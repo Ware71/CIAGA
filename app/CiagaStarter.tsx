@@ -15,6 +15,8 @@ import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
 import { MapPin, Trophy, Activity, Users, Target, Compass, Play, Pause } from "lucide-react"
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts"
+import { AuthUser } from "@/components/ui/auth-user";
+
 
 // --- Fake data to make the preview feel real ---
 const leaderboard = [
@@ -59,16 +61,15 @@ export default function CIAGAStarter() {
           </div>
           <div className="flex items-center gap-3">
             <Select defaultValue="2025 Season">
-              <SelectTrigger className="w-[160px]"><SelectValue placeholder="Season" /></SelectTrigger>
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="Season" />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="2025 Season">2025 Season</SelectItem>
                 <SelectItem value="2024 Season">2024 Season</SelectItem>
               </SelectContent>
             </Select>
-            <Avatar className="h-9 w-9">
-              <AvatarImage src="https://i.pravatar.cc/64" />
-              <AvatarFallback>U</AvatarFallback>
-            </Avatar>
+            <AuthUser />
           </div>
         </div>
       </header>

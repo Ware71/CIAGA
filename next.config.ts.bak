@@ -1,0 +1,15 @@
+import withPWA from 'next-pwa';
+
+const isProd = process.env.NODE_ENV === 'production';
+
+const nextConfig = {
+  reactStrictMode: true,
+  // (optional) if you use images from remote hosts, add images.domains here
+};
+
+export default withPWA({
+  dest: 'public',      // where next-pwa puts the service worker & precache
+  disable: !isProd,    // enable SW only for production build
+  register: true,      // auto-register service worker
+  skipWaiting: true,   // activate new SW immediately on refresh
+})(nextConfig);
