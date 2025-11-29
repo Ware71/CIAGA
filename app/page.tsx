@@ -1,5 +1,12 @@
+'use client';
+
 import CIAGAStarter from "./CiagaStarter";
+import AuthGate from "@/components/ui/auth-gate";
 
 export default function Page() {
-  return <CIAGAStarter />;
+  return (
+    <AuthGate>
+      <CIAGAStarter />
+    </AuthGate>
+  );
 }
