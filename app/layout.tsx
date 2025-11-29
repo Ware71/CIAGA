@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -12,20 +12,26 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata = {
+// ---------
+// METADATA
+// ---------
+export const metadata: Metadata = {
   title: "CIAGA Golf",
   description: "League, live scorecards, rangefinder, AI caddy",
   manifest: "/manifest.json",
+  themeColor: "#d4af37", // 🌟 CIAGA GOLD
   icons: {
     icon: "/icons/icon-192.png",
     apple: "/icons/icon-192.png",
   },
 };
 
-export const viewport = {
-  themeColor: "#0ea5e9",
+// ---------
+// VIEWPORT (iOS + Android UI bar color)
+// ---------
+export const viewport: Viewport = {
+  themeColor: "#d4af37",               // GOLD status bar
 };
-
 
 export default function RootLayout({
   children,
@@ -35,12 +41,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-[#042713] text-slate-100`}
       >
         {children}
       </body>
     </html>
   );
 }
-
-

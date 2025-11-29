@@ -2,12 +2,22 @@
   "name": "CIAGA Golf",
   "short_name": "CIAGA",
   "start_url": "/",
+  "id": "/",
   "display": "standalone",
-  "background_color": "#0b0b0c",
-  "theme_color": "#0ea5e9",
+  "orientation": "portrait",
   "description": "League management, live scorecards, rangefinder, and AI caddy.",
+  "theme_color": "#d4af37", 
+  "background_color": "#042713",
   "icons": [
-    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
   ]
 }
