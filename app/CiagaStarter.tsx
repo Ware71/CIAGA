@@ -95,7 +95,7 @@ export default function CIAGAStarter() {
       </div>
 
       {/* Bottom: main CIAGA home button */}
-      <div className="w-full max-w-sm flex items-center justify-center">
+      <div className="w-full flex items-center justify-center pb-[env(safe-area-inset-bottom)]">
         <motion.button
           className="relative h-20 w-20 rounded-full border-2 border-[#d4af37] bg-[#0a341c] shadow-[0_0_0_1px_rgba(0,0,0,0.7)] grid place-items-center"
           onClick={() => setOpen((prev) => !prev)}
