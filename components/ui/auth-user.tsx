@@ -18,6 +18,7 @@ type User = {
 export function AuthUser() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     // initial load
@@ -26,7 +27,7 @@ export function AuthUser() {
       setLoading(false);
     });
 
-    // listen for changes (login/logout)
+    // listen for login/logout
     const { data: subscription } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         setUser((session?.user as any) ?? null);
@@ -41,6 +42,7 @@ export function AuthUser() {
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     setUser(null);
+    setMenuOpen(false);
   };
 
   if (loading) {
@@ -49,6 +51,7 @@ export function AuthUser() {
     );
   }
 
+  // If not signed in: simple "Sign in" button
   if (!user) {
     return (
       <Button asChild size="sm" variant="outline">
@@ -67,25 +70,58 @@ export function AuthUser() {
     .toUpperCase();
 
   return (
-    <div className="flex items-center gap-3">
-      <div className="hidden sm:flex flex-col items-end">
-        <span className="text-[10px] text-muted-foreground">Signed in</span>
-        <span className="text-xs font-medium max-w-[140px] truncate">
-          {name}
-        </span>
-      </div>
-      <Avatar className="h-8 w-8">
-        <AvatarImage src={user.user_metadata?.avatar_url || ''} />
-        <AvatarFallback>{initials}</AvatarFallback>
-      </Avatar>
-      <Button
-        size="sm"
-        variant="ghost"
-        className="text-xs px-2"
-        onClick={handleSignOut}
+    <div className="relative">
+      {/* Avatar button */}
+      <button
+        type="button"
+        className="flex items-center gap-2"
+        onClick={() => setMenuOpen((prev) => !prev)}
       >
-        Sign out
-      </Button>
+        <div className="hidden sm:flex flex-col items-end">
+          <span className="text-[10px] text-muted-foreground">
+            Signed in
+          </span>
+          <span className="text-xs font-medium max-w-[140px] truncate">
+            {name}
+          </span>
+        </div>
+        <Avatar className="h-8 w-8 border border-emerald-200/70">
+          <AvatarImage src={user.user_metadata?.avatar_url || ''} />
+          <AvatarFallback>{initials}</AvatarFallback>
+        </Avatar>
+      </button>
+
+      {/* Dropdown menu */}
+      {menuOpen && (
+        <div className="absolute right-0 mt-2 w-40 rounded-xl border bg-[#0a341c] text-xs shadow-xl z-20">
+          <div className="px-3 py-2 border-b border-emerald-900/60">
+            <div className="text-[10px] uppercase tracking-wide text-emerald-200/70">
+              Account
+            </div>
+            <div className="text-[11px] text-emerald-50 truncate">
+              {name}
+            </div>
+          </div>
+          <button
+            type="button"
+            className="w-full text-left px-3 py-2 hover:bg-emerald-900/60"
+            onClick={() => {
+              setMenuOpen(false);
+              // Later you can create /profile and navigate there – for now this just closes.
+              // Example when ready: router.push('/profile')
+            }}
+          >
+            View profile
+          </button>
+          <button
+            type="button"
+            className="w-full text-left px-3 py-2 hover:bg-emerald-900/60 text-red-200"
+            onClick={handleSignOut}
+          >
+            Sign out
+          </button>
+        </div>
+      )}
     </div>
   );
 }
