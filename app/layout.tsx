@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   title: "CIAGA Golf",
   description: "League, live scorecards, rangefinder, AI caddy",
   manifest: "/manifest.json",
-  themeColor: "#d4af37", // 🌟 CIAGA GOLD
+  themeColor: "#042713", // 🌟 CIAGA GOLD
   icons: {
     icon: "/icons/icon-192.png",
     apple: "/icons/icon-192.png",
@@ -30,7 +30,7 @@ export const metadata: Metadata = {
 // VIEWPORT (iOS + Android UI bar color)
 // ---------
 export const viewport: Viewport = {
-  themeColor: "#d4af37",               // GOLD status bar
+  themeColor: "#042713",               // GOLD status bar
 };
 
 export default function RootLayout({

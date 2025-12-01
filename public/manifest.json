@@ -6,7 +6,7 @@
   "display": "standalone",
   "orientation": "portrait",
   "description": "League management, live scorecards, rangefinder, and AI caddy.",
-  "theme_color": "#d4af37", 
+  "theme_color": "#042713", 
   "background_color": "#042713",
   "icons": [
     {
