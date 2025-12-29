@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
 import Image from "next/image";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AuthUser } from "@/components/ui/auth-user";
 
@@ -25,29 +25,42 @@ const majorsMenuItems: MenuItem[] = [
 
 type ViewMode = "home" | "majors";
 
+function clamp(n: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, n));
+}
+
 export default function CIAGAStarter() {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<ViewMode>("home");
 
-  // Dynamic distance from the centre (based on screen height)
-  const [closedOffset, setClosedOffset] = useState(210);
+  // viewport-driven layout values
+  const [vw, setVw] = useState(390);
+  const [vh, setVh] = useState(844);
 
   useEffect(() => {
-    const computeOffset = () => {
+    const updateViewport = () => {
       if (typeof window === "undefined") return;
-      const h = window.innerHeight;
-      const offset = Math.min(260, Math.max(170, h * 0.28));
-      setClosedOffset(offset);
+      const w = window.visualViewport?.width ?? window.innerWidth;
+      const h = window.visualViewport?.height ?? window.innerHeight;
+      setVw(w);
+      setVh(h);
     };
 
-    computeOffset();
-    window.addEventListener("resize", computeOffset);
-    return () => window.removeEventListener("resize", computeOffset);
+    updateViewport();
+    window.addEventListener("resize", updateViewport);
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", updateViewport);
+    vv?.addEventListener("scroll", updateViewport);
+
+    return () => {
+      window.removeEventListener("resize", updateViewport);
+      vv?.removeEventListener("resize", updateViewport);
+      vv?.removeEventListener("scroll", updateViewport);
+    };
   }, []);
 
-  // Majors: use the same offset, but a bit smaller so it doesn't hit the notch.
-  // This stays dynamic because it's derived from closedOffset.
-  const majorsClosedOffset = closedOffset * 0.4; // tweak 0.6–0.8 if needed
+  // Home closed offset (device-relative)
+  const closedOffset = clamp(vh * 0.28, 170, 260);
 
   const goToMajors = () => {
     setOpen(false);
@@ -60,7 +73,6 @@ export default function CIAGAStarter() {
   };
 
   const handleHomeSelect = (id: string) => {
-    console.log("Home menu selected:", id);
     if (id === "majors") goToMajors();
   };
 
@@ -68,34 +80,42 @@ export default function CIAGAStarter() {
     console.log("Majors menu selected:", id);
   };
 
-  // Shared radial menu – centred; blur covers the whole container we render it in
+  /**
+   * Dynamic radial positions based on screen size.
+   */
+  const wheelRadius = clamp(Math.min(vw, vh) * 0.38, 115, 170);
+  const wheelSide = clamp(wheelRadius * 0.85, 90, 120);
+
+  const wheelPositions = [
+    { x: 0, y: -wheelRadius },
+    { x: wheelSide, y: -wheelRadius * 0.38 },
+    { x: wheelSide * 0.82, y: wheelRadius * 0.54 },
+    { x: -wheelSide * 0.82, y: wheelRadius * 0.54 },
+    { x: -wheelSide, y: -wheelRadius * 0.38 },
+  ];
+
   const renderRadialMenu = (items: MenuItem[], onSelect: (id: string) => void) => (
     <AnimatePresence>
       {open && (
         <>
-          {/* Blur overlay relative to the container we're inside */}
+          {/* Backdrop */}
           <motion.div
-            className="absolute inset-0 rounded-[32px] backdrop-blur-md z-10"
+            className="fixed inset-0 backdrop-blur-md z-10"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            onClick={() => setOpen(false)}
           />
 
+          {/* Wheel items */}
           {items.map((item, index) => {
-            const positions = [
-              { x: 0, y: -130 },
-              { x: 110, y: -50 },
-              { x: 90, y: 70 },
-              { x: -90, y: 70 },
-              { x: -110, y: -50 },
-            ];
-            const pos = positions[index];
+            const pos = wheelPositions[index] ?? { x: 0, y: 0 };
 
             return (
               <motion.button
                 key={item.id}
                 onClick={() => onSelect(item.id)}
-                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-auto z-20 flex items-center justify-center rounded-full border border-emerald-200/70 bg-[#0b3b21]/95 px-4 py-2 shadow-lg text-xs font-medium tracking-wide"
+                className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-auto z-20 flex items-center justify-center rounded-full border border-emerald-200/70 bg-[#0b3b21]/95 px-4 py-2 shadow-lg text-xs font-medium tracking-wide"
                 initial={{ opacity: 0, scale: 0.4, x: 0, y: 0 }}
                 animate={{ opacity: 1, scale: 1, x: pos.x, y: pos.y }}
                 exit={{ opacity: 0, scale: 0.4, x: 0, y: 0 }}
@@ -114,6 +134,72 @@ export default function CIAGAStarter() {
       )}
     </AnimatePresence>
   );
+
+  /**
+   * Majors CLOSED position measurement
+   */
+  const majorsHeaderAnchorRef = useRef<HTMLDivElement | null>(null);
+  const [majorsClosedY, setMajorsClosedY] = useState<number | null>(null);
+
+  const [majorsFallbackY, setMajorsFallbackY] = useState<number>(-200);
+
+  const majorsNudge = clamp(vh * 0.018, 8, 20);
+
+  const computeMajorsClosedY = useCallback(() => {
+    const el = majorsHeaderAnchorRef.current;
+    if (!el || typeof window === "undefined") return;
+
+    const rect = el.getBoundingClientRect();
+    if (!Number.isFinite(rect.top) || !Number.isFinite(rect.height) || rect.height === 0) return;
+
+    const anchorCenterY = rect.top + rect.height / 2;
+    const viewportCenterY = (window.visualViewport?.height ?? window.innerHeight) / 2;
+
+    const y = anchorCenterY - viewportCenterY;
+    if (Number.isFinite(y)) setMajorsClosedY(y);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (view !== "majors") return;
+
+    setMajorsClosedY(null);
+
+    const h = window.visualViewport?.height ?? window.innerHeight;
+    setMajorsFallbackY(-(h / 2) + h * 0.09);
+
+    const el = majorsHeaderAnchorRef.current;
+    if (!el) return;
+
+    const run = () => computeMajorsClosedY();
+
+    const raf = requestAnimationFrame(() => requestAnimationFrame(run));
+    const t1 = window.setTimeout(run, 50);
+    const t2 = window.setTimeout(run, 200);
+
+    const onResize = () => run();
+    window.addEventListener("resize", onResize);
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", onResize);
+    vv?.addEventListener("scroll", onResize);
+
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(() => run());
+      ro.observe(el);
+    }
+
+    (document as any)?.fonts?.ready?.then?.(() => run());
+
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      ro?.disconnect();
+      window.removeEventListener("resize", onResize);
+      vv?.removeEventListener("resize", onResize);
+      vv?.removeEventListener("scroll", onResize);
+    };
+  }, [view, computeMajorsClosedY]);
 
   return (
     <AnimatePresence initial={false} mode="wait">
@@ -148,34 +234,30 @@ export default function CIAGAStarter() {
               </div>
 
               <div className="flex flex-col leading-tight">
-                <span className="text-lg font-semibold tracking-wide text-[#f5e6b0]">
-                  CIAGA
-                </span>
+                <span className="text-lg font-semibold tracking-wide text-[#f5e6b0]">CIAGA</span>
                 <span className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">
                   Est. 2025
                 </span>
               </div>
             </div>
 
-            <AuthUser />
+            <div className="scale-[1.4] origin-top-right -translate-y-[4px]">
+              <AuthUser />
+            </div>
           </header>
 
-          {/* Subheading */}
           <p className="mt-4 text-sm text-emerald-100/80 text-center max-w-xs">
             Tap the CIAGA button to explore. Swipe up anywhere to open Majors.
           </p>
 
-          {/* HOME – wheel + blur area */}
-          <div className="relative flex-1 w-full max-w-sm flex items-center justify-center">
+          <div className="relative flex-1 w-full max-w-sm">
             {renderRadialMenu(homeMenuItems, handleHomeSelect)}
 
             <motion.div
               layoutId="ciaga-main-group"
-              className="relative h-20 w-20 grid place-items-center z-30"
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-20 w-20 grid place-items-center z-30"
               initial={false}
-              animate={{
-                y: open ? 0 : closedOffset, // bottom when closed, centre when open
-              }}
+              animate={{ y: open ? 0 : closedOffset }}
               transition={{ type: "spring", stiffness: 180, damping: 18 }}
             >
               <motion.button
@@ -210,7 +292,8 @@ export default function CIAGAStarter() {
       ) : (
         <motion.div
           key="majors"
-          className="min-h-screen bg-[#042713] text-slate-100 flex flex-col items-center pt-8 px-4 pb-[env(safe-area-inset-bottom)] overflow-hidden"
+          // ✅ IMPORTANT: overflow-visible so the top-right dropdown can't be clipped
+          className="min-h-screen bg-[#042713] text-slate-100 flex flex-col items-center pb-[env(safe-area-inset-bottom)] pt-8 px-4 overflow-visible"
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 16 }}
@@ -224,73 +307,94 @@ export default function CIAGAStarter() {
             }
           }}
         >
-          {/* HEADER */}
-          <header className="w-full max-w-sm flex items-center justify-end mb-2">
-            <AuthUser />
+          {/* ✅ IMPORTANT: z-50 + overflow-visible so AuthUser dropdown stays above backdrop */}
+          <header className="w-full max-w-sm flex items-center justify-between relative z-50 overflow-visible">
+            <div className="h-10 w-[132px]" />
+
+            {/* Anchor used for measurement (nudge is device-relative) */}
+            <div
+              ref={majorsHeaderAnchorRef}
+              className="absolute left-1/2 top-1/2 z-0"
+              style={{
+                width: 80,
+                height: 80,
+                opacity: 0,
+                pointerEvents: "none",
+                transform: `translate(-50%, -50%) translateY(${majorsNudge}px)`,
+              }}
+            />
+
+            {/* ✅ IMPORTANT: keep AuthUser on its own top layer */}
+            <div className="relative z-50 overflow-visible pointer-events-auto scale-[1.4] origin-top-right -translate-y-[4px]">
+              <AuthUser />
+            </div>
           </header>
 
-          {/* MAJORS – everything central (wheel + cards) lives in this relative container */}
-          <div className="relative flex-1 w-full max-w-sm flex flex-col items-center mt-2">
-            {/* Blur + wheel now cover BOTH CIAGA + cards */}
+          <div className="relative flex-1 w-full max-w-sm">
             {renderRadialMenu(majorsMenuItems, handleMajorsSelect)}
 
-            {/* CIAGA + "Majors" – top when closed, centre when open */}
-            <div className="relative w-full h-[220px] flex items-center justify-center">
-              <motion.div
-                layoutId="ciaga-main-group"
-                className="flex flex-col items-center z-30"
+            <motion.div
+              layoutId="ciaga-main-group"
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-30 flex flex-col items-center"
+              initial={false}
+              animate={{
+                y: open ? 0 : majorsClosedY ?? majorsFallbackY,
+                opacity: 1,
+              }}
+              transition={{ type: "spring", stiffness: 180, damping: 18 }}
+            >
+              <motion.button
+                className="h-20 w-20 rounded-full bg-transparent grid place-items-center"
+                onClick={() => setOpen((prev) => !prev)}
+                whileTap={{ scale: 0.92 }}
                 initial={false}
-                animate={{
-                  y: open ? 0 : -majorsClosedOffset,
-                }}
-                transition={{ type: "spring", stiffness: 180, damping: 18 }}
+                animate={{ rotate: open ? 360 : 0 }}
+                transition={{ type: "spring", stiffness: 200, damping: 18 }}
               >
-                <motion.button
-                  className="h-20 w-20 rounded-full bg-transparent grid place-items-center"
-                  onClick={() => setOpen((prev) => !prev)}
-                  whileTap={{ scale: 0.92 }}
-                  initial={false}
-                  animate={{ rotate: open ? 360 : 0 }}
-                  transition={{ type: "spring", stiffness: 200, damping: 18 }}
+                <motion.div
+                  className="h-[72px] w-[72px] rounded-full overflow-hidden flex items-center justify-center"
+                  animate={{ scale: open ? 1.05 : 1 }}
+                  transition={{ type: "spring", stiffness: 220, damping: 18 }}
                 >
-                  <motion.div
-                    className="h-[72px] w-[72px] rounded-full overflow-hidden flex items-center justify-center"
-                    animate={{ scale: open ? 1.05 : 1 }}
-                    transition={{ type: "spring", stiffness: 220, damping: 18 }}
-                  >
-                    <Image
-                      src="/ciaga-logo.png"
-                      alt="CIAGA logo"
-                      width={72}
-                      height={72}
-                      className="object-contain"
-                    />
-                  </motion.div>
-                </motion.button>
+                  <Image
+                    src="/ciaga-logo.png"
+                    alt="CIAGA logo"
+                    width={72}
+                    height={72}
+                    className="object-contain"
+                  />
+                </motion.div>
+              </motion.button>
 
-                <div className="mt-2 text-xs tracking-[0.18em] uppercase text-emerald-200/80">
-                  Majors
-                </div>
-              </motion.div>
-            </div>
+              <div className="mt-2 text-xs tracking-[0.18em] uppercase text-emerald-200/80">
+                Majors
+              </div>
+            </motion.div>
 
-            {/* CARDS – higher up, directly under the button; blurred by the same overlay */}
-            <div className="relative w-full mt-0 mb-2 space-y-3 z-0">
+            <motion.div
+              className="w-full mt-24 space-y-3"
+              initial={false}
+              animate={{
+                opacity: open ? 0.25 : 1,
+                scale: open ? 0.995 : 1,
+              }}
+              transition={{ duration: 0.18 }}
+              style={{
+                filter: open ? "blur(2px)" : "blur(0px)",
+                pointerEvents: open ? "none" : "auto",
+              }}
+            >
               <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4">
-                <h2 className="text-sm font-semibold text-emerald-50 mb-1">
-                  Season Majors
-                </h2>
+                <h2 className="text-sm font-semibold text-emerald-50 mb-1">Season Majors</h2>
                 <p className="text-[11px] text-emerald-100/80">
-                  Four flagship events with FedEx-style points. Swipe down to
-                  return home. Later we’ll wire in live standings and odds.
+                  Four flagship events with FedEx-style points. Swipe down to return home.
+                  Later we’ll wire in live standings and odds.
                 </p>
               </div>
 
               <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4 space-y-2">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-emerald-50">
-                    Major 1 · Spring
-                  </span>
+                  <span className="font-semibold text-emerald-50">Major 1 · Spring</span>
                   <span className="text-emerald-200/80">Coming soon</span>
                 </div>
                 <div className="flex items-center justify-between text-[11px] text-emerald-100/80">
@@ -301,9 +405,7 @@ export default function CIAGAStarter() {
 
               <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4 space-y-2">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-emerald-50">
-                    Major 2 · Summer
-                  </span>
+                  <span className="font-semibold text-emerald-50">Major 2 · Summer</span>
                   <span className="text-emerald-200/80">Coming soon</span>
                 </div>
                 <div className="flex items-center justify-between text-[11px] text-emerald-100/80">
@@ -311,7 +413,7 @@ export default function CIAGAStarter() {
                   <span>Points: —</span>
                 </div>
               </div>
-            </div>
+            </motion.div>
           </div>
         </motion.div>
       )}
