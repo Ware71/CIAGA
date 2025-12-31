@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { AuthUser } from "@/components/ui/auth-user";
 
@@ -9,10 +10,10 @@ type MenuItem = { id: string; label: string };
 
 const homeMenuItems: MenuItem[] = [
   { id: "round", label: "New Round" },
-  { id: "majors", label: "Majors" },
+  { id: "history", label: "Round History" },
   { id: "stats", label: "Stats" },
+  { id: "social", label: "Social" },
   { id: "courses", label: "Courses" },
-  { id: "profile", label: "Profile" },
 ];
 
 const majorsMenuItems: MenuItem[] = [
@@ -20,7 +21,7 @@ const majorsMenuItems: MenuItem[] = [
   { id: "schedule", label: "Schedule" },
   { id: "leaderboard", label: "Leaderboard" },
   { id: "history", label: "History" },
-  { id: "profile", label: "Profile" },
+  { id: "profile", label: "Majors Profile" },
 ];
 
 type ViewMode = "home" | "majors";
@@ -30,6 +31,8 @@ function clamp(n: number, min: number, max: number) {
 }
 
 export default function CIAGAStarter() {
+  const router = useRouter();
+
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<ViewMode>("home");
 
@@ -72,12 +75,63 @@ export default function CIAGAStarter() {
     setView("home");
   };
 
+  // ✅ WIRED: Home menu routes (including Courses)
   const handleHomeSelect = (id: string) => {
-    if (id === "majors") goToMajors();
+    setOpen(false);
+
+    if (id === "courses") {
+      router.push("/courses");
+      return;
+    }
+
+    if (id === "round") {
+      router.push("/round");
+      return;
+    }
+
+    if (id === "history") {
+      router.push("/history");
+      return;
+    }
+
+    if (id === "stats") {
+      router.push("/stats");
+      return;
+    }
+
+    if (id === "social") {
+      router.push("/social");
+      return;
+    }
+
+    // If you later re-add "majors" to home wheel:
+    // if (id === "majors") goToMajors();
   };
 
+  // ✅ OPTIONAL WIRED: Majors menu routes (edit paths to your liking)
   const handleMajorsSelect = (id: string) => {
-    console.log("Majors menu selected:", id);
+    setOpen(false);
+
+    if (id === "majors-hub") {
+      router.push("/majors");
+      return;
+    }
+    if (id === "schedule") {
+      router.push("/majors/schedule");
+      return;
+    }
+    if (id === "leaderboard") {
+      router.push("/majors/leaderboard");
+      return;
+    }
+    if (id === "history") {
+      router.push("/majors/history");
+      return;
+    }
+    if (id === "profile") {
+      router.push("/majors/profile");
+      return;
+    }
   };
 
   /**
@@ -387,8 +441,8 @@ export default function CIAGAStarter() {
               <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4">
                 <h2 className="text-sm font-semibold text-emerald-50 mb-1">Season Majors</h2>
                 <p className="text-[11px] text-emerald-100/80">
-                  Four flagship events with FedEx-style points. Swipe down to return home.
-                  Later we’ll wire in live standings and odds.
+                  Four flagship events with FedEx-style points. Swipe down to return home. Later we’ll
+                  wire in live standings and odds.
                 </p>
               </div>
 
