@@ -92,6 +92,19 @@ export default function CourseDetailPage() {
   const [draftCourseName, setDraftCourseName] = useState("");
   const [draftTees, setDraftTees] = useState<TeeBox[]>([]);
 
+  // Add tee (only in edit mode)
+  const [showAddTee, setShowAddTee] = useState(false);
+  const [addingTee, setAddingTee] = useState(false);
+  const [addErr, setAddErr] = useState<string | null>(null);
+  const [newTee, setNewTee] = useState({
+    name: "",
+    gender: "unisex" as "male" | "female" | "unisex",
+    par: "" as string,
+    yards: "" as string,
+    rating: "" as string,
+    slope: "" as string,
+  });
+
   async function reload() {
     setLoading(true);
     setError(null);
@@ -215,8 +228,12 @@ export default function CourseDetailPage() {
     }
 
     setDraftTees(draft);
-
     if (draft[0]?.id) setOpenTeeId(draft[0].id);
+
+    // enable add tee section in edit mode
+    setShowAddTee(false);
+    setAddErr(null);
+    setNewTee({ name: "", gender: "unisex", par: "", yards: "", rating: "", slope: "" });
   }
 
   function exitEditModeDiscard() {
@@ -225,6 +242,11 @@ export default function CourseDetailPage() {
     setSaving(false);
     setDraftCourseName("");
     setDraftTees([]);
+
+    setShowAddTee(false);
+    setAddErr(null);
+    setAddingTee(false);
+    setNewTee({ name: "", gender: "unisex", par: "", yards: "", rating: "", slope: "" });
   }
 
   function parseNumOrNull(v: string) {
@@ -290,6 +312,10 @@ export default function CourseDetailPage() {
       setEditMode(false);
       setDraftCourseName("");
       setDraftTees([]);
+
+      setShowAddTee(false);
+      setAddErr(null);
+
       await reload();
     } catch (e: any) {
       setEditError(e?.message ?? "Unknown error");
@@ -333,6 +359,51 @@ export default function CourseDetailPage() {
     }
   }
 
+  async function addTeeBox() {
+    if (!course) return;
+    setAddErr(null);
+
+    const name = newTee.name.trim();
+    if (!name) {
+      setAddErr("Please enter a tee name.");
+      return;
+    }
+
+    setAddingTee(true);
+    try {
+      const res = await fetch("/api/courses/tee-boxes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          course_id: course.id,
+          name,
+          gender: newTee.gender,
+          par: newTee.par.trim() ? Number(newTee.par) : null,
+          yards: newTee.yards.trim() ? Number(newTee.yards) : null,
+          rating: newTee.rating.trim() ? Number(newTee.rating) : null,
+          slope: newTee.slope.trim() ? Number(newTee.slope) : null,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? "Failed to add tee box");
+
+      // Reload, then re-enter edit mode so the new tee appears in draft
+      await reload();
+      enterEditMode();
+
+      // Open the newly added tee if returned
+      if (data?.tee_box?.id) setOpenTeeId(data.tee_box.id);
+
+      // Keep form open for multiple adds, but clear name
+      setNewTee((p) => ({ ...p, name: "" }));
+    } catch (e: any) {
+      setAddErr(e?.message ?? "Unknown error");
+    } finally {
+      setAddingTee(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto w-full max-w-sm space-y-4">
@@ -343,7 +414,7 @@ export default function CourseDetailPage() {
             size="sm"
             className="px-2 text-emerald-100 hover:bg-emerald-900/30"
             onClick={() => router.back()}
-            disabled={saving}
+            disabled={saving || addingTee}
           >
             ← Back
           </Button>
@@ -367,7 +438,7 @@ export default function CourseDetailPage() {
               if (!editMode) enterEditMode();
               else saveEdits();
             }}
-            disabled={!course || loading || saving}
+            disabled={!course || loading || saving || addingTee}
           >
             {editMode ? (saving ? "Saving…" : "Save") : "Edit"}
           </Button>
@@ -388,18 +459,6 @@ export default function CourseDetailPage() {
         {editError && (
           <div className="rounded-2xl border border-red-900/40 bg-red-950/20 p-4 text-sm text-red-200">
             {editError}
-            {editMode ? (
-              <div className="mt-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="px-2 text-red-100 hover:bg-red-900/20"
-                  onClick={() => setEditError(null)}
-                >
-                  Dismiss
-                </Button>
-              </div>
-            ) : null}
           </div>
         )}
 
@@ -420,6 +479,15 @@ export default function CourseDetailPage() {
                     onChange={(e) => setDraftCourseName(e.target.value)}
                     placeholder="Course name"
                   />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="px-2 text-emerald-100 hover:bg-emerald-900/30"
+                    onClick={exitEditModeDiscard}
+                    disabled={saving || addingTee}
+                  >
+                    Cancel
+                  </Button>
                 </div>
               )}
 
@@ -430,21 +498,99 @@ export default function CourseDetailPage() {
               <div className="mt-2 text-[10px] text-emerald-100/50 truncate">
                 Source: {course.osm_id}
               </div>
+            </div>
 
-              {editMode ? (
-                <div className="mt-3">
+            {/* Add tee box (only in edit mode) */}
+            {editMode ? (
+              <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-sm font-medium text-emerald-50">Add tee box</div>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="px-2 text-emerald-100 hover:bg-emerald-900/30"
-                    onClick={exitEditModeDiscard}
-                    disabled={saving}
+                    className="text-emerald-100 hover:bg-emerald-900/30"
+                    onClick={() => {
+                      setAddErr(null);
+                      setShowAddTee((v) => !v);
+                    }}
+                    disabled={addingTee || saving}
                   >
-                    Cancel
+                    {showAddTee ? "Close" : "+ Add"}
                   </Button>
                 </div>
-              ) : null}
-            </div>
+
+                {showAddTee ? (
+                  <div className="mt-3 space-y-3">
+                    {addErr ? (
+                      <div className="rounded-xl border border-red-900/40 bg-red-950/20 p-3 text-xs text-red-200">
+                        {addErr}
+                      </div>
+                    ) : null}
+
+                    <input
+                      className="w-full rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm text-emerald-50 outline-none focus:border-emerald-200/40"
+                      placeholder="Tee name (e.g. Blue)"
+                      value={newTee.name}
+                      onChange={(e) => setNewTee((p) => ({ ...p, name: e.target.value }))}
+                    />
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <select
+                        className="rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm text-emerald-50 outline-none focus:border-emerald-200/40"
+                        value={newTee.gender}
+                        onChange={(e) =>
+                          setNewTee((p) => ({ ...p, gender: e.target.value as any }))
+                        }
+                      >
+                        <option value="unisex">Unisex</option>
+                        <option value="male">Men</option>
+                        <option value="female">Women</option>
+                      </select>
+
+                      <input
+                        className="rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm text-emerald-50 outline-none focus:border-emerald-200/40"
+                        placeholder="Par"
+                        inputMode="numeric"
+                        value={newTee.par}
+                        onChange={(e) => setNewTee((p) => ({ ...p, par: e.target.value }))}
+                      />
+
+                      <input
+                        className="rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm text-emerald-50 outline-none focus:border-emerald-200/40"
+                        placeholder="Yards"
+                        inputMode="numeric"
+                        value={newTee.yards}
+                        onChange={(e) => setNewTee((p) => ({ ...p, yards: e.target.value }))}
+                      />
+
+                      <input
+                        className="rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm text-emerald-50 outline-none focus:border-emerald-200/40"
+                        placeholder="Rating"
+                        inputMode="decimal"
+                        value={newTee.rating}
+                        onChange={(e) => setNewTee((p) => ({ ...p, rating: e.target.value }))}
+                      />
+
+                      <input
+                        className="rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm text-emerald-50 outline-none focus:border-emerald-200/40"
+                        placeholder="Slope"
+                        inputMode="numeric"
+                        value={newTee.slope}
+                        onChange={(e) => setNewTee((p) => ({ ...p, slope: e.target.value }))}
+                      />
+
+                      <Button
+                        className="col-span-2 bg-emerald-700 hover:bg-emerald-600 text-emerald-50"
+                        disabled={addingTee || !newTee.name.trim()}
+                        onClick={addTeeBox}
+                      >
+                        {addingTee ? "Saving…" : "Save tee box"}
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
 
             {/* Gender toggle */}
             <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-2 flex gap-2">
@@ -607,7 +753,7 @@ export default function CourseDetailPage() {
                                       e.stopPropagation();
                                       deleteTeeBox(t.id);
                                     }}
-                                    disabled={saving}
+                                    disabled={saving || addingTee}
                                   >
                                     Delete tee
                                   </Button>
@@ -650,8 +796,12 @@ export default function CourseDetailPage() {
                                       >
                                         <div className="font-medium text-emerald-50">{h.hole_number}</div>
                                         <div className="text-center text-emerald-100/80">{h.par ?? "—"}</div>
-                                        <div className="text-center text-emerald-100/80">{h.yardage ?? "—"}</div>
-                                        <div className="text-center text-emerald-100/80">{h.handicap ?? "—"}</div>
+                                        <div className="text-center text-emerald-100/80">
+                                          {h.yardage ?? "—"}
+                                        </div>
+                                        <div className="text-center text-emerald-100/80">
+                                          {h.handicap ?? "—"}
+                                        </div>
                                       </div>
                                     ))}
                                 </div>
