@@ -5,8 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 
 type Hole = {
-  id: string;
-  tee_box_id: string;
+  id?: string;
+  tee_box_id?: string;
   hole_number: number;
   par: number | null;
   yardage: number | null;
@@ -66,6 +66,10 @@ function chip(text: string) {
   );
 }
 
+function deepCopy<T>(v: T): T {
+  return JSON.parse(JSON.stringify(v));
+}
+
 export default function CourseDetailPage() {
   const router = useRouter();
   const params = useParams<{ course_id: string }>();
@@ -80,6 +84,35 @@ export default function CourseDetailPage() {
 
   const [genderFilter, setGenderFilter] = useState<GenderFilter>("all");
 
+  // Edit mode
+  const [editMode, setEditMode] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  const [draftCourseName, setDraftCourseName] = useState("");
+  const [draftTees, setDraftTees] = useState<TeeBox[]>([]);
+
+  async function reload() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/courses/detail?course_id=${encodeURIComponent(courseId)}`, {
+        cache: "no-store",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? "Failed to load course");
+
+      setCourse(data.course ?? null);
+      setTeeBoxes(Array.isArray(data.tee_boxes) ? data.tee_boxes : []);
+      setOpenTeeId(null);
+      setGenderFilter("all");
+    } catch (e: any) {
+      setError(e?.message ?? "Unknown error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => {
     let cancelled = false;
 
@@ -88,7 +121,9 @@ export default function CourseDetailPage() {
       setError(null);
 
       try {
-        const res = await fetch(`/api/courses/detail?course_id=${encodeURIComponent(courseId)}`);
+        const res = await fetch(`/api/courses/detail?course_id=${encodeURIComponent(courseId)}`, {
+          cache: "no-store",
+        });
         const data = await res.json();
         if (!res.ok) throw new Error(data?.error ?? "Failed to load course");
 
@@ -130,13 +165,8 @@ export default function CourseDetailPage() {
     return arr;
   }, [teeBoxes]);
 
-  // Apply Men/Women toggle:
-  // - Men shows male + unisex
-  // - Women shows female + unisex
-  // - All shows all
   const filteredTees = useMemo(() => {
     if (genderFilter === "all") return sortedTees;
-
     return sortedTees.filter((t) => {
       const g = normalizeGender(t.gender);
       if (genderFilter === "male") return g === "male" || g === "unisex";
@@ -150,16 +180,170 @@ export default function CourseDetailPage() {
     return bits.join(" · ");
   }, [course?.city, course?.country]);
 
+  function enterEditMode() {
+    if (!course) return;
+    setEditError(null);
+    setEditMode(true);
+    setDraftCourseName(course.name ?? "");
+
+    const draft = deepCopy(teeBoxes);
+
+    // If a tee has no holes, create an editable 18-hole grid
+    for (const t of draft) {
+      const holes = Array.isArray(t.holes) ? t.holes : [];
+      if (holes.length === 0) {
+        t.holes = Array.from({ length: 18 }, (_, i) => ({
+          id: undefined,
+          hole_number: i + 1,
+          par: null,
+          yardage: null,
+          handicap: null,
+        }));
+      } else {
+        t.holes = holes
+          .slice()
+          .sort((a, b) => (a.hole_number ?? 0) - (b.hole_number ?? 0))
+          .map((h) => ({
+            id: h.id,
+            tee_box_id: h.tee_box_id,
+            hole_number: h.hole_number,
+            par: h.par ?? null,
+            yardage: h.yardage ?? null,
+            handicap: h.handicap ?? null,
+          }));
+      }
+    }
+
+    setDraftTees(draft);
+
+    if (draft[0]?.id) setOpenTeeId(draft[0].id);
+  }
+
+  function exitEditModeDiscard() {
+    setEditError(null);
+    setEditMode(false);
+    setSaving(false);
+    setDraftCourseName("");
+    setDraftTees([]);
+  }
+
+  function parseNumOrNull(v: string) {
+    const t = v.trim();
+    if (!t) return null;
+    const n = Number(t);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function updateDraftTee(teeId: string, patch: Partial<TeeBox>) {
+    setDraftTees((prev) => prev.map((t) => (t.id === teeId ? { ...t, ...patch } : t)));
+  }
+
+  function updateDraftHole(teeId: string, holeNumber: number, patch: Partial<Hole>) {
+    setDraftTees((prev) =>
+      prev.map((t) => {
+        if (t.id !== teeId) return t;
+        const holes = Array.isArray(t.holes) ? t.holes : [];
+        const nextHoles = holes.map((h) =>
+          h.hole_number === holeNumber ? { ...h, ...patch } : h
+        );
+        return { ...t, holes: nextHoles };
+      })
+    );
+  }
+
+  async function saveEdits() {
+    if (!course) return;
+    setEditError(null);
+    setSaving(true);
+
+    try {
+      const payload = {
+        course_id: course.id,
+        course_name: draftCourseName.trim(),
+        tee_boxes: draftTees.map((t) => ({
+          id: t.id,
+          name: t.name,
+          gender: t.gender,
+          yards: t.yards,
+          par: t.par,
+          rating: t.rating,
+          slope: t.slope,
+          holes: (t.holes ?? []).map((h) => ({
+            id: h.id ?? null,
+            hole_number: h.hole_number,
+            par: h.par,
+            yardage: h.yardage,
+            handicap: h.handicap,
+          })),
+        })),
+      };
+
+      const res = await fetch("/api/courses/edit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? "Failed to save");
+
+      setEditMode(false);
+      setDraftCourseName("");
+      setDraftTees([]);
+      await reload();
+    } catch (e: any) {
+      setEditError(e?.message ?? "Unknown error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteTeeBox(teeId: string) {
+    if (!course) return;
+
+    const ok = window.confirm("Delete this tee box? This will also delete its hole-by-hole data.");
+    if (!ok) return;
+
+    setEditError(null);
+    setSaving(true);
+
+    try {
+      const res = await fetch(
+        `/api/courses/tee-boxes/${encodeURIComponent(teeId)}?course_id=${encodeURIComponent(
+          course.id
+        )}`,
+        { method: "DELETE" }
+      );
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? "Failed to delete tee box");
+
+      await reload();
+
+      // Leave edit mode to avoid stale drafts
+      if (editMode) {
+        setEditMode(false);
+        setDraftCourseName("");
+        setDraftTees([]);
+      }
+    } catch (e: any) {
+      setEditError(e?.message ?? "Unknown error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto w-full max-w-sm space-y-4">
-        {/* Header (matches Courses header) */}
+        {/* Header */}
         <header className="flex items-center justify-between">
           <Button
             variant="ghost"
             size="sm"
             className="px-2 text-emerald-100 hover:bg-emerald-900/30"
             onClick={() => router.back()}
+            disabled={saving}
           >
             ← Back
           </Button>
@@ -173,7 +357,20 @@ export default function CourseDetailPage() {
             </div>
           </div>
 
-          <div className="w-[60px]" />
+          {/* Top-right edit/save */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="px-2 text-emerald-100 hover:bg-emerald-900/30"
+            onClick={() => {
+              if (!course) return;
+              if (!editMode) enterEditMode();
+              else saveEdits();
+            }}
+            disabled={!course || loading || saving}
+          >
+            {editMode ? (saving ? "Saving…" : "Save") : "Edit"}
+          </Button>
         </header>
 
         {loading && (
@@ -188,11 +385,43 @@ export default function CourseDetailPage() {
           </div>
         )}
 
+        {editError && (
+          <div className="rounded-2xl border border-red-900/40 bg-red-950/20 p-4 text-sm text-red-200">
+            {editError}
+            {editMode ? (
+              <div className="mt-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="px-2 text-red-100 hover:bg-red-900/20"
+                  onClick={() => setEditError(null)}
+                >
+                  Dismiss
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        )}
+
         {!loading && !error && course && (
           <>
             {/* Course card */}
             <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
-              <div className="text-sm font-semibold text-emerald-50">{course.name}</div>
+              {!editMode ? (
+                <div className="text-sm font-semibold text-emerald-50">{course.name}</div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">
+                    Course name
+                  </div>
+                  <input
+                    className="w-full rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm text-emerald-50 outline-none focus:border-emerald-200/40"
+                    value={draftCourseName}
+                    onChange={(e) => setDraftCourseName(e.target.value)}
+                    placeholder="Course name"
+                  />
+                </div>
+              )}
 
               {courseSubtitle ? (
                 <div className="mt-1 text-[11px] text-emerald-200/70">{courseSubtitle}</div>
@@ -201,6 +430,20 @@ export default function CourseDetailPage() {
               <div className="mt-2 text-[10px] text-emerald-100/50 truncate">
                 Source: {course.osm_id}
               </div>
+
+              {editMode ? (
+                <div className="mt-3">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="px-2 text-emerald-100 hover:bg-emerald-900/30"
+                    onClick={exitEditModeDiscard}
+                    disabled={saving}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              ) : null}
             </div>
 
             {/* Gender toggle */}
@@ -244,15 +487,16 @@ export default function CourseDetailPage() {
             </div>
 
             {/* Tee list */}
-            {filteredTees.length === 0 ? (
+            {(editMode ? draftTees : filteredTees).length === 0 ? (
               <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">
                 No tee boxes match this filter.
               </div>
             ) : (
               <ul className="space-y-3">
-                {filteredTees.map((t) => {
+                {(editMode ? draftTees : filteredTees).map((t) => {
                   const g = genderLabel(t.gender);
                   const isOpen = openTeeId === t.id;
+
                   const holes = Array.isArray(t.holes) ? t.holes : [];
                   const holesCount = holes.length;
 
@@ -261,26 +505,115 @@ export default function CourseDetailPage() {
                       key={t.id}
                       className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 overflow-hidden"
                     >
-                      {/* Tee header (click to expand) */}
+                      {/* Tee header */}
                       <button
                         type="button"
                         className="w-full text-left p-4 hover:bg-emerald-900/20 transition-colors"
                         onClick={() => setOpenTeeId((prev) => (prev === t.id ? null : t.id))}
                       >
                         <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="font-medium text-emerald-50 truncate">
-                              {t.name}
-                              {g ? <span className="text-emerald-200/70">{` · ${g}`}</span> : null}
-                            </div>
+                          <div className="min-w-0 w-full">
+                            {!editMode ? (
+                              <>
+                                <div className="font-medium text-emerald-50 truncate">
+                                  {t.name}
+                                  {g ? <span className="text-emerald-200/70">{` · ${g}`}</span> : null}
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  {chip(`Par ${t.par ?? "—"}`)}
+                                  {chip(`${t.yards ?? "—"} yds`)}
+                                  {chip(`Rating ${fmtNum(t.rating, 1)}`)}
+                                  {chip(`Slope ${t.slope ?? "—"}`)}
+                                  {holesCount ? chip(`${holesCount} holes`) : null}
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <input
+                                    className="col-span-2 rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm text-emerald-50 outline-none focus:border-emerald-200/40"
+                                    value={t.name ?? ""}
+                                    onChange={(e) => updateDraftTee(t.id, { name: e.target.value })}
+                                    placeholder="Tee name"
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
 
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              {chip(`Par ${t.par ?? "—"}`)}
-                              {chip(`${t.yards ?? "—"} yds`)}
-                              {chip(`Rating ${fmtNum(t.rating, 1)}`)}
-                              {chip(`Slope ${t.slope ?? "—"}`)}
-                              {holesCount ? chip(`${holesCount} holes`) : null}
-                            </div>
+                                  <select
+                                    className="rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm text-emerald-50 outline-none focus:border-emerald-200/40"
+                                    value={t.gender ?? "unisex"}
+                                    onChange={(e) => updateDraftTee(t.id, { gender: e.target.value })}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <option value="unisex">Unisex</option>
+                                    <option value="male">Men</option>
+                                    <option value="female">Women</option>
+                                  </select>
+
+                                  <input
+                                    className="rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm text-emerald-50 outline-none focus:border-emerald-200/40"
+                                    value={t.par ?? ""}
+                                    onChange={(e) =>
+                                      updateDraftTee(t.id, { par: parseNumOrNull(e.target.value) })
+                                    }
+                                    placeholder="Par"
+                                    inputMode="numeric"
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+
+                                  <input
+                                    className="rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm text-emerald-50 outline-none focus:border-emerald-200/40"
+                                    value={t.yards ?? ""}
+                                    onChange={(e) =>
+                                      updateDraftTee(t.id, { yards: parseNumOrNull(e.target.value) })
+                                    }
+                                    placeholder="Yards"
+                                    inputMode="numeric"
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+
+                                  <input
+                                    className="rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm text-emerald-50 outline-none focus:border-emerald-200/40"
+                                    value={t.rating ?? ""}
+                                    onChange={(e) =>
+                                      updateDraftTee(t.id, { rating: parseNumOrNull(e.target.value) })
+                                    }
+                                    placeholder="Rating"
+                                    inputMode="decimal"
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+
+                                  <input
+                                    className="rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm text-emerald-50 outline-none focus:border-emerald-200/40"
+                                    value={t.slope ?? ""}
+                                    onChange={(e) =>
+                                      updateDraftTee(t.id, { slope: parseNumOrNull(e.target.value) })
+                                    }
+                                    placeholder="Slope"
+                                    inputMode="numeric"
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                </div>
+
+                                <div className="mt-2 flex items-center justify-between">
+                                  <div className="text-[10px] text-emerald-100/50">
+                                    Tap to expand and edit holes.
+                                  </div>
+
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="px-2 text-red-200 hover:bg-red-900/20"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      deleteTeeBox(t.id);
+                                    }}
+                                    disabled={saving}
+                                  >
+                                    Delete tee
+                                  </Button>
+                                </div>
+                              </>
+                            )}
                           </div>
 
                           <div className="shrink-0 text-emerald-100/70 text-sm pt-1">
@@ -292,10 +625,38 @@ export default function CourseDetailPage() {
                       {/* Expanded holes */}
                       {isOpen ? (
                         <div className="border-t border-emerald-900/60 px-4 pb-4">
-                          {holesCount === 0 ? (
-                            <div className="pt-3 text-sm text-emerald-100/70">
-                              No hole-by-hole data saved for this tee yet.
-                            </div>
+                          {!editMode ? (
+                            holesCount === 0 ? (
+                              <div className="pt-3 text-sm text-emerald-100/70">
+                                No hole-by-hole data saved for this tee yet.
+                              </div>
+                            ) : (
+                              <div className="pt-3">
+                                <div className="grid grid-cols-4 gap-2 text-[10px] uppercase tracking-[0.18em] text-emerald-200/70 px-1">
+                                  <div>Hole</div>
+                                  <div className="text-center">Par</div>
+                                  <div className="text-center">Yds</div>
+                                  <div className="text-center">HCP</div>
+                                </div>
+
+                                <div className="mt-2 space-y-2">
+                                  {holes
+                                    .slice()
+                                    .sort((a, b) => (a.hole_number ?? 0) - (b.hole_number ?? 0))
+                                    .map((h) => (
+                                      <div
+                                        key={h.id ?? `${t.id}-${h.hole_number}`}
+                                        className="grid grid-cols-4 gap-2 items-center rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm"
+                                      >
+                                        <div className="font-medium text-emerald-50">{h.hole_number}</div>
+                                        <div className="text-center text-emerald-100/80">{h.par ?? "—"}</div>
+                                        <div className="text-center text-emerald-100/80">{h.yardage ?? "—"}</div>
+                                        <div className="text-center text-emerald-100/80">{h.handicap ?? "—"}</div>
+                                      </div>
+                                    ))}
+                                </div>
+                              </div>
+                            )
                           ) : (
                             <div className="pt-3">
                               <div className="grid grid-cols-4 gap-2 text-[10px] uppercase tracking-[0.18em] text-emerald-200/70 px-1">
@@ -306,20 +667,57 @@ export default function CourseDetailPage() {
                               </div>
 
                               <div className="mt-2 space-y-2">
-                                {holes
+                                {(t.holes ?? [])
                                   .slice()
-                                  .sort((a, b) => (a.hole_number ?? 0) - (b.hole_number ?? 0))
+                                  .sort((a, b) => a.hole_number - b.hole_number)
                                   .map((h) => (
                                     <div
-                                      key={h.id}
+                                      key={h.id ?? `${t.id}-${h.hole_number}`}
                                       className="grid grid-cols-4 gap-2 items-center rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm"
                                     >
                                       <div className="font-medium text-emerald-50">{h.hole_number}</div>
-                                      <div className="text-center text-emerald-100/80">{h.par ?? "—"}</div>
-                                      <div className="text-center text-emerald-100/80">{h.yardage ?? "—"}</div>
-                                      <div className="text-center text-emerald-100/80">{h.handicap ?? "—"}</div>
+
+                                      <input
+                                        className="rounded-lg border border-emerald-900/60 bg-[#082b16]/40 px-2 py-1 text-center text-emerald-50 outline-none focus:border-emerald-200/40"
+                                        value={h.par ?? ""}
+                                        inputMode="numeric"
+                                        placeholder="—"
+                                        onChange={(e) =>
+                                          updateDraftHole(t.id, h.hole_number, {
+                                            par: parseNumOrNull(e.target.value),
+                                          })
+                                        }
+                                      />
+
+                                      <input
+                                        className="rounded-lg border border-emerald-900/60 bg-[#082b16]/40 px-2 py-1 text-center text-emerald-50 outline-none focus:border-emerald-200/40"
+                                        value={h.yardage ?? ""}
+                                        inputMode="numeric"
+                                        placeholder="—"
+                                        onChange={(e) =>
+                                          updateDraftHole(t.id, h.hole_number, {
+                                            yardage: parseNumOrNull(e.target.value),
+                                          })
+                                        }
+                                      />
+
+                                      <input
+                                        className="rounded-lg border border-emerald-900/60 bg-[#082b16]/40 px-2 py-1 text-center text-emerald-50 outline-none focus:border-emerald-200/40"
+                                        value={h.handicap ?? ""}
+                                        inputMode="numeric"
+                                        placeholder="—"
+                                        onChange={(e) =>
+                                          updateDraftHole(t.id, h.hole_number, {
+                                            handicap: parseNumOrNull(e.target.value),
+                                          })
+                                        }
+                                      />
                                     </div>
                                   ))}
+                              </div>
+
+                              <div className="mt-3 text-[10px] text-emerald-100/50">
+                                Tip: leaving a hole blank will not create/update it.
                               </div>
                             </div>
                           )}
