@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createPortal } from 'react-dom';
 import { supabase } from '@/lib/supabaseClient';
+import { ensureProfile } from '@/lib/profile';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
@@ -34,13 +35,32 @@ export function AuthUser() {
   useEffect(() => setMounted(true), []);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setUser((data.user as any) ?? null);
+    supabase.auth.getUser().then(async ({ data }) => {
+      const u = (data.user as any) ?? null;
+      setUser(u);
+
+      if (u) {
+        try {
+          await ensureProfile(u);
+        } catch (e) {
+          console.warn('ensureProfile failed', e);
+        }
+      }
+
       setLoading(false);
     });
 
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser((session?.user as any) ?? null);
+    const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      const u = (session?.user as any) ?? null;
+      setUser(u);
+
+      if (u) {
+        try {
+          await ensureProfile(u);
+        } catch (e) {
+          console.warn('ensureProfile failed', e);
+        }
+      }
     });
 
     return () => {
