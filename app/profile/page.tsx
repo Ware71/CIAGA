@@ -37,6 +37,11 @@ export default function ProfilePage() {
   const [followersCount, setFollowersCount] = useState<number>(0);
   const [followingCount, setFollowingCount] = useState<number>(0);
 
+  // Display name edit
+  const [displayName, setDisplayName] = useState("");
+  const [savingName, setSavingName] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+
   // Modal state
   const [listOpen, setListOpen] = useState(false);
   const [listMode, setListMode] = useState<"followers" | "following">("followers");
@@ -50,6 +55,19 @@ export default function ProfilePage() {
   const [searchResults, setSearchResults] = useState<ProfileRow[]>([]);
   const [myFollowingSet, setMyFollowingSet] = useState<Set<string>>(new Set());
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
+
+  const generateNameFromEmail = (email?: string | null) => {
+    if (!email) return "Player";
+    const local = email.split("@")[0] || "Player";
+    const cleaned = local.replace(/[._-]+/g, " ").trim();
+    if (!cleaned) return "Player";
+    const titled = cleaned
+      .split(" ")
+      .filter(Boolean)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ");
+    return titled.slice(0, 30);
+  };
 
   useEffect(() => {
     let alive = true;
@@ -74,8 +92,44 @@ export default function ProfilePage() {
 
       if (!alive) return;
 
-      if (pErr) console.warn("Profile load error:", pErr);
-      else setProfile((p as any) ?? null);
+      if (pErr) {
+        console.warn("Profile load error:", pErr);
+      } else {
+        setProfile((p as any) ?? null);
+      }
+
+      // Auto-generate display name on first login if missing/blank
+      const existingName = (p as any)?.name as string | null | undefined;
+      const hasName = !!(existingName && existingName.trim().length > 0);
+
+      if (!hasName) {
+        const autoName = generateNameFromEmail(u.email);
+
+        // upsert ensures row exists; safe if it already exists
+        const { error: upErr } = await supabase
+          .from("profiles")
+          .upsert(
+            {
+              id: u.id,
+              email: u.email ?? null,
+              name: autoName,
+            },
+            { onConflict: "id" }
+          );
+
+        if (upErr) {
+          console.warn("Auto-name upsert failed:", upErr);
+        } else {
+          setProfile((prev) =>
+            prev
+              ? { ...prev, name: autoName, email: prev.email ?? u.email ?? null }
+              : { id: u.id, name: autoName, email: u.email ?? null, avatar_url: null }
+          );
+          setDisplayName(autoName);
+        }
+      } else {
+        setDisplayName(existingName!);
+      }
 
       await refreshCountsAndFollowing(u.id);
     })();
@@ -184,11 +238,31 @@ export default function ProfilePage() {
       );
     } catch (err) {
       console.error("Avatar upload failed:", err);
-      alert("Avatar upload failed. Check bucket exists + RLS + public bucket setting.");
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";
     }
+  };
+
+  const saveDisplayName = async () => {
+    if (!user) return;
+    const trimmed = displayName.trim();
+    if (!trimmed) return;
+
+    setSavingName(true);
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({ name: trimmed })
+      .eq("id", user.id);
+
+    if (error) {
+      console.warn("Save display name failed:", error);
+    } else {
+      setProfile((prev) => (prev ? { ...prev, name: trimmed } : prev));
+    }
+
+    setSavingName(false);
   };
 
   const initialsFor = (p: ProfileRow) => {
@@ -201,6 +275,7 @@ export default function ProfilePage() {
       .toUpperCase();
   };
 
+  // FIXED: no FK joins (reliable)
   const openList = async (mode: "followers" | "following") => {
     if (!user) return;
 
@@ -211,41 +286,40 @@ export default function ProfilePage() {
 
     try {
       if (mode === "followers") {
-        // follower_id -> profiles
-        const { data, error } = await supabase
+        // who follows me
+        const { data } = await supabase
           .from("follows")
-          .select(
-            `
-            profiles:profiles!follows_follower_id_fkey ( id, name, email, avatar_url )
-          `
-          )
+          .select("follower_id")
           .eq("following_id", user.id);
 
-        if (error) throw error;
+        const ids = (data ?? []).map((r: any) => r.follower_id);
+        if (!ids.length) return;
 
-        const rows = ((data as any[]) ?? []).map((r) => r.profiles).filter(Boolean) as ProfileRow[];
-        setListRows(rows);
+        const { data: profs } = await supabase
+          .from("profiles")
+          .select("id, name, email, avatar_url")
+          .in("id", ids);
+
+        setListRows((profs as any) ?? []);
       } else {
-        // following_id -> profiles
-        const { data, error } = await supabase
+        // who I follow
+        const { data } = await supabase
           .from("follows")
-          .select(
-            `
-            profiles:profiles!follows_following_id_fkey ( id, name, email, avatar_url )
-          `
-          )
+          .select("following_id")
           .eq("follower_id", user.id);
 
-        if (error) throw error;
+        const ids = (data ?? []).map((r: any) => r.following_id);
+        if (!ids.length) return;
 
-        const rows = ((data as any[]) ?? []).map((r) => r.profiles).filter(Boolean) as ProfileRow[];
-        setListRows(rows);
+        const { data: profs } = await supabase
+          .from("profiles")
+          .select("id, name, email, avatar_url")
+          .in("id", ids);
+
+        setListRows((profs as any) ?? []);
       }
     } catch (e) {
       console.warn("Failed to load follow list:", e);
-      alert(
-        "Could not load the list. If you see a relationship error, your FK join name may differ. Paste the console error."
-      );
     } finally {
       setListLoading(false);
     }
@@ -267,7 +341,6 @@ export default function ProfilePage() {
     setSearchLoading(true);
 
     try {
-      // simple search: name ilike OR email ilike, exclude me
       const { data, error } = await supabase
         .from("profiles")
         .select("id, name, email, avatar_url")
@@ -280,7 +353,6 @@ export default function ProfilePage() {
       setSearchResults((data as any) ?? []);
     } catch (e) {
       console.warn("Search failed:", e);
-      alert("Search failed. Check profiles select policy.");
     } finally {
       setSearchLoading(false);
     }
@@ -304,12 +376,10 @@ export default function ProfilePage() {
         return n;
       });
 
-      // refresh counts + list if open
       await refreshCountsAndFollowing(user.id);
-      if (listOpen && listMode === "following") await openList("following");
+      if (listOpen) await openList(listMode);
     } catch (e) {
       console.warn("Follow failed:", e);
-      alert("Follow failed. Check follows table + RLS policies.");
     } finally {
       setBusyUserId(null);
     }
@@ -335,10 +405,9 @@ export default function ProfilePage() {
       });
 
       await refreshCountsAndFollowing(user.id);
-      if (listOpen && listMode === "following") await openList("following");
+      if (listOpen) await openList(listMode);
     } catch (e) {
       console.warn("Unfollow failed:", e);
-      alert("Unfollow failed. Check follows table + RLS policies.");
     } finally {
       setBusyUserId(null);
     }
@@ -443,9 +512,65 @@ export default function ProfilePage() {
             <AvatarFallback className="text-lg">{initials}</AvatarFallback>
           </Avatar>
 
-          <div className="mt-4 text-base font-semibold text-[#f5e6b0] truncate max-w-[280px] text-center">
-            {name}
-          </div>
+          {/* NAME + PENCIL / EDITOR */}
+          {!editingName ? (
+            <div className="mt-4 flex items-center justify-center gap-2 max-w-[280px]">
+              <div className="text-base font-semibold text-[#f5e6b0] truncate text-center">
+                {profile?.name || name}
+              </div>
+
+              <button
+                type="button"
+                className="text-emerald-300 hover:text-emerald-200 text-sm"
+                onClick={() => setEditingName(true)}
+                title="Edit display name"
+                aria-label="Edit display name"
+              >
+                ✎
+              </button>
+            </div>
+          ) : (
+            <div className="mt-3 w-full max-w-sm">
+              <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-3">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">
+                  Display name
+                </div>
+                <input
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  placeholder="Set your display name"
+                  maxLength={30}
+                  autoFocus
+                  className="mt-2 w-full rounded-xl border border-emerald-900/70 bg-[#08341b] px-3 py-2 text-sm outline-none placeholder:text-emerald-200/40"
+                />
+                <div className="mt-2 flex justify-end gap-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 px-3 text-emerald-100 hover:bg-emerald-900/30"
+                    onClick={() => {
+                      setDisplayName(profile?.name || "");
+                      setEditingName(false);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+
+                  <Button
+                    size="sm"
+                    onClick={async () => {
+                      await saveDisplayName();
+                      setEditingName(false);
+                    }}
+                    disabled={savingName || !displayName.trim()}
+                    className="h-8 rounded-xl bg-emerald-700/80 hover:bg-emerald-700"
+                  >
+                    {savingName ? "Saving…" : "Save"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
 
           <input
             ref={fileRef}
@@ -498,8 +623,8 @@ export default function ProfilePage() {
 
       {/* FOLLOWERS / FOLLOWING LIST MODAL */}
       {listOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 px-4 py-10">
-          <div className="mx-auto w-full max-w-sm rounded-2xl border border-emerald-900/70 bg-[#0b3b21] shadow-xl overflow-hidden">
+        <div className="fixed inset-0 z-50 bg-black/60 px-4 py-6">
+          <div className="mx-auto w-full max-w-sm h-[85vh] rounded-2xl border border-emerald-900/70 bg-[#0b3b21] shadow-xl overflow-hidden flex flex-col">
             <div className="flex items-center justify-between px-4 py-3 border-b border-emerald-900/70">
               <div>
                 <div className="text-sm font-semibold text-[#f5e6b0]">
@@ -537,7 +662,7 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            <div className="max-h-[60vh] overflow-auto">
+            <div className="flex-1 overflow-y-auto">
               {listLoading ? (
                 <div className="p-4 text-sm text-emerald-100/70">Loading…</div>
               ) : listRows.length === 0 ? (
@@ -547,7 +672,9 @@ export default function ProfilePage() {
                   {listRows.map((p) => {
                     const nm = p.name || p.email || "Player";
                     const busy = busyUserId === p.id;
-                    const following = myFollowingSet.has(p.id);
+
+                    const followsYou = listMode === "followers";
+                    const youFollow = myFollowingSet.has(p.id);
 
                     return (
                       <div key={p.id} className="flex items-center gap-3 p-4">
@@ -559,26 +686,39 @@ export default function ProfilePage() {
                         <div className="min-w-0 flex-1">
                           <div className="text-sm font-semibold text-emerald-50 truncate">{nm}</div>
                           <div className="text-xs text-emerald-100/60 truncate">{p.email}</div>
+
+                          {followsYou && (
+                            <div className="mt-0.5 text-[10px] text-emerald-300">
+                              Follows you
+                            </div>
+                          )}
                         </div>
 
-                        {/* Only show follow controls in FOLLOWING view (optional) */}
+                        {followsYou && !youFollow && (
+                          <Button
+                            size="sm"
+                            disabled={busy}
+                            className="rounded-xl bg-emerald-700/80 hover:bg-emerald-700"
+                            onClick={() => follow(p.id)}
+                          >
+                            {busy ? "…" : "Follow back"}
+                          </Button>
+                        )}
+
                         {listMode === "following" && (
                           <Button
                             size="sm"
                             variant="outline"
                             disabled={busy}
-                            className="border-emerald-200/40 text-emerald-50 hover:bg-emerald-900/40"
+                            className="border-red-900 text-red-300 hover:bg-red-950/60 hover:text-red-200"
                             onClick={() => unfollow(p.id)}
                           >
                             {busy ? "…" : "Unfollow"}
                           </Button>
                         )}
 
-                        {/* In followers view: display only */}
-                        {listMode === "followers" && (
-                          <div className="text-[11px] text-emerald-100/60">
-                            {following ? "Following" : ""}
-                          </div>
+                        {listMode === "followers" && youFollow && (
+                          <div className="text-[11px] text-emerald-100/60">Following</div>
                         )}
                       </div>
                     );
@@ -588,10 +728,10 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* SEARCH MODAL (opened via +) */}
+          {/* SEARCH MODAL */}
           {searchOpen && (
-            <div className="fixed inset-0 z-[60] bg-black/70 px-4 py-10">
-              <div className="mx-auto w-full max-w-sm rounded-2xl border border-emerald-900/70 bg-[#0b3b21] shadow-xl overflow-hidden">
+            <div className="fixed inset-0 z-[60] bg-black/70 px-4 py-6">
+              <div className="mx-auto w-full max-w-sm h-[85vh] rounded-2xl border border-emerald-900/70 bg-[#0b3b21] shadow-xl overflow-hidden flex flex-col">
                 <div className="flex items-center justify-between px-4 py-3 border-b border-emerald-900/70">
                   <div>
                     <div className="text-sm font-semibold text-[#f5e6b0]">Find users</div>
@@ -629,7 +769,7 @@ export default function ProfilePage() {
                   </div>
                 </div>
 
-                <div className="max-h-[60vh] overflow-auto">
+                <div className="flex-1 overflow-y-auto">
                   {searchLoading ? (
                     <div className="p-4 text-sm text-emerald-100/70">Searching…</div>
                   ) : searchResults.length === 0 ? (
@@ -660,10 +800,10 @@ export default function ProfilePage() {
                                 size="sm"
                                 variant="outline"
                                 disabled={busy}
-                                className="border-emerald-200/40 text-emerald-50 hover:bg-emerald-900/40"
+                                className="border-red-900 text-red-300 hover:bg-red-950/60 hover:text-red-200"
                                 onClick={() => unfollow(p.id)}
                               >
-                                {busy ? "…" : "Following"}
+                                {busy ? "…" : "Unfollow"}
                               </Button>
                             ) : (
                               <Button

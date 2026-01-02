@@ -32,6 +32,9 @@ export function AuthUser() {
   const [mounted, setMounted] = useState(false);
   const [pos, setPos] = useState<MenuPos | null>(null);
 
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const [adminLoaded, setAdminLoaded] = useState<boolean>(false);
+
   useEffect(() => setMounted(true), []);
 
   useEffect(() => {
@@ -67,6 +70,45 @@ export function AuthUser() {
       subscription.subscription.unsubscribe();
     };
   }, []);
+
+  // Load admin flag from profiles (used to show Admin menu item)
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAdmin() {
+      setAdminLoaded(false);
+      setIsAdmin(false);
+
+      if (!user?.id) {
+        if (!cancelled) setAdminLoaded(true);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('is_admin')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (error) {
+        console.warn('Failed to load admin flag:', error.message);
+        setIsAdmin(false);
+        setAdminLoaded(true);
+        return;
+      }
+
+      setIsAdmin(Boolean(data?.is_admin));
+      setAdminLoaded(true);
+    }
+
+    loadAdmin();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   // Measure and position menu under the avatar button
   useLayoutEffect(() => {
@@ -181,6 +223,19 @@ export function AuthUser() {
             >
               View profile
             </button>
+
+            {adminLoaded && isAdmin && (
+              <button
+                type="button"
+                className="w-full text-left px-3 py-2 hover:bg-emerald-900/60"
+                onClick={() => {
+                  setMenuOpen(false);
+                  router.push('/admin');
+                }}
+              >
+                Admin
+              </button>
+            )}
 
             <button
               type="button"
