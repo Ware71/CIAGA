@@ -37,17 +37,42 @@ export function AuthUser() {
 
   useEffect(() => setMounted(true), []);
 
+  // Step 4: Safety net — if there's a pending invite, force onboarding BEFORE ensureProfile runs
+  const handlePendingInviteOrEnsure = async (u: User) => {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+
+    if (accessToken) {
+      try {
+        const res = await fetch('/api/invites/pending', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        const j = await res.json();
+
+        if (j?.pending) {
+          router.replace('/onboarding/set-password');
+          return;
+        }
+      } catch (e) {
+        // If this fails, fall back to ensureProfile to avoid blocking normal use
+        console.warn('pending invite check failed', e);
+      }
+    }
+
+    try {
+      await ensureProfile(u);
+    } catch (e) {
+      console.warn('ensureProfile failed', e);
+    }
+  };
+
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data }) => {
       const u = (data.user as any) ?? null;
       setUser(u);
 
       if (u) {
-        try {
-          await ensureProfile(u);
-        } catch (e) {
-          console.warn('ensureProfile failed', e);
-        }
+        await handlePendingInviteOrEnsure(u);
       }
 
       setLoading(false);
@@ -58,17 +83,14 @@ export function AuthUser() {
       setUser(u);
 
       if (u) {
-        try {
-          await ensureProfile(u);
-        } catch (e) {
-          console.warn('ensureProfile failed', e);
-        }
+        await handlePendingInviteOrEnsure(u);
       }
     });
 
     return () => {
       subscription.subscription.unsubscribe();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Load admin flag from profiles (used to show Admin menu item)
@@ -87,7 +109,7 @@ export function AuthUser() {
       const { data, error } = await supabase
         .from('profiles')
         .select('is_admin')
-        .eq('id', user.id)
+        .eq('owner_user_id', user.id)
         .maybeSingle();
 
       if (cancelled) return;
@@ -157,7 +179,6 @@ export function AuthUser() {
       if (e.key === 'Escape') setMenuOpen(false);
     };
 
-    // capture phase is fine here because we *don’t* close when clicking inside menu
     window.addEventListener('pointerdown', onPointerDownCapture, true);
     window.addEventListener('keydown', onKeyDown);
 

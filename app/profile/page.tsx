@@ -16,7 +16,8 @@ type User = {
 };
 
 type ProfileRow = {
-  id: string;
+  id: string; // profile uuid
+  owner_user_id?: string | null; // auth user uuid
   name?: string | null;
   email?: string | null;
   avatar_url?: string | null;
@@ -53,8 +54,8 @@ export default function ProfilePage() {
   const [search, setSearch] = useState("");
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchResults, setSearchResults] = useState<ProfileRow[]>([]);
-  const [myFollowingSet, setMyFollowingSet] = useState<Set<string>>(new Set());
-  const [busyUserId, setBusyUserId] = useState<string | null>(null);
+  const [myFollowingSet, setMyFollowingSet] = useState<Set<string>>(new Set()); // auth user ids
+  const [busyUserId, setBusyUserId] = useState<string | null>(null); // auth user id
 
   const generateNameFromEmail = (email?: string | null) => {
     if (!email) return "Player";
@@ -68,76 +69,6 @@ export default function ProfilePage() {
       .join(" ");
     return titled.slice(0, 30);
   };
-
-  useEffect(() => {
-    let alive = true;
-
-    (async () => {
-      const { data } = await supabase.auth.getUser();
-      const u = (data.user as any) ?? null;
-
-      if (!alive) return;
-
-      setUser(u);
-      setLoading(false);
-
-      if (!u) return;
-
-      // Load profile row (fallbacks for name/avatar)
-      const { data: p, error: pErr } = await supabase
-        .from("profiles")
-        .select("id, name, email, avatar_url")
-        .eq("id", u.id)
-        .single();
-
-      if (!alive) return;
-
-      if (pErr) {
-        console.warn("Profile load error:", pErr);
-      } else {
-        setProfile((p as any) ?? null);
-      }
-
-      // Auto-generate display name on first login if missing/blank
-      const existingName = (p as any)?.name as string | null | undefined;
-      const hasName = !!(existingName && existingName.trim().length > 0);
-
-      if (!hasName) {
-        const autoName = generateNameFromEmail(u.email);
-
-        // upsert ensures row exists; safe if it already exists
-        const { error: upErr } = await supabase
-          .from("profiles")
-          .upsert(
-            {
-              id: u.id,
-              email: u.email ?? null,
-              name: autoName,
-            },
-            { onConflict: "id" }
-          );
-
-        if (upErr) {
-          console.warn("Auto-name upsert failed:", upErr);
-        } else {
-          setProfile((prev) =>
-            prev
-              ? { ...prev, name: autoName, email: prev.email ?? u.email ?? null }
-              : { id: u.id, name: autoName, email: u.email ?? null, avatar_url: null }
-          );
-          setDisplayName(autoName);
-        }
-      } else {
-        setDisplayName(existingName!);
-      }
-
-      await refreshCountsAndFollowing(u.id);
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   const refreshCountsAndFollowing = async (uid: string) => {
     // Followers: people following me
@@ -155,7 +86,7 @@ export default function ProfilePage() {
     setFollowersCount(followersRes.count ?? 0);
     setFollowingCount(followingRes.count ?? 0);
 
-    // Keep a local set of who I follow (for the search modal buttons)
+    // Keep a local set of who I follow (auth user ids)
     const { data: fRows, error: fErr } = await supabase
       .from("follows")
       .select("following_id")
@@ -168,6 +99,98 @@ export default function ProfilePage() {
       setMyFollowingSet(new Set(((fRows as any) ?? []).map((r: any) => r.following_id)));
     }
   };
+
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      const u = (data.user as any) ?? null;
+
+      if (!alive) return;
+
+      setUser(u);
+      setLoading(false);
+
+      if (!u) return;
+
+      // Load profile row by ownership
+      const { data: p0, error: pErr } = await supabase
+        .from("profiles")
+        .select("id, owner_user_id, name, email, avatar_url")
+        .eq("owner_user_id", u.id)
+        .maybeSingle();
+
+      if (!alive) return;
+
+      if (pErr) {
+        console.warn("Profile load error:", pErr);
+      }
+
+      let p = (p0 as any) as ProfileRow | null;
+
+      // If profile row is missing, create one (normal signups)
+      if (!p) {
+        const autoName = generateNameFromEmail(u.email);
+
+        const { data: created, error: insErr } = await supabase
+          .from("profiles")
+          .insert({
+            owner_user_id: u.id,
+            email: u.email ?? null,
+            name: autoName,
+            avatar_url: null,
+            is_admin: false,
+          })
+          .select("id, owner_user_id, name, email, avatar_url")
+          .single();
+
+        if (insErr) {
+          console.warn("Profile insert failed:", insErr);
+        } else {
+          p = (created as any) ?? null;
+        }
+      }
+
+      if (p) setProfile(p);
+
+      // Auto-generate display name on first login if missing/blank
+      const existingName = p?.name as string | null | undefined;
+      const hasName = !!(existingName && existingName.trim().length > 0);
+
+      if (!hasName) {
+        const autoName = generateNameFromEmail(u.email);
+
+        if (p?.id) {
+          const { data: updated, error: upErr } = await supabase
+            .from("profiles")
+            .update({
+              name: autoName,
+              email: p.email ?? u.email ?? null,
+            })
+            .eq("id", p.id)
+            .select("id, owner_user_id, name, email, avatar_url")
+            .single();
+
+          if (upErr) {
+            console.warn("Auto-name update failed:", upErr);
+          } else {
+            setProfile((updated as any) ?? null);
+          }
+        }
+
+        setDisplayName(autoName);
+      } else {
+        setDisplayName(existingName!);
+      }
+
+      await refreshCountsAndFollowing(u.id);
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const name =
     user?.user_metadata?.full_name ||
@@ -197,7 +220,8 @@ export default function ProfilePage() {
       setUploading(true);
 
       const ext = file.name.split(".").pop() || "jpg";
-      const path = `${user.id}/${Date.now()}.${ext}`;
+      const folder = profile?.id || user.id; // prefer stable profile id
+      const path = `${folder}/${Date.now()}.${ext}`;
 
       const { error: uploadError } = await supabase.storage
         .from(AVATAR_BUCKET)
@@ -218,14 +242,24 @@ export default function ProfilePage() {
       });
       if (updateAuthError) throw updateAuthError;
 
-      // Update profiles.avatar_url too (so it appears everywhere)
-      const { error: updateProfileError } = await supabase
-        .from("profiles")
-        .update({ avatar_url: publicUrl })
-        .eq("id", user.id);
+      // Update profiles.avatar_url too
+      if (profile?.id) {
+        const { error: updateProfileError } = await supabase
+          .from("profiles")
+          .update({ avatar_url: publicUrl })
+          .eq("id", profile.id);
 
-      if (updateProfileError) console.warn("profiles.avatar_url update failed:", updateProfileError);
-      else setProfile((prev) => (prev ? { ...prev, avatar_url: publicUrl } : prev));
+        if (updateProfileError) console.warn("profiles.avatar_url update failed:", updateProfileError);
+        else setProfile((prev) => (prev ? { ...prev, avatar_url: publicUrl } : prev));
+      } else {
+        // fallback
+        const { error: updateProfileError } = await supabase
+          .from("profiles")
+          .update({ avatar_url: publicUrl })
+          .eq("owner_user_id", user.id);
+
+        if (updateProfileError) console.warn("profiles.avatar_url update failed:", updateProfileError);
+      }
 
       // Update local auth state
       setUser((prev) =>
@@ -251,10 +285,10 @@ export default function ProfilePage() {
 
     setSavingName(true);
 
-    const { error } = await supabase
-      .from("profiles")
-      .update({ name: trimmed })
-      .eq("id", user.id);
+    const targetId = profile?.id;
+    const { error } = targetId
+      ? await supabase.from("profiles").update({ name: trimmed }).eq("id", targetId)
+      : await supabase.from("profiles").update({ name: trimmed }).eq("owner_user_id", user.id);
 
     if (error) {
       console.warn("Save display name failed:", error);
@@ -275,7 +309,7 @@ export default function ProfilePage() {
       .toUpperCase();
   };
 
-  // FIXED: no FK joins (reliable)
+  // Followers/Following list
   const openList = async (mode: "followers" | "following") => {
     if (!user) return;
 
@@ -286,7 +320,7 @@ export default function ProfilePage() {
 
     try {
       if (mode === "followers") {
-        // who follows me
+        // who follows me (auth user ids)
         const { data } = await supabase
           .from("follows")
           .select("follower_id")
@@ -297,12 +331,12 @@ export default function ProfilePage() {
 
         const { data: profs } = await supabase
           .from("profiles")
-          .select("id, name, email, avatar_url")
-          .in("id", ids);
+          .select("id, owner_user_id, name, email, avatar_url")
+          .in("owner_user_id", ids);
 
         setListRows((profs as any) ?? []);
       } else {
-        // who I follow
+        // who I follow (auth user ids)
         const { data } = await supabase
           .from("follows")
           .select("following_id")
@@ -313,8 +347,8 @@ export default function ProfilePage() {
 
         const { data: profs } = await supabase
           .from("profiles")
-          .select("id, name, email, avatar_url")
-          .in("id", ids);
+          .select("id, owner_user_id, name, email, avatar_url")
+          .in("owner_user_id", ids);
 
         setListRows((profs as any) ?? []);
       }
@@ -343,8 +377,8 @@ export default function ProfilePage() {
     try {
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, name, email, avatar_url")
-        .neq("id", user.id)
+        .select("id, owner_user_id, name, email, avatar_url")
+        .neq("owner_user_id", user.id) // exclude my owned profile(s)
         .or(`name.ilike.%${q}%,email.ilike.%${q}%`)
         .limit(25);
 
@@ -358,21 +392,21 @@ export default function ProfilePage() {
     }
   };
 
-  const follow = async (targetId: string) => {
+  const follow = async (targetAuthUserId: string) => {
     if (!user) return;
-    setBusyUserId(targetId);
+    setBusyUserId(targetAuthUserId);
 
     try {
       const { error } = await supabase.from("follows").insert({
         follower_id: user.id,
-        following_id: targetId,
+        following_id: targetAuthUserId,
       });
 
       if (error) throw error;
 
       setMyFollowingSet((prev) => {
         const n = new Set(prev);
-        n.add(targetId);
+        n.add(targetAuthUserId);
         return n;
       });
 
@@ -385,22 +419,22 @@ export default function ProfilePage() {
     }
   };
 
-  const unfollow = async (targetId: string) => {
+  const unfollow = async (targetAuthUserId: string) => {
     if (!user) return;
-    setBusyUserId(targetId);
+    setBusyUserId(targetAuthUserId);
 
     try {
       const { error } = await supabase
         .from("follows")
         .delete()
         .eq("follower_id", user.id)
-        .eq("following_id", targetId);
+        .eq("following_id", targetAuthUserId);
 
       if (error) throw error;
 
       setMyFollowingSet((prev) => {
         const n = new Set(prev);
-        n.delete(targetId);
+        n.delete(targetAuthUserId);
         return n;
       });
 
@@ -483,7 +517,7 @@ export default function ProfilePage() {
   return (
     <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto w-full max-w-sm space-y-4">
-        {/* Header — MATCHES COURSES */}
+        {/* Header */}
         <header className="flex items-center justify-between">
           <Button
             variant="ghost"
@@ -501,7 +535,6 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* spacer to keep title centered */}
           <div className="w-[60px]" />
         </header>
 
@@ -671,10 +704,11 @@ export default function ProfilePage() {
                 <div className="divide-y divide-emerald-900/70">
                   {listRows.map((p) => {
                     const nm = p.name || p.email || "Player";
-                    const busy = busyUserId === p.id;
+                    const targetAuthId = p.owner_user_id || "";
+                    const busy = busyUserId === targetAuthId;
 
                     const followsYou = listMode === "followers";
-                    const youFollow = myFollowingSet.has(p.id);
+                    const youFollow = targetAuthId ? myFollowingSet.has(targetAuthId) : false;
 
                     return (
                       <div key={p.id} className="flex items-center gap-3 p-4">
@@ -688,30 +722,28 @@ export default function ProfilePage() {
                           <div className="text-xs text-emerald-100/60 truncate">{p.email}</div>
 
                           {followsYou && (
-                            <div className="mt-0.5 text-[10px] text-emerald-300">
-                              Follows you
-                            </div>
+                            <div className="mt-0.5 text-[10px] text-emerald-300">Follows you</div>
                           )}
                         </div>
 
-                        {followsYou && !youFollow && (
+                        {followsYou && !youFollow && !!targetAuthId && (
                           <Button
                             size="sm"
                             disabled={busy}
                             className="rounded-xl bg-emerald-700/80 hover:bg-emerald-700"
-                            onClick={() => follow(p.id)}
+                            onClick={() => follow(targetAuthId)}
                           >
                             {busy ? "…" : "Follow back"}
                           </Button>
                         )}
 
-                        {listMode === "following" && (
+                        {listMode === "following" && !!targetAuthId && (
                           <Button
                             size="sm"
                             variant="outline"
                             disabled={busy}
                             className="border-red-900 text-red-300 hover:bg-red-950/60 hover:text-red-200"
-                            onClick={() => unfollow(p.id)}
+                            onClick={() => unfollow(targetAuthId)}
                           >
                             {busy ? "…" : "Unfollow"}
                           </Button>
@@ -780,8 +812,9 @@ export default function ProfilePage() {
                     <div className="divide-y divide-emerald-900/70">
                       {searchResults.map((p) => {
                         const nm = p.name || p.email || "Player";
-                        const following = myFollowingSet.has(p.id);
-                        const busy = busyUserId === p.id;
+                        const targetAuthId = p.owner_user_id || "";
+                        const following = targetAuthId ? myFollowingSet.has(targetAuthId) : false;
+                        const busy = busyUserId === targetAuthId;
 
                         return (
                           <div key={p.id} className="flex items-center gap-3 p-4">
@@ -795,26 +828,27 @@ export default function ProfilePage() {
                               <div className="text-xs text-emerald-100/60 truncate">{p.email}</div>
                             </div>
 
-                            {following ? (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={busy}
-                                className="border-red-900 text-red-300 hover:bg-red-950/60 hover:text-red-200"
-                                onClick={() => unfollow(p.id)}
-                              >
-                                {busy ? "…" : "Unfollow"}
-                              </Button>
-                            ) : (
-                              <Button
-                                size="sm"
-                                disabled={busy}
-                                className="rounded-xl bg-emerald-700/80 hover:bg-emerald-700"
-                                onClick={() => follow(p.id)}
-                              >
-                                {busy ? "…" : "Follow"}
-                              </Button>
-                            )}
+                            {!!targetAuthId &&
+                              (following ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={busy}
+                                  className="border-red-900 text-red-300 hover:bg-red-950/60 hover:text-red-200"
+                                  onClick={() => unfollow(targetAuthId)}
+                                >
+                                  {busy ? "…" : "Unfollow"}
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  disabled={busy}
+                                  className="rounded-xl bg-emerald-700/80 hover:bg-emerald-700"
+                                  onClick={() => follow(targetAuthId)}
+                                >
+                                  {busy ? "…" : "Follow"}
+                                </Button>
+                              ))}
                           </div>
                         );
                       })}
