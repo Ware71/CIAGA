@@ -5,14 +5,21 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 
 type Course = {
-  id: string; // OSM id: "way/12345"
+  id: string;
   name: string;
   lat: number;
   lng: number;
-  distance_m: number; // in worldwide mode we may fake/omit this
+
+  distance_m: number;
   website: string | null;
   phone: string | null;
   subtitle?: string;
+
+  // ✅ locality (may be null)
+  city?: string | null;
+  county?: string | null;
+  country?: string | null;
+  postcode?: string | null;
 };
 
 type OverrideMap = Record<string, { course_id: string; name: string }>;
@@ -30,17 +37,14 @@ export default function CoursesPage() {
   const router = useRouter();
 
   const [mode, setMode] = useState<Mode>("nearby");
-
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [courses, setCourses] = useState<Course[]>([]);
-
   const [query, setQuery] = useState("");
   const [overrides, setOverrides] = useState<OverrideMap>({});
   const [resolvingId, setResolvingId] = useState<string | null>(null);
 
-  // store last known location so worldwide search can optionally compute distance (optional)
   const lastPosRef = useRef<{ lat: number; lng: number } | null>(null);
 
   // -----------------------------
@@ -70,7 +74,19 @@ export default function CoursesPage() {
             );
             const data = await res.json();
             if (!res.ok) throw new Error(data?.error ?? "Failed to load courses");
-            if (!cancelled) setCourses(data.items ?? []);
+
+            const items: Course[] = Array.isArray(data?.items) ? data.items : [];
+
+            // ✅ normalize locality keys so they always exist
+            const normalized = items.map((c: any) => ({
+              ...c,
+              city: c.city ?? null,
+              county: c.county ?? null,
+              country: c.country ?? null,
+              postcode: c.postcode ?? null,
+            }));
+
+            if (!cancelled) setCourses(normalized);
           } catch (e: any) {
             if (!cancelled) setError(e?.message ?? "Unknown error");
           } finally {
@@ -98,7 +114,7 @@ export default function CoursesPage() {
   }, [mode]);
 
   // -----------------------------
-  // Worldwide search (OSM)
+  // Worldwide search (OSM/Nominatim)
   // -----------------------------
   useEffect(() => {
     let cancelled = false;
@@ -107,7 +123,6 @@ export default function CoursesPage() {
       const q = query.trim();
       if (mode !== "world") return;
 
-      // If no query, show nothing (or keep previous)
       if (!q) {
         setCourses([]);
         setLoading(false);
@@ -119,19 +134,26 @@ export default function CoursesPage() {
       setError(null);
 
       try {
-        // Your search route should proxy to OSM/Nominatim and return items
-        const res = await fetch(`/api/courses/search?q=${encodeURIComponent(q)}&limit=25`);
+        // ✅ NEW: pass nearLat/nearLng when available to improve ordering + distance
+        const near = lastPosRef.current;
+        const nearQS = near ? `&nearLat=${near.lat}&nearLng=${near.lng}` : "";
+
+        const res = await fetch(
+          `/api/courses/search?q=${encodeURIComponent(q)}&limit=25${nearQS}`
+        );
         const data = await res.json();
 
         if (!res.ok) throw new Error(data?.error ?? "Search failed");
 
-        // Ensure shape: { items: Course[] }
         const items: Course[] = Array.isArray(data?.items) ? data.items : [];
 
-        // Worldwide items may not have distance; normalize to 0
-        const normalized = items.map((c) => ({
+        const normalized = items.map((c: any) => ({
           ...c,
           distance_m: Number.isFinite(c.distance_m) ? c.distance_m : 0,
+          city: c.city ?? null,
+          county: c.county ?? null,
+          country: c.country ?? null,
+          postcode: c.postcode ?? null,
         }));
 
         if (!cancelled) setCourses(normalized);
@@ -149,7 +171,7 @@ export default function CoursesPage() {
   }, [mode, query]);
 
   // -----------------------------
-  // Overrides for current results (so renamed courses show)
+  // Overrides for current results
   // -----------------------------
   useEffect(() => {
     let cancelled = false;
@@ -182,11 +204,11 @@ export default function CoursesPage() {
   }, [courses]);
 
   // -----------------------------
-  // Filter local list (nearby mode mainly; world mode already filtered by query)
+  // Filter local list (nearby mode)
   // -----------------------------
   const filteredCourses = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (mode === "world") return courses; // already query-driven
+    if (mode === "world") return courses;
     if (!q) return courses;
 
     return courses.filter((c) => {
@@ -234,7 +256,6 @@ export default function CoursesPage() {
   return (
     <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto w-full max-w-sm space-y-4">
-        {/* Header */}
         <header className="flex items-center justify-between">
           <Button
             variant="ghost"
@@ -255,7 +276,6 @@ export default function CoursesPage() {
           <div className="w-[60px]" />
         </header>
 
-        {/* Mode toggle */}
         <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-2 flex gap-2">
           <button
             type="button"
@@ -283,7 +303,6 @@ export default function CoursesPage() {
           </button>
         </div>
 
-        {/* Search */}
         <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-3">
           <input
             value={query}
@@ -299,7 +318,6 @@ export default function CoursesPage() {
           ) : null}
         </div>
 
-        {/* Body */}
         {loading && (
           <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">
             {mode === "nearby" ? "Finding courses near you…" : "Searching…"}
@@ -330,22 +348,18 @@ export default function CoursesPage() {
             const isResolving = resolvingId === c.id;
 
             return (
-              <li
-                key={c.id}
-                className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4"
-              >
+              <li key={c.id} className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="font-medium text-emerald-50 truncate">{displayName}</div>
 
-                    {/* Show distance only in nearby mode (worldwide usually doesn't have it) */}
                     {mode === "nearby" ? (
                       <div className="mt-1 text-[11px] text-emerald-200/70">
                         {formatDistance(c.distance_m)}
                       </div>
                     ) : (
                       <div className="mt-1 text-[11px] text-emerald-200/60">
-                        {c.lat && c.lng ? `${c.lat.toFixed(4)}, ${c.lng.toFixed(4)}` : ""}
+                        {c.subtitle ?? (c.lat && c.lng ? `${c.lat.toFixed(4)}, ${c.lng.toFixed(4)}` : "")}
                       </div>
                     )}
                   </div>

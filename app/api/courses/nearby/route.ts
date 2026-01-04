@@ -9,15 +9,9 @@ type OverpassElement = {
   tags?: Record<string, string>;
 };
 
-function haversineMeters(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number
-) {
+function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371000;
   const toRad = (d: number) => (d * Math.PI) / 180;
-
   const dLat = toRad(lat2 - lat1);
   const dLon = toRad(lon2 - lon1);
 
@@ -30,18 +24,24 @@ function haversineMeters(
   return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+function isProbablyNotAGolfCourse(tags: Record<string, string>) {
+  // Optional: filter out obvious non-courses that sometimes appear
+  const tourism = (tags.tourism ?? "").toLowerCase();
+  const amenity = (tags.amenity ?? "").toLowerCase();
+  if (tourism === "hotel") return true;
+  if (amenity === "hotel") return true;
+  return false;
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
 
   const lat = Number(searchParams.get("lat"));
   const lng = Number(searchParams.get("lng"));
-  const radius = Number(searchParams.get("radius") ?? "10000"); // slightly smaller default
+  const radius = Number(searchParams.get("radius") ?? "15000");
 
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-    return NextResponse.json(
-      { error: "Invalid lat/lng" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Invalid lat/lng" }, { status: 400 });
   }
 
   const query = `
@@ -67,8 +67,7 @@ export async function GET(req: NextRequest) {
       headers: {
         "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
         "Accept": "application/json",
-        // IMPORTANT: set a real contact string
-        "User-Agent": "CIAGA/1.0 (nearby courses; contact: you@example.com)",
+        "User-Agent": process.env.OVERPASS_USER_AGENT ?? "CIAGA/1.0 (contact: dev@ciaga.app)",
       },
       body: new URLSearchParams({ data: query }).toString(),
       cache: "no-store",
@@ -81,16 +80,12 @@ export async function GET(req: NextRequest) {
   for (const url of overpassUrls) {
     try {
       const res = await postOverpass(url);
-
       if (res.ok) {
         response = res;
         break;
       }
-
       const text = await res.text();
-      lastError = `${url} → ${res.status}: ${text.slice(0, 300)}`;
-
-      // Try next instance on common transient failures
+      lastError = `${url} → ${res.status}: ${text.slice(0, 250)}`;
       if ([429, 502, 503, 504].includes(res.status)) continue;
     } catch (e: any) {
       lastError = `${url} failed: ${e?.message ?? "unknown error"}`;
@@ -98,16 +93,10 @@ export async function GET(req: NextRequest) {
   }
 
   if (!response) {
-    return NextResponse.json(
-      { error: "Overpass error", detail: lastError },
-      { status: 502 }
-    );
+    return NextResponse.json({ error: "Overpass error", detail: lastError }, { status: 502 });
   }
 
-  const json = (await response.json()) as {
-    elements?: OverpassElement[];
-  };
-
+  const json = (await response.json()) as { elements?: OverpassElement[] };
   const elements = Array.isArray(json.elements) ? json.elements : [];
 
   const items = elements
@@ -116,8 +105,10 @@ export async function GET(req: NextRequest) {
       const lng0 = el.lon ?? el.center?.lon;
       if (!Number.isFinite(lat0) || !Number.isFinite(lng0)) return null;
 
-      const distance_m = haversineMeters(lat, lng, lat0!, lng0!);
       const tags = el.tags ?? {};
+      if (isProbablyNotAGolfCourse(tags)) return null;
+
+      const distance_m = haversineMeters(lat, lng, lat0!, lng0!);
 
       return {
         id: `${el.type}/${el.id}`,

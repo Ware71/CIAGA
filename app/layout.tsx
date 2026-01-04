@@ -20,8 +20,8 @@ export const metadata: Metadata = {
   description: "League, live scorecards, rangefinder, AI caddy",
   manifest: "/manifest.json",
   icons: {
-    icon: "/public/icons/icon-192.png",
-    apple: "/public/icons/icon-512.png",
+    icon: "/icons/icon-192.png",
+    apple: "/icons/icon-512.png",
   },
 };
 

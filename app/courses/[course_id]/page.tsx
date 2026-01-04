@@ -35,6 +35,7 @@ type Course = {
 };
 
 type GenderFilter = "all" | "male" | "female";
+type HolesFilter = "all" | "18" | "9";
 
 function genderLabel(g: string | null | undefined) {
   const s = (g ?? "").toLowerCase();
@@ -70,6 +71,18 @@ function deepCopy<T>(v: T): T {
   return JSON.parse(JSON.stringify(v));
 }
 
+// Prefer actual hole count; fallback to name hints for split tees.
+function teeHolesCount(t: TeeBox): number {
+  const holes = Array.isArray(t.holes) ? t.holes : [];
+  if (holes.length > 0) return holes.length;
+
+  const n = (t.name ?? "").toLowerCase();
+  if (n.includes("(front 9)") || n.includes("(back 9)")) return 9;
+
+  // default assumption if unknown
+  return 18;
+}
+
 export default function CourseDetailPage() {
   const router = useRouter();
   const params = useParams<{ course_id: string }>();
@@ -83,6 +96,7 @@ export default function CourseDetailPage() {
   const [openTeeId, setOpenTeeId] = useState<string | null>(null);
 
   const [genderFilter, setGenderFilter] = useState<GenderFilter>("all");
+  const [holesFilter, setHolesFilter] = useState<HolesFilter>("all");
 
   // Edit mode
   const [editMode, setEditMode] = useState(false);
@@ -119,6 +133,7 @@ export default function CourseDetailPage() {
       setTeeBoxes(Array.isArray(data.tee_boxes) ? data.tee_boxes : []);
       setOpenTeeId(null);
       setGenderFilter("all");
+      setHolesFilter("all");
     } catch (e: any) {
       setError(e?.message ?? "Unknown error");
     } finally {
@@ -145,6 +160,7 @@ export default function CourseDetailPage() {
           setTeeBoxes(Array.isArray(data.tee_boxes) ? data.tee_boxes : []);
           setOpenTeeId(null);
           setGenderFilter("all");
+          setHolesFilter("all");
         }
       } catch (e: any) {
         if (!cancelled) setError(e?.message ?? "Unknown error");
@@ -179,14 +195,46 @@ export default function CourseDetailPage() {
   }, [teeBoxes]);
 
   const filteredTees = useMemo(() => {
-    if (genderFilter === "all") return sortedTees;
-    return sortedTees.filter((t) => {
-      const g = normalizeGender(t.gender);
-      if (genderFilter === "male") return g === "male" || g === "unisex";
-      if (genderFilter === "female") return g === "female" || g === "unisex";
-      return true;
-    });
-  }, [sortedTees, genderFilter]);
+    // gender filter
+    let arr = sortedTees;
+    if (genderFilter !== "all") {
+      arr = arr.filter((t) => {
+        const g = normalizeGender(t.gender);
+        if (genderFilter === "male") return g === "male" || g === "unisex";
+        if (genderFilter === "female") return g === "female" || g === "unisex";
+        return true;
+      });
+    }
+
+    // holes filter
+    if (holesFilter !== "all") {
+      const want = holesFilter === "18" ? 18 : 9;
+      arr = arr.filter((t) => teeHolesCount(t) === want);
+    }
+
+    return arr;
+  }, [sortedTees, genderFilter, holesFilter]);
+
+  const filteredDraftTees = useMemo(() => {
+    let arr = [...draftTees];
+
+    // optional: keep edit list consistent with filters
+    if (genderFilter !== "all") {
+      arr = arr.filter((t) => {
+        const g = normalizeGender(t.gender);
+        if (genderFilter === "male") return g === "male" || g === "unisex";
+        if (genderFilter === "female") return g === "female" || g === "unisex";
+        return true;
+      });
+    }
+
+    if (holesFilter !== "all") {
+      const want = holesFilter === "18" ? 18 : 9;
+      arr = arr.filter((t) => teeHolesCount(t) === want);
+    }
+
+    return arr;
+  }, [draftTees, genderFilter, holesFilter]);
 
   const courseSubtitle = useMemo(() => {
     const bits = [course?.city, course?.country].filter(Boolean);
@@ -265,9 +313,7 @@ export default function CourseDetailPage() {
       prev.map((t) => {
         if (t.id !== teeId) return t;
         const holes = Array.isArray(t.holes) ? t.holes : [];
-        const nextHoles = holes.map((h) =>
-          h.hole_number === holeNumber ? { ...h, ...patch } : h
-        );
+        const nextHoles = holes.map((h) => (h.hole_number === holeNumber ? { ...h, ...patch } : h));
         return { ...t, holes: nextHoles };
       })
     );
@@ -335,9 +381,7 @@ export default function CourseDetailPage() {
 
     try {
       const res = await fetch(
-        `/api/courses/tee-boxes/${encodeURIComponent(teeId)}?course_id=${encodeURIComponent(
-          course.id
-        )}`,
+        `/api/courses/tee-boxes/${encodeURIComponent(teeId)}?course_id=${encodeURIComponent(course.id)}`,
         { method: "DELETE" }
       );
 
@@ -403,6 +447,8 @@ export default function CourseDetailPage() {
       setAddingTee(false);
     }
   }
+
+  const visibleTees = editMode ? filteredDraftTees : filteredTees;
 
   return (
     <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
@@ -538,9 +584,7 @@ export default function CourseDetailPage() {
                       <select
                         className="rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm text-emerald-50 outline-none focus:border-emerald-200/40"
                         value={newTee.gender}
-                        onChange={(e) =>
-                          setNewTee((p) => ({ ...p, gender: e.target.value as any }))
-                        }
+                        onChange={(e) => setNewTee((p) => ({ ...p, gender: e.target.value as any }))}
                       >
                         <option value="unisex">Unisex</option>
                         <option value="male">Men</option>
@@ -632,14 +676,54 @@ export default function CourseDetailPage() {
               </button>
             </div>
 
+            {/* Holes toggle (NEW) */}
+            <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-2 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setHolesFilter("all")}
+                className={[
+                  "flex-1 rounded-xl px-3 py-2 text-xs font-medium",
+                  holesFilter === "all"
+                    ? "bg-emerald-900/40 border border-emerald-200/30"
+                    : "hover:bg-emerald-900/20",
+                ].join(" ")}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                onClick={() => setHolesFilter("18")}
+                className={[
+                  "flex-1 rounded-xl px-3 py-2 text-xs font-medium",
+                  holesFilter === "18"
+                    ? "bg-emerald-900/40 border border-emerald-200/30"
+                    : "hover:bg-emerald-900/20",
+                ].join(" ")}
+              >
+                18 holes
+              </button>
+              <button
+                type="button"
+                onClick={() => setHolesFilter("9")}
+                className={[
+                  "flex-1 rounded-xl px-3 py-2 text-xs font-medium",
+                  holesFilter === "9"
+                    ? "bg-emerald-900/40 border border-emerald-200/30"
+                    : "hover:bg-emerald-900/20",
+                ].join(" ")}
+              >
+                9 holes
+              </button>
+            </div>
+
             {/* Tee list */}
-            {(editMode ? draftTees : filteredTees).length === 0 ? (
+            {visibleTees.length === 0 ? (
               <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">
                 No tee boxes match this filter.
               </div>
             ) : (
               <ul className="space-y-3">
-                {(editMode ? draftTees : filteredTees).map((t) => {
+                {visibleTees.map((t) => {
                   const g = genderLabel(t.gender);
                   const isOpen = openTeeId === t.id;
 
@@ -663,14 +747,16 @@ export default function CourseDetailPage() {
                               <>
                                 <div className="font-medium text-emerald-50 truncate">
                                   {t.name}
-                                  {g ? <span className="text-emerald-200/70">{` · ${g}`}</span> : null}
+                                  {g ? (
+                                    <span className="text-emerald-200/70">{` · ${g}`}</span>
+                                  ) : null}
                                 </div>
                                 <div className="mt-2 flex flex-wrap gap-2">
                                   {chip(`Par ${t.par ?? "—"}`)}
                                   {chip(`${t.yards ?? "—"} yds`)}
                                   {chip(`Rating ${fmtNum(t.rating, 1)}`)}
                                   {chip(`Slope ${t.slope ?? "—"}`)}
-                                  {holesCount ? chip(`${holesCount} holes`) : null}
+                                  {holesCount ? chip(`${holesCount} holes`) : chip(`${teeHolesCount(t)} holes`)}
                                 </div>
                               </>
                             ) : (

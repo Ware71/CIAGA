@@ -37,24 +37,36 @@ export function AuthUser() {
 
   useEffect(() => setMounted(true), []);
 
-  // Step 4: Safety net — if there's a pending invite, force onboarding BEFORE ensureProfile runs
-  const handlePendingInviteOrEnsure = async (u: User) => {
-    const { data: sessionData } = await supabase.auth.getSession();
-    const accessToken = sessionData.session?.access_token;
+  // Only run onboarding redirect once per session to avoid loops
+  const didCheckInviteRef = useRef<string | null>(null);
+
+  const handlePendingInviteOrEnsure = async (u: User, accessToken?: string | null) => {
+    // If we already checked invite for this user in this session, don't re-run
+    if (didCheckInviteRef.current === u.id) {
+      try {
+        await ensureProfile(u);
+      } catch (e) {
+        console.warn('ensureProfile failed', e);
+      }
+      return;
+    }
+
+    didCheckInviteRef.current = u.id;
 
     if (accessToken) {
       try {
         const res = await fetch('/api/invites/pending', {
           headers: { Authorization: `Bearer ${accessToken}` },
         });
+
         const j = await res.json();
 
+        // Only redirect when truly pending (your pending endpoint must check profile unclaimed)
         if (j?.pending) {
           router.replace('/onboarding/set-password');
           return;
         }
       } catch (e) {
-        // If this fails, fall back to ensureProfile to avoid blocking normal use
         console.warn('pending invite check failed', e);
       }
     }
@@ -67,27 +79,53 @@ export function AuthUser() {
   };
 
   useEffect(() => {
-    supabase.auth.getUser().then(async ({ data }) => {
-      const u = (data.user as any) ?? null;
-      setUser(u);
+    let cancelled = false;
 
-      if (u) {
-        await handlePendingInviteOrEnsure(u);
-      }
-
-      setLoading(false);
-    });
-
-    const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    (async () => {
+      // Prefer session (gives us token) and user in one go
+      const { data: sessionData } = await supabase.auth.getSession();
+      const session = sessionData.session;
       const u = (session?.user as any) ?? null;
+
+      if (cancelled) return;
+
       setUser(u);
+      setLoading(false);
 
       if (u) {
-        await handlePendingInviteOrEnsure(u);
+        await handlePendingInviteOrEnsure(u, session?.access_token ?? null);
       }
-    });
+    })();
+
+    const { data: subscription } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        const u = (session?.user as any) ?? null;
+        if (cancelled) return;
+
+        setUser(u);
+
+        if (!u) {
+          didCheckInviteRef.current = null;
+          return;
+        }
+
+        // Only run invite/onboarding logic on actual sign-in events
+        // (prevents loops on token refresh / tab focus)
+        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+          await handlePendingInviteOrEnsure(u, session?.access_token ?? null);
+        } else {
+          // For other events, just ensure profile exists
+          try {
+            await ensureProfile(u);
+          } catch (e) {
+            console.warn('ensureProfile failed', e);
+          }
+        }
+      }
+    );
 
     return () => {
+      cancelled = true;
       subscription.subscription.unsubscribe();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -110,7 +148,7 @@ export function AuthUser() {
         .from('profiles')
         .select('is_admin')
         .eq('owner_user_id', user.id)
-        .maybeSingle();
+        .limit(1);
 
       if (cancelled) return;
 
@@ -121,7 +159,7 @@ export function AuthUser() {
         return;
       }
 
-      setIsAdmin(Boolean(data?.is_admin));
+      setIsAdmin(Boolean((data as any)?.[0]?.is_admin));
       setAdminLoaded(true);
     }
 
@@ -142,7 +180,6 @@ export function AuthUser() {
 
       const r = btn.getBoundingClientRect();
 
-      // Menu anchored to the right edge of the button
       setPos({
         top: r.bottom + 8,
         right: Math.max(8, window.innerWidth - r.right),
@@ -168,7 +205,6 @@ export function AuthUser() {
       const t = e.target as Node | null;
       if (!t) return;
 
-      // If click is inside button or inside menu, ignore
       if (buttonRef.current?.contains(t)) return;
       if (menuRef.current?.contains(t)) return;
 
@@ -191,6 +227,7 @@ export function AuthUser() {
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     setUser(null);
+    didCheckInviteRef.current = null;
     setMenuOpen(false);
     router.push('/');
   };
