@@ -1,3 +1,4 @@
+// /app/api/admin/invite-user/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -16,13 +17,13 @@ export async function POST(req: Request) {
     const { data: userData, error: userErr } = await supabaseAdmin.auth.getUser(token);
     if (userErr || !userData?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const adminId = userData.user.id;
+    const adminAuthUserId = userData.user.id;
 
     // Check admin using owner_user_id model
     const { data: rows, error: adminErr } = await supabaseAdmin
       .from("profiles")
-      .select("is_admin")
-      .eq("owner_user_id", adminId)
+      .select("id, is_admin")
+      .eq("owner_user_id", adminAuthUserId)
       .limit(1);
 
     if (adminErr) return NextResponse.json({ error: adminErr.message }, { status: 500 });
@@ -30,6 +31,9 @@ export async function POST(req: Request) {
     if (!rows?.[0]?.is_admin) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+
+    // Model B: admin profile id
+    const adminProfileId = rows[0].id;
 
     // 2) Parse payload
     const body = await req.json();
@@ -48,13 +52,13 @@ export async function POST(req: Request) {
       .is("accepted_at", null)
       .is("revoked_at", null);
 
-    // 4) Insert invite row
+    // 4) Insert invite row (created_by = profiles.id)
     const { data: inviteRow, error: inviteErr } = await supabaseAdmin
       .from("invites")
       .insert({
         email,
         profile_id,
-        created_by: adminId,
+        created_by: adminProfileId,
       })
       .select("*")
       .single();

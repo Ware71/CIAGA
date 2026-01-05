@@ -7,7 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 
 type User = {
-  id: string;
+  id: string; // auth.users.id
   email?: string;
   user_metadata?: {
     full_name?: string;
@@ -16,7 +16,7 @@ type User = {
 };
 
 type ProfileRow = {
-  id: string; // profile uuid
+  id: string; // profiles.id (canonical player id)
   owner_user_id?: string | null; // auth user uuid
   name?: string | null;
   email?: string | null;
@@ -54,8 +54,8 @@ export default function ProfilePage() {
   const [search, setSearch] = useState("");
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchResults, setSearchResults] = useState<ProfileRow[]>([]);
-  const [myFollowingSet, setMyFollowingSet] = useState<Set<string>>(new Set()); // auth user ids
-  const [busyUserId, setBusyUserId] = useState<string | null>(null); // auth user id
+  const [myFollowingSet, setMyFollowingSet] = useState<Set<string>>(new Set()); // profile ids
+  const [busyUserId, setBusyUserId] = useState<string | null>(null); // profile id
 
   const generateNameFromEmail = (email?: string | null) => {
     if (!email) return "Player";
@@ -70,27 +70,27 @@ export default function ProfilePage() {
     return titled.slice(0, 30);
   };
 
-  const refreshCountsAndFollowing = async (uid: string) => {
-    // Followers: people following me
+  const refreshCountsAndFollowing = async (myProfileId: string) => {
+    // Followers: people following me (profile ids)
     const followersRes = await supabase
       .from("follows")
       .select("id", { count: "exact", head: true })
-      .eq("following_id", uid);
+      .eq("following_id", myProfileId);
 
-    // Following: people I follow
+    // Following: people I follow (profile ids)
     const followingRes = await supabase
       .from("follows")
       .select("id", { count: "exact", head: true })
-      .eq("follower_id", uid);
+      .eq("follower_id", myProfileId);
 
     setFollowersCount(followersRes.count ?? 0);
     setFollowingCount(followingRes.count ?? 0);
 
-    // Keep a local set of who I follow (auth user ids)
+    // Keep a local set of who I follow (profile ids)
     const { data: fRows, error: fErr } = await supabase
       .from("follows")
       .select("following_id")
-      .eq("follower_id", uid);
+      .eq("follower_id", myProfileId);
 
     if (fErr) {
       console.warn("Failed loading my following set:", fErr);
@@ -114,7 +114,7 @@ export default function ProfilePage() {
 
       if (!u) return;
 
-      // Load profile row by ownership
+      // Load profile row by ownership (Model B)
       const { data: p0, error: pErr } = await supabase
         .from("profiles")
         .select("id, owner_user_id, name, email, avatar_url")
@@ -184,7 +184,10 @@ export default function ProfilePage() {
         setDisplayName(existingName!);
       }
 
-      await refreshCountsAndFollowing(u.id);
+      // Model B: follow counts are based on profile.id
+      if (p?.id) {
+        await refreshCountsAndFollowing(p.id);
+      }
     })();
 
     return () => {
@@ -206,7 +209,7 @@ export default function ProfilePage() {
     .slice(0, 2)
     .toUpperCase();
 
-  // Prefer auth metadata avatar (current behaviour), fall back to profiles.avatar_url
+  // Prefer auth metadata avatar, fall back to profiles.avatar_url
   const avatarUrl = user?.user_metadata?.avatar_url || profile?.avatar_url || "";
 
   const onPickFile = () => fileRef.current?.click();
@@ -236,7 +239,7 @@ export default function ProfilePage() {
       const { data: pub } = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(path);
       const publicUrl = pub.publicUrl;
 
-      // Update auth metadata (existing behaviour)
+      // Update auth metadata
       const { error: updateAuthError } = await supabase.auth.updateUser({
         data: { avatar_url: publicUrl },
       });
@@ -252,7 +255,6 @@ export default function ProfilePage() {
         if (updateProfileError) console.warn("profiles.avatar_url update failed:", updateProfileError);
         else setProfile((prev) => (prev ? { ...prev, avatar_url: publicUrl } : prev));
       } else {
-        // fallback
         const { error: updateProfileError } = await supabase
           .from("profiles")
           .update({ avatar_url: publicUrl })
@@ -309,9 +311,9 @@ export default function ProfilePage() {
       .toUpperCase();
   };
 
-  // Followers/Following list
+  // Followers/Following list (Model B: follows stores profile ids)
   const openList = async (mode: "followers" | "following") => {
-    if (!user) return;
+    if (!user || !profile?.id) return;
 
     setListMode(mode);
     setListOpen(true);
@@ -320,11 +322,11 @@ export default function ProfilePage() {
 
     try {
       if (mode === "followers") {
-        // who follows me (auth user ids)
+        // Who follows me (profile ids)
         const { data } = await supabase
           .from("follows")
           .select("follower_id")
-          .eq("following_id", user.id);
+          .eq("following_id", profile.id);
 
         const ids = (data ?? []).map((r: any) => r.follower_id);
         if (!ids.length) return;
@@ -332,15 +334,15 @@ export default function ProfilePage() {
         const { data: profs } = await supabase
           .from("profiles")
           .select("id, owner_user_id, name, email, avatar_url")
-          .in("owner_user_id", ids);
+          .in("id", ids);
 
         setListRows((profs as any) ?? []);
       } else {
-        // who I follow (auth user ids)
+        // Who I follow (profile ids)
         const { data } = await supabase
           .from("follows")
           .select("following_id")
-          .eq("follower_id", user.id);
+          .eq("follower_id", profile.id);
 
         const ids = (data ?? []).map((r: any) => r.following_id);
         if (!ids.length) return;
@@ -348,7 +350,7 @@ export default function ProfilePage() {
         const { data: profs } = await supabase
           .from("profiles")
           .select("id, owner_user_id, name, email, avatar_url")
-          .in("owner_user_id", ids);
+          .in("id", ids);
 
         setListRows((profs as any) ?? []);
       }
@@ -365,7 +367,7 @@ export default function ProfilePage() {
   };
 
   const runSearch = async () => {
-    if (!user) return;
+    if (!user || !profile?.id) return;
     const q = search.trim();
     if (!q) {
       setSearchResults([]);
@@ -378,7 +380,7 @@ export default function ProfilePage() {
       const { data, error } = await supabase
         .from("profiles")
         .select("id, owner_user_id, name, email, avatar_url")
-        .neq("owner_user_id", user.id) // exclude my owned profile(s)
+        .neq("id", profile.id) // exclude my profile row
         .or(`name.ilike.%${q}%,email.ilike.%${q}%`)
         .limit(25);
 
@@ -392,25 +394,25 @@ export default function ProfilePage() {
     }
   };
 
-  const follow = async (targetAuthUserId: string) => {
-    if (!user) return;
-    setBusyUserId(targetAuthUserId);
+  const follow = async (targetProfileId: string) => {
+    if (!profile?.id) return;
+    setBusyUserId(targetProfileId);
 
     try {
       const { error } = await supabase.from("follows").insert({
-        follower_id: user.id,
-        following_id: targetAuthUserId,
+        follower_id: profile.id,
+        following_id: targetProfileId,
       });
 
       if (error) throw error;
 
       setMyFollowingSet((prev) => {
         const n = new Set(prev);
-        n.add(targetAuthUserId);
+        n.add(targetProfileId);
         return n;
       });
 
-      await refreshCountsAndFollowing(user.id);
+      await refreshCountsAndFollowing(profile.id);
       if (listOpen) await openList(listMode);
     } catch (e) {
       console.warn("Follow failed:", e);
@@ -419,26 +421,26 @@ export default function ProfilePage() {
     }
   };
 
-  const unfollow = async (targetAuthUserId: string) => {
-    if (!user) return;
-    setBusyUserId(targetAuthUserId);
+  const unfollow = async (targetProfileId: string) => {
+    if (!profile?.id) return;
+    setBusyUserId(targetProfileId);
 
     try {
       const { error } = await supabase
         .from("follows")
         .delete()
-        .eq("follower_id", user.id)
-        .eq("following_id", targetAuthUserId);
+        .eq("follower_id", profile.id)
+        .eq("following_id", targetProfileId);
 
       if (error) throw error;
 
       setMyFollowingSet((prev) => {
         const n = new Set(prev);
-        n.delete(targetAuthUserId);
+        n.delete(targetProfileId);
         return n;
       });
 
-      await refreshCountsAndFollowing(user.id);
+      await refreshCountsAndFollowing(profile.id);
       if (listOpen) await openList(listMode);
     } catch (e) {
       console.warn("Unfollow failed:", e);
@@ -466,9 +468,7 @@ export default function ProfilePage() {
 
             <div className="text-center flex-1">
               <div className="text-lg font-semibold tracking-wide text-[#f5e6b0]">Profile</div>
-              <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">
-                Account
-              </div>
+              <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">Account</div>
             </div>
 
             <div className="w-[60px]" />
@@ -498,9 +498,7 @@ export default function ProfilePage() {
 
             <div className="text-center flex-1">
               <div className="text-lg font-semibold tracking-wide text-[#f5e6b0]">Profile</div>
-              <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">
-                Account
-              </div>
+              <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">Account</div>
             </div>
 
             <div className="w-[60px]" />
@@ -530,9 +528,7 @@ export default function ProfilePage() {
 
           <div className="text-center flex-1">
             <div className="text-lg font-semibold tracking-wide text-[#f5e6b0]">Profile</div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">
-              Account
-            </div>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">Account</div>
           </div>
 
           <div className="w-[60px]" />
@@ -548,9 +544,7 @@ export default function ProfilePage() {
           {/* NAME + PENCIL / EDITOR */}
           {!editingName ? (
             <div className="mt-4 flex items-center justify-center gap-2 max-w-[280px]">
-              <div className="text-base font-semibold text-[#f5e6b0] truncate text-center">
-                {profile?.name || name}
-              </div>
+              <div className="text-base font-semibold text-[#f5e6b0] truncate text-center">{profile?.name || name}</div>
 
               <button
                 type="button"
@@ -565,9 +559,7 @@ export default function ProfilePage() {
           ) : (
             <div className="mt-3 w-full max-w-sm">
               <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-3">
-                <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">
-                  Display name
-                </div>
+                <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">Display name</div>
                 <input
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
@@ -605,13 +597,7 @@ export default function ProfilePage() {
             </div>
           )}
 
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={onFileChange}
-          />
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFileChange} />
 
           <Button
             onClick={onPickFile}
@@ -630,9 +616,7 @@ export default function ProfilePage() {
                 onClick={() => openList("followers")}
               >
                 <div className="text-lg font-semibold text-emerald-50">{followersCount}</div>
-                <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">
-                  {followersTitle}
-                </div>
+                <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">{followersTitle}</div>
               </button>
 
               <button
@@ -641,16 +625,12 @@ export default function ProfilePage() {
                 onClick={() => openList("following")}
               >
                 <div className="text-lg font-semibold text-emerald-50">{followingCount}</div>
-                <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">
-                  {followingTitle}
-                </div>
+                <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">{followingTitle}</div>
               </button>
             </div>
           </div>
 
-          <div className="mt-6 w-full text-xs text-emerald-100/70 text-center">
-            More profile stats coming soon.
-          </div>
+          <div className="mt-6 w-full text-xs text-emerald-100/70 text-center">More profile stats coming soon.</div>
         </div>
       </div>
 
@@ -704,11 +684,11 @@ export default function ProfilePage() {
                 <div className="divide-y divide-emerald-900/70">
                   {listRows.map((p) => {
                     const nm = p.name || p.email || "Player";
-                    const targetAuthId = p.owner_user_id || "";
-                    const busy = busyUserId === targetAuthId;
+                    const targetProfileId = p.id;
+                    const busy = busyUserId === targetProfileId;
 
                     const followsYou = listMode === "followers";
-                    const youFollow = targetAuthId ? myFollowingSet.has(targetAuthId) : false;
+                    const youFollow = myFollowingSet.has(targetProfileId);
 
                     return (
                       <div key={p.id} className="flex items-center gap-3 p-4">
@@ -721,29 +701,27 @@ export default function ProfilePage() {
                           <div className="text-sm font-semibold text-emerald-50 truncate">{nm}</div>
                           <div className="text-xs text-emerald-100/60 truncate">{p.email}</div>
 
-                          {followsYou && (
-                            <div className="mt-0.5 text-[10px] text-emerald-300">Follows you</div>
-                          )}
+                          {followsYou && <div className="mt-0.5 text-[10px] text-emerald-300">Follows you</div>}
                         </div>
 
-                        {followsYou && !youFollow && !!targetAuthId && (
+                        {followsYou && !youFollow && (
                           <Button
                             size="sm"
                             disabled={busy}
                             className="rounded-xl bg-emerald-700/80 hover:bg-emerald-700"
-                            onClick={() => follow(targetAuthId)}
+                            onClick={() => follow(targetProfileId)}
                           >
                             {busy ? "…" : "Follow back"}
                           </Button>
                         )}
 
-                        {listMode === "following" && !!targetAuthId && (
+                        {listMode === "following" && (
                           <Button
                             size="sm"
                             variant="outline"
                             disabled={busy}
                             className="border-red-900 text-red-300 hover:bg-red-950/60 hover:text-red-200"
-                            onClick={() => unfollow(targetAuthId)}
+                            onClick={() => unfollow(targetProfileId)}
                           >
                             {busy ? "…" : "Unfollow"}
                           </Button>
@@ -767,9 +745,7 @@ export default function ProfilePage() {
                 <div className="flex items-center justify-between px-4 py-3 border-b border-emerald-900/70">
                   <div>
                     <div className="text-sm font-semibold text-[#f5e6b0]">Find users</div>
-                    <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">
-                      Search & follow
-                    </div>
+                    <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">Search & follow</div>
                   </div>
 
                   <Button
@@ -805,16 +781,14 @@ export default function ProfilePage() {
                   {searchLoading ? (
                     <div className="p-4 text-sm text-emerald-100/70">Searching…</div>
                   ) : searchResults.length === 0 ? (
-                    <div className="p-4 text-sm text-emerald-100/70">
-                      Type a name/email and press Search.
-                    </div>
+                    <div className="p-4 text-sm text-emerald-100/70">Type a name/email and press Search.</div>
                   ) : (
                     <div className="divide-y divide-emerald-900/70">
                       {searchResults.map((p) => {
                         const nm = p.name || p.email || "Player";
-                        const targetAuthId = p.owner_user_id || "";
-                        const following = targetAuthId ? myFollowingSet.has(targetAuthId) : false;
-                        const busy = busyUserId === targetAuthId;
+                        const targetProfileId = p.id;
+                        const following = myFollowingSet.has(targetProfileId);
+                        const busy = busyUserId === targetProfileId;
 
                         return (
                           <div key={p.id} className="flex items-center gap-3 p-4">
@@ -828,27 +802,26 @@ export default function ProfilePage() {
                               <div className="text-xs text-emerald-100/60 truncate">{p.email}</div>
                             </div>
 
-                            {!!targetAuthId &&
-                              (following ? (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  disabled={busy}
-                                  className="border-red-900 text-red-300 hover:bg-red-950/60 hover:text-red-200"
-                                  onClick={() => unfollow(targetAuthId)}
-                                >
-                                  {busy ? "…" : "Unfollow"}
-                                </Button>
-                              ) : (
-                                <Button
-                                  size="sm"
-                                  disabled={busy}
-                                  className="rounded-xl bg-emerald-700/80 hover:bg-emerald-700"
-                                  onClick={() => follow(targetAuthId)}
-                                >
-                                  {busy ? "…" : "Follow"}
-                                </Button>
-                              ))}
+                            {following ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={busy}
+                                className="border-red-900 text-red-300 hover:bg-red-950/60 hover:text-red-200"
+                                onClick={() => unfollow(targetProfileId)}
+                              >
+                                {busy ? "…" : "Unfollow"}
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                disabled={busy}
+                                className="rounded-xl bg-emerald-700/80 hover:bg-emerald-700"
+                                onClick={() => follow(targetProfileId)}
+                              >
+                                {busy ? "…" : "Follow"}
+                              </Button>
+                            )}
                           </div>
                         );
                       })}
