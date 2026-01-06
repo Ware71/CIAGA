@@ -455,13 +455,13 @@ export default function CoursesPage() {
       {pinOpen && (
         <MapSpoofPicker
           initial={spoofPos}
+          fallbackCenter={lastPosRef.current} // ✅ starts at user's last known location
           onClose={() => setPinOpen(false)}
           onClear={() => {
             setSpoofPos(null);
             setPinOpen(false);
           }}
           onConfirm={(pos) => {
-            // basic clamp
             const lat = Math.max(-90, Math.min(90, pos.lat));
             const lng = Math.max(-180, Math.min(180, pos.lng));
             setSpoofPos({ lat, lng });
@@ -469,6 +469,7 @@ export default function CoursesPage() {
           }}
         />
       )}
+
     </div>
   );
 }
