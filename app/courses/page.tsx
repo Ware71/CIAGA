@@ -4,6 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 
+import { useCourseSearch, type CourseSearchItem } from "@/lib/useCourseSearch";
+import { CourseSearchBar } from "@/components/course/CourseSearchBar";
+
 type Course = {
   id: string;
   name: string;
@@ -15,7 +18,7 @@ type Course = {
   phone: string | null;
   subtitle?: string;
 
-  // ✅ locality (may be null)
+  // locality (may be null)
   city?: string | null;
   county?: string | null;
   country?: string | null;
@@ -31,17 +34,46 @@ function formatDistance(meters: number) {
   return `${(meters / 1000).toFixed(1)} km away`;
 }
 
-type Mode = "nearby" | "world";
+function worldItemToCourse(x: CourseSearchItem): Course {
+  return {
+    id: x.id,
+    name: x.name,
+    lat: x.lat,
+    lng: x.lng,
+    distance_m: Number.isFinite(x.distance_m) ? (x.distance_m as number) : 0,
+    website: null,
+    phone: null,
+    subtitle: x.subtitle ?? undefined,
+    city: x.city ?? null,
+    county: x.county ?? null,
+    country: x.country ?? null,
+    postcode: x.postcode ?? null,
+  };
+}
 
 export default function CoursesPage() {
   const router = useRouter();
 
-  const [mode, setMode] = useState<Mode>("nearby");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Shared "worldwide" search state (press-to-search)
+  const {
+    mode,
+    setMode,
+    queryInput,
+    setQueryInput,
+    runSearch,
+    clearSearch,
+    results: worldResults,
+    loading: worldLoading,
+    error: worldError,
+    setNear,
+  } = useCourseSearch({ initialMode: "nearby", limit: 25 });
 
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [query, setQuery] = useState("");
+  // Nearby mode: separate list + filter input (still live filtering)
+  const [nearbyLoading, setNearbyLoading] = useState(true);
+  const [nearbyError, setNearbyError] = useState<string | null>(null);
+  const [nearbyCourses, setNearbyCourses] = useState<Course[]>([]);
+  const [nearbyFilter, setNearbyFilter] = useState("");
+
   const [overrides, setOverrides] = useState<OverrideMap>({});
   const [resolvingId, setResolvingId] = useState<string | null>(null);
 
@@ -54,12 +86,12 @@ export default function CoursesPage() {
     let cancelled = false;
 
     async function loadNearby() {
-      setLoading(true);
-      setError(null);
+      setNearbyLoading(true);
+      setNearbyError(null);
 
       if (!navigator.geolocation) {
-        setError("Geolocation not supported.");
-        setLoading(false);
+        setNearbyError("Geolocation not supported.");
+        setNearbyLoading(false);
         return;
       }
 
@@ -69,15 +101,19 @@ export default function CoursesPage() {
             const { latitude, longitude } = pos.coords;
             lastPosRef.current = { lat: latitude, lng: longitude };
 
+            // feed into worldwide ordering when available
+            setNear(latitude, longitude);
+
             const res = await fetch(
-              `/api/courses/nearby?lat=${latitude}&lng=${longitude}&radius=15000`
+              `/api/courses/nearby?lat=${latitude}&lng=${longitude}&radius=15000`,
+              { cache: "no-store" }
             );
             const data = await res.json();
             if (!res.ok) throw new Error(data?.error ?? "Failed to load courses");
 
             const items: Course[] = Array.isArray(data?.items) ? data.items : [];
 
-            // ✅ normalize locality keys so they always exist
+            // normalize locality keys so they always exist
             const normalized = items.map((c: any) => ({
               ...c,
               city: c.city ?? null,
@@ -86,21 +122,21 @@ export default function CoursesPage() {
               postcode: c.postcode ?? null,
             }));
 
-            if (!cancelled) setCourses(normalized);
+            if (!cancelled) setNearbyCourses(normalized);
           } catch (e: any) {
-            if (!cancelled) setError(e?.message ?? "Unknown error");
+            if (!cancelled) setNearbyError(e?.message ?? "Unknown error");
           } finally {
-            if (!cancelled) setLoading(false);
+            if (!cancelled) setNearbyLoading(false);
           }
         },
         (geoErr) => {
           if (!cancelled) {
-            setError(
+            setNearbyError(
               geoErr.code === geoErr.PERMISSION_DENIED
                 ? "Location denied. Switch to Worldwide search."
                 : geoErr.message
             );
-            setLoading(false);
+            setNearbyLoading(false);
           }
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
@@ -111,64 +147,15 @@ export default function CoursesPage() {
     return () => {
       cancelled = true;
     };
-  }, [mode]);
+  }, [mode, setNear]);
 
   // -----------------------------
-  // Worldwide search (OSM/Nominatim)
+  // Courses currently displayed (world or nearby)
   // -----------------------------
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadWorld() {
-      const q = query.trim();
-      if (mode !== "world") return;
-
-      if (!q) {
-        setCourses([]);
-        setLoading(false);
-        setError(null);
-        return;
-      }
-
-      setLoading(true);
-      setError(null);
-
-      try {
-        // ✅ NEW: pass nearLat/nearLng when available to improve ordering + distance
-        const near = lastPosRef.current;
-        const nearQS = near ? `&nearLat=${near.lat}&nearLng=${near.lng}` : "";
-
-        const res = await fetch(
-          `/api/courses/search?q=${encodeURIComponent(q)}&limit=25${nearQS}`
-        );
-        const data = await res.json();
-
-        if (!res.ok) throw new Error(data?.error ?? "Search failed");
-
-        const items: Course[] = Array.isArray(data?.items) ? data.items : [];
-
-        const normalized = items.map((c: any) => ({
-          ...c,
-          distance_m: Number.isFinite(c.distance_m) ? c.distance_m : 0,
-          city: c.city ?? null,
-          county: c.county ?? null,
-          country: c.country ?? null,
-          postcode: c.postcode ?? null,
-        }));
-
-        if (!cancelled) setCourses(normalized);
-      } catch (e: any) {
-        if (!cancelled) setError(e?.message ?? "Unknown error");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    loadWorld();
-    return () => {
-      cancelled = true;
-    };
-  }, [mode, query]);
+  const baseCourses: Course[] = useMemo(() => {
+    if (mode === "world") return (worldResults ?? []).map(worldItemToCourse);
+    return nearbyCourses;
+  }, [mode, worldResults, nearbyCourses]);
 
   // -----------------------------
   // Overrides for current results
@@ -177,7 +164,7 @@ export default function CoursesPage() {
     let cancelled = false;
 
     async function loadOverrides() {
-      if (!courses.length) {
+      if (!baseCourses.length) {
         setOverrides({});
         return;
       }
@@ -186,7 +173,7 @@ export default function CoursesPage() {
         const res = await fetch("/api/courses/overrides", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ osm_ids: courses.map((c) => c.id) }),
+          body: JSON.stringify({ osm_ids: baseCourses.map((c) => c.id) }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data?.error ?? "Failed to load overrides");
@@ -201,21 +188,22 @@ export default function CoursesPage() {
     return () => {
       cancelled = true;
     };
-  }, [courses]);
+  }, [baseCourses]);
 
   // -----------------------------
-  // Filter local list (nearby mode)
+  // Filter local list (nearby mode only)
   // -----------------------------
   const filteredCourses = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (mode === "world") return courses;
-    if (!q) return courses;
+    if (mode === "world") return baseCourses;
 
-    return courses.filter((c) => {
+    const q = nearbyFilter.trim().toLowerCase();
+    if (!q) return baseCourses;
+
+    return baseCourses.filter((c) => {
       const displayName = overrides[c.id]?.name ?? c.name;
       return (displayName ?? "").toLowerCase().includes(q);
     });
-  }, [courses, query, overrides, mode]);
+  }, [mode, baseCourses, nearbyFilter, overrides]);
 
   // -----------------------------
   // View → resolve → navigate
@@ -247,11 +235,19 @@ export default function CoursesPage() {
       if (data?.course_id) router.push(`/courses/${data.course_id}`);
     } catch (e: any) {
       console.error("Resolve error:", e?.message ?? e);
-      setError(e?.message ?? "Resolve failed");
+      // show in whichever error region is active
+      if (mode === "world") {
+        // can't set hook error from here; just use an alert-like message via console + fallback UI message
+      } else {
+        setNearbyError(e?.message ?? "Resolve failed");
+      }
     } finally {
       setResolvingId(null);
     }
   }
+
+  const loading = mode === "world" ? worldLoading : nearbyLoading;
+  const error = mode === "world" ? worldError : nearbyError;
 
   return (
     <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
@@ -303,19 +299,32 @@ export default function CoursesPage() {
           </button>
         </div>
 
+        {/* Search / Filter */}
         <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-3">
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={mode === "nearby" ? "Filter nearby courses…" : "Search any course in the world…"}
-            className="w-full bg-transparent outline-none text-sm placeholder:text-emerald-100/40"
-            aria-label="Search courses"
-          />
           {mode === "world" ? (
-            <div className="mt-2 text-[10px] text-emerald-100/50">
-              Tip: include a city/country for better matches (e.g. “St Andrews Scotland”).
-            </div>
-          ) : null}
+            <>
+              <CourseSearchBar
+                value={queryInput}
+                onChange={setQueryInput}
+                onSearch={runSearch}
+                loading={worldLoading}
+                placeholder="Search any course in the world…"
+                showClear
+                onClear={clearSearch}
+              />
+              <div className="mt-2 text-[10px] text-emerald-100/50">
+                Tip: include a city/country for better matches (e.g. “St Andrews Scotland”).
+              </div>
+            </>
+          ) : (
+            <input
+              value={nearbyFilter}
+              onChange={(e) => setNearbyFilter(e.target.value)}
+              placeholder="Filter nearby courses…"
+              className="w-full bg-transparent outline-none text-sm placeholder:text-emerald-100/40"
+              aria-label="Filter nearby courses"
+            />
+          )}
         </div>
 
         {loading && (
@@ -333,10 +342,10 @@ export default function CoursesPage() {
         {!loading && !error && filteredCourses.length === 0 && (
           <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">
             {mode === "world"
-              ? query.trim()
+              ? queryInput.trim() || (worldResults?.length ? "" : "")
                 ? "No matches found."
-                : "Type a course name to search worldwide."
-              : query.trim()
+                : "Type a course name and press Search."
+              : nearbyFilter.trim()
               ? "No matches found."
               : "No courses found within 15 km."}
           </div>
