@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
 
   const lat = Number(searchParams.get("lat"));
   const lng = Number(searchParams.get("lng"));
-  const radius = Number(searchParams.get("radius") ?? "15000");
+  const radius = Number(searchParams.get("radius") ?? "30000");
 
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     return NextResponse.json({ error: "Invalid lat/lng" }, { status: 400 });

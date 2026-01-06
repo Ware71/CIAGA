@@ -7,6 +7,10 @@ import { Button } from "@/components/ui/button";
 import { useCourseSearch, type CourseSearchItem } from "@/lib/useCourseSearch";
 import { CourseSearchBar } from "@/components/course/CourseSearchBar";
 
+// ✅ add
+import MapSpoofPicker from "@/components/map-spoof-picker";
+import { MapPin } from "lucide-react";
+
 type Course = {
   id: string;
   name: string;
@@ -79,15 +83,58 @@ export default function CoursesPage() {
 
   const lastPosRef = useRef<{ lat: number; lng: number } | null>(null);
 
+  // ✅ NEW: spoof pin state (Nearby only)
+  const [pinOpen, setPinOpen] = useState(false);
+  const [spoofPos, setSpoofPos] = useState<{ lat: number; lng: number } | null>(
+    null
+  );
+
   // -----------------------------
-  // Nearby load (geolocation)
+  // Nearby load (geolocation OR spoof pin)
   // -----------------------------
   useEffect(() => {
     let cancelled = false;
 
+    async function fetchNearby(lat: number, lng: number) {
+      try {
+        // feed into worldwide ordering when available
+        setNear(lat, lng);
+
+        const res = await fetch(
+          `/api/courses/nearby?lat=${lat}&lng=${lng}&radius=30000`,
+          { cache: "no-store" }
+        );
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error ?? "Failed to load courses");
+
+        const items: Course[] = Array.isArray(data?.items) ? data.items : [];
+
+        // normalize locality keys so they always exist
+        const normalized = items.map((c: any) => ({
+          ...c,
+          city: c.city ?? null,
+          county: c.county ?? null,
+          country: c.country ?? null,
+          postcode: c.postcode ?? null,
+        }));
+
+        if (!cancelled) setNearbyCourses(normalized);
+      } catch (e: any) {
+        if (!cancelled) setNearbyError(e?.message ?? "Unknown error");
+      } finally {
+        if (!cancelled) setNearbyLoading(false);
+      }
+    }
+
     async function loadNearby() {
       setNearbyLoading(true);
       setNearbyError(null);
+
+      // ✅ If spoof is set, do NOT request geolocation
+      if (spoofPos) {
+        await fetchNearby(spoofPos.lat, spoofPos.lng);
+        return;
+      }
 
       if (!navigator.geolocation) {
         setNearbyError("Geolocation not supported.");
@@ -97,37 +144,9 @@ export default function CoursesPage() {
 
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
-          try {
-            const { latitude, longitude } = pos.coords;
-            lastPosRef.current = { lat: latitude, lng: longitude };
-
-            // feed into worldwide ordering when available
-            setNear(latitude, longitude);
-
-            const res = await fetch(
-              `/api/courses/nearby?lat=${latitude}&lng=${longitude}&radius=15000`,
-              { cache: "no-store" }
-            );
-            const data = await res.json();
-            if (!res.ok) throw new Error(data?.error ?? "Failed to load courses");
-
-            const items: Course[] = Array.isArray(data?.items) ? data.items : [];
-
-            // normalize locality keys so they always exist
-            const normalized = items.map((c: any) => ({
-              ...c,
-              city: c.city ?? null,
-              county: c.county ?? null,
-              country: c.country ?? null,
-              postcode: c.postcode ?? null,
-            }));
-
-            if (!cancelled) setNearbyCourses(normalized);
-          } catch (e: any) {
-            if (!cancelled) setNearbyError(e?.message ?? "Unknown error");
-          } finally {
-            if (!cancelled) setNearbyLoading(false);
-          }
+          const { latitude, longitude } = pos.coords;
+          lastPosRef.current = { lat: latitude, lng: longitude };
+          await fetchNearby(latitude, longitude);
         },
         (geoErr) => {
           if (!cancelled) {
@@ -147,7 +166,7 @@ export default function CoursesPage() {
     return () => {
       cancelled = true;
     };
-  }, [mode, setNear]);
+  }, [mode, setNear, spoofPos]); // ✅ spoofPos triggers reload
 
   // -----------------------------
   // Courses currently displayed (world or nearby)
@@ -230,17 +249,13 @@ export default function CoursesPage() {
       });
 
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error ?? data?.reason ?? "Resolve failed");
+      if (!res.ok)
+        throw new Error(data?.error ?? data?.reason ?? "Resolve failed");
 
       if (data?.course_id) router.push(`/courses/${data.course_id}`);
     } catch (e: any) {
       console.error("Resolve error:", e?.message ?? e);
-      // show in whichever error region is active
-      if (mode === "world") {
-        // can't set hook error from here; just use an alert-like message via console + fallback UI message
-      } else {
-        setNearbyError(e?.message ?? "Resolve failed");
-      }
+      if (mode !== "world") setNearbyError(e?.message ?? "Resolve failed");
     } finally {
       setResolvingId(null);
     }
@@ -263,7 +278,9 @@ export default function CoursesPage() {
           </Button>
 
           <div className="text-center flex-1">
-            <div className="text-lg font-semibold tracking-wide text-[#f5e6b0]">Courses</div>
+            <div className="text-lg font-semibold tracking-wide text-[#f5e6b0]">
+              Courses
+            </div>
             <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">
               {mode === "nearby" ? "Nearby" : "Worldwide"}
             </div>
@@ -313,17 +330,50 @@ export default function CoursesPage() {
                 onClear={clearSearch}
               />
               <div className="mt-2 text-[10px] text-emerald-100/50">
-                Tip: include a city/country for better matches (e.g. “St Andrews Scotland”).
+                Tip: include a city/country for better matches (e.g. “St Andrews
+                Scotland”).
               </div>
             </>
           ) : (
-            <input
-              value={nearbyFilter}
-              onChange={(e) => setNearbyFilter(e.target.value)}
-              placeholder="Filter nearby courses…"
-              className="w-full bg-transparent outline-none text-sm placeholder:text-emerald-100/40"
-              aria-label="Filter nearby courses"
-            />
+            <>
+              {/* ✅ Nearby filter + pin button */}
+              <div className="flex items-center gap-2">
+                <input
+                  value={nearbyFilter}
+                  onChange={(e) => setNearbyFilter(e.target.value)}
+                  placeholder="Filter nearby courses…"
+                  className="w-full bg-transparent outline-none text-sm placeholder:text-emerald-100/40"
+                  aria-label="Filter nearby courses"
+                />
+
+                <button
+                  type="button"
+                  onClick={() => setPinOpen(true)}
+                  className="shrink-0 rounded-xl border border-emerald-200/30 bg-[#0a341c]/40 px-2.5 py-2 text-emerald-100 hover:bg-[#0a341c]/70"
+                  aria-label="Choose nearby location on map"
+                  title="Choose nearby location on map"
+                >
+                  <MapPin size={16} />
+                </button>
+              </div>
+
+              {/* ✅ Pinned indicator (Nearby only) */}
+              {spoofPos && (
+                <div className="mt-2 flex items-center justify-between text-[10px] text-emerald-100/60">
+                  <div className="truncate">
+                    Using pinned location: {spoofPos.lat.toFixed(4)},{" "}
+                    {spoofPos.lng.toFixed(4)}
+                  </div>
+                  <button
+                    type="button"
+                    className="ml-2 shrink-0 text-emerald-100/70 hover:text-emerald-100 underline underline-offset-2"
+                    onClick={() => setSpoofPos(null)}
+                  >
+                    Clear
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -357,10 +407,15 @@ export default function CoursesPage() {
             const isResolving = resolvingId === c.id;
 
             return (
-              <li key={c.id} className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4">
+              <li
+                key={c.id}
+                className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4"
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="font-medium text-emerald-50 truncate">{displayName}</div>
+                    <div className="font-medium text-emerald-50 truncate">
+                      {displayName}
+                    </div>
 
                     {mode === "nearby" ? (
                       <div className="mt-1 text-[11px] text-emerald-200/70">
@@ -368,7 +423,10 @@ export default function CoursesPage() {
                       </div>
                     ) : (
                       <div className="mt-1 text-[11px] text-emerald-200/60">
-                        {c.subtitle ?? (c.lat && c.lng ? `${c.lat.toFixed(4)}, ${c.lng.toFixed(4)}` : "")}
+                        {c.subtitle ??
+                          (c.lat && c.lng
+                            ? `${c.lat.toFixed(4)}, ${c.lng.toFixed(4)}`
+                            : "")}
                       </div>
                     )}
                   </div>
@@ -392,6 +450,25 @@ export default function CoursesPage() {
           Powered by OpenStreetMap data.
         </footer>
       </div>
+
+      {/* ✅ Modal: only used on /courses, only relevant to Nearby */}
+      {pinOpen && (
+        <MapSpoofPicker
+          initial={spoofPos}
+          onClose={() => setPinOpen(false)}
+          onClear={() => {
+            setSpoofPos(null);
+            setPinOpen(false);
+          }}
+          onConfirm={(pos) => {
+            // basic clamp
+            const lat = Math.max(-90, Math.min(90, pos.lat));
+            const lng = Math.max(-180, Math.min(180, pos.lng));
+            setSpoofPos({ lat, lng });
+            setPinOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

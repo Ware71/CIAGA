@@ -117,7 +117,7 @@ export default function NewRoundCoursePickerPage() {
             setNear(latitude, longitude);
 
             const res = await fetch(
-              `/api/courses/nearby?lat=${latitude}&lng=${longitude}&radius=15000`,
+              `/api/courses/nearby?lat=${latitude}&lng=${longitude}&radius=10000`,
               { cache: "no-store" }
             );
             const data = await res.json();
