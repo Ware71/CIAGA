@@ -70,6 +70,28 @@ export default function ProfilePage() {
     return titled.slice(0, 30);
   };
 
+  /**
+   * Public-safe profile fetchers:
+   * - make unclaimed profiles findable (search / follower lists)
+   * - do not rely on direct SELECT on profiles (RLS may block unclaimed)
+   *
+   * Requires RPCs:
+   * - search_profiles_public(q text, lim int)
+   * - get_profiles_public(ids uuid[])
+   */
+  const fetchProfilesByIdsPublic = async (ids: string[]) => {
+    if (!ids.length) return [];
+    const { data, error } = await supabase.rpc("get_profiles_public", { ids });
+    if (error) throw error;
+    return ((data as any) ?? []) as ProfileRow[];
+  };
+
+  const searchProfilesPublic = async (q: string, lim = 25) => {
+    const { data, error } = await supabase.rpc("search_profiles_public", { q, lim });
+    if (error) throw error;
+    return ((data as any) ?? []) as ProfileRow[];
+  };
+
   const refreshCountsAndFollowing = async (myProfileId: string) => {
     // Followers: people following me (profile ids)
     const followersRes = await supabase
@@ -331,11 +353,7 @@ export default function ProfilePage() {
         const ids = (data ?? []).map((r: any) => r.follower_id);
         if (!ids.length) return;
 
-        const { data: profs } = await supabase
-          .from("profiles")
-          .select("id, owner_user_id, name, email, avatar_url")
-          .in("id", ids);
-
+        const profs = await fetchProfilesByIdsPublic(ids);
         setListRows((profs as any) ?? []);
       } else {
         // Who I follow (profile ids)
@@ -347,11 +365,7 @@ export default function ProfilePage() {
         const ids = (data ?? []).map((r: any) => r.following_id);
         if (!ids.length) return;
 
-        const { data: profs } = await supabase
-          .from("profiles")
-          .select("id, owner_user_id, name, email, avatar_url")
-          .in("id", ids);
-
+        const profs = await fetchProfilesByIdsPublic(ids);
         setListRows((profs as any) ?? []);
       }
     } catch (e) {
@@ -377,16 +391,9 @@ export default function ProfilePage() {
     setSearchLoading(true);
 
     try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, owner_user_id, name, email, avatar_url")
-        .neq("id", profile.id) // exclude my profile row
-        .or(`name.ilike.%${q}%,email.ilike.%${q}%`)
-        .limit(25);
-
-      if (error) throw error;
-
-      setSearchResults((data as any) ?? []);
+      const rows = await searchProfilesPublic(q, 25);
+      // exclude my profile row
+      setSearchResults(rows.filter((r) => r.id !== profile.id));
     } catch (e) {
       console.warn("Search failed:", e);
     } finally {

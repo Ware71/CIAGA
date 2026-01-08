@@ -77,11 +77,43 @@ function toNullInt(v: string | undefined): number | null {
   return Math.trunc(n);
 }
 
+/**
+ * osm_id can be:
+ *  - "way/1138697614" (or node/relation)
+ *  - "1138697614"
+ *
+ * This parses to the numeric id ONLY (so it works with bigint/int columns).
+ * If your DB column is TEXT and you want to store the full "way/..." string instead,
+ * change this function accordingly and store the raw string.
+ */
+function parseOsmId(v: string | undefined): number | null {
+  if (!v) return null;
+  const s = v.trim();
+  const m = s.match(/^(?:(way|node|relation)\/)?(\d+)$/i);
+  if (!m) return null;
+  const n = Number(m[2]);
+  return Number.isFinite(n) ? Math.trunc(n) : null;
+}
+
 function normKey(...parts: Array<string | null | undefined>) {
   return parts
     .map((p) => (p ?? "").trim().toLowerCase())
     .filter(Boolean)
     .join("|");
+}
+
+function sumInt(vals: Array<number | null | undefined>): number {
+  return vals.reduce((s: number, v) => s + (Number(v) || 0), 0);
+}
+function sumYards(holes: HoleRow[]) {
+  return sumInt(holes.map((h) => h.hole_yardage ?? 0));
+}
+function sumPar(holes: HoleRow[]) {
+  return sumInt(holes.map((h) => h.hole_par ?? 0));
+}
+function yardsToMeters(y: number | null) {
+  if (y == null) return null;
+  return Math.round(y * 0.9144);
 }
 
 type HoleRow = {
@@ -92,6 +124,9 @@ type HoleRow = {
   lat?: number | null;
   lng?: number | null;
 
+  // ✅ NEW
+  osm_id?: number | null;
+
   tee_name: string;
   gender?: string | null;
   tee_par?: number | null;
@@ -100,11 +135,187 @@ type HoleRow = {
   slope?: number | null;
   sort_order?: number | null;
 
+  // schema-aligned tee fields
+  bogey_rating?: number | null;
+  total_meters?: number | null;
+  holes_count?: number | null;
+
+  front_course_rating?: number | null;
+  front_slope_rating?: number | null;
+  front_bogey_rating?: number | null;
+
+  back_course_rating?: number | null;
+  back_slope_rating?: number | null;
+  back_bogey_rating?: number | null;
+
   hole_number: number;
   hole_par?: number | null;
   hole_yardage?: number | null;
   hole_handicap?: number | null;
 };
+
+type TeeGroup = {
+  tee_name: string;
+  gender: string | null;
+  tee_par: number | null;
+  tee_yards: number | null;
+  rating: number | null;
+  slope: number | null;
+  sort_order: number | null;
+
+  bogey_rating: number | null;
+  total_meters: number | null;
+  holes_count: number | null;
+
+  front_course_rating: number | null;
+  front_slope_rating: number | null;
+  front_bogey_rating: number | null;
+
+  back_course_rating: number | null;
+  back_slope_rating: number | null;
+  back_bogey_rating: number | null;
+
+  holes: HoleRow[];
+};
+
+function hasFrontBackSplit(t: TeeGroup) {
+  return (
+    t.front_course_rating != null ||
+    t.front_slope_rating != null ||
+    t.front_bogey_rating != null ||
+    t.back_course_rating != null ||
+    t.back_slope_rating != null ||
+    t.back_bogey_rating != null
+  );
+}
+
+function applyNonNullMeta(target: TeeGroup, hr: HoleRow) {
+  // "last non-null wins" (useful if later CSV rows repeat tee-level values)
+  const setIfNonNull = <K extends keyof TeeGroup>(k: K, v: TeeGroup[K] | null | undefined) => {
+    if (v !== null && v !== undefined) (target[k] as any) = v;
+  };
+
+  setIfNonNull("tee_par", hr.tee_par ?? null);
+  setIfNonNull("tee_yards", hr.tee_yards ?? null);
+  setIfNonNull("rating", hr.rating ?? null);
+  setIfNonNull("slope", hr.slope ?? null);
+  setIfNonNull("sort_order", hr.sort_order ?? null);
+
+  setIfNonNull("bogey_rating", hr.bogey_rating ?? null);
+  setIfNonNull("total_meters", hr.total_meters ?? null);
+  setIfNonNull("holes_count", hr.holes_count ?? null);
+
+  setIfNonNull("front_course_rating", hr.front_course_rating ?? null);
+  setIfNonNull("front_slope_rating", hr.front_slope_rating ?? null);
+  setIfNonNull("front_bogey_rating", hr.front_bogey_rating ?? null);
+
+  setIfNonNull("back_course_rating", hr.back_course_rating ?? null);
+  setIfNonNull("back_slope_rating", hr.back_slope_rating ?? null);
+  setIfNonNull("back_bogey_rating", hr.back_bogey_rating ?? null);
+}
+
+/**
+ * Detect WIDE hole columns: hole{N}_{metric}
+ * e.g. hole1_yards, hole01_par, hole18_si
+ */
+function getWideHoleSpec(header: string[]) {
+  const re = /^hole(\d+)_([a-z]+)$/i;
+
+  const byHole = new Map<number, Set<string>>();
+  for (const h of header) {
+    const m = h.trim().match(re);
+    if (!m) continue;
+    const holeNum = Number(m[1]);
+    const metric = m[2].toLowerCase();
+    if (!Number.isFinite(holeNum) || holeNum <= 0) continue;
+    if (!byHole.has(holeNum)) byHole.set(holeNum, new Set());
+    byHole.get(holeNum)!.add(metric);
+  }
+
+  const holes = [...byHole.keys()].sort((a, b) => a - b);
+  return { holes, hasAny: holes.length > 0 };
+}
+
+function isLongFormat(header: string[]) {
+  return header.some((h) => h.trim().toLowerCase() === "hole_number");
+}
+
+function idxOf(header: string[], name: string) {
+  const n = name.toLowerCase();
+  return header.findIndex((h) => h.trim().toLowerCase() === n);
+}
+
+function getCell(line: string[], header: string[], col: string) {
+  const i = idxOf(header, col);
+  return i >= 0 ? (line[i] ?? "").trim() : "";
+}
+
+/**
+ * Convert a single WIDE row into many LONG HoleRows (one per hole with any data)
+ * Supports metrics: yards/par/si (si -> hole_handicap)
+ */
+function explodeWideRow(line: string[], header: string[], holeNums: number[]): HoleRow[] {
+  const course_name = getCell(line, header, "course_name");
+  const tee_name = getCell(line, header, "tee_name");
+  if (!course_name || !tee_name) return [];
+
+  const base: Omit<HoleRow, "hole_number"> = {
+    course_id: getCell(line, header, "course_id") || null,
+    course_name,
+    city: getCell(line, header, "city") || null,
+    country: getCell(line, header, "country") || null,
+    lat: toNullNumber(getCell(line, header, "lat")),
+    lng: toNullNumber(getCell(line, header, "lng")),
+
+    // ✅ NEW
+    osm_id: parseOsmId(getCell(line, header, "osm_id")),
+
+    tee_name,
+    gender: getCell(line, header, "gender") || null,
+    tee_par: toNullInt(getCell(line, header, "tee_par")),
+    tee_yards: toNullInt(getCell(line, header, "tee_yards")),
+    rating: toNullNumber(getCell(line, header, "rating")),
+    slope: toNullInt(getCell(line, header, "slope")),
+    sort_order: toNullInt(getCell(line, header, "sort_order")),
+
+    bogey_rating: toNullNumber(getCell(line, header, "bogey_rating")),
+    total_meters: toNullInt(getCell(line, header, "total_meters")),
+    holes_count: toNullInt(getCell(line, header, "holes_count")),
+
+    front_course_rating: toNullNumber(getCell(line, header, "front_course_rating")),
+    front_slope_rating: toNullInt(getCell(line, header, "front_slope_rating")),
+    front_bogey_rating: toNullNumber(getCell(line, header, "front_bogey_rating")),
+
+    back_course_rating: toNullNumber(getCell(line, header, "back_course_rating")),
+    back_slope_rating: toNullInt(getCell(line, header, "back_slope_rating")),
+    back_bogey_rating: toNullNumber(getCell(line, header, "back_bogey_rating")),
+  };
+
+  const out: HoleRow[] = [];
+
+  for (const n of holeNums) {
+    const yards = toNullInt(getCell(line, header, `hole${n}_yards`));
+    const par = toNullInt(getCell(line, header, `hole${n}_par`));
+    const si = toNullInt(getCell(line, header, `hole${n}_si`));
+
+    // also allow "handicap" naming if your wide file uses it
+    const handicapAlt = toNullInt(getCell(line, header, `hole${n}_handicap`));
+    const handicap = si ?? handicapAlt;
+
+    // If there is literally no data for this hole, skip it.
+    if (yards == null && par == null && handicap == null) continue;
+
+    out.push({
+      ...base,
+      hole_number: n,
+      hole_yardage: yards,
+      hole_par: par,
+      hole_handicap: handicap,
+    });
+  }
+
+  return out;
+}
 
 export async function POST(req: NextRequest) {
   const authErr = requireAdmin(req);
@@ -123,50 +334,80 @@ export async function POST(req: NextRequest) {
   }
 
   const header = table[0].map((h) => h.trim());
-  const idx = (name: string) => header.findIndex((h) => h.toLowerCase() === name.toLowerCase());
 
-  const required = ["course_name", "tee_name", "hole_number"];
-  for (const r of required) {
-    if (idx(r) === -1) {
+  const requiredBase = ["course_name", "tee_name"];
+  for (const r of requiredBase) {
+    if (idxOf(header, r) === -1) {
       return NextResponse.json({ error: `Missing required column: ${r}` }, { status: 400 });
     }
   }
 
+  const long = isLongFormat(header);
+  const wideSpec = getWideHoleSpec(header);
+
+  if (!long && !wideSpec.hasAny) {
+    return NextResponse.json(
+      {
+        error:
+          "CSV format not recognized. Provide either LONG format with 'hole_number' OR WIDE format with columns like 'hole1_yards', 'hole1_par', 'hole1_si'.",
+      },
+      { status: 400 }
+    );
+  }
+
+  // Build rows (always LONG internally)
   const rows: HoleRow[] = [];
+
   for (let r = 1; r < table.length; r++) {
     const line = table[r];
-    const get = (col: string) => {
-      const i = idx(col);
-      return i >= 0 ? (line[i] ?? "").trim() : "";
-    };
 
-    const course_name = get("course_name");
-    const tee_name = get("tee_name");
-    const hole_number = toNullInt(get("hole_number"));
+    if (long) {
+      const course_name = getCell(line, header, "course_name");
+      const tee_name = getCell(line, header, "tee_name");
+      const hole_number = toNullInt(getCell(line, header, "hole_number"));
 
-    if (!course_name || !tee_name || !hole_number) continue; // skip incomplete lines
+      if (!course_name || !tee_name || !hole_number) continue; // skip incomplete lines
 
-    rows.push({
-      course_id: get("course_id") || null,
-      course_name,
-      city: get("city") || null,
-      country: get("country") || null,
-      lat: toNullNumber(get("lat")),
-      lng: toNullNumber(get("lng")),
+      rows.push({
+        course_id: getCell(line, header, "course_id") || null,
+        course_name,
+        city: getCell(line, header, "city") || null,
+        country: getCell(line, header, "country") || null,
+        lat: toNullNumber(getCell(line, header, "lat")),
+        lng: toNullNumber(getCell(line, header, "lng")),
 
-      tee_name,
-      gender: get("gender") || null,
-      tee_par: toNullInt(get("tee_par")),
-      tee_yards: toNullInt(get("tee_yards")),
-      rating: toNullNumber(get("rating")),
-      slope: toNullInt(get("slope")),
-      sort_order: toNullInt(get("sort_order")),
+        // ✅ NEW
+        osm_id: parseOsmId(getCell(line, header, "osm_id")),
 
-      hole_number,
-      hole_par: toNullInt(get("hole_par")),
-      hole_yardage: toNullInt(get("hole_yardage")),
-      hole_handicap: toNullInt(get("hole_handicap")),
-    });
+        tee_name,
+        gender: getCell(line, header, "gender") || null,
+        tee_par: toNullInt(getCell(line, header, "tee_par")),
+        tee_yards: toNullInt(getCell(line, header, "tee_yards")),
+        rating: toNullNumber(getCell(line, header, "rating")),
+        slope: toNullInt(getCell(line, header, "slope")),
+        sort_order: toNullInt(getCell(line, header, "sort_order")),
+
+        bogey_rating: toNullNumber(getCell(line, header, "bogey_rating")),
+        total_meters: toNullInt(getCell(line, header, "total_meters")),
+        holes_count: toNullInt(getCell(line, header, "holes_count")),
+
+        front_course_rating: toNullNumber(getCell(line, header, "front_course_rating")),
+        front_slope_rating: toNullInt(getCell(line, header, "front_slope_rating")),
+        front_bogey_rating: toNullNumber(getCell(line, header, "front_bogey_rating")),
+
+        back_course_rating: toNullNumber(getCell(line, header, "back_course_rating")),
+        back_slope_rating: toNullInt(getCell(line, header, "back_slope_rating")),
+        back_bogey_rating: toNullNumber(getCell(line, header, "back_bogey_rating")),
+
+        hole_number,
+        hole_par: toNullInt(getCell(line, header, "hole_par")),
+        hole_yardage: toNullInt(getCell(line, header, "hole_yardage")),
+        hole_handicap: toNullInt(getCell(line, header, "hole_handicap")),
+      });
+    } else {
+      // WIDE -> explode into LONG rows
+      rows.push(...explodeWideRow(line, header, wideSpec.holes));
+    }
   }
 
   if (!rows.length) {
@@ -185,27 +426,14 @@ export async function POST(req: NextRequest) {
       country: string | null;
       lat: number | null;
       lng: number | null;
-      tees: Map<
-        string,
-        {
-          tee_name: string;
-          gender: string | null;
-          tee_par: number | null;
-          tee_yards: number | null;
-          rating: number | null;
-          slope: number | null;
-          sort_order: number | null;
-          holes: HoleRow[];
-        }
-      >;
+      osm_id: number | null;
+      tees: Map<string, TeeGroup>;
     }
   >();
 
   for (const hr of rows) {
     const courseKey =
-      hr.course_id?.trim()
-        ? `id:${hr.course_id.trim()}`
-        : `name:${normKey(hr.course_name, hr.city, hr.country)}`;
+      hr.course_id?.trim() ? `id:${hr.course_id.trim()}` : `name:${normKey(hr.course_name, hr.city, hr.country)}`;
 
     if (!courses.has(courseKey)) {
       courses.set(courseKey, {
@@ -215,8 +443,13 @@ export async function POST(req: NextRequest) {
         country: hr.country ?? null,
         lat: hr.lat ?? null,
         lng: hr.lng ?? null,
+        osm_id: hr.osm_id ?? null,
         tees: new Map(),
       });
+    } else {
+      // last non-null wins for course-level osm_id too
+      const c0 = courses.get(courseKey)!;
+      if (c0.osm_id == null && hr.osm_id != null) c0.osm_id = hr.osm_id;
     }
 
     const c = courses.get(courseKey)!;
@@ -225,16 +458,136 @@ export async function POST(req: NextRequest) {
       c.tees.set(teeKey, {
         tee_name: hr.tee_name,
         gender: hr.gender ?? null,
+
         tee_par: hr.tee_par ?? null,
         tee_yards: hr.tee_yards ?? null,
         rating: hr.rating ?? null,
         slope: hr.slope ?? null,
         sort_order: hr.sort_order ?? null,
+
+        bogey_rating: hr.bogey_rating ?? null,
+        total_meters: hr.total_meters ?? null,
+        holes_count: hr.holes_count ?? null,
+
+        front_course_rating: hr.front_course_rating ?? null,
+        front_slope_rating: hr.front_slope_rating ?? null,
+        front_bogey_rating: hr.front_bogey_rating ?? null,
+
+        back_course_rating: hr.back_course_rating ?? null,
+        back_slope_rating: hr.back_slope_rating ?? null,
+        back_bogey_rating: hr.back_bogey_rating ?? null,
+
         holes: [],
       });
+    } else {
+      // allow later rows to fill missing tee-level metadata
+      applyNonNullMeta(c.tees.get(teeKey)!, hr);
     }
 
     c.tees.get(teeKey)!.holes.push(hr);
+  }
+
+  // Expand tees: if an 18-hole tee has front/back fields, auto-create 9-hole tees
+  for (const [, c] of courses) {
+    const toAdd: Array<[string, TeeGroup]> = [];
+
+    for (const [, t] of c.tees) {
+      // Dedup holes for splitting (last wins), then sort
+      const byHole = new Map<number, HoleRow>();
+      for (const h of t.holes) byHole.set(h.hole_number, h);
+      const holes18 = [...byHole.values()].sort((a, b) => a.hole_number - b.hole_number);
+
+      if (holes18.length !== 18) continue;
+      if (!hasFrontBackSplit(t)) continue;
+
+      // Only split "parent" tees (avoid re-splitting already-split tees)
+      const nameLower = (t.tee_name || "").toLowerCase();
+      if (nameLower.includes("front 9") || nameLower.includes("back 9")) continue;
+
+      const front = holes18.slice(0, 9);
+      const back = holes18.slice(9, 18);
+
+      // Ensure parent has good defaults if not supplied
+      if (t.holes_count == null) t.holes_count = 18;
+      if (t.tee_yards == null) t.tee_yards = sumYards(holes18);
+      if (t.tee_par == null) t.tee_par = sumPar(holes18);
+      if (t.total_meters == null) t.total_meters = yardsToMeters(t.tee_yards);
+
+      const baseName = t.tee_name;
+      const genderKey = t.gender ?? "";
+      const baseSort = t.sort_order ?? 0;
+
+      const frontYards = sumYards(front);
+      const backYards = sumYards(back);
+      const frontPar = sumPar(front);
+      const backPar = sumPar(back);
+
+      // Front 9 tee
+      {
+        const tee_name = `${baseName} (Front 9)`;
+        const key = normKey(tee_name, genderKey);
+
+        const g: TeeGroup = {
+          tee_name,
+          gender: t.gender ?? null,
+          tee_par: frontPar ?? null,
+          tee_yards: frontYards ?? null,
+          rating: t.front_course_rating ?? null,
+          slope: t.front_slope_rating ?? null,
+          sort_order: baseSort + 1,
+
+          bogey_rating: t.front_bogey_rating ?? null,
+          total_meters: yardsToMeters(frontYards ?? null),
+          holes_count: 9,
+
+          // do not carry split fields on derived tees
+          front_course_rating: null,
+          front_slope_rating: null,
+          front_bogey_rating: null,
+          back_course_rating: null,
+          back_slope_rating: null,
+          back_bogey_rating: null,
+
+          holes: front.map((h, i) => ({ ...h, hole_number: i + 1 })),
+        };
+
+        if (!c.tees.has(key)) toAdd.push([key, g]);
+      }
+
+      // Back 9 tee
+      {
+        const tee_name = `${baseName} (Back 9)`;
+        const key = normKey(tee_name, genderKey);
+
+        const g: TeeGroup = {
+          tee_name,
+          gender: t.gender ?? null,
+          tee_par: backPar ?? null,
+          tee_yards: backYards ?? null,
+          rating: t.back_course_rating ?? null,
+          slope: t.back_slope_rating ?? null,
+          sort_order: baseSort + 2,
+
+          bogey_rating: t.back_bogey_rating ?? null,
+          total_meters: yardsToMeters(backYards ?? null),
+          holes_count: 9,
+
+          // do not carry split fields on derived tees
+          front_course_rating: null,
+          front_slope_rating: null,
+          front_bogey_rating: null,
+          back_course_rating: null,
+          back_slope_rating: null,
+          back_bogey_rating: null,
+
+          holes: back.map((h, i) => ({ ...h, hole_number: i + 1 })),
+        };
+
+        if (!c.tees.has(key)) toAdd.push([key, g]);
+      }
+    }
+
+    for (const [k, v] of toAdd) c.tees.set(k, v);
   }
 
   let courseUpserts = 0;
@@ -246,6 +599,9 @@ export async function POST(req: NextRequest) {
 
   for (const [, c] of courses) {
     try {
+      // ✅ If courses.osm_id is NOT NULL, fail early with a clear error
+      if (c.osm_id == null) throw new Error(`Missing/invalid osm_id for course: ${c.course_name}`);
+
       // Upsert course
       let courseId = c.course_id;
 
@@ -260,6 +616,7 @@ export async function POST(req: NextRequest) {
               country: c.country,
               lat: c.lat,
               lng: c.lng,
+              osm_id: c.osm_id, // ✅ NEW
             },
             { onConflict: "id" }
           );
@@ -268,7 +625,6 @@ export async function POST(req: NextRequest) {
         courseUpserts++;
       } else {
         // Admin-friendly matching: (name, city, country)
-        // Stronger: create a unique index and use onConflict. For now we do: find-or-insert.
         const { data: existing, error: findErr } = await supabase
           .from("courses")
           .select("id")
@@ -281,10 +637,9 @@ export async function POST(req: NextRequest) {
 
         if (existing && existing.length) {
           courseId = existing[0].id;
-          // also update lat/lng if provided
           const { error: updErr } = await supabase
             .from("courses")
-            .update({ lat: c.lat, lng: c.lng })
+            .update({ lat: c.lat, lng: c.lng, osm_id: c.osm_id }) // ✅ NEW
             .eq("id", courseId);
           if (updErr) throw updErr;
         } else {
@@ -296,6 +651,7 @@ export async function POST(req: NextRequest) {
               country: c.country,
               lat: c.lat,
               lng: c.lng,
+              osm_id: c.osm_id, // ✅ NEW
             })
             .select("id")
             .single();
@@ -320,6 +676,18 @@ export async function POST(req: NextRequest) {
               rating: t.rating,
               slope: t.slope,
               sort_order: t.sort_order,
+
+              bogey_rating: t.bogey_rating,
+              total_meters: t.total_meters,
+              holes_count: t.holes_count,
+
+              front_course_rating: t.front_course_rating,
+              front_slope_rating: t.front_slope_rating,
+              front_bogey_rating: t.front_bogey_rating,
+
+              back_course_rating: t.back_course_rating,
+              back_slope_rating: t.back_slope_rating,
+              back_bogey_rating: t.back_bogey_rating,
             },
             { onConflict: "course_id,name,gender" }
           )
@@ -332,7 +700,7 @@ export async function POST(req: NextRequest) {
         const teeBoxId = teeBox.id;
 
         const { error: delErr, count } = await supabase
-          .from("course_tee_box_holes")
+          .from("course_tee_holes")
           .delete({ count: "exact" })
           .eq("tee_box_id", teeBoxId);
 
@@ -354,7 +722,7 @@ export async function POST(req: NextRequest) {
           }));
 
         if (holesToInsert.length) {
-          const { error: insErr } = await supabase.from("course_tee_box_holes").insert(holesToInsert);
+          const { error: insErr } = await supabase.from("course_tee_holes").insert(holesToInsert);
           if (insErr) throw insErr;
           holesInserted += holesToInsert.length;
         }

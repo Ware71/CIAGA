@@ -4,6 +4,13 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 const GOLF_BASE = process.env.GOLFCOURSE_API_BASE ?? "https://api.golfcourseapi.com";
 const GOLF_KEY = process.env.GOLFCOURSE_API_KEY;
 
+// Nominatim (OSM reverse geocode)
+const NOMINATIM_BASE = process.env.NOMINATIM_BASE ?? "https://nominatim.openstreetmap.org";
+const NOMINATIM_USER_AGENT =
+  process.env.OSM_NOMINATIM_USER_AGENT ??
+  process.env.OVERPASS_USER_AGENT ??
+  "CIAGA/1.0 (contact: dev@ciaga.app)";
+
 // geo gates (km)
 const MAX_KM_NAMED = Number(process.env.GOLFCOURSE_MAX_KM_NAMED ?? 60);
 const MAX_KM_UNNAMED = Number(process.env.GOLFCOURSE_MAX_KM_UNNAMED ?? 40);
@@ -18,6 +25,10 @@ type ResolveBody = {
   name: string;
   lat: number;
   lng: number;
+
+  // Optional: callers (search/nearby) may pass these in if they already have them.
+  city?: string | null;
+  country?: string | null;
 };
 
 const GENERIC_GOLF_WORDS = new Set([
@@ -259,6 +270,64 @@ function deriveSIRanksParYardage(holes: any[]): number[] {
   return si;
 }
 
+/** -----------------------------
+ *  Location helpers (City/Country)
+ *  -----------------------------
+ */
+
+function pickCityFromAddress(addr: Record<string, any> | undefined | null): string | null {
+  if (!addr) return null;
+  const v =
+    addr.city ??
+    addr.town ??
+    addr.village ??
+    addr.hamlet ??
+    addr.municipality ??
+    addr.county ??
+    null;
+  return typeof v === "string" && v.trim() ? v.trim() : null;
+}
+
+function pickCountryFromAddress(addr: Record<string, any> | undefined | null): string | null {
+  if (!addr) return null;
+  const v = addr.country ?? null;
+  return typeof v === "string" && v.trim() ? v.trim() : null;
+}
+
+async function reverseGeocodeCityCountry(lat: number, lng: number): Promise<{
+  city: string | null;
+  country: string | null;
+}> {
+  // Be tolerant: if Nominatim is slow/limited, we just return nulls.
+  try {
+    const url =
+      `${NOMINATIM_BASE}/reverse?format=jsonv2` +
+      `&lat=${encodeURIComponent(String(lat))}` +
+      `&lon=${encodeURIComponent(String(lng))}` +
+      `&zoom=10&addressdetails=1`;
+
+    const res = await fetch(url, {
+      headers: {
+        Accept: "application/json",
+        "User-Agent": NOMINATIM_USER_AGENT,
+      },
+      cache: "no-store",
+    });
+
+    if (!res.ok) return { city: null, country: null };
+
+    const json: any = await res.json();
+    const addr = json?.address ?? null;
+
+    return {
+      city: pickCityFromAddress(addr),
+      country: pickCountryFromAddress(addr),
+    };
+  } catch {
+    return { city: null, country: null };
+  }
+}
+
 export async function POST(req: NextRequest) {
   const body = (await req.json()) as ResolveBody;
 
@@ -266,10 +335,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing osm_id/name/lat/lng" }, { status: 400 });
   }
 
+  // 0) Determine city/country (prefer caller-provided; otherwise reverse geocode)
+  let city: string | null = typeof body.city === "string" ? body.city.trim() : (body.city ?? null);
+  let country: string | null =
+    typeof body.country === "string" ? body.country.trim() : (body.country ?? null);
+
+  if (!city || !country) {
+    const geo = await reverseGeocodeCityCountry(body.lat, body.lng);
+    city = city ?? geo.city;
+    country = country ?? geo.country;
+  }
+
   // 1) Get or create course row
   const existing = await supabaseAdmin
     .from("courses")
-    .select("id, golfcourseapi_id")
+    .select("id, golfcourseapi_id, city, country")
     .eq("osm_id", body.osm_id)
     .order("id", { ascending: false })
     .limit(1);
@@ -278,6 +358,20 @@ export async function POST(req: NextRequest) {
 
   let courseId: string | null = existing.data?.[0]?.id ?? null;
   const existingGolfId: string | null = existing.data?.[0]?.golfcourseapi_id ?? null;
+
+  // Backfill location on existing course if missing (never overwrite good values)
+  if (courseId) {
+    const existingCity = existing.data?.[0]?.city ?? null;
+    const existingCountry = existing.data?.[0]?.country ?? null;
+
+    const patch: any = {};
+    if (!existingCity && city) patch.city = city;
+    if (!existingCountry && country) patch.country = country;
+
+    if (Object.keys(patch).length) {
+      await supabaseAdmin.from("courses").update(patch).eq("id", courseId);
+    }
+  }
 
   if (courseId && existingGolfId) {
     const tees = await supabaseAdmin
@@ -291,6 +385,8 @@ export async function POST(req: NextRequest) {
         from_cache: true,
         enriched: true,
         tee_count: tees.count,
+        city,
+        country,
       });
     }
   }
@@ -305,6 +401,8 @@ export async function POST(req: NextRequest) {
         lat: body.lat,
         lng: body.lng,
         source: "osm",
+        city: city ?? null,
+        country: country ?? null,
       })
       .select("id");
 
@@ -315,7 +413,13 @@ export async function POST(req: NextRequest) {
   }
 
   if (!GOLF_KEY?.trim()) {
-    return NextResponse.json({ course_id: courseId, enriched: false, reason: "Missing GOLFCOURSE_API_KEY" });
+    return NextResponse.json({
+      course_id: courseId,
+      enriched: false,
+      reason: "Missing GOLFCOURSE_API_KEY",
+      city,
+      country,
+    });
   }
 
   const unnamed = isUnnamedOsmName(body.name);
@@ -383,7 +487,7 @@ export async function POST(req: NextRequest) {
       scored.push({ c, candName, km, nameScore: ns, finalScore: final, query: q });
     }
 
-    scored.sort((a, b) => b.finalScore - a.finalScore || a.km - b.km);
+    scored.sort((a, b) => b.finalScore - a.finalScore || a.km - a.km);
 
     debug.push({
       query: q,
@@ -411,6 +515,8 @@ export async function POST(req: NextRequest) {
       received: { name: body.name, lat: body.lat, lng: body.lng, unnamed, queries },
       debug,
       policy: { maxKm, minNameSim: MIN_NAME_SIM, minFinal: MIN_FINAL },
+      city,
+      country,
     });
   }
 
@@ -435,6 +541,8 @@ export async function POST(req: NextRequest) {
       golfcourseapi_raw: best.c,
       source: "osm+golfcourseapi",
       name: matchedDisplayName,
+      ...(city ? { city } : {}),
+      ...(country ? { country } : {}),
     })
     .eq("id", courseId);
 
@@ -602,6 +710,8 @@ export async function POST(req: NextRequest) {
       match_query: best.query,
       debug,
       note: "Matched course has no tee data",
+      city,
+      country,
     });
   }
 
@@ -642,6 +752,8 @@ export async function POST(req: NextRequest) {
       enriched: false,
       reason: "DB insert tee boxes failed",
       db_error: teeIns.error.message,
+      city,
+      country,
     });
   }
 
@@ -686,6 +798,8 @@ export async function POST(req: NextRequest) {
         enriched: false,
         reason: "DB insert holes failed",
         db_error: holeIns.error.message,
+        city,
+        country,
       });
     }
     holeCount = holesRows.length;
@@ -701,5 +815,7 @@ export async function POST(req: NextRequest) {
     match_score: best.finalScore,
     match_query: best.query,
     debug,
+    city,
+    country,
   });
 }

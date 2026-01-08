@@ -96,22 +96,29 @@ function Avatar({
   );
 }
 
+/**
+ * Public-safe resolvers:
+ * - make unclaimed profiles findable (following + search more)
+ * - do not rely on direct SELECT on profiles (RLS may block unclaimed)
+ *
+ * Requires RPCs:
+ * - get_profiles_public(ids uuid[])
+ * - get_profiles_public_by_owner_ids(owner_ids uuid[])
+ * - search_profiles_public(q text, lim int)
+ */
+
 // ✅ Robust resolver: handles follows storing either profiles.id OR auth.users.id
 async function resolveProfilesForFollowIds(ids: string[]) {
   if (!ids.length) return [];
 
-  // First try as profiles.id
-  const byProfileId = await supabase.from("profiles").select("id,name,email,avatar_url").in("id", ids);
+  // First try as profiles.id (via RPC)
+  const byProfileId = await supabase.rpc("get_profiles_public", { ids });
   if (!byProfileId.error && (byProfileId.data?.length ?? 0) > 0) {
     return (byProfileId.data ?? []) as ProfileLite[];
   }
 
-  // If none, treat ids as auth.users.id and match on owner_user_id
-  const byOwner = await supabase
-    .from("profiles")
-    .select("id,name,email,avatar_url,owner_user_id")
-    .in("owner_user_id", ids);
-
+  // If none, treat ids as auth.users.id and match on owner_user_id (via RPC)
+  const byOwner = await supabase.rpc("get_profiles_public_by_owner_ids", { owner_ids: ids });
   if (byOwner.error) throw byOwner.error;
 
   // Keep follow order
@@ -418,12 +425,7 @@ export default function RoundSetupPage() {
     setSearchingMore(true);
     setErr(null);
     try {
-      const res = await supabase
-        .from("profiles")
-        .select("id,name,email,avatar_url")
-        .or(`email.ilike.%${q}%,name.ilike.%${q}%`)
-        .limit(20);
-
+      const res = await supabase.rpc("search_profiles_public", { q, lim: 20 });
       if (res.error) throw res.error;
 
       const cleaned = (res.data ?? []).filter((p: any) => {
