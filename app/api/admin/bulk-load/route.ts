@@ -8,7 +8,7 @@ type TeeHole = {
   hole_number: number;
   par: number | null;
   yardage: number | null;
-  handicap_index: number | null;
+  handicap: number | null;
 };
 
 function must<T>(v: T | null | undefined, msg: string): T {
@@ -171,7 +171,7 @@ export async function POST(req: Request) {
 
         const { data: holes, error: hErr } = await admin
           .from("course_tee_holes")
-          .select("hole_number,par,yardage,handicap_index")
+          .select("hole_number,par,yardage,handicap")
           .eq("tee_box_id", teeBoxId)
           .order("hole_number", { ascending: true });
 
@@ -209,7 +209,7 @@ export async function POST(req: Request) {
           hole_number: h.hole_number,
           par: h.par,
           yardage: h.yardage,
-          stroke_index: h.handicap_index,
+          stroke_index: h.handicap,
         }));
 
         const { error: hsErr } = await admin.from("round_hole_snapshots").insert(holeSnapshotRows);

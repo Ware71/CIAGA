@@ -169,6 +169,47 @@ function sumMeta(holes: Hole[]) {
   };
 }
 
+/* ---------------- Finished-state helpers ---------------- */
+
+function stableNumber(n: any): number | null {
+  return typeof n === "number" && Number.isFinite(n) ? n : null;
+}
+
+type FinalRow = {
+  participantId: string;
+  name: string;
+  avatarUrl: string;
+  total: number;
+  out: number;
+  in: number;
+};
+
+function buildFinalRows(
+  participants: Participant[],
+  totals: Record<string, { out: number; in: number; total: number }>,
+  getParticipantLabel: (p: Participant) => string,
+  getParticipantAvatar: (p: Participant) => string
+): FinalRow[] {
+  return participants.map((p) => {
+    const t = totals[p.id] ?? { out: 0, in: 0, total: 0 };
+    return {
+      participantId: p.id,
+      name: getParticipantLabel(p),
+      avatarUrl: getParticipantAvatar(p),
+      total: stableNumber(t.total) ?? 0,
+      out: stableNumber(t.out) ?? 0,
+      in: stableNumber(t.in) ?? 0,
+    };
+  });
+}
+
+function formatPlayedOn(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" });
+}
+
 export default function RoundDetailPage() {
   const router = useRouter();
   const params = useParams<{ round_id: string }>();
@@ -184,6 +225,7 @@ export default function RoundDetailPage() {
   const [roundName, setRoundName] = useState<string>("Round");
   const [status, setStatus] = useState<string>("draft");
   const [courseLabel, setCourseLabel] = useState<string>("");
+  const [playedOnIso, setPlayedOnIso] = useState<string | null>(null);
 
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [teeSnapshotId, setTeeSnapshotId] = useState<string | null>(null);
@@ -265,6 +307,28 @@ export default function RoundDetailPage() {
     return cols;
   }, [holesList]);
 
+  // ✅ Make these hooks so ordering + deps are clean
+  const getParticipantLabel = useCallback((p: Participant) => {
+    const prof = pickProfile(p);
+    return p.display_name || prof?.name || prof?.email || (p.profile_id ? "Player" : "Guest");
+  }, []);
+
+  const getParticipantAvatar = useCallback((p: Participant) => {
+    const prof = pickProfile(p);
+    return prof?.avatar_url || "";
+  }, []);
+
+  // Finished-state presentation (archive-like) — MUST be above any early returns
+  const playedOnLabel = playedOnIso ? formatPlayedOn(playedOnIso) : "";
+
+  const finalRows = useMemo(() => {
+    const rows = buildFinalRows(participants, totals, getParticipantLabel, getParticipantAvatar);
+    rows.sort((a, b) => (a.total - b.total) || a.name.localeCompare(b.name));
+    return rows;
+  }, [participants, totals, getParticipantLabel, getParticipantAvatar]);
+
+  const winner = finalRows[0] ?? null;
+
   const fetchAll = useCallback(async () => {
     setErr(null);
 
@@ -279,7 +343,7 @@ export default function RoundDetailPage() {
 
     const roundRes = await supabase
       .from("rounds")
-      .select("id,name,status, course:courses(name)")
+      .select("id,name,status, started_at, created_at, course:courses(name)")
       .eq("id", roundId)
       .single();
     if (roundRes.error) throw roundRes.error;
@@ -290,6 +354,9 @@ export default function RoundDetailPage() {
     setRoundName(r.name || courseName || "Round");
     setStatus(r.status);
     setCourseLabel(courseName);
+
+    // archive-like: show played on date in header/subtitle
+    setPlayedOnIso((r.started_at as string | null) ?? (r.created_at as string | null) ?? null);
 
     const partRes = await supabase.rpc("get_round_participants", { _round_id: roundId });
     if (partRes.error) throw partRes.error;
@@ -311,8 +378,7 @@ export default function RoundDetailPage() {
 
     setParticipants(mappedParticipants);
 
-    const teeId =
-      mappedParticipants.find((p: any) => p.tee_snapshot_id)?.tee_snapshot_id ?? null;
+    const teeId = mappedParticipants.find((p: any) => p.tee_snapshot_id)?.tee_snapshot_id ?? null;
     setTeeSnapshotId(teeId);
 
     if (teeId) {
@@ -322,7 +388,6 @@ export default function RoundDetailPage() {
         .eq("round_tee_snapshot_id", teeId)
         .order("hole_number", { ascending: true });
       if (holesRes.error) throw holesRes.error;
-
 
       const hs = (holesRes.data ?? []) as Hole[];
       setHoles(hs);
@@ -409,12 +474,13 @@ export default function RoundDetailPage() {
     };
   }, [roundId, fetchAll]);
 
-  // Auto-active hole: always next incomplete hole
+  // Auto-active hole: always next incomplete hole (freeze when finished)
   useEffect(() => {
+    if (isFinished) return;
     if (!participants.length || !holesList.length) return;
     const next = computeNextIncompleteHole(holesList, participants, scoreFor);
     setActiveHole((prev) => (prev === next ? prev : next));
-  }, [participants, holesList, scoreFor]);
+  }, [participants, holesList, scoreFor, isFinished]);
 
   async function setScore(participantId: string, holeNumber: number, strokes: number | null) {
     if (!meId) return false;
@@ -477,16 +543,6 @@ export default function RoundDetailPage() {
     }
   }
 
-  function getParticipantLabel(p: Participant) {
-    const prof = pickProfile(p);
-    return p.display_name || prof?.name || prof?.email || (p.profile_id ? "Player" : "Guest");
-  }
-
-  function getParticipantAvatar(p: Participant) {
-    const prof = pickProfile(p);
-    return prof?.avatar_url || "";
-  }
-
   function closeEntry() {
     setEntryOpen(false);
     setEntryPid(null);
@@ -537,8 +593,10 @@ export default function RoundDetailPage() {
     );
   }
 
-  const needsSetup = status !== "live" || !teeSnapshotId;
-  const canFinish = !needsSetup && canScore && !isFinished;
+  const hasStarted = status === "live" || isFinished; // finished counts as started
+  const needsSetup = !hasStarted || !teeSnapshotId;
+  const canFinish = hasStarted && !!teeSnapshotId && canScore && !isFinished;
+
 
   // tighter thresholds + columns
   const compactPlayers = participants.length >= 6;
@@ -547,10 +605,8 @@ export default function RoundDetailPage() {
 
   const portraitTag = (text: string) => <div className="text-[10px] font-semibold leading-none">{text}</div>;
 
-  const sumPar = (k: SumKind) =>
-    k === "OUT" ? metaSums.parOut : k === "IN" ? metaSums.parIn : metaSums.parTot;
-  const sumYds = (k: SumKind) =>
-    k === "OUT" ? metaSums.ydsOut : k === "IN" ? metaSums.ydsIn : metaSums.ydsTot;
+  const sumPar = (k: SumKind) => (k === "OUT" ? metaSums.parOut : k === "IN" ? metaSums.parIn : metaSums.parTot);
+  const sumYds = (k: SumKind) => (k === "OUT" ? metaSums.ydsOut : k === "IN" ? metaSums.ydsIn : metaSums.ydsTot);
 
   return (
     <div className="min-h-screen bg-[#042713] text-slate-100 px-1.5 sm:px-2 pt-4 pb-[env(safe-area-inset-bottom)]">
@@ -561,7 +617,11 @@ export default function RoundDetailPage() {
             variant="ghost"
             size="sm"
             className="px-2 text-emerald-100 hover:bg-emerald-900/30"
-            onClick={() => router.push("/round")}
+            onClick={() => {
+              const sp = new URLSearchParams(window.location.search);
+              const from = sp.get("from");
+              router.push(from === "history" ? "/history" : "/round");
+            }}
           >
             ← Back
           </Button>
@@ -572,10 +632,17 @@ export default function RoundDetailPage() {
             </div>
             <div className="text-[10px] uppercase tracking-[0.14em] text-emerald-200/70 truncate">
               {status} {courseLabel ? `· ${courseLabel}` : ""}
+              {playedOnLabel ? ` · ${playedOnLabel}` : ""}
             </div>
           </div>
 
-          {canFinish ? (
+          {isFinished ? (
+            <div className="flex items-center gap-2">
+              <div className="rounded-xl border border-emerald-900/70 bg-[#0b3b21]/50 px-3 py-1 text-[11px] font-semibold text-emerald-100/90">
+                Finished
+              </div>
+            </div>
+          ) : canFinish ? (
             <Button
               size="sm"
               className="rounded-xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c] px-3"
@@ -604,6 +671,73 @@ export default function RoundDetailPage() {
             >
               Go to setup
             </Button>
+          </div>
+        ) : null}
+
+        {/* Finished: winner pinned */}
+        {!needsSetup && isFinished && winner ? (
+          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 overflow-hidden">
+            <div className="p-4 border-b border-emerald-900/60">
+              <div className="text-sm font-semibold text-[#f5e6b0]">Final results</div>
+              <div className="text-[11px] text-emerald-100/70 mt-1">Scores are locked. This is the final scorecard.</div>
+            </div>
+
+            <div className="p-3">
+              <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/60 p-3 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="rounded-full border border-emerald-900/70 bg-[#0b3b21]/50 px-2.5 py-1 text-[10px] font-bold text-emerald-100/90">
+                    WINNER
+                  </div>
+                  <Avatar className="h-9 w-9 border border-emerald-200/70 shrink-0">
+                    <AvatarImage src={winner.avatarUrl} />
+                    <AvatarFallback className="text-[10px]">{initialsFrom(winner.name)}</AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0">
+                    <div className="text-[13px] font-semibold text-emerald-50 truncate">{winner.name}</div>
+                    <div className="text-[11px] text-emerald-100/70">
+                      OUT {winner.out} · IN {winner.in}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="shrink-0 text-right">
+                  <div className="text-[10px] uppercase tracking-[0.14em] text-emerald-100/70">Total</div>
+                  <div className="text-2xl font-extrabold tabular-nums text-[#f5e6b0]">{winner.total}</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="divide-y divide-emerald-900/60">
+              {finalRows.map((r, idx) => {
+                const prev = finalRows[idx - 1];
+                const rank = idx === 0 ? 1 : prev && prev.total === r.total ? null : idx + 1;
+
+                return (
+                  <div key={r.participantId} className="p-3 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-7 text-center text-[12px] font-bold text-emerald-100/90">{rank ?? "•"}</div>
+
+                      <Avatar className="h-8 w-8 border border-emerald-200/70 shrink-0">
+                        <AvatarImage src={r.avatarUrl} />
+                        <AvatarFallback className="text-[10px]">{initialsFrom(r.name)}</AvatarFallback>
+                      </Avatar>
+
+                      <div className="min-w-0">
+                        <div className="text-[13px] font-semibold text-emerald-50 truncate">{r.name}</div>
+                        <div className="text-[11px] text-emerald-100/70">
+                          OUT {r.out} · IN {r.in}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0 text-right">
+                      <div className="text-[10px] uppercase tracking-[0.14em] text-emerald-100/70">Total</div>
+                      <div className="text-xl font-extrabold tabular-nums text-[#f5e6b0]">{r.total}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         ) : null}
 
@@ -654,7 +788,7 @@ export default function RoundDetailPage() {
                   {/* Hole rows + OUT between 9 and 10 */}
                   {holesList.flatMap((h) => {
                     const nodes: JSX.Element[] = [];
-                    const isActive = h.hole_number === activeHole;
+                    const isActive = !isFinished && h.hole_number === activeHole;
 
                     const metaCell = (v: any, key: string) => (
                       <div
@@ -804,7 +938,7 @@ export default function RoundDetailPage() {
                     </div>
 
                     {landscapePlan.map((c, idx) => {
-                      const isActive = c.kind === "hole" ? c.hole.hole_number === activeHole : false;
+                      const isActive = !isFinished && c.kind === "hole" ? c.hole.hole_number === activeHole : false;
 
                       const cell = (v: any) => (
                         <div
@@ -870,7 +1004,7 @@ export default function RoundDetailPage() {
                               const h = c.hole;
                               const s = scoreFor(p.id, h.hole_number);
                               const key = `${p.id}:${h.hole_number}`;
-                              const isActive = h.hole_number === activeHole;
+                              const isActive = !isFinished && h.hole_number === activeHole;
                               const disabled = !canScore || isFinished;
 
                               return (
@@ -892,8 +1026,8 @@ export default function RoundDetailPage() {
                               c.kind === "outMid" || c.kind === "outEnd"
                                 ? t?.out ?? 0
                                 : c.kind === "inEnd"
-                                  ? t?.in ?? 0
-                                  : t?.total ?? 0;
+                                ? t?.in ?? 0
+                                : t?.total ?? 0;
 
                             const isTot = c.kind === "totEnd";
 
@@ -930,8 +1064,8 @@ export default function RoundDetailPage() {
           />
         ) : null}
 
-        {/* Entry popup */}
-        {entryOpen && entryPid && entryHole ? (
+        {/* Entry popup (archive-like: never render when finished even if state gets toggled) */}
+        {!isFinished && entryOpen && entryPid && entryHole ? (
           <ScoreEntrySheet
             participants={participants}
             holes={holesList}
@@ -947,14 +1081,8 @@ export default function RoundDetailPage() {
             savingKey={savingKey}
             onClose={closeEntry}
             onSubmit={submitAndAdvance}
-            getParticipantLabel={(pp) => {
-              const prof = pickProfile(pp);
-              return pp.display_name || prof?.name || prof?.email || (pp.profile_id ? "Player" : "Guest");
-            }}
-            getParticipantAvatar={(pp) => {
-              const prof = pickProfile(pp);
-              return prof?.avatar_url || "";
-            }}
+            getParticipantLabel={getParticipantLabel}
+            getParticipantAvatar={getParticipantAvatar}
           />
         ) : null}
       </div>
