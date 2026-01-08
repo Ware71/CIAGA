@@ -220,9 +220,10 @@ export default function NewRoundCoursePickerPage() {
   // Select → resolve → navigate to round tee picker
   // -----------------------------
   async function onSelect(c: Course) {
+    if (resolvingId) return;
     const ov = overrides[c.id];
     if (ov?.course_id) {
-      router.push(`/round/new/${ov.course_id}`);
+      router.replace(`/round/new/${ov.course_id}`);
       return;
     }
 
@@ -243,7 +244,7 @@ export default function NewRoundCoursePickerPage() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error ?? data?.reason ?? "Resolve failed");
 
-      if (data?.course_id) router.push(`/round/new/${data.course_id}`);
+      if (data?.course_id) router.replace(`/round/new/${data.course_id}`);
       else throw new Error("Resolve did not return course_id");
     } catch (e: any) {
       console.error("Resolve error:", e?.message ?? e);
@@ -265,7 +266,7 @@ export default function NewRoundCoursePickerPage() {
             variant="ghost"
             size="sm"
             className="px-2 text-emerald-100 hover:bg-emerald-900/30"
-            onClick={() => router.back()}
+            onClick={() => router.push("/round")}
           >
             ← Back
           </Button>

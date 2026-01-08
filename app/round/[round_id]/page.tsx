@@ -291,16 +291,28 @@ export default function RoundDetailPage() {
     setStatus(r.status);
     setCourseLabel(courseName);
 
-    const partRes = await supabase
-      .from("round_participants")
-      .select("id,profile_id,is_guest,display_name,role,tee_snapshot_id, profiles(name,email,avatar_url)")
-      .eq("round_id", roundId)
-      .order("created_at", { ascending: true });
+    const partRes = await supabase.rpc("get_round_participants", { _round_id: roundId });
     if (partRes.error) throw partRes.error;
 
-    setParticipants((partRes.data ?? []) as Participant[]);
+    // Map RPC rows into your existing Participant shape
+    const mappedParticipants = ((partRes.data ?? []) as any[]).map((row) => ({
+      id: row.id,
+      profile_id: row.profile_id,
+      is_guest: row.is_guest,
+      display_name: row.display_name,
+      role: row.role, // already text from the function; matches your union
+      tee_snapshot_id: row.tee_snapshot_id,
+      profiles: {
+        name: row.name,
+        email: row.email,
+        avatar_url: row.avatar_url,
+      },
+    })) as Participant[];
 
-    const teeId = (partRes.data ?? []).find((p: any) => p.tee_snapshot_id)?.tee_snapshot_id ?? null;
+    setParticipants(mappedParticipants);
+
+    const teeId =
+      mappedParticipants.find((p: any) => p.tee_snapshot_id)?.tee_snapshot_id ?? null;
     setTeeSnapshotId(teeId);
 
     if (teeId) {
@@ -310,6 +322,7 @@ export default function RoundDetailPage() {
         .eq("round_tee_snapshot_id", teeId)
         .order("hole_number", { ascending: true });
       if (holesRes.error) throw holesRes.error;
+
 
       const hs = (holesRes.data ?? []) as Hole[];
       setHoles(hs);
@@ -548,7 +561,7 @@ export default function RoundDetailPage() {
             variant="ghost"
             size="sm"
             className="px-2 text-emerald-100 hover:bg-emerald-900/30"
-            onClick={() => router.back()}
+            onClick={() => router.push("/round")}
           >
             ← Back
           </Button>
@@ -587,7 +600,7 @@ export default function RoundDetailPage() {
             </div>
             <Button
               className="w-full rounded-2xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c]"
-              onClick={() => router.push(`/round/${roundId}/setup`)}
+              onClick={() => router.replace(`/round/${roundId}/setup`)}
             >
               Go to setup
             </Button>

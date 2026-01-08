@@ -1,3 +1,4 @@
+// /app/round/[round_id]/setup/page.tsx
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -133,6 +134,148 @@ async function resolveProfilesForFollowIds(ids: string[]) {
   })) as ProfileLite[];
 }
 
+// RPC return type for get_round_setup_participants
+type SetupParticipantRow = {
+  id: string;
+  profile_id: string | null;
+  is_guest: boolean;
+  display_name: string | null;
+  role: "owner" | "scorer" | "player" | string;
+  profile_name: string | null;
+  profile_email: string | null;
+  profile_avatar_url: string | null;
+};
+
+/* ---------------- Swipe Row (participants) ---------------- */
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function SwipeToRemoveRow(props: {
+  disabled?: boolean;
+  revealWidth?: number; // px
+  isOpen: boolean;
+  setOpen: (open: boolean) => void;
+  onRemove: () => void | Promise<void>;
+  children: React.ReactNode;
+}) {
+  const { disabled, revealWidth = 92, isOpen, setOpen, onRemove, children } = props;
+
+  const [dx, setDx] = useState(0); // negative = swiped left
+  const draggingRef = useRef(false);
+  const startXRef = useRef(0);
+  const startYRef = useRef(0);
+  const startDxRef = useRef(0);
+  const decidedRef = useRef<"h" | "v" | null>(null);
+
+  // Keep visual state in sync with open/close
+  useEffect(() => {
+    if (draggingRef.current) return;
+    setDx(isOpen ? -revealWidth : 0);
+  }, [isOpen, revealWidth]);
+
+  function onPointerDown(e: React.PointerEvent) {
+    if (disabled) return;
+
+    draggingRef.current = true;
+    decidedRef.current = null;
+    startXRef.current = e.clientX;
+    startYRef.current = e.clientY;
+    startDxRef.current = dx;
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+  }
+
+  function onPointerMove(e: React.PointerEvent) {
+    if (disabled) return;
+    if (!draggingRef.current) return;
+
+    const mx = e.clientX - startXRef.current;
+    const my = e.clientY - startYRef.current;
+
+    // Decide gesture direction once
+    if (!decidedRef.current) {
+      if (Math.abs(mx) < 6 && Math.abs(my) < 6) return;
+      decidedRef.current = Math.abs(mx) > Math.abs(my) ? "h" : "v";
+    }
+
+    if (decidedRef.current === "v") return; // allow page scroll
+
+    // Horizontal swipe
+    e.preventDefault();
+
+    const next = clamp(startDxRef.current + mx, -revealWidth, 0);
+    setDx(next);
+  }
+
+  function finishSwipe() {
+    draggingRef.current = false;
+    decidedRef.current = null;
+
+    const openThreshold = -revealWidth * 0.6;
+    const shouldOpen = dx <= openThreshold;
+
+    setOpen(shouldOpen);
+    setDx(shouldOpen ? -revealWidth : 0);
+  }
+
+  function onPointerUp() {
+    if (disabled) return;
+    if (!draggingRef.current) return;
+    finishSwipe();
+  }
+
+  function onPointerCancel() {
+    if (disabled) return;
+    if (!draggingRef.current) return;
+    finishSwipe();
+  }
+
+  return (
+    <div className="relative overflow-hidden rounded-2xl border border-emerald-900/70">
+      {/* Underlay */}
+      <div className="absolute inset-0 bg-red-950/40">
+        <div className="absolute right-0 top-0 bottom-0 flex items-center pr-3">
+          <button
+            type="button"
+            className="h-9 px-3 rounded-xl bg-red-600/90 text-white text-[12px] font-semibold hover:bg-red-600 disabled:opacity-60"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
+            disabled={!!disabled}
+          >
+            Remove
+          </button>
+        </div>
+      </div>
+
+      {/* Foreground row (✅ NOT transparent anymore) */}
+      <div
+        className="relative bg-[#042713]"
+        style={{
+          transform: `translateX(${dx}px)`,
+          transition: draggingRef.current ? "none" : "transform 180ms ease-out",
+          touchAction: "pan-y",
+          willChange: "transform",
+        }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerCancel}
+        onClick={() => {
+          if (disabled) return;
+          if (isOpen) setOpen(false);
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Page ---------------- */
+
 export default function RoundSetupPage() {
   const router = useRouter();
   const params = useParams<{ round_id: string }>();
@@ -165,6 +308,10 @@ export default function RoundSetupPage() {
   const [showGuest, setShowGuest] = useState(false);
   const [guestName, setGuestName] = useState("");
   const [addingGuest, setAddingGuest] = useState(false);
+
+  // swipe state (only one open at a time)
+  const [openSwipeId, setOpenSwipeId] = useState<string | null>(null);
+  const removingRef = useRef<Set<string>>(new Set());
 
   const participantProfileIds = useMemo(() => {
     return new Set(participants.map((p) => p.profile_id).filter(Boolean) as string[]);
@@ -218,20 +365,43 @@ export default function RoundSetupPage() {
       return;
     }
 
-    const pRes = await supabase
-      .from("round_participants")
-      .select("id,profile_id,is_guest,display_name,role, profiles(id,name,email,avatar_url)")
-      .eq("round_id", roundId)
-      .order("created_at", { ascending: true });
+    // If round is already live, bail to scorecard
+    if ((rRes.data as any)?.status === "live") {
+      router.replace(`/round/${roundId}`);
+      return;
+    }
 
+    // ✅ Use RPC for setup participants (RLS-safe)
+    const pRes = await supabase.rpc("get_round_setup_participants", { _round_id: roundId });
     if (pRes.error) {
       setErr(pRes.error.message);
       setLoading(false);
       return;
     }
 
+    const rows = (pRes.data ?? []) as SetupParticipantRow[];
+
+    const mapped = rows.map((row) => {
+      const role = (row.role as any) as "owner" | "scorer" | "player";
+      return {
+        id: row.id,
+        profile_id: row.profile_id,
+        is_guest: !!row.is_guest,
+        display_name: row.display_name,
+        role,
+        profiles: row.profile_id
+          ? {
+              id: row.profile_id ?? undefined,
+              name: row.profile_name,
+              email: row.profile_email,
+              avatar_url: row.profile_avatar_url,
+            }
+          : null,
+      } as Participant;
+    });
+
     setRound(rRes.data as any);
-    setParticipants((pRes.data ?? []) as unknown as Participant[]);
+    setParticipants(mapped);
     setLoading(false);
   }
 
@@ -364,7 +534,62 @@ export default function RoundSetupPage() {
     }
   }
 
+  // ✅ Swipe-to-remove participants (draft only)
+  async function removeParticipant(participant: Participant) {
+    if (!isOwner) return;
+    if (starting) return;
+    if (round?.status === "live") return;
+
+    // protect owner row + "me"
+    if (participant.role === "owner") return;
+    if (participant.profile_id && participant.profile_id === meId) return;
+
+    if (removingRef.current.has(participant.id)) return;
+
+    const label = displayParticipant(participant).name;
+    const ok = window.confirm(`Remove ${label} from this round?`);
+    if (!ok) return;
+
+    removingRef.current.add(participant.id);
+    setErr(null);
+
+    // Optimistic UI
+    setParticipants((prev) => prev.filter((p) => p.id !== participant.id));
+    setOpenSwipeId(null);
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("Not authenticated.");
+
+      // ✅ IMPORTANT: this is NOT delete-draft. It is remove-participant.
+      const res = await fetch("/api/rounds/remove-participant", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          round_id: roundId,
+          participant_id: participant.id,
+          requester_profile_id: meId,
+        }),
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error || `Failed (${res.status})`);
+
+      await fetchAll();
+    } catch (e: any) {
+      setErr(e?.message || "Failed to remove player");
+      await fetchAll();
+    } finally {
+      removingRef.current.delete(participant.id);
+    }
+  }
+
   async function startRound() {
+    if (starting) return;
     if (!isOwner) {
       setErr("Only the round owner can start the round.");
       return;
@@ -468,7 +693,7 @@ export default function RoundSetupPage() {
             variant="ghost"
             size="sm"
             className="px-2 text-emerald-100 hover:bg-emerald-900/30"
-            onClick={() => router.back()}
+            onClick={() => router.push("/round")}
             disabled={starting}
           >
             ← Back
@@ -519,21 +744,36 @@ export default function RoundSetupPage() {
           <div className="mt-3 space-y-2">
             {participants.map((p) => {
               const d = displayParticipant(p);
+
+              const removable =
+                isOwner &&
+                !starting &&
+                round?.status !== "live" &&
+                p.role !== "owner" &&
+                !(p.profile_id && p.profile_id === meId);
+
               return (
-                <div
+                <SwipeToRemoveRow
                   key={p.id}
-                  className="rounded-2xl border border-emerald-900/70 bg-[#042713]/60 p-3 flex items-center gap-3"
+                  disabled={!removable}
+                  isOpen={openSwipeId === p.id}
+                  setOpen={(open) => setOpenSwipeId(open ? p.id : null)}
+                  onRemove={() => removeParticipant(p)}
                 >
-                  <Avatar name={d.name} url={d.avatar_url} size={36} />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-semibold text-emerald-50 truncate">{d.name}</div>
-                    <div className="text-[11px] text-emerald-100/60">
-                      {p.is_guest ? "Guest" : p.profile_id === meId ? "You" : "Player"} · {p.role}
+                  <div className="p-3 flex items-center gap-3">
+                    <Avatar name={d.name} url={d.avatar_url} size={36} />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-semibold text-emerald-50 truncate">{d.name}</div>
+                      <div className="text-[11px] text-emerald-100/60">
+                        {p.is_guest ? "Guest" : p.profile_id === meId ? "You" : "Player"} · {p.role}
+                        {removable ? <span className="ml-2 text-[10px] text-emerald-100/50">Swipe to remove</span> : null}
+                      </div>
                     </div>
                   </div>
-                </div>
+                </SwipeToRemoveRow>
               );
             })}
+
             {participants.length === 0 ? (
               <div className="text-[11px] text-emerald-100/60 mt-2">No players yet.</div>
             ) : null}
@@ -567,35 +807,34 @@ export default function RoundSetupPage() {
             disabled={!canEdit}
           />
 
-          <div className="space-y-2">
-            {filteredFollowing.slice(0, 10).map((p) => {
-              const name = pickNickname(p);
-              return (
-                <button
-                  key={p.id}
-                  onClick={() => addProfile(p.id)}
-                  disabled={!canEdit}
-                  className="w-full text-left rounded-2xl border border-emerald-900/70 bg-[#042713]/60 p-3 flex items-center gap-3 hover:bg-[#07341c]/70 disabled:opacity-60"
-                >
-                  <Avatar name={name} url={p.avatar_url} size={34} />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-semibold text-emerald-50 truncate">{name}</div>
-                    <div className="text-[11px] text-emerald-100/60 truncate">{p.email ?? ""}</div>
-                  </div>
-                  <div className="text-[12px] text-emerald-100/70">Add</div>
-                </button>
-              );
-            })}
+          {/* ✅ show ~3 people, scroll for more */}
+          <div className="max-h-[220px] overflow-y-auto overscroll-contain pr-1">
+            <div className="space-y-2">
+              {filteredFollowing.map((p) => {
+                const name = pickNickname(p);
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => addProfile(p.id)}
+                    disabled={!canEdit}
+                    className="w-full text-left rounded-2xl border border-emerald-900/70 bg-[#042713]/60 p-3 flex items-center gap-3 hover:bg-[#07341c]/70 disabled:opacity-60"
+                  >
+                    <Avatar name={name} url={p.avatar_url} size={34} />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-semibold text-emerald-50 truncate">{name}</div>
+                      <div className="text-[11px] text-emerald-100/60 truncate">{p.email ?? ""}</div>
+                    </div>
+                    <div className="text-[12px] text-emerald-100/70">Add</div>
+                  </button>
+                );
+              })}
 
-            {filteredFollowing.length === 0 ? (
-              <div className="text-[11px] text-emerald-100/60">
-                {loadingFollowing ? "Loading…" : "No matches in your following."}
-              </div>
-            ) : null}
-
-            {filteredFollowing.length > 10 ? (
-              <div className="text-[11px] text-emerald-100/60">+ {filteredFollowing.length - 10} more</div>
-            ) : null}
+              {filteredFollowing.length === 0 ? (
+                <div className="text-[11px] text-emerald-100/60">
+                  {loadingFollowing ? "Loading…" : "No matches in your following."}
+                </div>
+              ) : null}
+            </div>
           </div>
 
           <div className="pt-2 flex gap-2">
@@ -683,6 +922,12 @@ export default function RoundSetupPage() {
           {!isOwner ? (
             <div className="text-center text-[10px] text-emerald-100/60">
               Only the round owner can add players and start the round.
+            </div>
+          ) : null}
+
+          {isOwner && round?.status !== "live" ? (
+            <div className="text-center text-[10px] text-emerald-100/50">
+              Tip: swipe a player in the “Players” list to remove them.
             </div>
           ) : null}
         </div>
