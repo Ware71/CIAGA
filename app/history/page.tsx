@@ -64,6 +64,15 @@ function chunk<T>(arr: T[], size: number) {
   return out;
 }
 
+function toNumberMaybe(v: unknown): number | null {
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  if (typeof v === "string") {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
 export default function RoundsHistoryPage() {
   const [loading, setLoading] = useState(true);
   const [profileId, setProfileId] = useState<string | null>(null);
@@ -169,10 +178,7 @@ export default function RoundsHistoryPage() {
         // fetch in chunks to avoid long URL issues
         const teeSnaps: TeeSnap[] = [];
         for (const ids of chunk(teeIds, 150)) {
-          const { data: tees, error: tErr } = await supabase
-            .from("round_tee_snapshots")
-            .select("id,name")
-            .in("id", ids);
+          const { data: tees, error: tErr } = await supabase.from("round_tee_snapshots").select("id,name").in("id", ids);
           if (tErr) continue;
           teeSnaps.push(...((tees ?? []) as TeeSnap[]));
         }
@@ -188,32 +194,53 @@ export default function RoundsHistoryPage() {
 
       if (!cancelled) setTeeNameByRoundId(teeNameMap);
 
-      // 3) Load MY totals by summing round_current_scores for MY participant ids only
+      // 3) Load MY totals (robust): fetch by round_id + participant_id to avoid PostgREST row caps
       const myParticipantIds = Array.from(new Set(Object.values(pidMap).filter(Boolean)));
       const totalsByParticipant: Record<string, number> = {};
+      const countsByParticipant: Record<string, number> = {}; // ✅ track whether we saw any numeric strokes
 
       if (myParticipantIds.length) {
-        for (const ids of chunk(myParticipantIds, 120)) {
+        // Build (round_id, participant_id) pairs so we can query each round tightly (max 18 rows per round)
+        const pairs = Object.keys(pidMap).map((roundId) => ({
+          roundId,
+          participantId: pidMap[roundId],
+        }));
+
+        // chunk pairs to keep requests reasonable
+        for (const batch of chunk(pairs, 25)) {
+          // Build an OR filter like:
+          // (round_id.eq.<rid1>,participant_id.eq.<pid1>),(round_id.eq.<rid2>,participant_id.eq.<pid2>)...
+          const orExpr = batch
+            .map((p) => `and(round_id.eq.${p.roundId},participant_id.eq.${p.participantId})`)
+            .join(",");
+
           const { data: scores, error: sErr } = await supabase
             .from("round_current_scores")
-            .select("participant_id, strokes")
-            .in("participant_id", ids);
+            .select("round_id, participant_id, strokes")
+            .or(orExpr);
 
           if (sErr) continue;
 
           for (const row of (scores ?? []) as any[]) {
             const p = row.participant_id as string;
-            const s = row.strokes;
-            if (typeof s !== "number") continue;
-            totalsByParticipant[p] = (totalsByParticipant[p] ?? 0) + s;
+            const n = toNumberMaybe(row.strokes);
+            if (n == null) continue;
+
+            totalsByParticipant[p] = (totalsByParticipant[p] ?? 0) + n;
+            countsByParticipant[p] = (countsByParticipant[p] ?? 0) + 1;
           }
         }
       }
 
+      // ✅ only set a total if we actually summed something for that participant
       const totalByRound: Record<string, number> = {};
       for (const roundId of Object.keys(pidMap)) {
         const participantId = pidMap[roundId];
-        totalByRound[roundId] = totalsByParticipant[participantId] ?? 0;
+        const count = countsByParticipant[participantId] ?? 0;
+        if (count > 0) {
+          totalByRound[roundId] = totalsByParticipant[participantId] ?? 0;
+        }
+        // else: leave undefined so UI shows "—" instead of "0"
       }
 
       if (!cancelled) {
@@ -246,129 +273,138 @@ export default function RoundsHistoryPage() {
   }, [loading, error, rounds.length]);
 
   return (
-    <div className="min-h-screen bg-[#042713] text-slate-100 px-1.5 sm:px-2 pt-4 pb-[env(safe-area-inset-bottom)]">
-      <div className="mx-auto w-full max-w-3xl space-y-3">
-        {/* Header */}
-        <header className="flex items-center justify-between gap-2 px-1">
-          {/* ✅ Back goes to homepage */}
-          <Button asChild variant="ghost" size="sm" className="px-2 text-emerald-100 hover:bg-emerald-900/30">
-            <Link href="/">← Back</Link>
-          </Button>
+    <div className="h-screen bg-[#042713] text-slate-100 px-1.5 sm:px-2 pt-4">
+      <div className="mx-auto w-full max-w-3xl h-full flex flex-col">
+        {/* ✅ Sticky Header */}
+        <header className="sticky top-0 z-20 bg-[#042713] pb-3">
+          <div className="flex items-center justify-between gap-2 px-1">
+            <Button asChild variant="ghost" size="sm" className="px-2 text-emerald-100 hover:bg-emerald-900/30">
+              <Link href="/">← Back</Link>
+            </Button>
 
-          <div className="text-center flex-1 min-w-0 px-2">
-            <div className="text-[15px] sm:text-base font-semibold tracking-wide text-[#f5e6b0] truncate">{title}</div>
-            <div className="text-[10px] uppercase tracking-[0.14em] text-emerald-200/70 truncate">
-              Finished rounds
+            <div className="text-center flex-1 min-w-0 px-2">
+              <div className="text-[15px] sm:text-base font-semibold tracking-wide text-[#f5e6b0] truncate">{title}</div>
+              <div className="text-[10px] uppercase tracking-[0.14em] text-emerald-200/70 truncate">
+                Finished rounds
+              </div>
             </div>
-          </div>
 
-          <div className="w-[64px]" />
+            <div className="w-[64px]" />
+          </div>
         </header>
 
-        {loading && (
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">
-            Loading…
-          </div>
-        )}
+        {/* ✅ Only this area scrolls */}
+        <div className="flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
+          {loading && (
+            <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">
+              Loading…
+            </div>
+          )}
 
-        {!loading && error && (
-          <div className="rounded-2xl border border-red-900/50 bg-red-950/30 p-4">
-            <p className="text-sm text-red-100">{error}</p>
-            <div className="mt-3 flex gap-2">
-              <Button
-                variant="outline"
-                className="border-emerald-900/70 bg-[#0b3b21]/40 text-emerald-50 hover:bg-emerald-900/20"
-                onClick={() => window.location.reload()}
-              >
-                Retry
-              </Button>
-              <Button
-                variant="outline"
-                className="border-emerald-900/70 bg-[#0b3b21]/40 text-emerald-50 hover:bg-emerald-900/20"
-                onClick={async () => {
-                  await supabase.auth.signOut();
-                  window.location.href = "/login";
-                }}
-              >
-                Sign out
+          {!loading && error && (
+            <div className="rounded-2xl border border-red-900/50 bg-red-950/30 p-4">
+              <p className="text-sm text-red-100">{error}</p>
+              <div className="mt-3 flex gap-2">
+                <Button
+                  variant="outline"
+                  className="border-emerald-900/70 bg-[#0b3b21]/40 text-emerald-50 hover:bg-emerald-900/20"
+                  onClick={() => window.location.reload()}
+                >
+                  Retry
+                </Button>
+                <Button
+                  variant="outline"
+                  className="border-emerald-900/70 bg-[#0b3b21]/40 text-emerald-50 hover:bg-emerald-900/20"
+                  onClick={async () => {
+                    await supabase.auth.signOut();
+                    window.location.href = "/login";
+                  }}
+                >
+                  Sign out
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {!loading && !error && rounds.length === 0 && (
+            <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-6 space-y-2">
+              <div className="text-sm font-semibold text-emerald-50">No finished rounds yet</div>
+              <p className="text-[12px] text-emerald-100/70">Finish a round and it will show up here.</p>
+              <Button asChild variant="ghost" size="sm" className="mt-2 px-2 text-emerald-100 hover:bg-emerald-900/20">
+                <Link href="/round">Go to rounds</Link>
               </Button>
             </div>
-          </div>
-        )}
+          )}
 
-        {!loading && !error && rounds.length === 0 && (
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-6 space-y-2">
-            <div className="text-sm font-semibold text-emerald-50">No finished rounds yet</div>
-            <p className="text-[12px] text-emerald-100/70">Finish a round and it will show up here.</p>
-            <Button asChild variant="ghost" size="sm" className="mt-2 px-2 text-emerald-100 hover:bg-emerald-900/20">
-              <Link href="/round">Go to rounds</Link>
-            </Button>
-          </div>
-        )}
+          {!loading && !error && rounds.length > 0 && (
+            <div className="space-y-4">
+              {grouped.map(([month, list]) => (
+                <section key={month} className="space-y-2">
+                  <div className="flex items-center justify-between px-1">
+                    <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70">{month}</div>
+                    <div className="text-[11px] text-emerald-100/60">{list.length}</div>
+                  </div>
 
-        {!loading && !error && rounds.length > 0 && (
-          <div className="space-y-4">
-            {grouped.map(([month, list]) => (
-              <section key={month} className="space-y-2">
-                <div className="flex items-center justify-between px-1">
-                  <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70">{month}</div>
-                  <div className="text-[11px] text-emerald-100/60">{list.length}</div>
-                </div>
+                  <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 overflow-hidden">
+                    <div className="divide-y divide-emerald-900/60">
+                      {list.map((r) => {
+                        const course = one(r.courses)?.name ?? "Unknown course";
+                        const played = shortDate(r.started_at ?? r.created_at);
 
-                <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 overflow-hidden">
-                  <div className="divide-y divide-emerald-900/60">
-                    {list.map((r) => {
-                      const course = one(r.courses)?.name ?? "Unknown course";
-                      const played = shortDate(r.started_at ?? r.created_at);
+                        // ✅ title: name if set else course
+                        const titleText = r.name?.trim() ? r.name.trim() : course;
 
-                      // ✅ title: name if set else course
-                      const titleText = r.name?.trim() ? r.name.trim() : course;
+                        // ✅ subtitle: tee name
+                        const teeName = teeNameByRoundId[r.id] ?? "—";
 
-                      // ✅ subtitle: tee name
-                      const teeName = teeNameByRoundId[r.id] ?? "—";
+                        // ✅ robust link with query preserved for scorecard back button
+                        const href = { pathname: `/round/${r.id}`, query: { from: "history" } } as const;
 
-                      // ✅ robust link with query preserved for scorecard back button
-                      const href = { pathname: `/round/${r.id}`, query: { from: "history" } } as const;
+                        const total = myTotalByRoundId[r.id];
+                        const scoreText = typeof total === "number" ? String(total) : "—"; // ✅ no fake zeros
 
-                      const total = myTotalByRoundId[r.id];
-                      const scoreText = typeof total === "number" ? String(total) : "0";
-
-                      return (
-                        <div key={r.id} className="p-3 sm:p-4 flex items-center justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="text-[13px] sm:text-[14px] font-semibold text-emerald-50 truncate">
-                              {titleText}
-                            </div>
-                            <div className="text-[11px] sm:text-[12px] text-emerald-100/70 truncate">
-                              {teeName} · {played}
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-3 shrink-0">
-                            <div className="text-right">
-                              <div className="text-[18px] font-extrabold tabular-nums text-[#f5e6b0] leading-none">
-                                {scoreText}
+                        return (
+                          <div key={r.id} className="p-3 sm:p-4 flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="text-[13px] sm:text-[14px] font-semibold text-emerald-50 truncate">
+                                {titleText}
+                              </div>
+                              <div className="text-[11px] sm:text-[12px] text-emerald-100/70 truncate">
+                                {teeName} · {played}
                               </div>
                             </div>
 
-                            <Button asChild variant="ghost" size="sm" className="px-2 text-emerald-100 hover:bg-emerald-900/20">
-                              <Link href={href}>View</Link>
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </section>
-            ))}
-          </div>
-        )}
+                            <div className="flex items-center gap-3 shrink-0">
+                              <div className="text-right">
+                                <div className="text-[18px] font-extrabold tabular-nums text-[#f5e6b0] leading-none">
+                                  {scoreText}
+                                </div>
+                              </div>
 
-        {/* optional debug hint */}
-        {!loading && !error && profileId && (
-          <p className="text-[10px] text-emerald-100/50 px-1">Profile: {profileId}</p>
-        )}
+                              <Button
+                                asChild
+                                variant="ghost"
+                                size="sm"
+                                className="px-2 text-emerald-100 hover:bg-emerald-900/20"
+                              >
+                                <Link href={href}>View</Link>
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </section>
+              ))}
+            </div>
+          )}
+
+          {/* optional debug hint */}
+          {!loading && !error && profileId && (
+            <p className="text-[10px] text-emerald-100/50 px-1 mt-4">Profile: {profileId}</p>
+          )}
+        </div>
       </div>
     </div>
   );
