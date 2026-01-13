@@ -212,27 +212,16 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
   };
 
   const fetchCounts = async (pid: string) => {
-    const followersRes = await supabase
-      .from("follows")
-      .select("id", { count: "exact", head: true })
-      .eq("following_id", pid);
+    const followersRes = await supabase.from("follows").select("id", { count: "exact", head: true }).eq("following_id", pid);
 
-    const followingRes = await supabase
-      .from("follows")
-      .select("id", { count: "exact", head: true })
-      .eq("follower_id", pid);
+    const followingRes = await supabase.from("follows").select("id", { count: "exact", head: true }).eq("follower_id", pid);
 
     setFollowersCount(followersRes.count ?? 0);
     setFollowingCount(followingRes.count ?? 0);
   };
 
   const refreshFollowState = async (myPid: string, targetPid: string) => {
-    const { data, error } = await supabase
-      .from("follows")
-      .select("id")
-      .eq("follower_id", myPid)
-      .eq("following_id", targetPid)
-      .maybeSingle();
+    const { data, error } = await supabase.from("follows").select("id").eq("follower_id", myPid).eq("following_id", targetPid).maybeSingle();
 
     if (error) {
       console.warn("Follow state load error:", error);
@@ -295,11 +284,7 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
     if (!canFollow || !myProfileId || !profile?.id) return;
     setBusy(true);
     try {
-      const { error } = await supabase
-        .from("follows")
-        .delete()
-        .eq("follower_id", myProfileId)
-        .eq("following_id", profile.id);
+      const { error } = await supabase.from("follows").delete().eq("follower_id", myProfileId).eq("following_id", profile.id);
       if (error) throw error;
 
       setIsFollowing(false);
@@ -394,11 +379,7 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
 
     setBusyUserId(targetPid);
     try {
-      const { error } = await supabase
-        .from("follows")
-        .delete()
-        .eq("follower_id", myProfileId)
-        .eq("following_id", targetPid);
+      const { error } = await supabase.from("follows").delete().eq("follower_id", myProfileId).eq("following_id", targetPid);
 
       if (error) throw error;
 
@@ -472,10 +453,7 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
       }
 
       // update profiles.avatar_url
-      const { error: updateProfileError } = await supabase
-        .from("profiles")
-        .update({ avatar_url: publicUrl })
-        .eq("id", targetProfileId);
+      const { error: updateProfileError } = await supabase.from("profiles").update({ avatar_url: publicUrl }).eq("id", targetProfileId);
 
       if (updateProfileError) throw updateProfileError;
 
@@ -683,10 +661,7 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
           for (const batch of chunk(pairs, 25)) {
             const orExpr = batch.map((p) => `and(round_id.eq.${p.roundId},participant_id.eq.${p.participantId})`).join(",");
 
-            const { data: scores, error: sErr } = await supabase
-              .from("round_current_scores")
-              .select("round_id, participant_id, strokes")
-              .or(orExpr);
+            const { data: scores, error: sErr } = await supabase.from("round_current_scores").select("round_id, participant_id, strokes").or(orExpr);
 
             if (sErr) continue;
 
@@ -904,9 +879,7 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
             <div className="w-[60px]" />
           </header>
 
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">
-            Loading…
-          </div>
+          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">Loading…</div>
         </div>
       </div>
     );
@@ -927,9 +900,7 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
             <div className="w-[60px]" />
           </header>
 
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">
-            Player not found.
-          </div>
+          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">Player not found.</div>
         </div>
       </div>
     );
@@ -1068,11 +1039,7 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
             <div>
               <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">Round History</div>
               <div className="mt-0.5 text-[10px] text-emerald-100/60">
-                {window20.length >= 3 && usedCount > 0
-                  ? `${usedCount} of ${window20.length} counting`
-                  : window20.length > 0
-                  ? `Scoring rounds: ${window20.length}`
-                  : ""}
+                {window20.length >= 3 && usedCount > 0 ? `${usedCount} of ${window20.length} counting` : window20.length > 0 ? `Scoring rounds: ${window20.length}` : ""}
               </div>
             </div>
 
@@ -1082,19 +1049,13 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
           </div>
 
           {historyLoading && (
-            <div className="mt-2 rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">
-              Loading history…
-            </div>
+            <div className="mt-2 rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">Loading history…</div>
           )}
 
-          {!historyLoading && historyError && (
-            <div className="mt-2 rounded-2xl border border-red-900/50 bg-red-950/30 p-4 text-sm text-red-100">{historyError}</div>
-          )}
+          {!historyLoading && historyError && <div className="mt-2 rounded-2xl border border-red-900/50 bg-red-950/30 p-4 text-sm text-red-100">{historyError}</div>}
 
           {!historyLoading && !historyError && rounds.length === 0 && (
-            <div className="mt-2 rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/70">
-              No finished rounds yet.
-            </div>
+            <div className="mt-2 rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/70">No finished rounds yet.</div>
           )}
 
           {!historyLoading && !historyError && rounds.length > 0 && (
@@ -1245,51 +1206,59 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
                     const canAct = !!myProfileId && myProfileId !== targetPid;
 
                     return (
-                      <div
-                        key={p.id}
-                        className="flex items-center gap-3 p-4 cursor-pointer hover:bg-emerald-900/20"
-                        onClick={() => router.push(`/player/${p.id}`)}
-                      >
-                        <Avatar className="h-10 w-10 border border-emerald-200/70">
-                          <AvatarImage src={p.avatar_url || ""} />
-                          <AvatarFallback>{initialsFor(p)}</AvatarFallback>
-                        </Avatar>
+                      <div key={p.id} className="flex items-center gap-3 p-4 hover:bg-emerald-900/20">
+                        {/* LEFT: clickable area only (prevents row stealing button taps on mobile) */}
+                        <button
+                          type="button"
+                          className="flex flex-1 items-center gap-3 min-w-0 text-left touch-manipulation"
+                          onClick={() => router.push(`/player/${p.id}`)}
+                        >
+                          <Avatar className="h-10 w-10 border border-emerald-200/70 shrink-0">
+                            <AvatarImage src={p.avatar_url || ""} />
+                            <AvatarFallback>{initialsFor(p)}</AvatarFallback>
+                          </Avatar>
 
-                        <div className="min-w-0 flex-1">
-                          <div className="text-sm font-semibold text-emerald-50 truncate">{nm}</div>
-                          <div className="text-xs text-emerald-100/60 truncate">{p.email}</div>
-                        </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm font-semibold text-emerald-50 truncate">{nm}</div>
+                            <div className="text-xs text-emerald-100/60 truncate">{p.email}</div>
+                          </div>
+                        </button>
 
-                        {canAct ? (
-                          following ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={busyRow}
-                              className="border-red-900 text-red-300 hover:bg-red-950/60 hover:text-red-200"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                unfollowUserFromList(targetPid);
-                              }}
-                            >
-                              {busyRow ? "…" : "Unfollow"}
-                            </Button>
+                        {/* RIGHT: big thumb-friendly follow/unfollow */}
+                        <div className="shrink-0 pl-2 touch-manipulation">
+                          {canAct ? (
+                            following ? (
+                              <Button
+                                type="button"
+                                disabled={busyRow}
+                                className="h-11 min-w-[108px] rounded-xl border border-red-900 bg-transparent px-4 text-red-200 hover:bg-red-950/60"
+                                variant="outline"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  unfollowUserFromList(targetPid);
+                                }}
+                              >
+                                {busyRow ? "…" : "Unfollow"}
+                              </Button>
+                            ) : (
+                              <Button
+                                type="button"
+                                disabled={busyRow}
+                                className="h-11 min-w-[108px] rounded-xl bg-emerald-700/80 px-4 hover:bg-emerald-700"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  followUserFromList(targetPid);
+                                }}
+                              >
+                                {busyRow ? "…" : "Follow"}
+                              </Button>
+                            )
                           ) : (
-                            <Button
-                              size="sm"
-                              disabled={busyRow}
-                              className="rounded-xl bg-emerald-700/80 hover:bg-emerald-700"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                followUserFromList(targetPid);
-                              }}
-                            >
-                              {busyRow ? "…" : "Follow"}
-                            </Button>
-                          )
-                        ) : (
-                          <div className="text-[11px] text-emerald-100/60">{following ? "Following" : ""}</div>
-                        )}
+                            <div className="text-[11px] text-emerald-100/60">{following ? "Following" : ""}</div>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
@@ -1308,12 +1277,7 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
                     <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">Search & follow</div>
                   </div>
 
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 px-2 text-emerald-100 hover:bg-emerald-900/30"
-                    onClick={() => setSearchOpen(false)}
-                  >
+                  <Button variant="ghost" size="sm" className="h-8 px-2 text-emerald-100 hover:bg-emerald-900/30" onClick={() => setSearchOpen(false)}>
                     Close
                   </Button>
                 </div>
@@ -1326,12 +1290,7 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
                       placeholder="Search by name or email…"
                       className="flex-1 rounded-xl border border-emerald-900/70 bg-[#08341b] px-3 py-2 text-sm outline-none placeholder:text-emerald-200/40"
                     />
-                    <Button
-                      size="sm"
-                      className="rounded-xl bg-emerald-700/80 hover:bg-emerald-700"
-                      onClick={runSearch}
-                      disabled={searchLoading}
-                    >
+                    <Button size="sm" className="rounded-xl bg-emerald-700/80 hover:bg-emerald-700" onClick={runSearch} disabled={searchLoading}>
                       {searchLoading ? "…" : "Search"}
                     </Button>
                   </div>
@@ -1351,47 +1310,55 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
                         const busyRow = busyUserId === targetPid;
 
                         return (
-                          <div
-                            key={p.id}
-                            className="flex items-center gap-3 p-4 cursor-pointer hover:bg-emerald-900/20"
-                            onClick={() => router.push(`/player/${p.id}`)}
-                          >
-                            <Avatar className="h-10 w-10 border border-emerald-200/70">
-                              <AvatarImage src={p.avatar_url || ""} />
-                              <AvatarFallback>{initialsFor(p)}</AvatarFallback>
-                            </Avatar>
+                          <div key={p.id} className="flex items-center gap-3 p-4 hover:bg-emerald-900/20">
+                            {/* LEFT clickable */}
+                            <button
+                              type="button"
+                              className="flex flex-1 items-center gap-3 min-w-0 text-left touch-manipulation"
+                              onClick={() => router.push(`/player/${p.id}`)}
+                            >
+                              <Avatar className="h-10 w-10 border border-emerald-200/70 shrink-0">
+                                <AvatarImage src={p.avatar_url || ""} />
+                                <AvatarFallback>{initialsFor(p)}</AvatarFallback>
+                              </Avatar>
 
-                            <div className="min-w-0 flex-1">
-                              <div className="text-sm font-semibold text-emerald-50 truncate">{nm}</div>
-                              <div className="text-xs text-emerald-100/60 truncate">{p.email}</div>
+                              <div className="min-w-0 flex-1">
+                                <div className="text-sm font-semibold text-emerald-50 truncate">{nm}</div>
+                                <div className="text-xs text-emerald-100/60 truncate">{p.email}</div>
+                              </div>
+                            </button>
+
+                            {/* RIGHT big follow/unfollow */}
+                            <div className="shrink-0 pl-2 touch-manipulation">
+                              {following ? (
+                                <Button
+                                  type="button"
+                                  disabled={busyRow}
+                                  className="h-11 min-w-[108px] rounded-xl border border-red-900 bg-transparent px-4 text-red-200 hover:bg-red-950/60"
+                                  variant="outline"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    unfollowUserFromList(targetPid);
+                                  }}
+                                >
+                                  {busyRow ? "…" : "Unfollow"}
+                                </Button>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  disabled={busyRow}
+                                  className="h-11 min-w-[108px] rounded-xl bg-emerald-700/80 px-4 hover:bg-emerald-700"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    followUserFromList(targetPid);
+                                  }}
+                                >
+                                  {busyRow ? "…" : "Follow"}
+                                </Button>
+                              )}
                             </div>
-
-                            {following ? (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={busyRow}
-                                className="border-red-900 text-red-300 hover:bg-red-950/60 hover:text-red-200"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  unfollowUserFromList(targetPid);
-                                }}
-                              >
-                                {busyRow ? "…" : "Unfollow"}
-                              </Button>
-                            ) : (
-                              <Button
-                                size="sm"
-                                disabled={busyRow}
-                                className="rounded-xl bg-emerald-700/80 hover:bg-emerald-700"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  followUserFromList(targetPid);
-                                }}
-                              >
-                                {busyRow ? "…" : "Follow"}
-                              </Button>
-                            )}
                           </div>
                         );
                       })}
