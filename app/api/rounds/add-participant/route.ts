@@ -58,16 +58,27 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Only owner can add participants" }, { status: 403 });
     }
 
-    const role = ("role" in body && body.role) ? body.role : "player";
+    const role = "role" in body && body.role ? body.role : "player";
 
     // --- Add profile participant ---
     if (body.kind === "profile") {
-      await supabaseAdmin.from("round_participants").insert({
+      // Optional duplicate protection (uncomment if you want it):
+      // const { data: existing } = await supabaseAdmin
+      //   .from("round_participants")
+      //   .select("id")
+      //   .eq("round_id", body.round_id)
+      //   .eq("profile_id", body.profile_id)
+      //   .maybeSingle();
+      // if (existing?.id) return NextResponse.json({ ok: true, existed: true });
+
+      const { error: insErr } = await supabaseAdmin.from("round_participants").insert({
         round_id: body.round_id,
         profile_id: body.profile_id, // ✅ profiles.id ONLY
         role,
         is_guest: false,
       });
+
+      if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 });
 
       return NextResponse.json({ ok: true });
     }
@@ -79,13 +90,25 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Guest name required" }, { status: 400 });
       }
 
-      await supabaseAdmin.from("round_participants").insert({
+      // Optional duplicate protection (uncomment if you want it):
+      // const { data: existing } = await supabaseAdmin
+      //   .from("round_participants")
+      //   .select("id")
+      //   .eq("round_id", body.round_id)
+      //   .eq("is_guest", true)
+      //   .ilike("display_name", name)
+      //   .maybeSingle();
+      // if (existing?.id) return NextResponse.json({ ok: true, existed: true });
+
+      const { error: insErr } = await supabaseAdmin.from("round_participants").insert({
         round_id: body.round_id,
         profile_id: null,
         is_guest: true,
         display_name: name,
         role,
       });
+
+      if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 });
 
       return NextResponse.json({ ok: true });
     }

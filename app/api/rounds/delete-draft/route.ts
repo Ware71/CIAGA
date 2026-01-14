@@ -47,19 +47,35 @@ export async function POST(req: Request) {
     // Collect any tee snapshot ids referenced anywhere (defensive)
     const teeIds = new Set<string>();
 
-    const { data: partTees } = await supabaseAdmin
+    const { data: partTees, error: partTeesErr } = await supabaseAdmin
       .from("round_participants")
       .select("tee_snapshot_id")
       .eq("round_id", roundId);
 
+    if (partTeesErr) return NextResponse.json({ error: partTeesErr.message }, { status: 500 });
+
     (partTees ?? []).forEach((r: any) => r?.tee_snapshot_id && teeIds.add(r.tee_snapshot_id));
 
-    const { data: teeSnaps } = await supabaseAdmin
-      .from("round_tee_snapshots")
+    // round_tee_snapshots does NOT have round_id; derive by course snapshot ids
+    const { data: courseSnaps, error: csErr } = await supabaseAdmin
+      .from("round_course_snapshots")
       .select("id")
       .eq("round_id", roundId);
 
-    (teeSnaps ?? []).forEach((r: any) => r?.id && teeIds.add(r.id));
+    if (csErr) return NextResponse.json({ error: csErr.message }, { status: 500 });
+
+    const courseSnapIds = (courseSnaps ?? []).map((r: any) => r.id).filter(Boolean);
+
+    if (courseSnapIds.length) {
+      const { data: teeSnaps, error: teeSnapsErr } = await supabaseAdmin
+        .from("round_tee_snapshots")
+        .select("id")
+        .in("round_course_snapshot_id", courseSnapIds);
+
+      if (teeSnapsErr) return NextResponse.json({ error: teeSnapsErr.message }, { status: 500 });
+
+      (teeSnaps ?? []).forEach((r: any) => r?.id && teeIds.add(r.id));
+    }
 
     const teeIdArr = Array.from(teeIds);
 
@@ -71,14 +87,17 @@ export async function POST(req: Request) {
     // Hole snapshots (if any tee snapshots exist)
     if (teeIdArr.length) {
       // chunk to avoid URL length issues
-      const chunk = <T,>(arr: T[], n: number) => Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, i * n + n));
+      const chunk = <T,>(arr: T[], n: number) =>
+        Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, i * n + n));
       for (const ids of chunk(teeIdArr, 100)) {
         await supabaseAdmin.from("round_hole_snapshots").delete().in("round_tee_snapshot_id", ids);
       }
     }
 
     // Tee snapshots + course snapshots
-    await supabaseAdmin.from("round_tee_snapshots").delete().eq("round_id", roundId);
+    if (courseSnapIds.length) {
+      await supabaseAdmin.from("round_tee_snapshots").delete().in("round_course_snapshot_id", courseSnapIds);
+    }
     await supabaseAdmin.from("round_course_snapshots").delete().eq("round_id", roundId);
 
     // Participants

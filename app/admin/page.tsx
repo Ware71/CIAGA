@@ -103,7 +103,7 @@ export default function AdminPage() {
       const name = newName.trim() || null;
       const email = newEmail.trim().toLowerCase() || null;
 
-      const { error } = await supabase.from("profiles").insert({
+      const { error } = await supabase.from("public_profiles").insert({
         name,
         email,
         owner_user_id: null,

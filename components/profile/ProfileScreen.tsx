@@ -399,18 +399,38 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
     }
   };
 
-  // -------- Self-only: save name --------
+  // -------- Self-only: save name (UPDATED: uses /api/profiles/update) --------
   const saveDisplayName = async () => {
     if (!isMe) return;
     const trimmed = displayName.trim();
-    if (!trimmed || !targetProfileId) return;
+    if (!trimmed) return;
 
     setSavingName(true);
     try {
-      const { error } = await supabase.from("profiles").update({ name: trimmed }).eq("id", targetProfileId);
-      if (error) throw error;
+      const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
+      if (sessionErr) throw sessionErr;
 
-      setProfile((prev) => (prev ? { ...prev, name: trimmed } : prev));
+      const token = sessionData.session?.access_token;
+      if (!token) throw new Error("Not logged in");
+
+      const res = await fetch("/api/profiles/update", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name: trimmed }),
+      });
+
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j?.error || "Failed to save name");
+
+      const updated = j?.profile as ProfileRow | undefined;
+      if (updated?.id) {
+        setProfile((prev) => (prev ? { ...prev, name: updated.name ?? trimmed } : prev));
+      } else {
+        setProfile((prev) => (prev ? { ...prev, name: trimmed } : prev));
+      }
     } catch (e) {
       console.warn("Save display name failed:", e);
     } finally {
@@ -418,7 +438,7 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
     }
   };
 
-  // -------- Self-only: avatar upload --------
+  // -------- Self-only: avatar upload (UPDATED: uses /api/profiles/update) --------
   const onPickFile = () => fileRef.current?.click();
 
   const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -452,10 +472,24 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
         if (updateAuthError) console.warn("auth metadata avatar update failed:", updateAuthError);
       }
 
-      // update profiles.avatar_url
-      const { error: updateProfileError } = await supabase.from("profiles").update({ avatar_url: publicUrl }).eq("id", targetProfileId);
+      // update profiles.avatar_url via server route
+      const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
+      if (sessionErr) throw sessionErr;
 
-      if (updateProfileError) throw updateProfileError;
+      const token = sessionData.session?.access_token;
+      if (!token) throw new Error("Not logged in");
+
+      const res = await fetch("/api/profiles/update", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ avatar_url: publicUrl }),
+      });
+
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j?.error || "Failed to update avatar");
 
       setProfile((prev) => (prev ? { ...prev, avatar_url: publicUrl } : prev));
     } catch (err) {
@@ -1052,7 +1086,9 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
             <div className="mt-2 rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">Loading history…</div>
           )}
 
-          {!historyLoading && historyError && <div className="mt-2 rounded-2xl border border-red-900/50 bg-red-950/30 p-4 text-sm text-red-100">{historyError}</div>}
+          {!historyLoading && historyError && (
+            <div className="mt-2 rounded-2xl border border-red-900/50 bg-red-950/30 p-4 text-sm text-red-100">{historyError}</div>
+          )}
 
           {!historyLoading && !historyError && rounds.length === 0 && (
             <div className="mt-2 rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/70">No finished rounds yet.</div>

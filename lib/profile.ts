@@ -3,50 +3,25 @@ import { supabase } from "@/lib/supabaseClient";
 type User = {
   id: string;
   email?: string;
-  user_metadata?: { full_name?: string; avatar_url?: string };
+  user_metadata?: { full_name?: string; avatar_url?: string; name?: string };
 };
 
-export async function ensureProfile(user: User) {
-  const name = user.user_metadata?.full_name || user.email || "Player";
-  const avatar_url = user.user_metadata?.avatar_url || null;
-  const email = (user.email || "").trim().toLowerCase();
+export async function ensureProfile(_user: User) {
+  const { data: sessionData, error: sessionErr } = await supabase.auth.getSession();
+  if (sessionErr) throw sessionErr;
 
-  // 1) Find the profile owned by this auth user
-  const { data: existing, error: findErr } = await supabase
-    .from("profiles")
-    .select("id, name, email, avatar_url")
-    .eq("owner_user_id", user.id)
-    .maybeSingle();
+  const token = sessionData.session?.access_token;
+  if (!token) return;
 
-  if (findErr) throw findErr;
-
-  // 2) If it exists, fill blanks (don’t overwrite real user edits)
-  if (existing) {
-    const nextName = existing.name && existing.name.trim() ? existing.name : name;
-    const nextEmail = existing.email ?? (email || null);
-    const nextAvatar = existing.avatar_url ?? avatar_url;
-
-    const { error: upErr } = await supabase
-      .from("profiles")
-      .update({
-        name: nextName,
-        email: nextEmail,
-        avatar_url: nextAvatar,
-      })
-      .eq("id", existing.id);
-
-    if (upErr) throw upErr;
-    return;
-  }
-
-  // 3) Otherwise create a new owned profile (normal signup)
-  const { error: insErr } = await supabase.from("profiles").insert({
-    owner_user_id: user.id,
-    name,
-    email: email || null,
-    avatar_url,
-    is_admin: false,
+  const res = await fetch("/api/profiles/ensure", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
   });
 
-  if (insErr) throw insErr;
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json?.error || "Failed to ensure profile");
+
+  return json as { ok: boolean; profile_id: string; existed: boolean };
 }

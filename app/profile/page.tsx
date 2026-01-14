@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
 import ProfileScreen from "@/components/profile/ProfileScreen";
+import { ensureProfile } from "@/lib/profile";
 
 type User = {
   id: string;
@@ -26,19 +27,6 @@ export default function ProfilePage() {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<ProfileRow | null>(null);
 
-  const generateNameFromEmail = (email?: string | null) => {
-    if (!email) return "Player";
-    const local = email.split("@")[0] || "Player";
-    const cleaned = local.replace(/[._-]+/g, " ").trim();
-    if (!cleaned) return "Player";
-    const titled = cleaned
-      .split(" ")
-      .filter(Boolean)
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(" ");
-    return titled.slice(0, 30);
-  };
-
   useEffect(() => {
     let alive = true;
 
@@ -55,7 +43,15 @@ export default function ProfilePage() {
           return;
         }
 
-        // Load profile row by ownership (Model B)
+        // ✅ Ensure profile exists / fill blanks (no client-side insert/update here)
+        try {
+          await ensureProfile(u);
+        } catch (e) {
+          console.warn("ensureProfile failed:", e);
+          // continue anyway; attempt to load
+        }
+
+        // ✅ Load profile row by ownership (Model B)
         const { data: p0, error: pErr } = await supabase
           .from("profiles")
           .select("id, owner_user_id, name, email, avatar_url")
@@ -66,52 +62,7 @@ export default function ProfilePage() {
 
         if (pErr) console.warn("Profile load error:", pErr);
 
-        let p = (p0 as any) as ProfileRow | null;
-
-        // If missing, create it
-        if (!p) {
-          const autoName = generateNameFromEmail(u.email);
-
-          const { data: created, error: insErr } = await supabase
-            .from("profiles")
-            .insert({
-              owner_user_id: u.id,
-              email: u.email ?? null,
-              name: autoName,
-              avatar_url: null,
-              is_admin: false,
-            })
-            .select("id, owner_user_id, name, email, avatar_url")
-            .single();
-
-          if (insErr) {
-            console.warn("Profile insert failed:", insErr);
-          } else {
-            p = (created as any) ?? null;
-          }
-        }
-
-        // Auto-set name if blank
-        const existingName = p?.name as string | null | undefined;
-        const hasName = !!(existingName && existingName.trim().length > 0);
-
-        if (p?.id && !hasName) {
-          const autoName = generateNameFromEmail(u.email);
-
-          const { data: updated, error: upErr } = await supabase
-            .from("profiles")
-            .update({ name: autoName, email: p.email ?? u.email ?? null })
-            .eq("id", p.id)
-            .select("id, owner_user_id, name, email, avatar_url")
-            .single();
-
-          if (upErr) console.warn("Auto-name update failed:", upErr);
-          else p = (updated as any) ?? p;
-        }
-
-        if (!alive) return;
-
-        setProfile(p);
+        setProfile((p0 as any) ?? null);
       } finally {
         if (alive) setLoading(false);
       }
@@ -127,7 +78,12 @@ export default function ProfilePage() {
       <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
         <div className="mx-auto w-full max-w-sm space-y-4">
           <header className="flex items-center justify-between">
-            <Button variant="ghost" size="sm" className="px-2 text-emerald-100 hover:bg-emerald-900/30" onClick={() => router.back()}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="px-2 text-emerald-100 hover:bg-emerald-900/30"
+              onClick={() => router.back()}
+            >
               ← Back
             </Button>
             <div className="text-center flex-1">
@@ -150,7 +106,12 @@ export default function ProfilePage() {
       <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
         <div className="mx-auto w-full max-w-sm space-y-4">
           <header className="flex items-center justify-between">
-            <Button variant="ghost" size="sm" className="px-2 text-emerald-100 hover:bg-emerald-900/30" onClick={() => router.back()}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="px-2 text-emerald-100 hover:bg-emerald-900/30"
+              onClick={() => router.back()}
+            >
               ← Back
             </Button>
             <div className="text-center flex-1">
@@ -173,7 +134,12 @@ export default function ProfilePage() {
       <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
         <div className="mx-auto w-full max-w-sm space-y-4">
           <header className="flex items-center justify-between">
-            <Button variant="ghost" size="sm" className="px-2 text-emerald-100 hover:bg-emerald-900/30" onClick={() => router.back()}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="px-2 text-emerald-100 hover:bg-emerald-900/30"
+              onClick={() => router.back()}
+            >
               ← Back
             </Button>
             <div className="text-center flex-1">

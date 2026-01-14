@@ -40,9 +40,14 @@ export function AuthUser() {
   // Only run onboarding redirect once per session to avoid loops
   const didCheckInviteRef = useRef<string | null>(null);
 
+  // Track pending invite per user id so we never "ensure/create" profiles for invited users before they claim
+  const invitePendingRef = useRef<Record<string, boolean>>({});
+
   const handlePendingInviteOrEnsure = async (u: User, accessToken?: string | null) => {
-    // If we already checked invite for this user in this session, don't re-run
+    // If we already checked invite for this user in this session, don't re-run invite check
     if (didCheckInviteRef.current === u.id) {
+      if (invitePendingRef.current[u.id]) return;
+
       try {
         await ensureProfile(u);
       } catch (e) {
@@ -59,15 +64,19 @@ export function AuthUser() {
           headers: { Authorization: `Bearer ${accessToken}` },
         });
 
-        const j = await res.json();
+        const j = await res.json().catch(() => ({}));
 
         // Only redirect when truly pending (your pending endpoint must check profile unclaimed)
         if (j?.pending) {
+          invitePendingRef.current[u.id] = true;
           router.replace('/onboarding/set-password');
           return;
         }
+
+        invitePendingRef.current[u.id] = false;
       } catch (e) {
         console.warn('pending invite check failed', e);
+        invitePendingRef.current[u.id] = false;
       }
     }
 
@@ -106,15 +115,17 @@ export function AuthUser() {
 
         if (!u) {
           didCheckInviteRef.current = null;
+          invitePendingRef.current = {};
           return;
         }
 
-        // Only run invite/onboarding logic on actual sign-in events
-        // (prevents loops on token refresh / tab focus)
+        // Only run invite/onboarding logic on actual sign-in events (prevents loops)
         if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
           await handlePendingInviteOrEnsure(u, session?.access_token ?? null);
         } else {
-          // For other events, just ensure profile exists
+          // For other events, only ensure if not pending invite
+          if (invitePendingRef.current[u.id]) return;
+
           try {
             await ensureProfile(u);
           } catch (e) {
@@ -131,7 +142,8 @@ export function AuthUser() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Load admin flag from profiles (used to show Admin menu item)
+  // Load admin flag (used to show Admin menu item)
+  // IMPORTANT: Read from public_profiles to stay compatible with locked-down profiles table
   useEffect(() => {
     let cancelled = false;
 
@@ -228,6 +240,7 @@ export function AuthUser() {
     await supabase.auth.signOut();
     setUser(null);
     didCheckInviteRef.current = null;
+    invitePendingRef.current = {};
     setMenuOpen(false);
     router.push('/');
   };
