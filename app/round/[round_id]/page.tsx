@@ -1390,7 +1390,7 @@ function ScoreEntrySheet(props: {
                 <div className="text-sm font-semibold text-emerald-50 truncate">Enter score for {name}</div>
                 <div className="text-[11px] text-emerald-100/70">
                   Hole {holeNumber} · Par {holeMeta?.par ?? "–"} · SI {holeMeta?.stroke_index ?? "–"}
-                  {missingCount > 0 ? ` · Missing ${missingCount}` : ""}
+                  
                 </div>
               </div>
             </div>

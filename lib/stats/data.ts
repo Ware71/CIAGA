@@ -18,7 +18,7 @@ export async function getHandicapHistoryPoints(profileId: string): Promise<HiPoi
 
   return ((data as any as HiRow[]) ?? [])
     .filter((r) => typeof r.handicap_index === "number")
-    .map((r) => ({ date: r.as_of_date, hi: Number(r.handicap_index) }));
+    .map((r) => ({ date: String(r.as_of_date), hi: Number(r.handicap_index) }));
 }
 
 export async function getFollowedProfiles(myProfileId: string): Promise<FollowProfile[]> {
@@ -27,18 +27,17 @@ export async function getFollowedProfiles(myProfileId: string): Promise<FollowPr
     .select("following_id")
     .eq("follower_id", myProfileId);
 
-  if (followsErr) return [];
+  if (followsErr) throw followsErr;
 
   const followingIds = (follows ?? []).map((r: any) => r.following_id as string).filter(Boolean);
   if (!followingIds.length) return [];
 
-  const { data: profs, error: profErr } = await supabase
-    .from("profiles")
-    .select("id, name, avatar_url")
-    .in("id", followingIds)
-    .order("name", { ascending: true });
+  // ✅ Use public-safe resolver (must exist in DB as an RPC)
+  const { data: profs, error: profErr } = await supabase.rpc("get_profiles_public", { ids: followingIds });
 
-  if (profErr) return [];
+  if (profErr) throw profErr;
 
-  return (profs as any as FollowProfile[]) ?? [];
+  const out = ((profs ?? []) as FollowProfile[]).slice();
+  out.sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+  return out;
 }

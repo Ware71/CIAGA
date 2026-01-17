@@ -65,6 +65,15 @@ function getProfile(p: Participant): ProfileJoin | null {
   return Array.isArray(pr) ? pr[0] ?? null : pr;
 }
 
+function round1(n: number) {
+  return Math.round(n * 10) / 10;
+}
+
+// WHS: Course Handicap = HI*(Slope/113) + (Course Rating - Par)
+function calcCourseHandicap(hi: number, slope: number, rating: number, par: number) {
+  return Math.round(hi * (slope / 113) + (rating - par));
+}
+
 function Avatar({
   name,
   url,
@@ -313,6 +322,10 @@ export default function RoundSetupPage() {
   const [openSwipeId, setOpenSwipeId] = useState<string | null>(null);
   const removingRef = useRef<Set<string>>(new Set());
 
+  // ✅ HI + CH (display only)
+  const [hiByProfileId, setHiByProfileId] = useState<Record<string, number>>({});
+  const [chByProfileId, setChByProfileId] = useState<Record<string, number>>({});
+
   const participantProfileIds = useMemo(() => {
     return new Set(participants.map((p) => p.profile_id).filter(Boolean) as string[]);
   }, [participants]);
@@ -459,6 +472,89 @@ export default function RoundSetupPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roundId]);
+
+  // ✅ Load latest HI + compute CH for players in the "Players" list (display only)
+  useEffect(() => {
+    const ids = participants
+      .filter((p) => !p.is_guest && p.profile_id)
+      .map((p) => p.profile_id!) as string[];
+
+    if (!ids.length) {
+      setHiByProfileId({});
+      setChByProfileId({});
+      return;
+    }
+
+    let alive = true;
+
+    (async () => {
+      try {
+        // 1) Newest HI per profile in one query (sorted desc)
+        const { data, error } = await supabase
+          .from("handicap_index_history")
+          .select("profile_id, as_of_date, handicap_index")
+          .in("profile_id", ids)
+          .not("handicap_index", "is", null)
+          .order("as_of_date", { ascending: false });
+
+        if (error) throw error;
+
+        const newest: Record<string, number> = {};
+        for (const r of (data ?? []) as any[]) {
+          const pid = r.profile_id as string;
+          if (newest[pid] != null) continue;
+          const hi = Number(r.handicap_index);
+          if (Number.isFinite(hi)) newest[pid] = hi;
+        }
+
+        const hiMap: Record<string, number> = {};
+        for (const pid of ids) {
+          const hi = newest[pid];
+          if (Number.isFinite(hi)) hiMap[pid] = round1(hi);
+        }
+
+        // 2) Tee meta (for CH)
+        let chMap: Record<string, number> = {};
+        if (round?.pending_tee_box_id) {
+          const teeRes = await supabase
+            .from("course_tee_boxes")
+            .select("par, rating, slope")
+            .eq("id", round.pending_tee_box_id)
+            .single();
+
+          if (!teeRes.error && teeRes.data) {
+            const par = Number((teeRes.data as any).par);
+            const rating = Number((teeRes.data as any).rating);
+            const slope = Number((teeRes.data as any).slope);
+
+            if (Number.isFinite(par) && Number.isFinite(rating) && Number.isFinite(slope)) {
+              const out: Record<string, number> = {};
+              for (const pid of ids) {
+                const hi = newest[pid];
+                if (!Number.isFinite(hi)) continue;
+                out[pid] = calcCourseHandicap(hi, slope, rating, par);
+              }
+              chMap = out;
+            }
+          }
+        }
+
+        if (!alive) return;
+        setHiByProfileId(hiMap);
+        setChByProfileId(chMap);
+      } catch (e) {
+        // Non-fatal; keep setup usable
+        console.warn("HI/CH load failed", e);
+        if (!alive) return;
+        setHiByProfileId({});
+        setChByProfileId({});
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [participants, round?.pending_tee_box_id]);
 
   async function addProfile(profileId: string) {
     if (!isOwner) return;
@@ -752,6 +848,9 @@ export default function RoundSetupPage() {
                 p.role !== "owner" &&
                 !(p.profile_id && p.profile_id === meId);
 
+              const hi = p.profile_id ? hiByProfileId[p.profile_id] : null;
+              const ch = p.profile_id ? chByProfileId[p.profile_id] : null;
+
               return (
                 <SwipeToRemoveRow
                   key={p.id}
@@ -766,7 +865,14 @@ export default function RoundSetupPage() {
                       <div className="text-sm font-semibold text-emerald-50 truncate">{d.name}</div>
                       <div className="text-[11px] text-emerald-100/60">
                         {p.is_guest ? "Guest" : p.profile_id === meId ? "You" : "Player"} · {p.role}
-                        {removable ? <span className="ml-2 text-[10px] text-emerald-100/50">Swipe to remove</span> : null}
+                        {!p.is_guest ? (
+                          <span className="ml-2 text-[10px] text-emerald-100/70 tabular-nums">
+                            HI {typeof hi === "number" ? hi.toFixed(1) : "—"} · CH {typeof ch === "number" ? ch : "—"}
+                          </span>
+                        ) : null}
+                        {removable ? (
+                          <span className="ml-2 text-[10px] text-emerald-100/50">Swipe to remove</span>
+                        ) : null}
                       </div>
                     </div>
                   </div>
