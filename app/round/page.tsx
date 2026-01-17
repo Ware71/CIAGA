@@ -230,6 +230,7 @@ export default function RoundHomePage() {
         .from("round_participants")
         .select("id, role, round:rounds(id,name,status,started_at,created_at,course_id, courses(name))")
         .eq("profile_id", myProfileId)
+        .not("rounds.status", "in", "(finished)") // Exclude finished rounds
         .order("created_at", { ascending: false, referencedTable: "rounds" as any });
 
       if (cancelled) return;

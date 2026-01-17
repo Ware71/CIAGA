@@ -700,7 +700,13 @@ export default function RoundDetailPage() {
             onClick={() => {
               const sp = new URLSearchParams(window.location.search);
               const from = sp.get("from");
-              router.push(from === "history" ? "/history" : "/round");
+              if (from === "history") {
+                router.push("/history");
+              } else if (from === "player") {
+                router.back();
+              } else {
+                router.push("/round");
+              }
             }}
           >
             ← Back

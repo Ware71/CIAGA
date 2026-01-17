@@ -477,7 +477,7 @@ export default function RoundsHistoryPage() {
               variant="ghost"
               size="sm"
               className="px-2 text-emerald-100 hover:bg-emerald-900/30"
-              onClick={() => router.back()}
+              onClick={() => router.replace("/")}
             >
               ← Back
             </Button>
