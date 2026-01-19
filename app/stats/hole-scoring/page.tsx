@@ -1,7 +1,7 @@
 // src/app/stats/hole-scoring/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { getMyProfileIdByAuthUserId } from "@/lib/myProfile";
@@ -30,14 +30,40 @@ function siBucket(si: number | null) {
   if (si <= 15) return "13–15";
   return "16–18";
 }
-function lengthBucket(y: number | null) {
-  if (!y || !Number.isFinite(y)) return "Unknown";
-  if (y < 150) return "<150";
-  if (y < 200) return "150–199";
-  if (y < 250) return "200–249";
-  if (y < 350) return "250–349";
-  if (y < 450) return "350–449";
-  return "450+";
+
+// Buckets per par (final ranges)
+function lengthBucketByPar(par: number | null, yardage: number | null) {
+  const p = par == null ? null : Math.round(par);
+  const y = yardage == null ? null : Number(yardage);
+  if (!p || y == null || !Number.isFinite(y)) return "Other";
+
+  // Par 3 (typically ~90–240y)
+  if (p === 3) {
+    if (y < 140) return "<140";
+    if (y < 170) return "140–169";
+    if (y < 200) return "170–199";
+    return "200+";
+  }
+
+  // Par 4 (typically ~260–520y)
+  if (p === 4) {
+    if (y < 330) return "<330";
+    if (y < 380) return "330–379";
+    if (y < 430) return "380–429";
+    if (y < 480) return "430–479";
+    return "480+";
+  }
+
+  // Par 5 (data-driven)
+  if (p === 5) {
+    if (y < 460) return "<460";
+    if (y < 490) return "460–489";
+    if (y < 520) return "490–519";
+    if (y < 550) return "520–549";
+    return "550+";
+  }
+
+  return "Other";
 }
 
 function parseYMD(s: string | null): number | null {
@@ -60,8 +86,10 @@ function normalizeTeeName(teeName: string | null) {
   const raw = (teeName ?? "").trim();
   if (!raw) return { base: "Tee", nine: "full" as const };
 
-  if (/\(front 9\)/i.test(raw)) return { base: raw.replace(/\s*\(front 9\)\s*/i, "").trim(), nine: "front" as const };
-  if (/\(back 9\)/i.test(raw)) return { base: raw.replace(/\s*\(back 9\)\s*/i, "").trim(), nine: "back" as const };
+  if (/\(front 9\)/i.test(raw))
+    return { base: raw.replace(/\s*\(front 9\)\s*/i, "").trim(), nine: "front" as const };
+  if (/\(back 9\)/i.test(raw))
+    return { base: raw.replace(/\s*\(back 9\)\s*/i, "").trim(), nine: "back" as const };
   return { base: raw, nine: "full" as const };
 }
 
@@ -80,6 +108,37 @@ function normalizeHoleNumberForNine(teeName: string | null, holeNumber: number |
   }
   return hn;
 }
+
+async function fetchAllHoleScoringSource(profileId: string) {
+  const pageSize = 1000;
+  let from = 0;
+
+  const out: any[] = [];
+
+  while (true) {
+    const to = from + pageSize - 1;
+
+    const { data, error } = await supabase
+      .from("hole_scoring_source")
+      .select(
+        "profile_id, round_id, played_at, course_id, course_name, tee_box_id, tee_name, hole_number, par, yardage, stroke_index, strokes, to_par, net_strokes, net_to_par, strokes_received, is_double_plus, is_triple_plus"
+      )
+      .eq("profile_id", profileId)
+      .order("played_at", { ascending: false })
+      .range(from, to);
+
+    if (error) throw error;
+
+    const chunk = (data ?? []) as any[];
+    out.push(...chunk);
+
+    if (chunk.length < pageSize) break;
+    from += pageSize;
+  }
+
+  return out;
+}
+
 
 type HoleRow = {
   profile_id: string | null;
@@ -100,6 +159,11 @@ type HoleRow = {
   strokes: number | null;
   to_par: number | null;
 
+  // Net (from view)
+  net_strokes?: number | null;
+  net_to_par?: number | null;
+  strokes_received?: number | null;
+
   is_double_plus: boolean | null;
   is_triple_plus: boolean | null;
 };
@@ -115,6 +179,7 @@ export default function HoleScoringPage() {
   const [err, setErr] = useState<string | null>(null);
 
   const [blowupMode, setBlowupMode] = useState<"double" | "triple">("double");
+  const [scoreMode, setScoreMode] = useState<"gross" | "net">("gross");
 
   // Presets
   const [preset, setPreset] = useState<TimePreset>("6m");
@@ -124,6 +189,9 @@ export default function HoleScoringPage() {
 
   const [courseId, setCourseId] = useState<string>(""); // empty = all
   const [teeBoxId, setTeeBoxId] = useState<string>(""); // empty = all
+
+  // Filters container expands/collapses when tapped
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   // -----------------------------
   // Load data (once)
@@ -144,18 +212,9 @@ export default function HoleScoringPage() {
 
         const pid = await getMyProfileIdByAuthUserId(user.id);
 
-        const { data, error } = await supabase
-          .from("hole_scoring_source")
-          .select(
-            "profile_id, round_id, played_at, course_id, course_name, tee_box_id, tee_name, hole_number, par, yardage, stroke_index, strokes, to_par, is_double_plus, is_triple_plus"
-          )
-          .eq("profile_id", pid)
-          .order("played_at", { ascending: false })
-          .limit(10000);
-
-        if (error) throw error;
-
+        const data = await fetchAllHoleScoringSource(pid);
         const got = ((data as any) ?? []) as HoleRow[];
+
         if (!alive) return;
         setRows(got);
       } catch (e: any) {
@@ -203,7 +262,20 @@ export default function HoleScoringPage() {
     if (!ok) setTeeBoxId("");
   }, [courseId, teeOptions, teeBoxId]);
 
-  const blowupFlag = (r: HoleRow) => (blowupMode === "double" ? !!r.is_double_plus : !!r.is_triple_plus);
+  const netAvailable = useMemo(
+    () => rows.some((r) => safeNum(r.net_to_par) != null || safeNum(r.net_strokes) != null),
+    [rows]
+  );
+
+  const getStrokes = (r: HoleRow) => (scoreMode === "net" ? safeNum(r.net_strokes) : safeNum(r.strokes));
+  const getToPar = (r: HoleRow) => (scoreMode === "net" ? safeNum(r.net_to_par) : safeNum(r.to_par));
+
+  const blowupFlag = (r: HoleRow) => {
+    // Use to-par threshold for both gross and net so it behaves consistently.
+    const tp = getToPar(r);
+    if (tp == null) return false;
+    return blowupMode === "double" ? tp >= 2 : tp >= 3;
+  };
 
   // Apply time preset
   const timeFiltered = useMemo(() => {
@@ -253,15 +325,15 @@ export default function HoleScoringPage() {
   // -----------------------------
   function computeDetail(rs: HoleRow[]) {
     const attempts = rs.length;
-    const avgStrokes = rs.reduce((a, r) => a + (safeNum(r.strokes) ?? 0), 0) / attempts;
-    const avgToPar = rs.reduce((a, r) => a + (safeNum(r.to_par) ?? 0), 0) / attempts;
+    const avgStrokes = rs.reduce((a, r) => a + (getStrokes(r) ?? 0), 0) / attempts;
+    const avgToPar = rs.reduce((a, r) => a + (getToPar(r) ?? 0), 0) / attempts;
     const blow = rs.reduce((a, r) => a + (blowupFlag(r) ? 1 : 0), 0) / attempts;
 
-    const birdie = rs.reduce((a, r) => a + ((safeNum(r.to_par) ?? 999) <= -1 ? 1 : 0), 0) / attempts;
-    const parRate = rs.reduce((a, r) => a + ((safeNum(r.to_par) ?? 999) === 0 ? 1 : 0), 0) / attempts;
-    const bogey = rs.reduce((a, r) => a + ((safeNum(r.to_par) ?? 999) === 1 ? 1 : 0), 0) / attempts;
+    const birdieOrBetter = rs.reduce((a, r) => a + ((getToPar(r) ?? 999) <= -1 ? 1 : 0), 0) / attempts;
+    const parRate = rs.reduce((a, r) => a + ((getToPar(r) ?? 999) === 0 ? 1 : 0), 0) / attempts;
+    const bogey = rs.reduce((a, r) => a + ((getToPar(r) ?? 999) === 1 ? 1 : 0), 0) / attempts;
 
-    return { attempts, avgStrokes, avgToPar, blow, birdie, parRate, bogey };
+    return { attempts, avgStrokes, avgToPar, blow, birdieOrBetter, parRate, bogey };
   }
 
   // -----------------------------
@@ -276,8 +348,8 @@ export default function HoleScoringPage() {
     let blowups = 0;
 
     for (const r of filtered) {
-      const tp = safeNum(r.to_par);
-      const st = safeNum(r.strokes);
+      const tp = getToPar(r);
+      const st = getStrokes(r);
       if (tp != null) sumToPar += tp;
       if (st != null) sumStrokes += st;
       if (blowupFlag(r)) blowups += 1;
@@ -289,7 +361,7 @@ export default function HoleScoringPage() {
       avgStrokes: sumStrokes / n,
       blowupRate: blowups / n,
     };
-  }, [filtered, blowupMode]);
+  }, [filtered, blowupMode, scoreMode]);
 
   const byPar = useMemo(() => {
     const m = new Map<number, HoleRow[]>();
@@ -304,22 +376,49 @@ export default function HoleScoringPage() {
     return Array.from(m.entries())
       .map(([par, rs]) => ({ par, ...computeDetail(rs) }))
       .sort((a, b) => a.par - b.par);
-  }, [filtered, blowupMode]);
+  }, [filtered, blowupMode, scoreMode]);
 
+  // By length — now buckets per-par and label includes Par for clarity
   const byLength = useMemo(() => {
     const m = new Map<string, HoleRow[]>();
+
     for (const r of filtered) {
-      const b = lengthBucket(safeNum(r.yardage));
-      if (!m.has(b)) m.set(b, []);
-      m.get(b)!.push(r);
+      const p = safeNum(r.par);
+      const y = safeNum(r.yardage);
+      if (p == null) continue;
+
+      const bucket = lengthBucketByPar(p, y);
+      if (bucket === "Other") continue;
+
+      const key = `P${Math.round(p)} · ${bucket}`;
+      if (!m.has(key)) m.set(key, []);
+      m.get(key)!.push(r);
     }
 
-    const order = ["<150", "150–199", "200–249", "250–349", "350–449", "450+", "Unknown"];
+    const orderKeys = [
+      // Par 3
+      "P3 · <140",
+      "P3 · 140–169",
+      "P3 · 170–199",
+      "P3 · 200+",
+      // Par 4
+      "P4 · <330",
+      "P4 · 330–379",
+      "P4 · 380–429",
+      "P4 · 430–479",
+      "P4 · 480+",
+      // Par 5
+      "P5 · <460",
+      "P5 · 460–489",
+      "P5 · 490–519",
+      "P5 · 520–549",
+      "P5 · 550+",
+    ];
 
     return Array.from(m.entries())
       .map(([bucket, rs]) => ({ bucket, ...computeDetail(rs) }))
-      .sort((a, b) => order.indexOf(a.bucket) - order.indexOf(b.bucket));
-  }, [filtered, blowupMode]);
+      .sort((a, b) => orderKeys.indexOf(a.bucket) - orderKeys.indexOf(b.bucket));
+  }, [filtered, blowupMode, scoreMode]);
 
   const bySI = useMemo(() => {
     const m = new Map<string, HoleRow[]>();
@@ -334,7 +433,7 @@ export default function HoleScoringPage() {
     return Array.from(m.entries())
       .map(([bucket, rs]) => ({ bucket, ...computeDetail(rs) }))
       .sort((a, b) => order.indexOf(a.bucket) - order.indexOf(b.bucket));
-  }, [filtered, blowupMode]);
+  }, [filtered, blowupMode, scoreMode]);
 
   // Blow-up after previous hole (within same round)
   const blowupAfterPrev = useMemo(() => {
@@ -345,46 +444,50 @@ export default function HoleScoringPage() {
       byRound.get(r.round_id)!.push(r);
     }
 
-    type Ctx = "after_doubleplus" | "after_bogeyplus" | "after_par_or_better" | "unknown";
+    // Replace "after_par_or_better" with "after_birdie_or_better"
+    type Ctx = "after_birdie_or_better" | "after_par" | "after_bogeyplus" | "after_doubleplus" | "unknown";
     const buckets: Record<Ctx, { attempts: number; blow: number }> = {
-      after_doubleplus: { attempts: 0, blow: 0 },
+      after_birdie_or_better: { attempts: 0, blow: 0 },
+      after_par: { attempts: 0, blow: 0 },
       after_bogeyplus: { attempts: 0, blow: 0 },
-      after_par_or_better: { attempts: 0, blow: 0 },
+      after_doubleplus: { attempts: 0, blow: 0 },
       unknown: { attempts: 0, blow: 0 },
     };
 
     for (const rs of byRound.values()) {
-      const sorted = rs
-        .slice()
-        .sort((a, b) => (safeNum(a.hole_number) ?? 0) - (safeNum(b.hole_number) ?? 0));
+      const sorted = rs.slice().sort((a, b) => {
+        const ha = normalizeHoleNumberForNine(a.tee_name, safeNum(a.hole_number)) ?? 0;
+        const hb = normalizeHoleNumberForNine(b.tee_name, safeNum(b.hole_number)) ?? 0;
+        return ha - hb;
+      });
 
       for (let i = 1; i < sorted.length; i++) {
         const prev = sorted[i - 1];
         const cur = sorted[i];
 
         let ctx: Ctx = "unknown";
-        const prevToPar = safeNum(prev.to_par);
+        const prevToPar = getToPar(prev);
 
-        if (blowupFlag(prev)) ctx = "after_doubleplus";
+        if (prevToPar != null && prevToPar <= -1) ctx = "after_birdie_or_better";
+        else if (prevToPar != null && prevToPar === 0) ctx = "after_par";
+        else if (blowupFlag(prev)) ctx = "after_doubleplus";
         else if (prevToPar != null && prevToPar >= 1) ctx = "after_bogeyplus";
-        else if (prevToPar != null && prevToPar <= 0) ctx = "after_par_or_better";
 
         buckets[ctx].attempts += 1;
         buckets[ctx].blow += blowupFlag(cur) ? 1 : 0;
       }
     }
 
-    const order: Ctx[] = ["after_par_or_better", "after_bogeyplus", "after_doubleplus", "unknown"];
+    const order: Ctx[] = ["after_birdie_or_better", "after_par", "after_bogeyplus", "after_doubleplus", "unknown"];
 
     return order.map((k) => ({
       context: k,
       attempts: buckets[k].attempts,
       rate: buckets[k].attempts ? buckets[k].blow / buckets[k].attempts : 0,
     }));
-  }, [filtered, blowupMode]);
+  }, [filtered, blowupMode, scoreMode]);
 
-  // Worst holes — now weighted by attempts:
-  // weighted = max(0, avgToPar) * sqrt(attempts)
+  // Worst holes — weighted by attempts
   const worstHoles = useMemo(() => {
     const m = new Map<string, HoleRow[]>();
 
@@ -403,10 +506,9 @@ export default function HoleScoringPage() {
     const out = Array.from(m.entries()).map(([key, rs]) => {
       const attempts = rs.length;
 
-      const avgToPar = rs.reduce((a, r) => a + (safeNum(r.to_par) ?? 0), 0) / attempts;
+      const avgToPar = rs.reduce((a, r) => a + (getToPar(r) ?? 0), 0) / attempts;
       const blow = rs.reduce((a, r) => a + (blowupFlag(r) ? 1 : 0), 0) / attempts;
 
-      // Weight formula (attempts-aware)
       const severity = Math.max(0, avgToPar) * Math.sqrt(attempts);
 
       const sample = rs[0];
@@ -429,10 +531,11 @@ export default function HoleScoringPage() {
     });
 
     return out.sort((a, b) => b.severity - a.severity).slice(0, 8);
-  }, [filtered, blowupMode]);
+  }, [filtered, blowupMode, scoreMode]);
 
   const prettyCtx = (c: string) => {
-    if (c === "after_par_or_better") return "After par or better";
+    if (c === "after_birdie_or_better") return "After birdie or better";
+    if (c === "after_par") return "After par";
     if (c === "after_bogeyplus") return "After bogey+";
     if (c === "after_doubleplus") return "After double+";
     return "Unknown";
@@ -455,36 +558,38 @@ export default function HoleScoringPage() {
     avgStrokes: number;
     avgToPar: number;
     blow: number;
-    birdie: number;
+    birdieOrBetter: number;
     parRate: number;
     bogey: number;
   }) {
-    const { title, attempts, avgStrokes, avgToPar, blow, birdie, parRate, bogey } = props;
+    const { title, attempts, avgStrokes, avgToPar, blow, birdieOrBetter, parRate, bogey } = props;
 
     return (
       <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/45 p-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="text-sm font-extrabold text-emerald-50">{title}</div>
-          <div className="text-[11px] text-emerald-100/60 font-semibold">attempts: {attempts}</div>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-sm font-extrabold text-emerald-50 truncate">{title}</div>
+          </div>
+          <div className="text-[11px] text-emerald-100/70 font-semibold shrink-0">attempts: {attempts}</div>
         </div>
 
-        <div className="mt-2 grid grid-cols-4 gap-3">
+        <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div>
-            <div className="text-[10px] text-emerald-100/60 font-bold">Avg strokes</div>
-            <div className="text-sm font-extrabold tabular-nums text-emerald-50">{round1(avgStrokes)}</div>
+            <div className="text-[11px] text-emerald-100/70 font-bold">Avg strokes</div>
+            <div className="text-base sm:text-sm font-extrabold tabular-nums text-emerald-50">{round1(avgStrokes)}</div>
           </div>
           <div>
-            <div className="text-[10px] text-emerald-100/60 font-bold">Avg to par</div>
-            <div className="text-sm font-extrabold tabular-nums text-[#f5e6b0]">{round1(avgToPar)}</div>
+            <div className="text-[11px] text-emerald-100/70 font-bold">Avg to par</div>
+            <div className="text-base sm:text-sm font-extrabold tabular-nums text-[#f5e6b0]">{round1(avgToPar)}</div>
           </div>
           <div>
-            <div className="text-[10px] text-emerald-100/60 font-bold">{blowupMode === "double" ? "Double+" : "Triple+"}</div>
-            <div className="text-sm font-extrabold tabular-nums text-emerald-50">{pct(blow)}</div>
+            <div className="text-[11px] text-emerald-100/70 font-bold">{blowupMode === "double" ? "Double+" : "Triple+"}</div>
+            <div className="text-base sm:text-sm font-extrabold tabular-nums text-emerald-50">{pct(blow)}</div>
           </div>
           <div>
-            <div className="text-[10px] text-emerald-100/60 font-bold">Birdie/Par/Bogey</div>
-            <div className="text-[11px] font-extrabold tabular-nums text-emerald-50">
-              {pct(birdie)} / {pct(parRate)} / {pct(bogey)}
+            <div className="text-[11px] text-emerald-100/70 font-bold">Birdie+ / Par / Bogey</div>
+            <div className="text-[12px] sm:text-[11px] font-extrabold tabular-nums text-emerald-50 whitespace-nowrap">
+              {pct(birdieOrBetter)} / {pct(parRate)} / {pct(bogey)}
             </div>
           </div>
         </div>
@@ -513,145 +618,234 @@ export default function HoleScoringPage() {
               <div className="text-[15px] sm:text-base font-semibold tracking-wide text-[#f5e6b0] truncate">
                 Hole scoring
               </div>
-              <div className="text-[10px] uppercase tracking-[0.14em] text-emerald-200/70 truncate">
-                {presetLabel(preset)} · By par · length · SI · blow-ups
+              <div className="text-[11px] sm:text-[10px] uppercase tracking-[0.14em] text-emerald-200/70 truncate">
+                {presetLabel(preset)} · {scoreMode === "gross" ? "Gross" : "Net"} · By par · length · SI · blow-ups
               </div>
             </div>
 
             <div className="w-[64px]" />
           </div>
 
-          {/* Controls */}
-          <div className="mt-3 space-y-2 px-1">
-            {/* Time range as 3 rows */}
-            <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-2">
-              <div className="text-[10px] uppercase tracking-[0.14em] text-emerald-100/60 font-bold mb-2">
-                Time range
-              </div>
-
-              {/* Row 1: All time */}
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPreset("all")}
-                  className={[
-                    "rounded-2xl px-3 py-1.5 text-[12px] font-extrabold border w-full",
-                    preset === "all"
-                      ? "bg-[#042713]/60 border-[#f5e6b0]/60 text-[#f5e6b0]"
-                      : "bg-[#042713]/30 border-emerald-900/70 text-emerald-50/90 hover:bg-emerald-900/20",
-                  ].join(" ")}
-                >
-                  All time
-                </button>
-              </div>
-
-              {/* Row 2: time */}
-              <div className="mt-2 grid grid-cols-3 gap-2">
-                {([
-                  ["12m", "Last 12 months"],
-                  ["6m", "Last 6 months"],
-                  ["30d", "Last 30 days"],
-                ] as const).map(([id, label]) => {
-                  const active = preset === id;
-                  return (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() => setPreset(id)}
-                      className={[
-                        "rounded-2xl px-3 py-1.5 text-[12px] font-extrabold border",
-                        active
-                          ? "bg-[#042713]/60 border-[#f5e6b0]/60 text-[#f5e6b0]"
-                          : "bg-[#042713]/30 border-emerald-900/70 text-emerald-50/90 hover:bg-emerald-900/20",
-                      ].join(" ")}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Row 3: rounds */}
-              <div className="mt-2 grid grid-cols-4 gap-2">
-                {([
-                  ["40r", "Last 40"],
-                  ["20r", "Last 20"],
-                  ["10r", "Last 10"],
-                  ["5r", "Last 5"],
-                ] as const).map(([id, label]) => {
-                  const active = preset === id;
-                  return (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() => setPreset(id)}
-                      className={[
-                        "rounded-2xl px-3 py-1.5 text-[12px] font-extrabold border",
-                        active
-                          ? "bg-[#042713]/60 border-[#f5e6b0]/60 text-[#f5e6b0]"
-                          : "bg-[#042713]/30 border-emerald-900/70 text-emerald-50/90 hover:bg-emerald-900/20",
-                      ].join(" ")}
-                    >
-                      {label} rounds
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Course + tee + blow-up */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-2 col-span-1 sm:col-span-2">
-                <div className="text-[10px] uppercase tracking-[0.14em] text-emerald-100/60 font-bold">Course</div>
-                <select
-                  value={courseId}
-                  onChange={(e) => setCourseId(e.target.value)}
-                  className="mt-1 w-full rounded-xl bg-[#042713]/60 border border-emerald-900/70 px-2 py-1 text-[12px] text-emerald-50"
-                >
-                  <option value="">All</option>
-                  {courseOptions.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-2 col-span-1 sm:col-span-1">
-                <div className="text-[10px] uppercase tracking-[0.14em] text-emerald-100/60 font-bold">Tee</div>
-                <select
-                  value={teeBoxId}
-                  onChange={(e) => setTeeBoxId(e.target.value)}
-                  className="mt-1 w-full rounded-xl bg-[#042713]/60 border border-emerald-900/70 px-2 py-1 text-[12px] text-emerald-50"
-                >
-                  <option value="">All tees</option>
-                  {teeOptions.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-2 col-span-1 sm:col-span-1">
-                <div className="flex items-center justify-between">
-                  <div className="text-[10px] uppercase tracking-[0.14em] text-emerald-100/60 font-bold">
-                    Blow-up
+          {/* Filters (tap container to expand/collapse) */}
+          <div className="mt-3 px-1">
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => setFiltersOpen((v) => !v)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") setFiltersOpen((v) => !v);
+              }}
+              className={[
+                "rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70",
+                "p-2 select-none cursor-pointer",
+              ].join(" ")}
+              aria-expanded={filtersOpen}
+              title="Tap to expand filters"
+            >
+              {/* Collapsed summary row */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">
+                    Filters
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setBlowupMode(blowupMode === "double" ? "triple" : "double")}
-                    className="text-[10px] font-extrabold text-[#f5e6b0]"
-                    title="Toggle blow-up threshold"
-                  >
-                    {blowupMode === "double" ? "Double+" : "Triple+"}
-                  </button>
+                  <div className="mt-1 text-[12px] text-emerald-50/90 font-extrabold leading-tight">
+                    {presetLabel(preset)}
+                    {" · "}
+                    {courseId ? courseOptions.find((c) => c.id === courseId)?.name ?? "Course" : "All courses"}
+                    {" · "}
+                    {teeBoxId ? teeOptions.find((t) => t.id === teeBoxId)?.name ?? "Tee" : "All tees"}
+                  </div>
                 </div>
 
-                <div className="mt-1 text-[12px] font-extrabold text-emerald-50/90">
-                  {blowupMode === "double" ? "Double+ (par+2)" : "Triple+ (par+3)"}
+                <div className="shrink-0 text-[12px] font-extrabold text-[#f5e6b0] pt-[2px]">
+                  {filtersOpen ? "▲" : "▼"}
                 </div>
               </div>
+
+              {filtersOpen ? (
+                <div className="mt-3 space-y-2">
+                  {/* Time range as 3 rows */}
+                  <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/40 p-2">
+                    <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold mb-2">
+                      Time range
+                    </div>
+
+                    {/* Row 1: All time */}
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPreset("all");
+                        }}
+                        className={[
+                          "rounded-2xl px-3 py-2 text-[13px] font-extrabold border w-full",
+                          preset === "all"
+                            ? "bg-[#042713]/70 border-[#f5e6b0]/60 text-[#f5e6b0]"
+                            : "bg-[#042713]/30 border-emerald-900/70 text-emerald-50/90 hover:bg-emerald-900/20",
+                        ].join(" ")}
+                      >
+                        All time
+                      </button>
+                    </div>
+
+                    {/* Row 2: time */}
+                    <div className="mt-2 grid grid-cols-3 gap-2">
+                      {([
+                        ["12m", "Last 12 months"],
+                        ["6m", "Last 6 months"],
+                        ["30d", "Last 30 days"],
+                      ] as const).map(([id, label]) => {
+                        const active = preset === id;
+                        return (
+                          <button
+                            key={id}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPreset(id);
+                            }}
+                            className={[
+                              "rounded-2xl px-3 py-2 text-[13px] font-extrabold border leading-tight",
+                              active
+                                ? "bg-[#042713]/70 border-[#f5e6b0]/60 text-[#f5e6b0]"
+                                : "bg-[#042713]/30 border-emerald-900/70 text-emerald-50/90 hover:bg-emerald-900/20",
+                            ].join(" ")}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Row 3: rounds */}
+                    <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {([
+                        ["40r", "Last 40 rounds"],
+                        ["20r", "Last 20 rounds"],
+                        ["10r", "Last 10 rounds"],
+                        ["5r", "Last 5 rounds"],
+                      ] as const).map(([id, label]) => {
+                        const active = preset === id;
+                        return (
+                          <button
+                            key={id}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPreset(id);
+                            }}
+                            className={[
+                              "rounded-2xl px-3 py-2 text-[13px] font-extrabold border leading-tight",
+                              active
+                                ? "bg-[#042713]/70 border-[#f5e6b0]/60 text-[#f5e6b0]"
+                                : "bg-[#042713]/30 border-emerald-900/70 text-emerald-50/90 hover:bg-emerald-900/20",
+                            ].join(" ")}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Course + tee + scoring */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/40 p-2 col-span-2">
+                      <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">Course</div>
+                      <select
+                        value={courseId}
+                        onChange={(e) => setCourseId(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="mt-1 w-full rounded-xl bg-[#042713]/70 border border-emerald-900/70 px-2 py-2 text-[13px] text-emerald-50"
+                      >
+                        <option value="">All</option>
+                        {courseOptions.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/40 p-2 col-span-2 sm:col-span-1">
+                      <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">Tee</div>
+                      <select
+                        value={teeBoxId}
+                        onChange={(e) => setTeeBoxId(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="mt-1 w-full rounded-xl bg-[#042713]/70 border border-emerald-900/70 px-2 py-2 text-[13px] text-emerald-50"
+                      >
+                        <option value="">All tees</option>
+                        {teeOptions.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/40 p-2 col-span-2 sm:col-span-1">
+                      <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">
+                        Scoring
+                      </div>
+
+                      {/* Separate toggles: Net + Blow-up */}
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (scoreMode === "net" && !netAvailable) return;
+                            setScoreMode(scoreMode === "gross" ? "net" : "gross");
+                          }}
+                          className={[
+                            "flex-1 rounded-xl border px-3 py-2 text-[13px] font-extrabold",
+                            scoreMode === "gross"
+                              ? "bg-[#042713]/70 border-[#f5e6b0]/30 text-emerald-50"
+                              : "bg-[#042713]/70 border-[#f5e6b0]/60 text-[#f5e6b0]",
+                          ].join(" ")}
+                          title="Toggle gross vs net"
+                        >
+                          {scoreMode === "gross" ? "Gross" : "Net"}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setBlowupMode(blowupMode === "double" ? "triple" : "double");
+                          }}
+                          className={[
+                            "flex-1 rounded-xl border px-3 py-2 text-[13px] font-extrabold",
+                            "bg-[#042713]/70",
+                            blowupMode === "double"
+                              ? "border-[#f5e6b0]/30 text-emerald-50"
+                              : "border-[#f5e6b0]/60 text-[#f5e6b0]",
+                          ].join(" ")}
+                          title="Toggle blow-up threshold"
+                        >
+                          {blowupMode === "double" ? "Double+" : "Triple+"}
+                        </button>
+                      </div>
+
+                      <div className="mt-2 text-[12px] font-semibold text-emerald-100/80 leading-snug">
+                        <span className="font-extrabold text-emerald-50">
+                          {scoreMode === "gross" ? "Gross scoring" : "Net scoring"}
+                        </span>
+                        {" · "}
+                        {blowupMode === "double" ? "Double+ means ≥ +2" : "Triple+ means ≥ +3"}
+                      </div>
+
+                      {scoreMode === "net" && !netAvailable ? (
+                        <div className="mt-1 text-[11px] text-red-200/80 font-semibold">
+                          Net fields not available (view not rebuilt yet)
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         </header>
@@ -677,45 +871,47 @@ export default function HoleScoringPage() {
           ) : !filtered.length ? (
             <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-6 space-y-2">
               <div className="text-sm font-semibold text-emerald-50">No hole data found</div>
-              <p className="text-[12px] text-emerald-100/70">
-                Try a different time preset or clear course/tee filters.
-              </p>
+              <p className="text-[12px] text-emerald-100/70">Try a different time preset or clear course/tee filters.</p>
             </div>
           ) : (
             <div className="space-y-4">
               {/* Summary */}
               {summary ? (
                 <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
-                  <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/60 font-bold">
-                    Summary
-                  </div>
-                  <div className="mt-2 grid grid-cols-3 gap-3">
+                  <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">Summary</div>
+                  <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-3">
                     <div>
-                      <div className="text-[10px] text-emerald-100/60 font-bold">Holes</div>
+                      <div className="text-[11px] text-emerald-100/70 font-bold">Holes</div>
                       <div className="text-lg font-extrabold tabular-nums text-emerald-50">{summary.holes}</div>
                     </div>
                     <div>
-                      <div className="text-[10px] text-emerald-100/60 font-bold">Avg to par</div>
-                      <div className="text-lg font-extrabold tabular-nums text-[#f5e6b0]">
-                        {round1(summary.avgToPar)}
-                      </div>
+                      <div className="text-[11px] text-emerald-100/70 font-bold">Avg to par</div>
+                      <div className="text-lg font-extrabold tabular-nums text-[#f5e6b0]">{round1(summary.avgToPar)}</div>
                     </div>
-                    <div>
-                      <div className="text-[10px] text-emerald-100/60 font-bold">
+                    <div className="sm:block hidden">
+                      <div className="text-[11px] text-emerald-100/70 font-bold">
                         {blowupMode === "double" ? "Double+" : "Triple+"} rate
                       </div>
-                      <div className="text-lg font-extrabold tabular-nums text-emerald-50">
-                        {pct(summary.blowupRate)}
-                      </div>
+                      <div className="text-lg font-extrabold tabular-nums text-emerald-50">{pct(summary.blowupRate)}</div>
                     </div>
+                  </div>
+
+                  <div className="mt-2 sm:hidden">
+                    <div className="text-[11px] text-emerald-100/70 font-bold">
+                      {blowupMode === "double" ? "Double+" : "Triple+"} rate
+                    </div>
+                    <div className="text-lg font-extrabold tabular-nums text-emerald-50">{pct(summary.blowupRate)}</div>
                   </div>
                 </div>
               ) : null}
 
               {/* By Par */}
               <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
-                <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/60 font-bold">
+                <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">
                   Avg scoring by Par
+                </div>
+                <div className="mt-1 text-[12px] text-emerald-100/70 font-semibold">
+                  {scoreMode === "gross" ? "Gross scoring" : "Net scoring"}
                 </div>
 
                 <div className="mt-3 space-y-2">
@@ -727,7 +923,7 @@ export default function HoleScoringPage() {
                       avgStrokes={r.avgStrokes}
                       avgToPar={r.avgToPar}
                       blow={r.blow}
-                      birdie={r.birdie}
+                      birdieOrBetter={r.birdieOrBetter}
                       parRate={r.parRate}
                       bogey={r.bogey}
                     />
@@ -737,8 +933,11 @@ export default function HoleScoringPage() {
 
               {/* By Length */}
               <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
-                <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/60 font-bold">
-                  Avg scoring by Length (yards)
+                <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">
+                  Avg scoring by Length (by par)
+                </div>
+                <div className="mt-1 text-[12px] text-emerald-100/70 font-semibold">
+                  {scoreMode === "gross" ? "Gross scoring" : "Net scoring"}
                 </div>
 
                 <div className="mt-3 space-y-2">
@@ -750,7 +949,7 @@ export default function HoleScoringPage() {
                       avgStrokes={r.avgStrokes}
                       avgToPar={r.avgToPar}
                       blow={r.blow}
-                      birdie={r.birdie}
+                      birdieOrBetter={r.birdieOrBetter}
                       parRate={r.parRate}
                       bogey={r.bogey}
                     />
@@ -760,8 +959,11 @@ export default function HoleScoringPage() {
 
               {/* By SI */}
               <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
-                <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/60 font-bold">
+                <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">
                   Avg scoring by SI (stroke index)
+                </div>
+                <div className="mt-1 text-[12px] text-emerald-100/70 font-semibold">
+                  {scoreMode === "gross" ? "Gross scoring" : "Net scoring"}
                 </div>
 
                 <div className="mt-3 space-y-2">
@@ -773,7 +975,7 @@ export default function HoleScoringPage() {
                       avgStrokes={r.avgStrokes}
                       avgToPar={r.avgToPar}
                       blow={r.blow}
-                      birdie={r.birdie}
+                      birdieOrBetter={r.birdieOrBetter}
                       parRate={r.parRate}
                       bogey={r.bogey}
                     />
@@ -783,73 +985,68 @@ export default function HoleScoringPage() {
 
               {/* Blow-up patterns */}
               <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
-                <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/60 font-bold">
+                <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">
                   Blow-up patterns
                 </div>
-                <div className="text-[12px] text-emerald-100/70 font-semibold mt-1">
-                  {blowupMode === "double" ? "Double+" : "Triple+"} rate after the previous hole
+                <div className="text-[12px] text-emerald-100/70 font-semibold mt-1 leading-snug">
+                  {blowupMode === "double" ? "Double+" : "Triple+"} rate on the next hole, grouped by the previous result
+                  {" · "}
+                  {scoreMode === "gross" ? "Gross" : "Net"}
                 </div>
 
                 <div className="mt-3 space-y-2">
                   {blowupAfterPrev.map((r) => (
-                    <div
-                      key={r.context}
-                      className="rounded-2xl border border-emerald-900/70 bg-[#042713]/45 p-3"
-                    >
+                    <div key={r.context} className="rounded-2xl border border-emerald-900/70 bg-[#042713]/45 p-3">
                       <div className="flex items-center justify-between gap-3">
                         <div className="text-sm font-extrabold text-emerald-50">{prettyCtx(r.context)}</div>
-                        <div className="text-[11px] text-emerald-100/60 font-semibold">attempts: {r.attempts}</div>
+                        <div className="text-[11px] text-emerald-100/70 font-semibold">attempts: {r.attempts}</div>
                       </div>
                       <div className="mt-2">
-                        <div className="text-[10px] text-emerald-100/60 font-bold">Rate</div>
-                        <div className="text-sm font-extrabold tabular-nums text-[#f5e6b0]">{pct(r.rate)}</div>
+                        <div className="text-[11px] text-emerald-100/70 font-bold">Rate</div>
+                        <div className="text-base font-extrabold tabular-nums text-[#f5e6b0]">{pct(r.rate)}</div>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* Worst holes (weighted) */}
+              {/* Worst holes */}
               <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
-                <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/60 font-bold">
+                <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">
                   Worst holes
                 </div>
-                <div className="text-[12px] text-emerald-100/70 font-semibold">
-                  Ranked by attempts-weighted damage (avg to-par × √attempts)
+                <div className="text-[12px] text-emerald-100/70 font-semibold leading-snug">
+                  Ranked by sustained damage: <span className="font-extrabold text-emerald-50">avg to-par × √attempts</span>
+                  {" · "}
+                  {scoreMode === "gross" ? "Gross" : "Net"}
                 </div>
 
                 <div className="mt-3 space-y-2">
                   {worstHoles.map((h) => (
-                    <div
-                      key={h.key}
-                      className="rounded-2xl border border-emerald-900/70 bg-[#042713]/45 p-3"
-                    >
-                      <div className="flex items-center justify-between gap-3">
+                    <div key={h.key} className="rounded-2xl border border-emerald-900/70 bg-[#042713]/45 p-3">
+                      <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <div className="text-[13px] font-extrabold text-emerald-50 truncate">
+                          <div className="text-[14px] font-extrabold text-emerald-50 leading-tight break-words">
                             {h.course} · {h.tee} · Hole {h.hole}
                           </div>
 
-                          <div className="text-[11px] text-emerald-100/60 font-semibold truncate">
-                            Par {h.par}
+                          <div className="mt-1 text-[12px] text-emerald-100/75 font-semibold leading-snug break-words">
+                            <span className="whitespace-nowrap">Par {h.par}</span>
                             {" · "}
-                            {h.yardage != null ? `${h.yardage}y` : "—"}
+                            <span className="whitespace-nowrap">{h.yardage != null ? `${h.yardage}y` : "—"}</span>
                             {" · "}
-                            SI {h.si ?? "—"}
+                            <span className="whitespace-nowrap">SI {h.si ?? "—"}</span>
                             {" · "}
-                            attempts: {h.attempts}
+                            <span className="whitespace-nowrap">attempts: {h.attempts}</span>
                           </div>
                         </div>
 
-                        <div className="text-right">
-                          <div className="text-[10px] text-emerald-100/60 font-bold">Avg to par</div>
-                          <div className="text-base font-extrabold tabular-nums text-[#f5e6b0]">
-                            {round1(h.avgToPar)}
-                          </div>
-                          <div className="text-[10px] text-emerald-100/60 font-bold">
-                            Weighted: {round1(h.severity)}
-                          </div>
-                          <div className="text-[10px] text-emerald-100/60 font-bold">
+                        <div className="text-right shrink-0">
+                          <div className="text-[11px] text-emerald-100/70 font-bold">Avg to par</div>
+                          <div className="text-lg font-extrabold tabular-nums text-[#f5e6b0]">{round1(h.avgToPar)}</div>
+                          <div className="text-[11px] text-emerald-100/70 font-bold">Weighted</div>
+                          <div className="text-[13px] font-extrabold tabular-nums text-emerald-50">{round1(h.severity)}</div>
+                          <div className="mt-1 text-[11px] text-emerald-100/70 font-bold">
                             {blowupMode === "double" ? "Double+" : "Triple+"}: {pct(h.blow)}
                           </div>
                         </div>
@@ -859,9 +1056,7 @@ export default function HoleScoringPage() {
                 </div>
               </div>
 
-              <div className="pt-1 text-[10px] text-emerald-100/40 text-center font-semibold">
-                CIAGA · Hole scoring
-              </div>
+              <div className="pt-1 text-[10px] text-emerald-100/40 text-center font-semibold">CIAGA · Hole scoring</div>
             </div>
           )}
         </div>

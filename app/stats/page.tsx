@@ -189,7 +189,7 @@ export default function StatsHomePage() {
     {
       title: "Scoring breakdown",
       subtitle: "Birdies/par/par+ rates, net vs gross distribution",
-      href: "/stats/scoring",
+      href: "/stats/scoring-breakdown",
       icon: <IconTarget />,
     },
     {

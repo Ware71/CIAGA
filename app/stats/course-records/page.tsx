@@ -22,57 +22,60 @@ function fmtDate(isoDate: string | null | undefined) {
     return isoDate;
   }
 }
+
 function safeNum(x: any): number | null {
   const n = Number(x);
   return Number.isFinite(n) ? n : null;
 }
+
 function one<T>(v: T | T[] | null | undefined): T | null {
   if (!v) return null;
   return Array.isArray(v) ? (v[0] ?? null) : v;
 }
+
 function chunk<T>(arr: T[], size: number) {
   const out: T[][] = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
   return out;
 }
 
+function teeTag(teeName: string | null | undefined): "front9" | "back9" | "full" {
+  const t = (teeName ?? "").toLowerCase();
+  if (t.includes("(front 9)") || t.includes("front 9")) return "front9";
+  if (t.includes("(back 9)") || t.includes("back 9")) return "back9";
+  return "full";
+}
+
+function canonicalHoleNumber(holeNumber: number, teeName: string | null | undefined): number {
+  const tag = teeTag(teeName);
+  if (tag === "back9") return holeNumber + 9; // 1..9 -> 10..18
+  return holeNumber; // front9 and full
+}
+
 // -----------------------------
-// Types (schema-tolerant)
+// Types
 // -----------------------------
-type CourseRow = { id: string; name: string | null };
+type RecordRow = {
+  round_id: string;
+  participant_id: string;
+  profile_id: string | null;
+  played_at: string | null;
 
-type HRRRow = {
-  round_id?: string | null;
-  participant_id?: string | null;
-  profile_id?: string | null;
-  played_at?: string | null;
+  course_id: string;
+  course_name: string;
 
-  adjusted_gross_score?: number | null;
-  course_handicap_used?: number | null;
+  tee_box_id: string;
+  tee_name: string | null;
 
-  tee_snapshot_id?: string | null;
+  tee_snapshot_id: string;
 
-  rounds?:
-    | { course_id?: string | null; courses?: CourseRow | CourseRow[] | null }
-    | { course_id?: string | null; courses?: CourseRow | CourseRow[] | null }[]
-    | null;
+  par_total: number | null;
+  holes_count: number | null;
 
-  round_tee_snapshots?:
-    | { id: string; name: string; source_tee_box_id: string | null; holes_count: number | null }
-    | { id: string; name: string; source_tee_box_id: string | null; holes_count: number | null }[]
-    | null;
-};
+  is_complete: boolean;
 
-type HoleScoreRow = {
-  participant_id?: string | null;
-  hole_number?: number | null;
-  strokes?: number | null;
-};
-
-type HoleSnapRow = {
-  round_tee_snapshot_id?: string | null;
-  hole_number?: number | null;
-  par?: number | null;
+  gross_score: number | null;
+  net_score: number | null;
 };
 
 type ResultRow = {
@@ -84,30 +87,20 @@ type ResultRow = {
   course_id: string;
   course_name: string;
 
-  // group by tee BOX (so Front/Back snapshots still combine if same tee box id)
+  // group by tee BOX (so Front/Back snapshots still combine if same tee box)
   tee_id: string; // tee_box_id
   tee_name: string | null;
 
-  // per-round tee snapshot (for expected holes + par)
   tee_snapshot_id: string;
 
-  // computed from strokes if complete, else null
   gross_score: number | null;
-
-  // net from HRR (AGS - course handicap used)
   net_score: number | null;
 
-  // par total for this round’s expected holes (from round_hole_snapshots)
   par_total: number | null;
-
-  // “complete” = every expected hole has numeric strokes
   is_complete: boolean;
 };
 
-type RecordKey = {
-  courseId: string;
-  teeId: string;
-};
+type RecordKey = { courseId: string; teeId: string };
 
 type RecordSummary = {
   key: RecordKey;
@@ -117,8 +110,20 @@ type RecordSummary = {
   parTotal: number | null;
   rounds: number;
 
-  bestGross: { score: number; date: string | null } | null; // complete-only
-  bestNet: { score: number; date: string | null } | null;   // from HRR net (can be incomplete)
+  bestGross: { score: number; date: string | null } | null;
+  bestNet: { score: number; date: string | null } | null;
+};
+
+// hole_scoring_source row (minimal)
+type HoleScoringRow = {
+  profile_id: string | null;
+  course_id: string | null;
+  tee_box_id: string | null;
+  tee_name: string | null;
+  hole_number: number | null;
+  par: number | null;
+  strokes: number | null;
+  played_at: string | null;
 };
 
 // -----------------------------
@@ -138,7 +143,7 @@ export default function CourseRecordsPage() {
 
   // Sorting for “All records”
   const [sortMetric, setSortMetric] = useState<"gross" | "net">("gross");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc"); // asc = best->worst (lower to-par is better)
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   // Eclectic
   const [ecLoading, setEcLoading] = useState(false);
@@ -148,10 +153,7 @@ export default function CourseRecordsPage() {
   const [ecBestByHole, setEcBestByHole] = useState<Record<number, { strokes: number; date: string | null }>>({});
 
   // -----------------------------
-  // Load my results
-  // - pulls HRR + joins to rounds + tee snapshots
-  // - computes expected holes + par from round_hole_snapshots
-  // - computes completeness + gross from round_current_scores
+  // Load my results from v_course_record_rounds
   // -----------------------------
   useEffect(() => {
     let alive = true;
@@ -170,26 +172,23 @@ export default function CourseRecordsPage() {
         const pid = await getMyProfileIdByAuthUserId(user.id);
 
         const { data, error } = await supabase
-          .from("handicap_round_results")
+          .from("v_course_record_rounds")
           .select(
             `
             round_id,
             participant_id,
             profile_id,
             played_at,
+            course_id,
+            course_name,
+            tee_box_id,
+            tee_name,
             tee_snapshot_id,
-            adjusted_gross_score,
-            course_handicap_used,
-            rounds!handicap_round_results_round_id_fkey (
-              course_id,
-              courses ( id, name )
-            ),
-            round_tee_snapshots!handicap_round_results_tee_snapshot_id_fkey (
-              id,
-              name,
-              source_tee_box_id,
-              holes_count
-            )
+            par_total,
+            holes_count,
+            is_complete,
+            gross_score,
+            net_score
           `
           )
           .eq("profile_id", pid)
@@ -197,165 +196,40 @@ export default function CourseRecordsPage() {
 
         if (error) throw error;
 
-        const raw = ((data as any) ?? []) as HRRRow[];
+        const raw = ((data as any) ?? []) as RecordRow[];
 
-        // Build base rows (still missing computed completeness/gross/par)
-        const base = raw
+        const normalized: ResultRow[] = raw
           .map((r) => {
-            const rid = String(r.round_id ?? "");
-            const partid = String(r.participant_id ?? "");
-            if (!rid || !partid) return null;
+            const roundId = String(r.round_id ?? "");
+            const participantId = String(r.participant_id ?? "");
+            const courseId = String(r.course_id ?? "");
+            const teeBoxId = String(r.tee_box_id ?? "");
+            const teeSnapshotId = String(r.tee_snapshot_id ?? "");
 
-            const rounds = one(r.rounds);
-            const courseId = String(rounds?.course_id ?? "");
-            if (!courseId) return null;
-
-            const course = one(rounds?.courses);
-            const courseName = String(course?.name ?? courseId.slice(0, 8));
-
-            const teeSnap = one(r.round_tee_snapshots);
-            const teeSnapshotId = String(r.tee_snapshot_id ?? teeSnap?.id ?? "");
-            if (!teeSnapshotId) return null;
-
-            const teeBoxId = String(teeSnap?.source_tee_box_id ?? "");
-            if (!teeBoxId) return null;
-
-            const teeName = (teeSnap?.name ?? null) as string | null;
-
-            const ags = safeNum(r.adjusted_gross_score);
-            const ch = safeNum(r.course_handicap_used);
-            const net = ags != null && ch != null ? ags - ch : null;
+            if (!roundId || !participantId || !courseId || !teeBoxId || !teeSnapshotId) return null;
 
             return {
-              round_id: rid,
-              participant_id: partid,
+              round_id: roundId,
+              participant_id: participantId,
               profile_id: (r.profile_id ?? null) as string | null,
               played_at: (r.played_at ?? null) as string | null,
+
               course_id: courseId,
-              course_name: courseName,
+              course_name: String(r.course_name ?? courseId.slice(0, 8)),
+
               tee_id: teeBoxId,
-              tee_name: teeName,
+              tee_name: (r.tee_name ?? null) as string | null,
+
               tee_snapshot_id: teeSnapshotId,
-              net_score: net,
+
+              gross_score: safeNum(r.gross_score),
+              net_score: safeNum(r.net_score),
+
+              par_total: safeNum(r.par_total),
+              is_complete: Boolean(r.is_complete),
             };
           })
-          .filter(Boolean) as Array<
-          Omit<ResultRow, "gross_score" | "par_total" | "is_complete">
-        >;
-
-        const participantIds = Array.from(new Set(base.map((r) => r.participant_id)));
-        const teeSnapshotIds = Array.from(new Set(base.map((r) => r.tee_snapshot_id)));
-
-        // Expected holes + par per tee_snapshot_id
-        const expectedHolesBySnap: Record<string, number[]> = {};
-        const parBySnapHole: Record<string, Record<number, number | null>> = {};
-        const parTotalBySnap: Record<string, number | null> = {};
-
-        if (teeSnapshotIds.length) {
-          const snapRows: HoleSnapRow[] = [];
-          for (const batch of chunk(teeSnapshotIds, 150)) {
-            const { data: hsData, error: hsErr } = await supabase
-              .from("round_hole_snapshots")
-              .select("round_tee_snapshot_id, hole_number, par")
-              .in("round_tee_snapshot_id", batch);
-
-            if (hsErr) throw hsErr;
-            snapRows.push(...(((hsData as any) ?? []) as HoleSnapRow[]));
-          }
-
-          for (const row of snapRows) {
-            const sid = String(row.round_tee_snapshot_id ?? "");
-            const hn = safeNum(row.hole_number);
-            if (!sid || hn == null) continue;
-
-            const hole = Math.round(hn);
-            if (!Number.isFinite(hole) || hole <= 0) continue;
-
-            if (!expectedHolesBySnap[sid]) expectedHolesBySnap[sid] = [];
-            expectedHolesBySnap[sid].push(hole);
-
-            if (!parBySnapHole[sid]) parBySnapHole[sid] = {};
-            parBySnapHole[sid][hole] = safeNum(row.par);
-          }
-
-          for (const sid of Object.keys(expectedHolesBySnap)) {
-            const holes = Array.from(new Set(expectedHolesBySnap[sid])).sort((a, b) => a - b);
-            expectedHolesBySnap[sid] = holes;
-
-            // par total = sum of pars for expected holes IF all pars exist, else null
-            const pmap = parBySnapHole[sid] ?? {};
-            let ok = true;
-            let sum = 0;
-            for (const h of holes) {
-              const p = pmap[h];
-              if (p == null) {
-                ok = false;
-                break;
-              }
-              sum += p;
-            }
-            parTotalBySnap[sid] = ok ? sum : null;
-          }
-        }
-
-        // Pull hole scores for all participants (numeric strokes only)
-        const scoredHolesByParticipant: Record<string, Set<number>> = {};
-        const strokesByParticipantHole: Record<string, Record<number, number>> = {};
-
-        if (participantIds.length) {
-          for (const batch of chunk(participantIds, 150)) {
-            const { data: sData, error: sErr } = await supabase
-              .from("round_current_scores")
-              .select("participant_id, hole_number, strokes")
-              .in("participant_id", batch);
-
-            if (sErr) throw sErr;
-
-            for (const row of ((sData ?? []) as any[]) as HoleScoreRow[]) {
-              const pid2 = String(row.participant_id ?? "");
-              const hn = safeNum(row.hole_number);
-              const st = safeNum(row.strokes);
-              if (!pid2 || hn == null || st == null) continue;
-
-              const hole = Math.round(hn);
-              if (!Number.isFinite(hole) || hole <= 0) continue;
-
-              if (!scoredHolesByParticipant[pid2]) scoredHolesByParticipant[pid2] = new Set<number>();
-              scoredHolesByParticipant[pid2].add(hole);
-
-              if (!strokesByParticipantHole[pid2]) strokesByParticipantHole[pid2] = {};
-              strokesByParticipantHole[pid2][hole] = st;
-            }
-          }
-        }
-
-        // Final normalize: compute is_complete + gross_score (sum strokes) + par_total
-        const normalized: ResultRow[] = base.map((r) => {
-          const expected = expectedHolesBySnap[r.tee_snapshot_id] ?? null;
-          const scored = scoredHolesByParticipant[r.participant_id] ?? new Set<number>();
-          const strokesMap = strokesByParticipantHole[r.participant_id] ?? {};
-
-          // If expected holes missing, treat as not complete
-          const isComplete = expected ? expected.every((h) => scored.has(h)) : false;
-
-          // Gross = sum strokes for expected holes (only if complete)
-          let gross: number | null = null;
-          if (isComplete && expected) {
-            let sum = 0;
-            for (const h of expected) sum += safeNum(strokesMap[h]) ?? 0;
-            // Guard: if somehow sum is 0, treat as null (prevents “0” best gross spam)
-            gross = sum > 0 ? sum : null;
-          }
-
-          const parTotal = parTotalBySnap[r.tee_snapshot_id] ?? null;
-
-          return {
-            ...r,
-            gross_score: gross,
-            par_total: parTotal,
-            is_complete: isComplete,
-          };
-        });
+          .filter(Boolean) as ResultRow[];
 
         if (!alive) return;
         setResults(normalized);
@@ -449,13 +323,13 @@ export default function CourseRecordsPage() {
       }
 
       for (const r of entry.rows) {
-        // Best Gross = computed gross sum, complete-only (already null if incomplete)
+        // Best Gross = complete-only
         const g = safeNum(r.gross_score);
         if (r.is_complete && g != null) {
           if (!bestGross || g < bestGross.score) bestGross = { score: g, date: r.played_at ?? null };
         }
 
-        // Best Net = AGS-CH (may exist even if incomplete)
+        // Best Net
         const n = safeNum(r.net_score);
         if (n != null) {
           if (!bestNet || n < bestNet.score) bestNet = { score: n, date: r.played_at ?? null };
@@ -484,10 +358,7 @@ export default function CourseRecordsPage() {
       const par = r.parTotal;
       const score = sortMetric === "gross" ? r.bestGross?.score ?? null : r.bestNet?.score ?? null;
 
-      // nulls go bottom always
       if (score == null) return null;
-
-      // if par missing, fall back to the score itself (still sortable)
       if (par == null) return score;
 
       return score - par;
@@ -506,7 +377,6 @@ export default function CourseRecordsPage() {
       const diff = (av as number) - (bv as number);
       if (diff !== 0) return sortDir === "asc" ? diff : -diff;
 
-      // tie-break by raw score
       const as = sortMetric === "gross" ? a.bestGross?.score ?? 99999 : a.bestNet?.score ?? 99999;
       const bs = sortMetric === "gross" ? b.bestGross?.score ?? 99999 : b.bestNet?.score ?? 99999;
       const d2 = as - bs;
@@ -543,8 +413,6 @@ export default function CourseRecordsPage() {
       }
     }
 
-    const teeSnapshotIds = Array.from(new Set(relevant.map((r) => r.tee_snapshot_id).filter(Boolean)));
-
     // par: most common
     const parCounts = new Map<number, number>();
     for (const r of relevant) if (typeof r.par_total === "number") parCounts.set(r.par_total, (parCounts.get(r.par_total) ?? 0) + 1);
@@ -559,7 +427,6 @@ export default function CourseRecordsPage() {
       courseName,
       teeName,
       rounds: relevant.length,
-      teeSnapshotIds,
       bestGross,
       bestNet,
       parTotal,
@@ -567,8 +434,8 @@ export default function CourseRecordsPage() {
   }, [results, selectedCourseId, selectedTeeId]);
 
   // -----------------------------
-  // Eclectic loader (course+tee)
-  // Uses union of hole_numbers from round_hole_snapshots over snapshots in this group
+  // Eclectic loader (course+tee) using hole_scoring_source
+  // - uses tee_name tags to normalize front/back holes
   // -----------------------------
   useEffect(() => {
     let alive = true;
@@ -579,73 +446,72 @@ export default function CourseRecordsPage() {
       setEcParByHole({});
       setEcBestByHole({});
 
-      if (!selected?.teeSnapshotIds?.length) return;
+      if (!selectedCourseId || !selectedTeeId) return;
 
       setEcLoading(true);
       try {
-        const relevant = results.filter((r) => r.course_id === selectedCourseId && r.tee_id === selectedTeeId);
-        const participantIds = Array.from(new Set(relevant.map((r) => r.participant_id).filter(Boolean)));
-        if (!participantIds.length) {
-          if (!alive) return;
-          setEcLoading(false);
-          return;
+        const { data: authData, error: authErr } = await supabase.auth.getUser();
+        if (authErr) throw authErr;
+
+        const user = (authData.user as any) ?? null;
+        if (!user) throw new Error("You must be signed in.");
+
+        const pid = await getMyProfileIdByAuthUserId(user.id);
+
+        // Pull ALL hole rows for this course + tee box for this profile
+        // (You can add a limit/window later if needed)
+        const all: HoleScoringRow[] = [];
+        let from = 0;
+        const pageSize = 1000;
+
+        while (true) {
+          const { data, error } = await supabase
+            .from("hole_scoring_source")
+            .select("profile_id, course_id, tee_box_id, tee_name, hole_number, par, strokes, played_at")
+            .eq("profile_id", pid)
+            .eq("course_id", selectedCourseId)
+            .eq("tee_box_id", selectedTeeId)
+            .order("played_at", { ascending: false })
+            .range(from, from + pageSize - 1);
+
+          if (error) throw error;
+
+          const rows = ((data as any) ?? []) as HoleScoringRow[];
+          all.push(...rows);
+
+          if (rows.length < pageSize) break;
+          from += pageSize;
+
+          // safety break to avoid runaway in pathological cases
+          if (from > 20000) break;
         }
 
-        const playedAtByParticipant: Record<string, string | null> = {};
-        for (const r of relevant) playedAtByParticipant[r.participant_id] = r.played_at ?? null;
-
-        // hole meta
-        const holeSet = new Set<number>();
+        // Build eclectic best by canonical hole number
+        const best: Record<number, { strokes: number; date: string | null }> = {};
         const parByHole: Record<number, number | null> = {};
+        const holeSet = new Set<number>();
 
-        for (const batch of chunk(selected.teeSnapshotIds, 150)) {
-          const { data: hsData, error: hsErr } = await supabase
-            .from("round_hole_snapshots")
-            .select("round_tee_snapshot_id, hole_number, par")
-            .in("round_tee_snapshot_id", batch);
+        for (const row of all) {
+          const hn = safeNum(row.hole_number);
+          const st = safeNum(row.strokes);
+          if (hn == null || st == null) continue;
 
-          if (hsErr) throw hsErr;
+          const hole = Math.round(hn);
+          if (!Number.isFinite(hole) || hole <= 0) continue;
 
-          for (const row of ((hsData ?? []) as any[]) as HoleSnapRow[]) {
-            const hn = safeNum(row.hole_number);
-            if (hn == null) continue;
-            const hole = Math.round(hn);
-            if (!Number.isFinite(hole) || hole <= 0) continue;
-            holeSet.add(hole);
+          const canon = canonicalHoleNumber(hole, row.tee_name);
 
-            const p = safeNum(row.par);
-            if (parByHole[hole] == null && p != null) parByHole[hole] = p;
+          holeSet.add(canon);
+
+          const p = safeNum(row.par);
+          if (parByHole[canon] == null && p != null) parByHole[canon] = p;
+
+          if (!best[canon] || st < best[canon].strokes) {
+            best[canon] = { strokes: st, date: row.played_at ?? null };
           }
         }
 
         const holeNos = Array.from(holeSet).sort((a, b) => a - b);
-
-        // scores
-        const allRows: HoleScoreRow[] = [];
-        for (const batch of chunk(participantIds, 150)) {
-          const { data: sData, error: sErr } = await supabase
-            .from("round_current_scores")
-            .select("participant_id, hole_number, strokes")
-            .in("participant_id", batch);
-
-          if (sErr) throw sErr;
-          allRows.push(...(((sData as any) ?? []) as HoleScoreRow[]));
-        }
-
-        const best: Record<number, { strokes: number; date: string | null }> = {};
-        for (const r of allRows) {
-          const pid = String(r.participant_id ?? "");
-          const h = safeNum(r.hole_number);
-          const s = safeNum(r.strokes);
-          if (!pid || h == null || s == null) continue;
-
-          const hole = Math.round(h);
-          if (!Number.isFinite(hole) || hole <= 0) continue;
-
-          if (!best[hole] || s < best[hole].strokes) {
-            best[hole] = { strokes: s, date: playedAtByParticipant[pid] ?? null };
-          }
-        }
 
         if (!alive) return;
         setEcHoleNos(holeNos);
@@ -663,7 +529,7 @@ export default function CourseRecordsPage() {
     return () => {
       alive = false;
     };
-  }, [selectedCourseId, selectedTeeId, results, selected?.teeSnapshotIds]);
+  }, [selectedCourseId, selectedTeeId]);
 
   const eclectic = useMemo(() => {
     if (!ecHoleNos.length) return null;
@@ -789,7 +655,9 @@ export default function CourseRecordsPage() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-sm font-extrabold text-emerald-50">Eclectic scoring</div>
-                  <div className="text-[11px] text-emerald-100/55 font-semibold">Best hole scores combined across your rounds on this course + tee</div>
+                  <div className="text-[11px] text-emerald-100/55 font-semibold">
+                    Best hole scores combined across your rounds on this course + tee (front/back 9 mapped by tee name tags)
+                  </div>
                 </div>
                 {ecLoading ? <div className="text-[11px] font-bold text-emerald-100/70">Loading…</div> : null}
               </div>
