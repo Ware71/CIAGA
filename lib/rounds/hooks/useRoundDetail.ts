@@ -30,6 +30,10 @@ export type Participant = {
 export type Hole = { hole_number: number; par: number | null; yardage: number | null; stroke_index: number | null };
 export type Score = { participant_id: string; hole_number: number; strokes: number | null; created_at: string };
 
+// B: Hole states
+export type HoleState = "completed" | "picked_up" | "not_started";
+export type HoleStateRow = { participant_id: string; hole_number: number; status: HoleState };
+
 function getCourseNameFromJoin(r: any): string {
   const c = r?.course;
   if (!c) return "";
@@ -52,6 +56,9 @@ export function useRoundDetail(roundId: string) {
   const [teeSnapshotId, setTeeSnapshotId] = useState<string | null>(null);
   const [holes, setHoles] = useState<Hole[]>([]);
   const [scoresByKey, setScoresByKey] = useState<Record<string, Score>>({});
+
+  // B: hole states keyed by `${participant_id}:${hole_number}`
+  const [holeStatesByKey, setHoleStatesByKey] = useState<Record<string, HoleState>>({});
 
   const fetchAll = useCallback(async () => {
     if (!roundId) return;
@@ -147,6 +154,19 @@ export function useRoundDetail(roundId: string) {
     const map: Record<string, Score> = {};
     for (const s of (scoreRes.data ?? []) as Score[]) map[`${s.participant_id}:${s.hole_number}`] = s;
     setScoresByKey(map);
+
+    // B: Hole states
+    const hsRes = await supabase
+      .from("round_hole_states")
+      .select("participant_id,hole_number,status")
+      .eq("round_id", roundId);
+    if (hsRes.error) throw hsRes.error;
+
+    const hsMap: Record<string, HoleState> = {};
+    for (const row of (hsRes.data ?? []) as HoleStateRow[]) {
+      hsMap[`${row.participant_id}:${row.hole_number}`] = row.status;
+    }
+    setHoleStatesByKey(hsMap);
   }, [roundId]);
 
   // initial load
@@ -197,6 +217,43 @@ export function useRoundDetail(roundId: string) {
     };
   }, [roundId]);
 
+  // B: realtime hole state changes
+  useEffect(() => {
+    if (!roundId) return;
+
+    const channel = supabase
+      .channel(`round-hole-states:${roundId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "round_hole_states", filter: `round_id=eq.${roundId}` },
+        (payload) => {
+          const row: any = (payload.new ?? payload.old) as any;
+          if (!row?.participant_id || !row?.hole_number) return;
+
+          const key = `${row.participant_id}:${row.hole_number}`;
+
+          if (payload.eventType === "DELETE") {
+            setHoleStatesByKey((prev) => {
+              const next = { ...prev };
+              delete next[key];
+              return next;
+            });
+            return;
+          }
+
+          setHoleStatesByKey((prev) => ({
+            ...prev,
+            [key]: row.status as HoleState,
+          }));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [roundId]);
+
   // realtime: meta changes (refetch all)
   useEffect(() => {
     if (!roundId) return;
@@ -220,10 +277,10 @@ export function useRoundDetail(roundId: string) {
     };
   }, [roundId, fetchAll]);
 
+  // Permission: any participant can score (you already changed this; keep it)
   const canScore = useMemo(() => {
     if (!meId) return false;
-    const me = participants.find((p) => p.profile_id === meId);
-    return !!me && (me.role === "owner" || me.role === "scorer");
+    return participants.some((p) => p.profile_id === meId);
   }, [participants, meId]);
 
   return {
@@ -242,8 +299,13 @@ export function useRoundDetail(roundId: string) {
     participants,
     teeSnapshotId,
     holes,
+
     scoresByKey,
     setScoresByKey,
+
+    // B
+    holeStatesByKey,
+    setHoleStatesByKey,
 
     fetchAll,
     canScore,

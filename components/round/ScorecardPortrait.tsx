@@ -73,7 +73,8 @@ export default function ScorecardPortrait(props: {
 
   totals: Record<string, { out: number; in: number; total: number }>;
 
-  displayedScoreFor: (participantId: string, holeNumber: number) => number | null;
+  // B: allow "PU" marker as well as numbers/null
+  displayedScoreFor: (participantId: string, holeNumber: number) => string | number | null;
   onOpenEntry: (participantId: string, holeNumber: number) => void;
 
   getParticipantLabel: (p: Participant) => string;
@@ -198,7 +199,7 @@ export default function ScorecardPortrait(props: {
                   onClick={() => onOpenEntry(p.id, h.hole_number)}
                   disabled={disabled}
                 >
-                  <div className="leading-none">{savingKey === key ? "…" : s ?? "–"}</div>
+                  <div className="leading-none">{savingKey === key ? "…" : (s ?? "–")}</div>
                   {scoreView === "net" && recv > 0 ? (
                     <div className="mt-1 leading-none">
                       <StrokeDots count={recv} />

@@ -3,7 +3,7 @@
 import React, { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import type { Participant, Hole } from "@/lib/rounds/hooks/useRoundDetail";
+import type { Participant, Hole, HoleState } from "@/lib/rounds/hooks/useRoundDetail";
 
 function initialsFrom(name: string) {
   const parts = (name || "").trim().split(/\s+/).filter(Boolean);
@@ -25,6 +25,12 @@ export default function ScoreEntrySheet(props: {
   isFinished: boolean;
   scoreFor: (pid: string, hole: number) => number | null;
   savingKey: string | null;
+
+  // B: hole state controls
+  holeState: HoleState;
+  onSetPickedUp: () => Promise<void> | void;
+  onSetNotStarted: () => Promise<void> | void;
+
   onClose: () => void;
   onSubmit: (strokes: number | null) => Promise<void>;
   getParticipantLabel: (p: Participant) => string;
@@ -43,6 +49,11 @@ export default function ScoreEntrySheet(props: {
     isFinished,
     scoreFor,
     savingKey,
+
+    holeState,
+    onSetPickedUp,
+    onSetNotStarted,
+
     onClose,
     onSubmit,
     getParticipantLabel,
@@ -58,9 +69,22 @@ export default function ScoreEntrySheet(props: {
   const disabled = !canScore || isFinished;
   const busy = savingKey === `${pid}:${holeNumber}`;
 
+  const currentDisplay = useMemo(() => {
+    if (busy) return "…";
+    if (holeState === "picked_up") return "PU";
+    if (holeState === "not_started") return "–";
+    // completed:
+    return typeof current === "number" ? current : "–";
+  }, [busy, holeState, current]);
+
   const missingCount = useMemo(() => {
     let missing = 0;
     for (const pp of participants) {
+      // treat picked_up as not missing
+      // treat completed as not missing (even if scoreFor is temporarily null, state is authoritative)
+      // treat not_started as missing
+      // NOTE: this sheet is for a single hole; holeState prop is only for current pid.
+      // For missingCount we still fall back to numeric check as the rest of the page will advance logic.
       const s = scoreFor(pp.id, holeNumber);
       if (typeof s !== "number") missing += 1;
     }
@@ -102,13 +126,32 @@ export default function ScoreEntrySheet(props: {
           <div className="p-3">
             <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/25 p-3 flex items-center justify-between">
               <div className="text-[11px] text-emerald-100/70">Current</div>
-              <div className="text-4xl font-extrabold text-[#f5e6b0] tabular-nums">{busy ? "…" : current ?? "–"}</div>
+              <div className="text-4xl font-extrabold text-[#f5e6b0] tabular-nums">{currentDisplay}</div>
               <button
                 className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/35 px-3 py-2 text-[11px] text-emerald-100/80 hover:bg-emerald-900/20 disabled:opacity-40"
                 disabled={disabled || busy}
                 onClick={() => onSubmit(null)}
               >
-                Clear
+                Clear score
+              </button>
+            </div>
+
+            {/* B: Hole state quick actions */}
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button
+                className="h-11 rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/40 text-emerald-50 text-sm font-semibold hover:bg-emerald-900/25 disabled:opacity-40"
+                disabled={disabled || busy}
+                onClick={() => onSetPickedUp()}
+              >
+                Picked up (PU)
+              </button>
+
+              <button
+                className="h-11 rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/40 text-emerald-50 text-sm font-semibold hover:bg-emerald-900/25 disabled:opacity-40"
+                disabled={disabled || busy}
+                onClick={() => onSetNotStarted()}
+              >
+                Not started (—)
               </button>
             </div>
 

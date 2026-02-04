@@ -20,13 +20,7 @@ export type FeedItemType =
   | "trend"
   | "system_announcement";
 
-export type FeedAudience =
-  | "followers"
-  | "public"
-  | "private"
-  | "match_participants"
-  | "custom_list";
-
+export type FeedAudience = "followers" | "public" | "private" | "match_participants" | "custom_list";
 export type FeedVisibility = "visible" | "hidden" | "removed";
 
 /**
@@ -50,9 +44,37 @@ export type FeedActor = {
 };
 
 /**
- * What we store in feed_items.payload (jsonb).
- * We keep it typed per card, but note: runtime validation is in schemas.ts.
+ * Subject(s) of a feed item.
+ * For most items this is the profile the card is "about" (often the actor),
+ * but for multi-player items (e.g. round_played) there can be multiple subjects.
  */
+export type FeedSubject = FeedActor;
+
+/**
+ * Optional “preview” of the highest-voted comment on an item.
+ * Tie-breaker handled server-side (most recent when same votes).
+ */
+export type FeedTopComment = {
+  id: string;
+  body: string;
+  created_at: string;
+  vote_count: number;
+  author: {
+    profile_id: string;
+    display_name: string;
+    avatar_url?: string | null;
+  };
+};
+
+/**
+ * Optional reaction summary for subtle display on cards.
+ * This is derived from reaction_counts (top N).
+ */
+export type FeedReactionSummary = Array<{
+  emoji: string;
+  count: number;
+}>;
+
 export type FeedPayloadByType = {
   user_post: {
     text?: string | null;
@@ -69,147 +91,122 @@ export type FeedPayloadByType = {
     course_id?: string | null;
     course_name: string;
     tee_name?: string | null;
-    players: Array<{ profile_id: string; name: string }>;
-    gross_total?: number | null;
-    net_total?: number | null;
-    gross_to_par?: number | null;
-    net_to_par?: number | null;
-    date?: string | null; // YYYY-MM-DD
+
+    // For “collaboration” cards, list all players (subjects usually align)
+    players: Array<{
+      profile_id?: string | null;
+      name: string;
+      avatar_url?: string | null;
+
+      // Desired display fields
+      gross_total?: number | null;
+      net_total?: number | null;
+      net_to_par?: number | null;
+      par_total?: number | null;
+    }>;
+
+    date?: string | null;
   };
 
+  /**
+   * Course record cards should show the gross total strokes (not AGS).
+   * Optionally include tee_name for clarity.
+   */
   course_record: {
-    record_type: "course_record";
-    metric: "gross" | "net";
+    round_id?: string | null;
     course_id?: string | null;
     course_name: string;
     tee_name?: string | null;
-    score: number;
-    to_par?: number | null;
-    previous_record?: number | null;
-    round_id?: string | null;
-    date?: string | null; // YYYY-MM-DD
+
+    // Who holds the record (often a single player)
+    profile_id?: string | null;
+    name?: string | null;
+    avatar_url?: string | null;
+
+    gross_total?: number | null;
+    date?: string | null;
   };
 
+  /**
+   * Personal best cards should show the gross total strokes (not AGS).
+   * This is PB on course+tee (per your spec).
+   */
   pb: {
-    record_type: "pb";
-    metric: "gross" | "net";
-    label?: string | null; // e.g. "Personal Best Net"
-    course_id?: string | null;
-    course_name?: string | null;
-    tee_name?: string | null;
-    score: number;
-    to_par?: number | null;
-    previous_best?: number | null;
     round_id?: string | null;
-    date?: string | null; // YYYY-MM-DD
+    course_id?: string | null;
+    course_name: string;
+    tee_name?: string | null;
+
+    profile_id?: string | null;
+    name?: string | null;
+    avatar_url?: string | null;
+
+    gross_total?: number | null;
+    date?: string | null;
   };
 
-  leaderboard_move: {
-    leaderboard_id: string;
-    old_rank?: number | null;
-    new_rank: number;
-    metric_value?: number | null;
-    delta?: number | null;
-    label?: string | null;
-  };
-
+  /**
+   * Hole event cards should include hole number, yardage and par.
+   */
   hole_event: {
-    event: "eagle" | "albatross" | "hole_in_one";
     round_id?: string | null;
     course_id?: string | null;
     course_name?: string | null;
     tee_name?: string | null;
-    hole_number: number;
-    par: number;
-    score: number;
-    date?: string | null; // YYYY-MM-DD
+
+    profile_id?: string | null;
+    name?: string | null;
+    avatar_url?: string | null;
+
+    kind: "hio" | "albatross" | "eagle";
+    hole_number?: number | null;
+    par?: number | null;
+    yardage?: number | null;
+
+    date?: string | null;
   };
 
-  match_start: {
-    match_id: string;
-    course_id?: string | null;
-    course_name?: string | null;
-    tee_name?: string | null;
-    format?: string | null;
-    start_time?: string | null; // ISO
-    participants: Array<{ profile_id: string; name: string }>;
-  };
-
-  match_update: {
-    match_id: string;
-    status?: string | null;
-    summary: string; // e.g. "X is 2 up thru 11"
-    thru?: number | null;
-    last_updated?: string | null; // ISO
-  };
-
-  match_result: {
-    match_id: string;
-    winner_profile_id?: string | null;
-    winner_name?: string | null;
-    margin?: string | null; // "2&1", "3 up", etc.
-    highlights?: string[] | null;
-    finished_at?: string | null; // ISO
-  };
-
-  hi_change: {
-    old_hi: number;
-    new_hi: number;
-    delta: number;
-    effective_date?: string | null; // YYYY-MM-DD
-  };
-
-  trend: {
-    label: string; // e.g. "3 straight rounds under net par"
-    details?: string | null;
-    window_label?: string | null; // e.g. "last 10 rounds"
-  };
-
-  system_announcement: {
-    title: string;
-    body?: string | null;
-    cta_label?: string | null;
-    cta_href?: string | null;
-  };
+  // Keep the rest permissive for now (we’ll tighten later if needed)
+  leaderboard_move: any;
+  match_start: any;
+  match_update: any;
+  match_result: any;
+  hi_change: any;
+  trend: any;
+  system_announcement: any;
 };
 
-export type FeedPayload = FeedPayloadByType[FeedItemType];
-
-/**
- * DB row shape (as returned by Supabase) for feed_items.
- * Note: actual table columns may include more; keep this minimal.
- */
-export type FeedItemRow = {
-  id: string;
-  type: FeedItemType;
-  actor_profile_id: string | null;
-  audience: FeedAudience;
-  visibility: FeedVisibility;
-  occurred_at: string; // ISO timestamp
-  created_at: string; // ISO timestamp
-  payload: unknown; // validate at runtime
-  group_key?: string | null;
-};
-
-/**
- * Aggregates and per-viewer metadata returned with feed items.
- */
 export type FeedItemAggregates = {
-  reaction_counts?: Record<string, number>; // emoji -> count
-  comment_count?: number;
-  my_reaction?: string | null; // emoji
+  reaction_counts: Record<string, number>;
+  comment_count: number;
+  my_reaction: string | null;
+
+  /**
+   * Optional server-provided helpers (non-breaking):
+   * - top_comment: highest voted comment preview (tie-break most recent)
+   * - reaction_summary: small top-N emoji summary derived from reaction_counts
+   */
+  top_comment?: FeedTopComment | null;
+  reaction_summary?: FeedReactionSummary | null;
 };
 
-/**
- * The normalized “view model” sent to the client/UI.
- * This is what FeedCard consumes.
- */
 export type FeedItemVM<TType extends FeedItemType = FeedItemType> = {
   id: string;
   type: TType;
   occurred_at: string;
   created_at: string;
+
+  /** Who performed the action (may be null for synthetic/live items) */
   actor: FeedActor | null;
+
+  /**
+   * Who the card is about.
+   * - For user_post: the posting profile
+   * - For round_played: players in the round (often multiple)
+   */
+  subject: FeedSubject | null;
+  subjects: FeedSubject[];
+
   audience: FeedAudience;
   visibility: FeedVisibility;
   payload: FeedPayloadByType[TType];

@@ -8,11 +8,26 @@ import { fanOutFeedItemToFollowers } from "@/lib/feed/fanout";
  * - Create manual post (user_post)
  * - Set/toggle reaction (one-reaction-per-user model)
  * - Create comment
+ * - Report content
  *
- * Notes:
- * - RLS is enforced in DB, but we still validate inputs here.
- * - We use supabaseAdmin for writes and rely on our own auth guard in routes.
+ * IMPORTANT:
+ * We use supabaseAdmin for writes, which bypasses RLS.
+ * Therefore we MUST enforce access rules in code (via feed_item_targets).
  */
+
+async function assertViewerCanReadFeedItem(feedItemId: string, viewerProfileId: string) {
+  if (!feedItemId || !viewerProfileId) throw new Error("Missing ids");
+
+  const { data, error } = await supabaseAdmin
+    .from("feed_item_targets")
+    .select("id")
+    .eq("feed_item_id", feedItemId)
+    .eq("viewer_profile_id", viewerProfileId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data?.id) throw new Error("Forbidden");
+}
 
 export async function createUserPost(params: {
   actorProfileId: string;
@@ -77,6 +92,9 @@ export async function setReaction(params: {
   if (typeof emoji !== "string" || emoji.trim().length === 0) throw new Error("Invalid emoji");
   if (emoji.length > 16) throw new Error("Emoji too long");
 
+  // IMPORTANT: service role bypasses RLS, so we enforce access here.
+  await assertViewerCanReadFeedItem(feedItemId, profileId);
+
   // Check existing
   const { data: existing, error: exErr } = await supabaseAdmin
     .from("feed_reactions")
@@ -90,21 +108,13 @@ export async function setReaction(params: {
   if (existing?.id) {
     if (existing.emoji === emoji) {
       // Toggle off
-      const { error: delErr } = await supabaseAdmin
-        .from("feed_reactions")
-        .delete()
-        .eq("id", existing.id);
-
+      const { error: delErr } = await supabaseAdmin.from("feed_reactions").delete().eq("id", existing.id);
       if (delErr) throw delErr;
       return { status: "removed", emoji: null };
     }
 
     // Update to new emoji
-    const { error: upErr } = await supabaseAdmin
-      .from("feed_reactions")
-      .update({ emoji })
-      .eq("id", existing.id);
-
+    const { error: upErr } = await supabaseAdmin.from("feed_reactions").update({ emoji }).eq("id", existing.id);
     if (upErr) throw upErr;
     return { status: "set", emoji };
   }
@@ -133,6 +143,9 @@ export async function createComment(params: {
   const trimmed = body.trim();
   if (trimmed.length < 1) throw new Error("Comment cannot be empty");
   if (trimmed.length > 2000) throw new Error("Comment too long");
+
+  // IMPORTANT: service role bypasses RLS, so we enforce access here.
+  await assertViewerCanReadFeedItem(feedItemId, profileId);
 
   const { data, error } = await supabaseAdmin
     .from("feed_comments")
@@ -166,6 +179,12 @@ export async function reportContent(params: {
   const r = (reason ?? "").trim();
   if (r.length < 1) throw new Error("Reason required");
   if (r.length > 500) throw new Error("Reason too long");
+
+  // Optional hardening:
+  // - If reporting a feed_item, ensure reporter can see it
+  if (targetType === "feed_item") {
+    await assertViewerCanReadFeedItem(targetId, reporterProfileId);
+  }
 
   const { data, error } = await supabaseAdmin
     .from("feed_reports")

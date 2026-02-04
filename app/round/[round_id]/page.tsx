@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useEffect, useMemo, useState, useCallback, JSX } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
 
 import { finishRound as finishRoundApi } from "@/lib/rounds/api";
 import { useRoundDetail } from "@/lib/rounds/hooks/useRoundDetail";
-import type { Participant, Hole } from "@/lib/rounds/hooks/useRoundDetail";
+import type { Participant, Hole, HoleState } from "@/lib/rounds/hooks/useRoundDetail";
 
 import ConfirmSheet from "@/components/round/ConfirmSheet";
 import ScoreEntrySheet from "@/components/round/ScoreEntrySheet";
@@ -53,13 +53,13 @@ function useMediaQuery(query: string) {
 function computeNextIncompleteHole(
   holesList: Hole[],
   participants: Participant[],
-  scoreFor: (pid: string, hole: number) => number | null
+  isHoleCompleteForPlayer: (pid: string, hole: number) => boolean
 ) {
   if (!holesList.length) return 1;
 
   for (const h of holesList) {
-    const allScored = participants.every((p) => typeof scoreFor(p.id, h.hole_number) === "number");
-    if (!allScored) return h.hole_number;
+    const allDone = participants.every((p) => isHoleCompleteForPlayer(p.id, h.hole_number));
+    if (!allDone) return h.hole_number;
   }
 
   return holesList[holesList.length - 1].hole_number;
@@ -69,7 +69,7 @@ function findNextUnscoredPlayerForHole(
   participants: Participant[],
   startParticipantId: string,
   holeNumber: number,
-  scoreFor: (pid: string, hole: number) => number | null
+  isHoleCompleteForPlayer: (pid: string, hole: number) => boolean
 ): string | null {
   if (!participants.length) return null;
 
@@ -78,8 +78,7 @@ function findNextUnscoredPlayerForHole(
   for (let step = 1; step <= participants.length; step++) {
     const idx = (startIdx + step) % participants.length;
     const pid = participants[idx].id;
-    const s = scoreFor(pid, holeNumber);
-    if (typeof s !== "number") return pid;
+    if (!isHoleCompleteForPlayer(pid, holeNumber)) return pid;
   }
 
   return null;
@@ -88,11 +87,11 @@ function findNextUnscoredPlayerForHole(
 function countMissingForHole(
   participants: Participant[],
   holeNumber: number,
-  scoreFor: (pid: string, hole: number) => number | null
+  isHoleCompleteForPlayer: (pid: string, hole: number) => boolean
 ) {
   let missing = 0;
   for (const p of participants) {
-    if (typeof scoreFor(p.id, holeNumber) !== "number") missing += 1;
+    if (!isHoleCompleteForPlayer(p.id, holeNumber)) missing += 1;
   }
   return missing;
 }
@@ -237,6 +236,7 @@ export default function RoundDetailPage() {
     holes,
     scoresByKey,
     setScoresByKey,
+    holeStatesByKey,
     canScore,
   } = useRoundDetail(roundId);
 
@@ -259,6 +259,20 @@ export default function RoundDetailPage() {
   const scoreFor = useCallback(
     (participantId: string, holeNumber: number) => scoresByKey[`${participantId}:${holeNumber}`]?.strokes ?? null,
     [scoresByKey]
+  );
+
+  const holeStateFor = useCallback(
+    (participantId: string, holeNumber: number): HoleState =>
+      (holeStatesByKey?.[`${participantId}:${holeNumber}`] as HoleState | undefined) ?? "not_started",
+    [holeStatesByKey]
+  );
+
+  const isHoleCompleteForPlayer = useCallback(
+    (participantId: string, holeNumber: number) => {
+      const st = holeStateFor(participantId, holeNumber);
+      return st === "completed" || st === "picked_up";
+    },
+    [holeStateFor]
   );
 
   const isFinished = status === "completed" || status === "finished" || status === "ended";
@@ -286,8 +300,16 @@ export default function RoundDetailPage() {
     return prof?.avatar_url || null;
   }, []);
 
+  // Displayed score:
+  // - not_started => null (render blank)
+  // - picked_up   => "PU"
+  // - completed   => number (gross or net)
   const displayedScoreFor = useCallback(
-    (participantId: string, holeNumber: number) => {
+    (participantId: string, holeNumber: number): string | number | null => {
+      const st = holeStateFor(participantId, holeNumber);
+      if (st === "not_started") return null;
+      if (st === "picked_up") return "PU";
+
       const gross = scoreFor(participantId, holeNumber);
       if (typeof gross !== "number") return null;
       if (scoreView === "gross") return gross;
@@ -298,7 +320,7 @@ export default function RoundDetailPage() {
       const recv = strokesReceivedOnHole(p?.course_handicap ?? null, h?.stroke_index ?? null);
       return netFromGross(gross, recv);
     },
-    [scoreFor, scoreView, participants, holesList]
+    [holeStateFor, scoreFor, scoreView, participants, holesList]
   );
 
   const totals = useMemo(() => {
@@ -362,10 +384,75 @@ export default function RoundDetailPage() {
   useEffect(() => {
     if (isFinished) return;
     if (!participants.length || !holesList.length) return;
-    const next = computeNextIncompleteHole(holesList, participants, scoreFor);
+    const next = computeNextIncompleteHole(holesList, participants, isHoleCompleteForPlayer);
     setActiveHole((prev) => (prev === next ? prev : next));
-  }, [participants, holesList, scoreFor, isFinished]);
+  }, [participants, holesList, isHoleCompleteForPlayer, isFinished]);
 
+  async function setHoleState(participantId: string, holeNumber: number, nextState: HoleState) {
+    if (!canScore || isFinished) return false;
+
+    const key = `${participantId}:${holeNumber}`;
+    setSavingKey(key);
+    setErr(null);
+
+    try {
+      const { error } = await supabase
+        .from("round_hole_states")
+        .upsert(
+          { round_id: roundId, participant_id: participantId, hole_number: holeNumber, status: nextState },
+          { onConflict: "participant_id,hole_number" }
+        );
+      if (error) throw error;
+
+      return true;
+    } catch (e: any) {
+      setErr(e?.message || "Failed to save hole status");
+      return false;
+    } finally {
+      setSavingKey(null);
+    }
+  }
+
+  // Only clears score event (does NOT touch hole state)
+  async function clearScoreEvent(participantId: string, holeNumber: number) {
+    if (!meId) return false;
+    if (!canScore || isFinished) return false;
+
+    const key = `${participantId}:${holeNumber}`;
+    setSavingKey(key);
+    setErr(null);
+
+    try {
+      const { error } = await supabase.from("round_score_events").insert({
+        round_id: roundId,
+        participant_id: participantId,
+        hole_number: holeNumber,
+        strokes: null,
+        entered_by: meId,
+      });
+      if (error) throw error;
+
+      setScoresByKey((prev) => ({
+        ...prev,
+        [key]: {
+          participant_id: participantId,
+          hole_number: holeNumber,
+          strokes: null,
+          created_at: new Date().toISOString(),
+        } as Score,
+      }));
+
+      return true;
+    } catch (e: any) {
+      setErr(e?.message || "Failed to clear score");
+      return false;
+    } finally {
+      setSavingKey(null);
+    }
+  }
+
+  // We keep your event-sourced scoring.
+  // Additionally, when a numeric score is entered, mark the hole as completed.
   async function setScore(participantId: string, holeNumber: number, strokes: number | null) {
     if (!meId) return false;
     if (!canScore) {
@@ -401,6 +488,12 @@ export default function RoundDetailPage() {
         } as Score,
       }));
 
+      // If user entered a number, the hole is completed.
+      // If strokes is null, we do NOT force state (use explicit PU/Not Started buttons).
+      if (typeof strokes === "number") {
+        await setHoleState(participantId, holeNumber, "completed");
+      }
+
       return true;
     } catch (e: any) {
       setErr(e?.message || "Failed to save score");
@@ -408,6 +501,18 @@ export default function RoundDetailPage() {
     } finally {
       setSavingKey(null);
     }
+  }
+
+  async function markPickedUp(participantId: string, holeNumber: number) {
+    const ok = await setHoleState(participantId, holeNumber, "picked_up");
+    if (!ok) return;
+    await clearScoreEvent(participantId, holeNumber);
+  }
+
+  async function markNotStarted(participantId: string, holeNumber: number) {
+    const ok = await setHoleState(participantId, holeNumber, "not_started");
+    if (!ok) return;
+    await clearScoreEvent(participantId, holeNumber);
   }
 
   async function finishRound() {
@@ -449,13 +554,13 @@ export default function RoundDetailPage() {
     const ok = await setScore(entryPid, entryHole, strokes);
     if (!ok) return;
 
-    const missingNow = countMissingForHole(participants, entryHole, scoreFor);
+    const missingNow = countMissingForHole(participants, entryHole, isHoleCompleteForPlayer);
     if (missingNow === 0) {
       closeEntry();
       return;
     }
 
-    const nextPid = findNextUnscoredPlayerForHole(participants, entryPid, entryHole, scoreFor);
+    const nextPid = findNextUnscoredPlayerForHole(participants, entryPid, entryHole, isHoleCompleteForPlayer);
     if (nextPid) {
       setEntryPid(nextPid);
       setEntryMode("quick");
@@ -498,6 +603,8 @@ export default function RoundDetailPage() {
               const from = sp.get("from");
               if (from === "history") {
                 router.push("/history");
+              } else if (from === "social") {
+                router.push("/social");
               } else if (from === "player") {
                 router.back();
               } else {
@@ -621,7 +728,7 @@ export default function RoundDetailPage() {
         {finishOpen ? (
           <ConfirmSheet
             title="Finish round?"
-            subtitle="This will lock scoring for everyone."
+            subtitle="This will lock scoring for everyone. Any incomplete holes will be saved as Not Started (—)."
             confirmLabel={finishing ? "Finishing…" : "Finish round"}
             confirmDisabled={finishing}
             onConfirm={finishRound}
@@ -643,6 +750,9 @@ export default function RoundDetailPage() {
             isFinished={isFinished}
             scoreFor={scoreFor}
             savingKey={savingKey}
+            holeState={holeStateFor(entryPid, entryHole)}
+            onSetPickedUp={() => markPickedUp(entryPid, entryHole)}
+            onSetNotStarted={() => markNotStarted(entryPid, entryHole)}
             onClose={closeEntry}
             onSubmit={submitAndAdvance}
             getParticipantLabel={getParticipantLabel}

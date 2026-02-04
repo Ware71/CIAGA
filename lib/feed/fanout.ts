@@ -2,74 +2,105 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import type { FeedAudience } from "@/lib/feed/types";
 
 /**
- * Fan-out on write:
- * - Always target the actor themself
- * - If audience = followers, target all accepted followers (or all followers if no status yet)
- * - If audience = private, target only actor
+ * Fan-out on write (viewer-specific targets).
  *
- * Later:
- * - match_participants -> target match participants
- * - public -> either create broad targets or rely on a different read path
- * - custom_list -> target members of list
+ * v1 rules (per CIAGA Social Feed spec):
+ * - Targets are computed from SUBJECTS, not solely from actor/creator.
+ * - For round_played, subjects are the players.
+ * - Targets include:
+ *   - all subjects
+ *   - followers of any subject
+ *   - optionally the actor (if not already a subject)
+ *
+ * Note: feed_item_targets is used for MAIN FEED and notifications.
  */
 
+export async function fanOutFeedItemToSubjectsAndFollowers(params: {
+  feedItemId: string;
+  actorProfileId: string;
+  audience: FeedAudience;
+  subjectProfileIds: string[];
+}): Promise<void> {
+  const { feedItemId, actorProfileId, audience, subjectProfileIds } = params;
+
+  if (!feedItemId || !actorProfileId) throw new Error("Missing ids");
+
+  const subjects = Array.from(new Set((subjectProfileIds ?? []).filter(Boolean)));
+
+  // Always include all subjects; include actor only if not already a subject.
+  const viewerIds = new Set<string>(subjects);
+  viewerIds.add(actorProfileId);
+
+  // Private = only subjects + actor.
+  if (audience === "private") {
+    await insertTargets(
+      Array.from(viewerIds).map((vid) => ({
+        feed_item_id: feedItemId,
+        viewer_profile_id: vid,
+        reason: vid === actorProfileId ? "self" : "subject",
+      }))
+    );
+    return;
+  }
+
+  // MVP only: followers + private.
+  if (audience !== "followers") {
+    await insertTargets(
+      Array.from(viewerIds).map((vid) => ({
+        feed_item_id: feedItemId,
+        viewer_profile_id: vid,
+        reason: vid === actorProfileId ? "self" : "subject",
+      }))
+    );
+    return;
+  }
+
+  // Followers of ANY subject should see the card.
+  // follows(follower_id -> following_id)
+  if (subjects.length) {
+    const { data: followerRows, error } = await supabaseAdmin
+      .from("follows")
+      .select("follower_id")
+      .in("following_id", subjects);
+
+    if (error) throw error;
+
+    for (const r of followerRows ?? []) {
+      const fid = (r as any).follower_id as string | undefined;
+      if (fid) viewerIds.add(fid);
+    }
+  }
+
+  const targets = Array.from(viewerIds).map((vid) => ({
+    feed_item_id: feedItemId,
+    viewer_profile_id: vid,
+    reason:
+      vid === actorProfileId
+        ? "self"
+        : subjects.includes(vid)
+          ? "subject"
+          : "follow",
+  }));
+
+  await insertTargets(targets);
+}
+
+/**
+ * Backwards-compatible wrapper for older emitters:
+ * keeps existing call sites working while we migrate item types.
+ */
 export async function fanOutFeedItemToFollowers(params: {
   feedItemId: string;
   actorProfileId: string;
   audience: FeedAudience;
 }): Promise<void> {
   const { feedItemId, actorProfileId, audience } = params;
-
-  if (!feedItemId || !actorProfileId) throw new Error("Missing ids");
-
-  // Always include actor
-  const targets: Array<{
-    feed_item_id: string;
-    viewer_profile_id: string;
-    reason: "self" | "follow";
-  }> = [
-    { feed_item_id: feedItemId, viewer_profile_id: actorProfileId, reason: "self" },
-  ];
-
-  if (audience === "private") {
-    await insertTargets(targets);
-    return;
-  }
-
-  if (audience !== "followers") {
-    // For MVP, only implement followers + private.
-    // Other audiences can be implemented when needed.
-    await insertTargets(targets);
-    return;
-  }
-
-  // Fetch followers: rows where follower_profile_id follows actorProfileId
-  // In spec naming: follows(follower_profile_id, followed_profile_id)
-  // Optional privacy extension: status pending/accepted
-  const { data: followers, error } = await supabaseAdmin
-    .from("follows")
-    .select("follower_profile_id, status")
-    .eq("followed_profile_id", actorProfileId);
-
-  if (error) throw error;
-
-  for (const f of followers || []) {
-    const followerId = (f as any).follower_profile_id as string | undefined;
-    const status = (f as any).status as string | undefined;
-
-    // If you add private accounts later, only accepted followers get targets.
-    if (status && status !== "accepted") continue;
-
-    if (followerId && followerId !== actorProfileId) {
-      targets.push({
-        feed_item_id: feedItemId,
-        viewer_profile_id: followerId,
-        reason: "follow",
-      });
-    }
-  }
-
-  await insertTargets(targets);
+  return fanOutFeedItemToSubjectsAndFollowers({
+    feedItemId,
+    actorProfileId,
+    audience,
+    subjectProfileIds: [actorProfileId],
+  });
 }
 
 async function insertTargets(
@@ -86,10 +117,10 @@ async function insertTargets(
     return true;
   });
 
-  const { error } = await supabaseAdmin.from("feed_item_targets").insert(unique);
-  if (error) {
-    // If unique constraint exists, conflicts might happen in retries.
-    // If you add an upsert constraint later, switch to upsert.
-    throw error;
-  }
+  // Upsert to make retries + idempotent re-runs safe.
+  const { error } = await supabaseAdmin
+    .from("feed_item_targets")
+    .upsert(unique, { onConflict: "feed_item_id,viewer_profile_id" });
+
+  if (error) throw error;
 }

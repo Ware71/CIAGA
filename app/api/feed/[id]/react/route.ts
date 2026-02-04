@@ -4,10 +4,7 @@ import { setReaction } from "@/lib/feed/commands";
 
 type Body = { emoji?: string };
 
-export async function POST(
-  req: Request,
-  ctx: { params: Promise<{ id: string }> }
-) {
+export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { profileId } = await getAuthedProfileOrThrow(req);
     const { id: feedItemId } = await ctx.params;
@@ -24,9 +21,12 @@ export async function POST(
 
     return NextResponse.json(result);
   } catch (e: any) {
-    return NextResponse.json(
-      { error: e?.message ?? "Unknown error" },
-      { status: 400 }
-    );
+    const msg = e?.message ?? "Unknown error";
+
+    if (msg === "Forbidden") {
+      return NextResponse.json({ error: msg }, { status: 403 });
+    }
+
+    return NextResponse.json({ error: msg }, { status: 400 });
   }
 }

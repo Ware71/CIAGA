@@ -1,15 +1,18 @@
 "use client";
 
 import Image from "next/image";
-import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { AuthUser } from "@/components/ui/auth-user";
 
+import { supabase } from "@/lib/supabaseClient";
+import { getMyProfileIdByAuthUserId } from "@/lib/myProfile";
+
 type MenuItem = { id: string; label: string };
 
-const homeMenuItems: MenuItem[] = [
-  { id: "round", label: "New Round" },
+const homeMenuItemsBase: MenuItem[] = [
+  { id: "round", label: "New Round" }, // label will be overridden dynamically
   { id: "history", label: "Round History" },
   { id: "stats", label: "Stats" },
   { id: "social", label: "Social" },
@@ -40,6 +43,9 @@ export default function CIAGAStarter() {
   const [vw, setVw] = useState(390);
   const [vh, setVh] = useState(844);
 
+  // ✅ Live round detection (for "Resume Round")
+  const [liveRoundId, setLiveRoundId] = useState<string | null>(null);
+
   useEffect(() => {
     const updateViewport = () => {
       if (typeof window === "undefined") return;
@@ -61,6 +67,74 @@ export default function CIAGAStarter() {
       vv?.removeEventListener("scroll", updateViewport);
     };
   }, []);
+
+  // ✅ Fetch whether current user has a live round
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const { data: auth } = await supabase.auth.getUser();
+        const user = auth?.user;
+        if (!user) {
+          if (!cancelled) setLiveRoundId(null);
+          return;
+        }
+
+        const myProfileId = await getMyProfileIdByAuthUserId(user.id);
+        if (!myProfileId) {
+          if (!cancelled) setLiveRoundId(null);
+          return;
+        }
+
+        // Step 1: all round_ids I'm a participant in
+        const partRes = await supabase
+          .from("round_participants")
+          .select("round_id")
+          .eq("profile_id", myProfileId);
+
+        if (partRes.error) throw partRes.error;
+
+        const roundIds = (partRes.data ?? [])
+          .map((r: any) => r.round_id as string)
+          .filter(Boolean);
+
+        if (!roundIds.length) {
+          if (!cancelled) setLiveRoundId(null);
+          return;
+        }
+
+        // Step 2: find most recent live round among those
+        const roundsRes = await supabase
+          .from("rounds")
+          .select("id,status,started_at,created_at")
+          .in("id", roundIds)
+          .eq("status", "live")
+          .order("started_at", { ascending: false })
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        if (roundsRes.error) throw roundsRes.error;
+
+        const id = (roundsRes.data?.[0]?.id as string | undefined) ?? null;
+        if (!cancelled) setLiveRoundId(id);
+      } catch {
+        if (!cancelled) setLiveRoundId(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const homeMenuItems: MenuItem[] = useMemo(() => {
+    return homeMenuItemsBase.map((it) =>
+      it.id === "round"
+        ? { ...it, label: liveRoundId ? "Resume Round" : "New Round" }
+        : it
+    );
+  }, [liveRoundId]);
 
   // Home closed offset (device-relative)
   const closedOffset = clamp(vh * 0.28, 170, 260);
@@ -85,7 +159,12 @@ export default function CIAGAStarter() {
     }
 
     if (id === "round") {
-      router.push("/round");
+      // ✅ If I have a live round, go straight to it
+      if (liveRoundId) {
+        router.push(`/round/${liveRoundId}`);
+      } else {
+        router.push("/round");
+      }
       return;
     }
 
@@ -289,9 +368,7 @@ export default function CIAGAStarter() {
 
               <div className="flex flex-col leading-tight">
                 <span className="text-lg font-semibold tracking-wide text-[#f5e6b0]">CIAGA</span>
-                <span className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">
-                  Est. 2025
-                </span>
+                <span className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">Est. 2025</span>
               </div>
             </div>
 
@@ -327,21 +404,13 @@ export default function CIAGAStarter() {
                   animate={{ scale: open ? 1.05 : 1 }}
                   transition={{ type: "spring", stiffness: 220, damping: 18 }}
                 >
-                  <Image
-                    src="/ciaga-logo.png"
-                    alt="CIAGA logo"
-                    width={72}
-                    height={72}
-                    className="object-contain"
-                  />
+                  <Image src="/ciaga-logo.png" alt="CIAGA logo" width={72} height={72} className="object-contain" />
                 </motion.div>
               </motion.button>
             </motion.div>
           </div>
 
-          <footer className="mt-4 text-[10px] text-emerald-100/60 text-center">
-            Tap to explore. Swipe up for Majors.
-          </footer>
+          <footer className="mt-4 text-[10px] text-emerald-100/60 text-center">Tap to explore. Swipe up for Majors.</footer>
         </motion.div>
       ) : (
         <motion.div
@@ -410,19 +479,11 @@ export default function CIAGAStarter() {
                   animate={{ scale: open ? 1.05 : 1 }}
                   transition={{ type: "spring", stiffness: 220, damping: 18 }}
                 >
-                  <Image
-                    src="/ciaga-logo.png"
-                    alt="CIAGA logo"
-                    width={72}
-                    height={72}
-                    className="object-contain"
-                  />
+                  <Image src="/ciaga-logo.png" alt="CIAGA logo" width={72} height={72} className="object-contain" />
                 </motion.div>
               </motion.button>
 
-              <div className="mt-2 text-xs tracking-[0.18em] uppercase text-emerald-200/80">
-                Majors
-              </div>
+              <div className="mt-2 text-xs tracking-[0.18em] uppercase text-emerald-200/80">Majors</div>
             </motion.div>
 
             <motion.div
@@ -441,8 +502,8 @@ export default function CIAGAStarter() {
               <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4">
                 <h2 className="text-sm font-semibold text-emerald-50 mb-1">Season Majors</h2>
                 <p className="text-[11px] text-emerald-100/80">
-                  Four flagship events with FedEx-style points. Swipe down to return home. Later we’ll
-                  wire in live standings and odds.
+                  Four flagship events with FedEx-style points. Swipe down to return home. Later we’ll wire in live
+                  standings and odds.
                 </p>
               </div>
 
