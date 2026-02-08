@@ -303,18 +303,13 @@ function PbOrRecordBody({ item }: { item: FeedItemVM }) {
   const gross = safeNum(p?.gross) ?? safeNum(p?.gross_total) ?? safeNum(p?.score);
   const course = p?.course_name ?? "Course";
   const tee = p?.tee_name ? ` · ${p.tee_name}` : "";
-  const date = typeof p?.date === "string" && p.date ? ` · ${p.date}` : "";
 
   return (
     <div className="rounded-2xl border border-emerald-900/50 bg-emerald-950/10 p-3">
-      <div className="text-xs font-semibold text-emerald-100/60">
-        {course}
-        {tee}
-        {date}
-      </div>
-      <div className="mt-2 flex items-end justify-between">
+      <div className="flex items-end justify-between">
         <div className="text-sm font-extrabold text-emerald-50">
-          {item.type === "course_record" ? "New course record" : "New personal best"}
+          {course}
+          {tee}
         </div>
         <div className="text-right">
           <div className="text-[10px] font-extrabold text-emerald-100/50">GROSS</div>
@@ -538,7 +533,7 @@ export default function FeedCard({ item }: { item: FeedItemVM }) {
               {collaborationAvatars ? <AvatarStack people={collaborationAvatars} max={3} /> : null}
               <div className="min-w-0">
                 <div className="text-sm font-extrabold truncate text-emerald-50">{collaborationLabel}</div>
-                <div className="text-[11px] font-semibold text-emerald-100/60">Group round · {timeLabel}</div>
+                <div className="text-[11px] font-semibold text-emerald-100/60">{timeLabel}</div>
               </div>
             </div>
           ) : primaryPerson ? (
@@ -577,19 +572,11 @@ export default function FeedCard({ item }: { item: FeedItemVM }) {
             ) : null}
           </div>
 
-          <div className="mt-0.5 text-xs font-semibold text-emerald-100/60">
-            {item.type === "round_played" ? (
+          {item.type === "round_played" ? (
+            <div className="mt-0.5 text-xs font-semibold text-emerald-100/60">
               <RoundMetaLine payload={item.payload as any} timeLabel={""} />
-            ) : item.type === "hole_event" || item.type === "pb" || item.type === "course_record" ? (
-              <ActorCourseMetaLine
-                actorName={item.actor?.display_name ?? null}
-                payload={item.payload as any}
-                timeLabel={""}
-              />
-            ) : (
-              <span />
-            )}
-          </div>
+            </div>
+          ) : null}
         </div>
 
         {/* Actions */}

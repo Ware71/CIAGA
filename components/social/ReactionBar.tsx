@@ -195,7 +195,7 @@ export default function ReactionBar({ feedItemId, myReaction, reactionCounts, on
       {/* Overlay */}
       {open ? (
         <div
-          className="absolute right-0 mt-2 w-[280px] rounded-2xl border border-emerald-900/70 bg-[#062a18] p-3 shadow-xl z-50"
+          className="absolute right-0 mt-2 w-[min(280px,calc(100vw-1rem))] rounded-2xl border border-emerald-900/70 bg-[#062a18] p-3 shadow-xl z-50"
           onClick={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
@@ -251,9 +251,80 @@ function MoreEmojiButton(props: {
 }) {
   const [open, setOpen] = useState(false);
 
+  // Fixed-position menu anchored to button with viewport clamping
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const update = () => {
+      const btn = btnRef.current;
+      if (!btn) return;
+
+      const r = btn.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+
+      const margin = 8; // px
+      const width = Math.min(280, vw - margin * 2);
+
+      // prefer align-right to the button, then clamp into viewport
+      let left = r.right - width;
+      left = Math.max(margin, Math.min(left, vw - width - margin));
+
+      // initial "below" position; we’ll flip above if needed after measuring menu height
+      let top = r.bottom + 8;
+      top = Math.max(margin, Math.min(top, vh - margin));
+
+      setPos({ top, left, width });
+
+      // second pass: if it would overflow bottom, flip above
+      requestAnimationFrame(() => {
+        const menu = menuRef.current;
+        if (!menu) return;
+
+        const mh = menu.getBoundingClientRect().height;
+        const wouldOverflowBottom = top + mh > vh - margin;
+
+        if (wouldOverflowBottom) {
+          const flippedTop = Math.max(margin, r.top - 8 - mh);
+          setPos((p) => (p ? { ...p, top: flippedTop } : p));
+        }
+      });
+    };
+
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [open]);
+
+  // Close the "More" menu on outside click
+  useEffect(() => {
+    if (!open) return;
+
+    const onDocDown = (e: MouseEvent | PointerEvent) => {
+      const btn = btnRef.current;
+      const menu = menuRef.current;
+      if (!btn || !menu) return;
+
+      if (e.target instanceof Node && (btn.contains(e.target) || menu.contains(e.target))) return;
+      setOpen(false);
+    };
+
+    document.addEventListener("pointerdown", onDocDown, { capture: true });
+    return () => document.removeEventListener("pointerdown", onDocDown, { capture: true } as any);
+  }, [open]);
+
   return (
     <div className="relative">
       <button
+        ref={btnRef}
         type="button"
         disabled={props.disabled}
         onClick={() => setOpen((v) => !v)}
@@ -268,9 +339,11 @@ function MoreEmojiButton(props: {
         More…
       </button>
 
-      {open ? (
+      {open && pos ? (
         <div
-          className="absolute right-0 mt-2 w-[280px] rounded-2xl border border-emerald-900/70 bg-[#062a18] p-3 shadow-xl z-50"
+          ref={menuRef}
+          style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width }}
+          className="rounded-2xl border border-emerald-900/70 bg-[#062a18] p-3 shadow-xl z-[9999]"
           onClick={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
