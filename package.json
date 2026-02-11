@@ -1,0 +1,12 @@
+{
+  "name": "ciagagolf",
+  "private": true,
+  "workspaces": ["apps/*"],
+  "scripts": {
+    "dev:app": "npm --workspace apps/app run dev",
+    "build:app": "npm --workspace apps/app run build",
+    "dev:web": "npm --workspace apps/web run dev",
+    "build:web": "npm --workspace apps/web run build",
+    "build": "npm run build:app && npm run build:web"
+  }
+}
