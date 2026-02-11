@@ -16,12 +16,40 @@ const geistMono = Geist_Mono({
 // METADATA
 // ---------
 export const metadata: Metadata = {
-  title: "CIAGA Golf",
-  description: "League, live scorecards, rangefinder, AI caddy",
+  metadataBase: new URL("https://app.ciagagolf.com"), // change to your primary domain
+  title: {
+    default: "CIAGA Golf",
+    template: "%s | CIAGA Golf",
+  },
+  description: "Golf leagues for friends: live scorecards, GPS rangefinder, stats, and a social feed.",
+  applicationName: "CIAGA Golf",
   manifest: "/manifest.json",
   icons: {
     icon: "/icons/icon-192.png",
     apple: "/icons/icon-512.png",
+  },
+  openGraph: {
+    type: "website",
+    siteName: "CIAGA Golf",
+    title: "CIAGA Golf",
+    description:
+      "Golf leagues for friends: live scorecards, GPS rangefinder, stats, and a social feed.",
+    url: "/",
+    images: [
+      {
+        url: "/og.png", // add this image in /public/og.png
+        width: 1200,
+        height: 630,
+        alt: "CIAGA Golf",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "CIAGA Golf",
+    description:
+      "Golf leagues for friends: live scorecards, GPS rangefinder, stats, and a social feed.",
+    images: ["/og.png"],
   },
 };
 
@@ -29,7 +57,7 @@ export const metadata: Metadata = {
 // VIEWPORT (iOS + Android UI bar color)
 // ---------
 export const viewport: Viewport = {
-  themeColor: "#042713",               // Green status bar
+  themeColor: "#042713", // Green status bar
 };
 
 export default function RootLayout({
