@@ -80,7 +80,7 @@ export default function SetPasswordPage() {
       const { error: pwErr } = await supabase.auth.updateUser({ password });
       if (pwErr) throw pwErr;
 
-      router.replace("/profile");
+      router.replace("/");
     } catch (e: any) {
       setMsg(e?.message || "Failed to set password.");
     } finally {

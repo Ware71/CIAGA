@@ -1,0 +1,8 @@
+{
+  "claude.excludePatterns": [
+    "**/node_modules/**",
+    "**/.next/**",
+    "**/.git/**",
+    "**/.vscode/**",
+  ]
+}
