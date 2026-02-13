@@ -103,14 +103,29 @@ export default function AdminPage() {
       const name = newName.trim() || null;
       const email = newEmail.trim().toLowerCase() || null;
 
-      const { error } = await supabase.from("profiles").insert({
-        name,
-        email,
-        owner_user_id: null,
-        is_admin: false,
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+
+      if (!accessToken) {
+        setMsg("Not authenticated. Please sign in again.");
+        return;
+      }
+
+      const res = await fetch("/api/admin/create-profile", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ name, email }),
       });
 
-      if (error) throw error;
+      const json = await res.json();
+
+      if (!res.ok) {
+        setMsg(json.error || `Failed to create profile (${res.status})`);
+        return;
+      }
 
       setNewName("");
       setNewEmail("");
