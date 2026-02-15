@@ -682,7 +682,7 @@ export default function CourseRecordsPage() {
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/45 p-3 max-h-[55vh] overflow-y-auto pr-1" style={{ WebkitOverflowScrolling: "touch" }}>
+                  <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/45 p-3 max-h-[55vh] overflow-y-auto overscroll-y-contain pr-1" style={{ WebkitOverflowScrolling: "touch" }}>
                     <div className="grid grid-cols-3 gap-2">
                       {ecHoleNos.map((hole) => {
                         const b = ecBestByHole[hole];

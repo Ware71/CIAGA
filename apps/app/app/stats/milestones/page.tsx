@@ -975,7 +975,7 @@ export default function MilestonesPage() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
+        <div className="flex-1 overflow-y-auto overscroll-y-contain pb-[env(safe-area-inset-bottom)]">
           {loading ? (
             <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">
               Loading…

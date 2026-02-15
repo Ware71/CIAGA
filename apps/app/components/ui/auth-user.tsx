@@ -46,6 +46,7 @@ export function AuthUser() {
   const handlePendingInviteOrEnsure = async (u: User, accessToken?: string | null) => {
     // If we already checked invite for this user in this session, don't re-run invite check
     if (didCheckInviteRef.current === u.id) {
+      // If pending invite exists, do nothing — set-password page handles the choice
       if (invitePendingRef.current[u.id]) return;
 
       try {
@@ -66,9 +67,10 @@ export function AuthUser() {
 
         const j = await res.json().catch(() => ({}));
 
-        // Only redirect when truly pending (your pending endpoint must check profile unclaimed)
+        // Only redirect when truly pending (pending endpoint checks profile unclaimed)
         if (j?.pending) {
           invitePendingRef.current[u.id] = true;
+          // Redirect to set-password page which will show the claim-or-create modal
           router.replace('/onboarding/set-password');
           return;
         }
@@ -80,6 +82,7 @@ export function AuthUser() {
       }
     }
 
+    // No pending invite — ensure profile as normal
     try {
       await ensureProfile(u);
     } catch (e) {
@@ -242,7 +245,7 @@ export function AuthUser() {
     didCheckInviteRef.current = null;
     invitePendingRef.current = {};
     setMenuOpen(false);
-    router.push('/');
+    router.push('/auth');
   };
 
   if (loading) {
@@ -250,11 +253,7 @@ export function AuthUser() {
   }
 
   if (!user) {
-    return (
-      <Button asChild size="sm" variant="outline">
-        <Link href="/auth">Sign in</Link>
-      </Button>
-    );
+    return null;
   }
 
   const name = user.user_metadata?.full_name || user.email || 'Player';

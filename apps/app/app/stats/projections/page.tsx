@@ -800,7 +800,7 @@ export default function StatsPage() {
         {allCompareLoading ? (
           <div className="text-sm font-semibold text-emerald-100/70">Loading…</div>
         ) : (
-          <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1" style={{ WebkitOverflowScrolling: "touch" }}>
+          <div className="space-y-2 max-h-[60vh] overflow-y-auto overscroll-y-contain pr-1" style={{ WebkitOverflowScrolling: "touch" }}>
             {allGoalRows.map((r) => (
               <div key={r.id} className="rounded-2xl border border-emerald-900/70 bg-[#042713]/55 p-3">
                 <div className="flex items-center justify-between">
@@ -827,7 +827,7 @@ export default function StatsPage() {
         {allCompareLoading ? (
           <div className="text-sm font-semibold text-emerald-100/70">Loading…</div>
         ) : (
-          <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1" style={{ WebkitOverflowScrolling: "touch" }}>
+          <div className="space-y-2 max-h-[60vh] overflow-y-auto overscroll-y-contain pr-1" style={{ WebkitOverflowScrolling: "touch" }}>
             {allProjRows.map((r) => (
               <div key={r.id} className="rounded-2xl border border-emerald-900/70 bg-[#042713]/55 p-3">
                 <div className="flex items-center justify-between">

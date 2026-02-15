@@ -34,7 +34,7 @@ export async function GET(req: Request) {
     // 2) Only pending if the invited profile is STILL unclaimed
     const { data: prof, error: profErr } = await supabaseAdmin
       .from("profiles")
-      .select("id, owner_user_id")
+      .select("id, owner_user_id, name, email, created_at")
       .eq("id", invite.profile_id)
       .maybeSingle();
 
@@ -50,8 +50,16 @@ export async function GET(req: Request) {
       return NextResponse.json({ pending: false, profile_id: null });
     }
 
-    // Profile unclaimed => pending true
-    return NextResponse.json({ pending: true, profile_id: invite.profile_id });
+    // Profile unclaimed => pending true, include preview for modal display
+    return NextResponse.json({
+      pending: true,
+      profile_id: invite.profile_id,
+      profile_preview: {
+        name: prof?.name ?? null,
+        email: prof?.email ?? null,
+        created_at: prof?.created_at ?? null,
+      },
+    });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Server error" }, { status: 500 });
   }
