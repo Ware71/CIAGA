@@ -119,4 +119,30 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  /* ===== Native app feel ===== */
+
+  /* Prevent overscroll bounce / rubber-banding / pull-to-refresh */
+  html, body {
+    overscroll-behavior: none;
+  }
+
+  /* Prevent double-tap-to-zoom; keeps normal scroll + single-tap */
+  html {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Prevent iOS long-press callout & text selection on static content */
+  body {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Re-enable text selection inside form fields */
+  input, textarea, [contenteditable="true"] {
+    -webkit-user-select: text;
+    user-select: text;
+  }
 }

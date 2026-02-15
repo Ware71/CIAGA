@@ -45,8 +45,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, profile_id: existing.id, existed: true });
     }
 
-    // 2.5) Check for pending invite before creating new profile
-    const { data: invite, error: invErr } = await supabaseAdmin
+    // 2.5) Check for pending invite — do NOT auto-claim; return flag so client can present choice
+    // If X-Force-Create header is set, the user explicitly chose "Create new profile" — skip invite check
+    const forceCreate = req.headers.get("x-force-create") === "true";
+
+    const { data: invite } = !forceCreate ? await supabaseAdmin
       .from("invites")
       .select("id, profile_id")
       .eq("email", email)
@@ -54,62 +57,27 @@ export async function POST(req: Request) {
       .is("revoked_at", null)
       .order("created_at", { ascending: false })
       .limit(1)
-      .maybeSingle();
+      .maybeSingle() : { data: null };
 
     if (invite?.profile_id) {
-      // Check if invited profile is still unclaimed
-      const { data: invitedProfile, error: profErr } = await supabaseAdmin
+      const { data: invitedProfile } = await supabaseAdmin
         .from("profiles")
-        .select("id, owner_user_id, name, email, avatar_url")
+        .select("id, owner_user_id, name, email, created_at")
         .eq("id", invite.profile_id)
         .maybeSingle();
 
-      if (!profErr && invitedProfile && !invitedProfile.owner_user_id) {
-        // Claim the invited profile
-        const updatePayload: Record<string, any> = {
-          owner_user_id: user.id,
-        };
-
-        // Fill blanks only (don't overwrite admin-set values)
-        if (!invitedProfile.email) updatePayload.email = email;
-        if (!invitedProfile.name) updatePayload.name = displayName;
-        if (!invitedProfile.avatar_url) updatePayload.avatar_url = avatar_url;
-
-        const { error: claimErr } = await supabaseAdmin
-          .from("profiles")
-          .update(updatePayload)
-          .eq("id", invite.profile_id)
-          .is("owner_user_id", null);
-
-        if (claimErr) {
-          console.warn("Failed to claim invited profile:", claimErr);
-          // Fall through to create new profile
-        } else {
-          // Mark invite as accepted
-          await supabaseAdmin
-            .from("invites")
-            .update({
-              accepted_at: new Date().toISOString(),
-              accepted_by: user.id,
-            })
-            .eq("id", invite.id);
-
-          // Revoke other active invites for this email
-          await supabaseAdmin
-            .from("invites")
-            .update({ revoked_at: new Date().toISOString() })
-            .eq("email", email)
-            .neq("id", invite.id)
-            .is("accepted_at", null)
-            .is("revoked_at", null);
-
-          return NextResponse.json({
-            ok: true,
-            profile_id: invite.profile_id,
-            existed: true,
-            claimed_invite: true,
-          });
-        }
+      if (invitedProfile && !invitedProfile.owner_user_id) {
+        // Profile is unclaimed — tell the client so it can show the claim-or-create modal
+        return NextResponse.json({
+          ok: false,
+          pending_invite: true,
+          profile_id: invitedProfile.id,
+          profile_preview: {
+            name: invitedProfile.name,
+            email: invitedProfile.email,
+            created_at: invitedProfile.created_at,
+          },
+        });
       }
     }
 

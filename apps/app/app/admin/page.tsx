@@ -249,13 +249,13 @@ export default function AdminPage() {
 
           <div className="grid gap-3 sm:grid-cols-2">
             <input
-              className="w-full rounded-xl bg-black/30 border border-emerald-900/60 px-3 py-2 text-sm outline-none"
+              className="w-full rounded-xl bg-black/30 border border-emerald-900/60 px-3 py-2 text-base outline-none"
               placeholder="Name (optional)"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
             />
             <input
-              className="w-full rounded-xl bg-black/30 border border-emerald-900/60 px-3 py-2 text-sm outline-none"
+              className="w-full rounded-xl bg-black/30 border border-emerald-900/60 px-3 py-2 text-base outline-none"
               placeholder="Email (optional)"
               value={newEmail}
               onChange={(e) => setNewEmail(e.target.value)}
@@ -314,7 +314,7 @@ export default function AdminPage() {
 
                     <div className="flex gap-2">
                       <input
-                        className="w-full sm:w-64 rounded-xl bg-black/30 border border-emerald-900/60 px-3 py-2 text-sm outline-none"
+                        className="w-full sm:w-64 rounded-xl bg-black/30 border border-emerald-900/60 px-3 py-2 text-base outline-none"
                         placeholder="Invite email"
                         value={inviteEmailByProfile[p.id] ?? ""}
                         onChange={(e) =>

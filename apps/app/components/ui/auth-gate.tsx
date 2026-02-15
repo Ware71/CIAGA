@@ -1,53 +1,45 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
-import { Auth } from '@supabase/auth-ui-react';
-import { ThemeSupa } from '@supabase/auth-ui-shared';
 
 // Renders children only when the user is signed in.
-// Otherwise shows the email login UI right on the home page.
+// Otherwise redirects to the custom auth page.
 export default function AuthGate({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [signedIn, setSignedIn] = useState(false);
 
   useEffect(() => {
-    // On first load
     supabase.auth.getSession().then(({ data }) => {
-      setSignedIn(!!data.session);
+      if (!data.session) {
+        router.replace('/auth');
+        return;
+      }
+      setSignedIn(true);
       setLoading(false);
     });
 
-    // React to sign-in / sign-out
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSignedIn(!!session);
+      if (!session) {
+        setSignedIn(false);
+        router.replace('/auth');
+        return;
+      }
+      setSignedIn(true);
+      setLoading(false);
     });
 
     return () => {
       sub.subscription.unsubscribe();
     };
-  }, []);
+  }, [router]);
 
-  if (loading) {
+  if (loading || !signedIn) {
     return (
-      <div className="min-h-screen grid place-items-center">
-        <div className="h-8 w-8 rounded-full bg-muted animate-pulse" />
-      </div>
-    );
-  }
-
-  if (!signedIn) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="w-full max-w-md rounded-2xl border bg-card p-6 shadow-sm">
-          <h1 className="mb-4 text-xl font-semibold text-center">Sign in to CIAGA</h1>
-          <Auth
-            supabaseClient={supabase}
-            appearance={{ theme: ThemeSupa }}
-            providers={[]}                 // email-only
-            onlyThirdPartyProviders={false}
-          />
-        </div>
+      <div className="min-h-screen grid place-items-center bg-[#042713]">
+        <div className="h-8 w-8 rounded-full bg-emerald-900/40 animate-pulse" />
       </div>
     );
   }

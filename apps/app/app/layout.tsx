@@ -26,10 +26,14 @@ export const metadata: Metadata = {
 };
 
 // ---------
-// VIEWPORT (iOS + Android UI bar color)
+// VIEWPORT (iOS + Android UI bar color, disable zoom for native feel)
 // ---------
 export const viewport: Viewport = {
-  themeColor: "#042713",               // Green status bar
+  themeColor: "#042713",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({
