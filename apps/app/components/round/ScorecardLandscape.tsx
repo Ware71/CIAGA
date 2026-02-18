@@ -3,6 +3,8 @@
 import React from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import type { Participant, Hole } from "@/lib/rounds/hooks/useRoundDetail";
+import type { FormatScoreView, FormatDisplayData } from "@/lib/rounds/formatScoring";
+import { strokesReceivedOnHole } from "@/lib/rounds/handicapUtils";
 
 type LandscapeCol =
   | { kind: "hole"; hole: Hole }
@@ -24,17 +26,6 @@ function formatToPar(toPar: number | null) {
   if (toPar == null) return "";
   if (toPar === 0) return "E";
   return toPar > 0 ? `+${toPar}` : `${toPar}`;
-}
-
-function strokesReceivedOnHole(courseHcp: number | null | undefined, holeStrokeIndex: number | null) {
-  const hcp = typeof courseHcp === "number" && Number.isFinite(courseHcp) ? Math.max(0, Math.floor(courseHcp)) : 0;
-  const si = typeof holeStrokeIndex === "number" && Number.isFinite(holeStrokeIndex) ? holeStrokeIndex : null;
-  if (!hcp || !si) return 0;
-
-  const base = Math.floor(hcp / 18);
-  const rem = hcp % 18;
-
-  return base + (si <= rem ? 1 : 0);
 }
 
 function StrokeDots({ count }: { count: number }) {
@@ -67,7 +58,8 @@ export default function ScorecardLandscape(props: {
   isFinished: boolean;
   activeHole: number;
   savingKey: string | null;
-  scoreView: "gross" | "net";
+  scoreView: FormatScoreView;
+  formatDisplay: FormatDisplayData | null;
 
   metaSums: {
     parOut: number | null;
@@ -97,6 +89,7 @@ export default function ScorecardLandscape(props: {
     activeHole,
     savingKey,
     scoreView,
+    formatDisplay,
     metaSums,
     totals,
     displayedScoreFor,
@@ -203,12 +196,26 @@ export default function ScorecardLandscape(props: {
                           ? strokesReceivedOnHole(p.course_handicap ?? null, h.stroke_index ?? null)
                           : 0;
 
+                      const fmtHint =
+                        scoreView === "format" && formatDisplay
+                          ? formatDisplay.holeResults[key]?.cssHint
+                          : undefined;
+
+                      const fmtColor =
+                        fmtHint === "positive" ? "text-green-300" :
+                        fmtHint === "won" ? "text-green-300" :
+                        fmtHint === "negative" ? "text-emerald-100/50" :
+                        fmtHint === "lost" ? "text-red-300/80" :
+                        fmtHint === "halved" ? "text-emerald-100/70" :
+                        "";
+
                       return (
                         <button
                           key={`cell-hole-${idx}-${key}`}
                           className={`h-10 border-r border-emerald-900/60 flex flex-col items-center justify-center font-semibold tabular-nums text-[13px]
                             ${isActive ? "bg-[#042713] text-[#f5e6b0]" : "bg-[#0b3b21]/20 text-emerald-50"}
                             ${disabled ? "opacity-80 cursor-default" : "hover:bg-emerald-900/20"}
+                            ${fmtColor}
                           `}
                           onClick={() => onOpenEntry(p.id, h.hole_number)}
                           disabled={disabled}

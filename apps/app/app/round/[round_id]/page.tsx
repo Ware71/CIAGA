@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { finishRound as finishRoundApi } from "@/lib/rounds/api";
 import { useRoundDetail } from "@/lib/rounds/hooks/useRoundDetail";
 import type { Participant, Hole, HoleState } from "@/lib/rounds/hooks/useRoundDetail";
+import { strokesReceivedOnHole, netFromGross } from "@/lib/rounds/handicapUtils";
+import { computeFormatDisplay, type FormatScoreView, type FormatDisplayData } from "@/lib/rounds/formatScoring";
 
 import ConfirmSheet from "@/components/round/ConfirmSheet";
 import ScoreEntrySheet from "@/components/round/ScoreEntrySheet";
@@ -157,21 +159,6 @@ function sumMeta(holes: Hole[]) {
   };
 }
 
-function strokesReceivedOnHole(courseHcp: number | null | undefined, holeStrokeIndex: number | null) {
-  const hcp = typeof courseHcp === "number" && Number.isFinite(courseHcp) ? Math.max(0, Math.floor(courseHcp)) : 0;
-  const si = typeof holeStrokeIndex === "number" && Number.isFinite(holeStrokeIndex) ? holeStrokeIndex : null;
-  if (!hcp || !si) return 0;
-
-  const base = Math.floor(hcp / 18);
-  const rem = hcp % 18;
-
-  return base + (si <= rem ? 1 : 0);
-}
-
-function netFromGross(gross: number, recv: number) {
-  return Math.max(1, gross - recv);
-}
-
 function stableNumber(n: any): number | null {
   return typeof n === "number" && Number.isFinite(n) ? n : null;
 }
@@ -231,7 +218,10 @@ export default function RoundDetailPage() {
     setStatus,
     courseLabel,
     playedOnIso,
+    formatType,
+    formatConfig,
     participants,
+    teams,
     teeSnapshotId,
     holes,
     scoresByKey,
@@ -240,7 +230,7 @@ export default function RoundDetailPage() {
     canScore,
   } = useRoundDetail(roundId);
 
-  const [scoreView, setScoreView] = useState<"gross" | "net">("gross");
+  const [scoreView, setScoreView] = useState<FormatScoreView>("gross");
 
   const [activeHole, setActiveHole] = useState<number>(1);
   const [savingKey, setSavingKey] = useState<string | null>(null);
@@ -300,12 +290,21 @@ export default function RoundDetailPage() {
     return prof?.avatar_url || null;
   }, []);
 
+  const formatDisplay = useMemo<FormatDisplayData | null>(() => {
+    return computeFormatDisplay(formatType, formatConfig, participants, holesList, scoresByKey, holeStatesByKey, teams);
+  }, [formatType, formatConfig, participants, holesList, scoresByKey, holeStatesByKey, teams]);
+
   // Displayed score:
   // - not_started => null (render blank)
   // - picked_up   => "PU"
-  // - completed   => number (gross or net)
+  // - completed   => number (gross or net) or format value
   const displayedScoreFor = useCallback(
     (participantId: string, holeNumber: number): string | number | null => {
+      if (scoreView === "format" && formatDisplay) {
+        const r = formatDisplay.holeResults[`${participantId}:${holeNumber}`];
+        return r?.displayValue ?? null;
+      }
+
       const st = holeStateFor(participantId, holeNumber);
       if (st === "not_started") return null;
       if (st === "picked_up") return "PU";
@@ -320,10 +319,27 @@ export default function RoundDetailPage() {
       const recv = strokesReceivedOnHole(p?.course_handicap ?? null, h?.stroke_index ?? null);
       return netFromGross(gross, recv);
     },
-    [holeStateFor, scoreFor, scoreView, participants, holesList]
+    [holeStateFor, scoreFor, scoreView, participants, holesList, formatDisplay]
   );
 
   const totals = useMemo(() => {
+    // Format view uses its own summaries
+    if (scoreView === "format" && formatDisplay) {
+      const byId: Record<string, { out: number; in: number; total: number }> = {};
+      for (const s of formatDisplay.summaries) {
+        byId[s.participantId] = {
+          out: typeof s.out === "number" ? s.out : 0,
+          in: typeof s.inn === "number" ? s.inn : 0,
+          total: typeof s.total === "number" ? s.total : 0,
+        };
+      }
+      // Fill missing participants with zeros
+      for (const p of participants) {
+        if (!byId[p.id]) byId[p.id] = { out: 0, in: 0, total: 0 };
+      }
+      return byId;
+    }
+
     const byParticipant: Record<string, { out: number; in: number; total: number }> = {};
     for (const p of participants) {
       let out = 0,
@@ -342,7 +358,7 @@ export default function RoundDetailPage() {
       byParticipant[p.id] = { out, in: inn, total };
     }
     return byParticipant;
-  }, [participants, holesList, displayedScoreFor]);
+  }, [participants, holesList, displayedScoreFor, scoreView, formatDisplay]);
 
   const toParTotalByParticipant = useMemo(() => {
     const map: Record<string, number | null> = {};
@@ -375,9 +391,13 @@ export default function RoundDetailPage() {
 
   const finalRows = useMemo(() => {
     const rows = buildFinalRows(participants, totals, toParTotalByParticipant, getParticipantLabel, getParticipantAvatar);
-    rows.sort((a, b) => a.total - b.total || a.name.localeCompare(b.name));
+    if (formatDisplay?.higherIsBetter) {
+      rows.sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+    } else {
+      rows.sort((a, b) => a.total - b.total || a.name.localeCompare(b.name));
+    }
     return rows;
-  }, [participants, totals, toParTotalByParticipant, getParticipantLabel, getParticipantAvatar]);
+  }, [participants, totals, toParTotalByParticipant, getParticipantLabel, getParticipantAvatar, formatDisplay]);
 
   const winner = finalRows[0] ?? null;
 
@@ -624,26 +644,19 @@ export default function RoundDetailPage() {
 
           <div className="flex flex-col items-end gap-1 shrink-0">
             <div className="rounded-xl border border-emerald-900/70 bg-[#0b3b21]/50 p-1 flex">
-              <button
-                className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg ${
-                  scoreView === "gross"
-                    ? "bg-[#f5e6b0] text-[#042713]"
-                    : "text-emerald-100/80 hover:bg-emerald-900/20"
-                }`}
-                onClick={() => setScoreView("gross")}
-              >
-                Gross
-              </button>
-              <button
-                className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg ${
-                  scoreView === "net"
-                    ? "bg-[#f5e6b0] text-[#042713]"
-                    : "text-emerald-100/80 hover:bg-emerald-900/20"
-                }`}
-                onClick={() => setScoreView("net")}
-              >
-                Net
-              </button>
+              {(["gross", "net", ...(formatDisplay ? ["format"] : [])] as FormatScoreView[]).map((v) => (
+                <button
+                  key={v}
+                  className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg ${
+                    scoreView === v
+                      ? "bg-[#f5e6b0] text-[#042713]"
+                      : "text-emerald-100/80 hover:bg-emerald-900/20"
+                  }`}
+                  onClick={() => setScoreView(v)}
+                >
+                  {v === "format" ? formatDisplay!.tabLabel : v === "gross" ? "Gross" : "Net"}
+                </button>
+              ))}
             </div>
 
             {canFinish ? (
@@ -683,7 +696,7 @@ export default function RoundDetailPage() {
           </div>
         ) : null}
 
-        {!needsSetup && isFinished && winner ? <FinalResultsPanel winner={winner} finalRows={finalRows} /> : null}
+        {!needsSetup && isFinished && winner ? <FinalResultsPanel winner={winner} finalRows={finalRows} formatDisplay={formatDisplay} /> : null}
 
         {!needsSetup ? (
           isPortrait ? (
@@ -697,6 +710,7 @@ export default function RoundDetailPage() {
               activeHole={activeHole}
               savingKey={savingKey}
               scoreView={scoreView}
+              formatDisplay={formatDisplay}
               metaSums={metaSums}
               totals={totals}
               displayedScoreFor={displayedScoreFor}
@@ -715,6 +729,7 @@ export default function RoundDetailPage() {
               activeHole={activeHole}
               savingKey={savingKey}
               scoreView={scoreView}
+              formatDisplay={formatDisplay}
               metaSums={metaSums}
               totals={totals}
               displayedScoreFor={displayedScoreFor}

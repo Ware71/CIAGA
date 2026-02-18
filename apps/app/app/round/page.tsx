@@ -11,10 +11,11 @@ import { Button } from "@/components/ui/button";
 type RoundRow = {
   id: string;
   name: string | null;
-  status: "draft" | "live" | "finished";
+  status: "draft" | "scheduled" | "starting" | "live" | "finished";
   started_at: string | null;
   created_at: string;
   course_id: string | null;
+  scheduled_at: string | null;
   courses?: { name: string | null } | null;
 };
 
@@ -153,7 +154,7 @@ function SwipeToDeleteRow(props: {
       locked.current = "none";
     }
 
-    const showRail = enabled && (open || dragging || x < 0);
+    const showRail = enabled && (open || x < -10);
 
     return (
       <div className="relative rounded-2xl overflow-hidden">
@@ -212,6 +213,7 @@ export default function RoundHomePage() {
 
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [creatingRound, setCreatingRound] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -228,7 +230,7 @@ export default function RoundHomePage() {
 
       const { data, error } = await supabase
         .from("round_participants")
-        .select("id, role, round:rounds(id,name,status,started_at,created_at,course_id, courses(name))")
+        .select("id, role, round:rounds!round_id(id,name,status,started_at,created_at,course_id,scheduled_at, courses(name))")
         .eq("profile_id", myProfileId)
         .not("rounds.status", "in", "(finished)") // Exclude finished rounds
         .order("created_at", { ascending: false, referencedTable: "rounds" as any });
@@ -255,6 +257,42 @@ export default function RoundHomePage() {
       .filter(Boolean)
       .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
   }, [rows]);
+
+  async function handleCreateNewRound() {
+    setCreatingRound(true);
+    setErr(null);
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("Not authenticated");
+
+      const res = await fetch("/api/rounds/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          // Create round without course/tee - user will select in setup
+          course_id: null,
+          pending_tee_box_id: null,
+          format_type: "strokeplay",
+          default_playing_handicap_mode: "allowance_pct",
+          default_playing_handicap_value: 100,
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Failed to create round");
+
+      // Navigate directly to setup
+      router.push(`/round/${json.round_id}/setup`);
+    } catch (e: any) {
+      setErr(e?.message || "Failed to create round");
+      setCreatingRound(false);
+    }
+  }
 
   async function deleteDraft(roundId: string) {
     setErr(null);
@@ -310,9 +348,10 @@ export default function RoundHomePage() {
 
         <Button
           className="w-full rounded-2xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c]"
-          onClick={() => router.push("/round/new")}
+          onClick={handleCreateNewRound}
+          disabled={creatingRound}
         >
-          + New round
+          {creatingRound ? "Creating..." : "+ New round"}
         </Button>
 
         {loading ? (
@@ -330,12 +369,14 @@ export default function RoundHomePage() {
           <div className="space-y-3">
             {rounds.map((r) => {
               const isDraft = r.status === "draft";
+              const isScheduled = r.status === "scheduled";
+              const isDeletable = isDraft || isScheduled;
               const isDeleting = deletingId === r.id;
 
               const card = (
                 <Link
                   key={r.id}
-                  href={`/round/${r.id}`}
+                  href={(isDraft || isScheduled) ? `/round/${r.id}/setup` : `/round/${r.id}`}
                   className="block rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 hover:bg-[#0b3b21]/90"
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -345,10 +386,21 @@ export default function RoundHomePage() {
                       </div>
                       <div className="text-[11px] text-emerald-100/70">
                         {(r.courses?.name && r.name ? r.courses?.name : null) ||
-                          (r.status === "live" ? "Live" : r.status === "finished" ? "Finished" : "Draft")}
+                          (r.status === "live" ? "Live" : r.status === "finished" ? "Finished" : r.status === "scheduled" ? "Scheduled" : "Draft")}
                       </div>
-                      {isDraft ? (
-                        <div className="mt-1 text-[10px] text-emerald-100/50">Swipe left to delete draft</div>
+                      {r.scheduled_at ? (
+                        <div className="text-[10px] text-emerald-100/50 mt-0.5">
+                          {new Date(r.scheduled_at).toLocaleString(undefined, {
+                            weekday: "short",
+                            month: "short",
+                            day: "numeric",
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })}
+                        </div>
+                      ) : null}
+                      {isDeletable ? (
+                        <div className="mt-1 text-[10px] text-emerald-100/50">Swipe left to delete {isScheduled ? "scheduled round" : "draft"}</div>
                       ) : null}
                     </div>
                     <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/70">{r.status}</div>
@@ -356,11 +408,11 @@ export default function RoundHomePage() {
                 </Link>
               );
 
-              // Only drafts get swipe delete
+              // Drafts and scheduled rounds get swipe delete
               return (
                 <SwipeToDeleteRow
                   key={r.id}
-                  enabled={isDraft}
+                  enabled={isDeletable}
                   deleting={isDeleting}
                   onDelete={() => setConfirmDeleteId(r.id)}
                 >
@@ -371,16 +423,22 @@ export default function RoundHomePage() {
           </div>
         )}
 
-        {confirmDeleteId ? (
-          <ConfirmSheet
-            title="Delete draft round?"
-            subtitle="This removes the draft and any related data from the database."
-            confirmLabel={deletingId === confirmDeleteId ? "Deleting…" : "Delete"}
-            confirmDisabled={deletingId === confirmDeleteId}
-            onClose={() => setConfirmDeleteId(null)}
-            onConfirm={() => deleteDraft(confirmDeleteId)}
-          />
-        ) : null}
+        {confirmDeleteId ? (() => {
+          const round = rounds.find((r) => r.id === confirmDeleteId);
+          const isScheduled = round?.status === "scheduled";
+          return (
+            <ConfirmSheet
+              title={isScheduled ? "Delete scheduled round?" : "Delete draft round?"}
+              subtitle={isScheduled
+                ? "This removes the scheduled round and any related data from the database."
+                : "This removes the draft and any related data from the database."}
+              confirmLabel={deletingId === confirmDeleteId ? "Deleting…" : "Delete"}
+              confirmDisabled={deletingId === confirmDeleteId}
+              onClose={() => setConfirmDeleteId(null)}
+              onConfirm={() => deleteDraft(confirmDeleteId)}
+            />
+          );
+        })() : null}
       </div>
     </div>
   );

@@ -207,6 +207,13 @@ export async function POST(req: Request) {
 
     if (assignErr) return NextResponse.json({ error: assignErr.message }, { status: 500 });
 
+    // Persist resolved handicaps (snapshot at start to prevent mid-round drift)
+    const { error: handicapErr } = await supabaseAdmin.rpc("ciaga_persist_playing_handicaps", {
+      p_round_id: round.id,
+    });
+
+    if (handicapErr) return NextResponse.json({ error: handicapErr.message }, { status: 500 });
+
     // Finalize: mark live (idempotent)
     const { error: updErr } = await supabaseAdmin
       .from("rounds")

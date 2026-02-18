@@ -2,6 +2,7 @@
 
 import React from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import type { FormatDisplayData } from "@/lib/rounds/formatScoring";
 
 type FinalRow = {
   participantId: string;
@@ -29,8 +30,10 @@ function formatToPar(toPar: number | null) {
 export default function FinalResultsPanel(props: {
   winner: FinalRow;
   finalRows: FinalRow[];
+  formatDisplay?: FormatDisplayData | null;
 }) {
-  const { winner, finalRows } = props;
+  const { winner, finalRows, formatDisplay } = props;
+  const scoreLabel = formatDisplay?.higherIsBetter ? "Points" : "Total";
 
   return (
     <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 overflow-hidden">
@@ -60,7 +63,7 @@ export default function FinalResultsPanel(props: {
           </div>
 
           <div className="shrink-0 text-right">
-            <div className="text-[10px] uppercase tracking-[0.14em] text-emerald-100/70">Total</div>
+            <div className="text-[10px] uppercase tracking-[0.14em] text-emerald-100/70">{scoreLabel}</div>
             <div className="text-2xl font-extrabold tabular-nums text-[#f5e6b0]">
               {winner.total}{" "}
               <span className="text-[12px] font-bold text-emerald-100/80 ml-1">
@@ -97,7 +100,7 @@ export default function FinalResultsPanel(props: {
               </div>
 
               <div className="shrink-0 text-right">
-                <div className="text-[10px] uppercase tracking-[0.14em] text-emerald-100/70">Total</div>
+                <div className="text-[10px] uppercase tracking-[0.14em] text-emerald-100/70">{scoreLabel}</div>
                 <div className="text-xl font-extrabold tabular-nums text-[#f5e6b0]">
                   {r.total}{" "}
                   <span className="text-[12px] font-bold text-emerald-100/80 ml-1">

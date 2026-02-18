@@ -36,7 +36,7 @@ function wrapLng(lng: number) {
  * - avoids dropping pin after drag
  * - centers on initial / fallback / geolocation
  */
-export default function MapSpoofPicker({
+export default function MapLocationPicker({
   initial,
   fallbackCenter,
   onConfirm,
@@ -309,7 +309,7 @@ export default function MapSpoofPicker({
         <div className="flex items-center justify-between px-4 py-2 border-b">
           <div className="font-semibold text-sm flex items-center gap-2">
             <MapPin size={16} />
-            Pick Nearby Location
+            Pick Location on Map
           </div>
           <button onClick={onClose} aria-label="Close">
             <X size={18} />

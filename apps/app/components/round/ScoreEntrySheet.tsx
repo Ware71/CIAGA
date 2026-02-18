@@ -95,7 +95,7 @@ export default function ScoreEntrySheet(props: {
     <div className="fixed inset-0 z-50">
       <button className="absolute inset-0 bg-black/60" onClick={onClose} aria-label="Close" />
 
-      <div className="absolute left-0 right-0 bottom-0 px-3 pb-[env(safe-area-inset-bottom)]">
+      <div className="absolute left-0 right-0 bottom-0 px-3 pb-[env(safe-area-inset-bottom)] max-h-[100dvh] overflow-y-auto">
         <div className="mx-auto w-full max-w-[520px] rounded-t-3xl border border-emerald-900/70 bg-[#061f12] shadow-2xl overflow-hidden">
           <div className="p-3 border-b border-emerald-900/60 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5 min-w-0">

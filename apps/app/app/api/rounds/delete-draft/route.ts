@@ -38,8 +38,8 @@ export async function POST(req: Request) {
       .single();
 
     if (roundErr) return NextResponse.json({ error: roundErr.message }, { status: 500 });
-    if (round.status !== "draft") {
-      return NextResponse.json({ error: "Only draft rounds can be deleted" }, { status: 400 });
+    if (round.status !== "draft" && round.status !== "scheduled") {
+      return NextResponse.json({ error: "Only draft or scheduled rounds can be deleted" }, { status: 400 });
     }
 
     const roundId = body.round_id;
