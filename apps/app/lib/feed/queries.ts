@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { parseFeedPayload } from "@/lib/feed/schemas";
 import type { FeedItemVM, FeedPageResponse } from "@/lib/feed/types";
+import { strokesReceivedOnHole } from "@/lib/rounds/handicapUtils";
 
 /**
  * NOTE:
@@ -380,15 +381,28 @@ export async function getLiveRoundsAsFeedItems(params: { viewerProfileId: string
   const liveRoundIds = (rounds ?? []).map((r: any) => r.id).filter(Boolean);
   if (!liveRoundIds.length) return [];
 
-  const { data: snaps, error: sErr } = await supabaseAdmin
-    .from("round_course_snapshots")
-    .select("round_id, course_name, created_at")
-    .in("round_id", liveRoundIds);
+  // Parallel: course snapshots, all participants with tee info, current scores
+  const [snapRes, rpsRes, scoresRes] = await Promise.all([
+    supabaseAdmin
+      .from("round_course_snapshots")
+      .select("round_id, course_name, created_at")
+      .in("round_id", liveRoundIds),
+    supabaseAdmin
+      .from("round_participants")
+      .select("id, round_id, profile_id, display_name, tee_snapshot_id, handicap_index")
+      .in("round_id", liveRoundIds),
+    supabaseAdmin
+      .from("round_current_scores")
+      .select("participant_id, hole_number, strokes")
+      .in("round_id", liveRoundIds),
+  ]);
 
-  if (sErr) throw sErr;
+  if (snapRes.error) throw snapRes.error;
+  if (rpsRes.error) throw rpsRes.error;
+  if (scoresRes.error) throw scoresRes.error;
 
   const snapByRound = new Map<string, any>();
-  for (const s of snaps ?? []) {
+  for (const s of snapRes.data ?? []) {
     const rid = (s as any).round_id as string;
     const existing = snapByRound.get(rid);
     if (!existing || String((s as any).created_at) > String(existing.created_at)) {
@@ -396,46 +410,128 @@ export async function getLiveRoundsAsFeedItems(params: { viewerProfileId: string
     }
   }
 
-  const { data: rps, error: rpErr } = await supabaseAdmin
-    .from("round_participants")
-    .select("round_id, profile_id, display_name")
-    .in("round_id", liveRoundIds);
+  const rps = rpsRes.data ?? [];
+  const profileIds = Array.from(new Set(rps.map((x: any) => x.profile_id).filter(Boolean)));
+  const teeSnapIds = Array.from(new Set(rps.map((x: any) => x.tee_snapshot_id).filter(Boolean)));
 
-  if (rpErr) throw rpErr;
+  // Parallel: profiles, tee snapshots (for slope/rating/par)
+  const [profRes, teeRes] = await Promise.all([
+    supabaseAdmin
+      .from("profiles")
+      .select("id, name, avatar_url")
+      .in("id", profileIds.length ? profileIds : [viewerProfileId]),
+    teeSnapIds.length
+      ? supabaseAdmin
+          .from("round_tee_snapshots")
+          .select("id, par_total, rating, slope")
+          .in("id", teeSnapIds)
+      : Promise.resolve({ data: [] as any[], error: null }),
+  ]);
 
-  const profileIds = Array.from(new Set((rps ?? []).map((x: any) => x.profile_id).filter(Boolean)));
-
-  const { data: profiles, error: prErr } = await supabaseAdmin
-    .from("profiles")
-    .select("id, name, avatar_url")
-    .in("id", profileIds.length ? profileIds : [viewerProfileId]);
-
-  if (prErr) throw prErr;
+  if (profRes.error) throw profRes.error;
+  if (teeRes.error) throw teeRes.error;
 
   const profMap = new Map<string, any>();
-  for (const p of profiles ?? []) profMap.set((p as any).id, p);
+  for (const p of profRes.data ?? []) profMap.set((p as any).id, p);
+
+  const teeSnapMap = new Map<string, any>();
+  for (const t of teeRes.data ?? []) teeSnapMap.set((t as any).id, t);
+
+  // Hole snapshots for stroke_index and par per hole
+  const holeSnapRes = teeSnapIds.length
+    ? await supabaseAdmin
+        .from("round_hole_snapshots")
+        .select("round_tee_snapshot_id, hole_number, par, stroke_index")
+        .in("round_tee_snapshot_id", teeSnapIds)
+    : { data: [] as any[], error: null };
+
+  if (holeSnapRes.error) throw holeSnapRes.error;
+
+  // Map hole data: teeSnapId → Map<holeNumber, {par, stroke_index}>
+  const holesByTeeSnap = new Map<string, Map<number, { par: number | null; stroke_index: number | null }>>();
+  for (const h of holeSnapRes.data ?? []) {
+    const tid = (h as any).round_tee_snapshot_id as string;
+    if (!holesByTeeSnap.has(tid)) holesByTeeSnap.set(tid, new Map());
+    holesByTeeSnap.get(tid)!.set((h as any).hole_number as number, {
+      par: (h as any).par ?? null,
+      stroke_index: (h as any).stroke_index ?? null,
+    });
+  }
+
+  // Map scores: participantId → Map<holeNumber, strokes>
+  const scoresByParticipant = new Map<string, Map<number, number>>();
+  for (const s of scoresRes.data ?? []) {
+    const pid = (s as any).participant_id as string;
+    const hn = (s as any).hole_number as number;
+    const strokes = (s as any).strokes;
+    if (!pid || !hn || typeof strokes !== "number") continue;
+    if (!scoresByParticipant.has(pid)) scoresByParticipant.set(pid, new Map());
+    scoresByParticipant.get(pid)!.set(hn, strokes);
+  }
 
   return (rounds ?? []).map((r: any) => {
     const rid = r.id as string;
     const snap = snapByRound.get(rid);
     const course_name = snap?.course_name ?? "Live round";
 
-    const players =
-      (rps ?? [])
-        .filter((x: any) => x.round_id === rid)
-        .map((rp: any) => {
-          const prof = rp.profile_id ? profMap.get(rp.profile_id) : null;
-          return {
-            profile_id: rp.profile_id ?? null,
-            display_name:
-              (prof?.name && String(prof.name)) ||
-              (typeof rp.display_name === "string" && rp.display_name) ||
-              "Player",
-            avatar_url: prof?.avatar_url ?? null,
-            gross_total: null,
-            net_total: null,
-          };
-        }) ?? [];
+    const players = rps
+      .filter((x: any) => x.round_id === rid)
+      .map((rp: any) => {
+        const prof = rp.profile_id ? profMap.get(rp.profile_id) : null;
+        const teeSnap = rp.tee_snapshot_id ? teeSnapMap.get(rp.tee_snapshot_id) : null;
+        const holes = rp.tee_snapshot_id ? holesByTeeSnap.get(rp.tee_snapshot_id) : null;
+        const scoreMap = scoresByParticipant.get(rp.id);
+
+        // Calculate course handicap from handicap_index × slope/113 + (rating - par)
+        const hi = rp.handicap_index != null ? Number(rp.handicap_index) : null;
+        const slope = teeSnap?.slope != null ? Number(teeSnap.slope) : null;
+        const rating = teeSnap?.rating != null ? Number(teeSnap.rating) : null;
+        const parTot = teeSnap?.par_total != null ? Number(teeSnap.par_total) : null;
+        const courseHcp =
+          hi != null && slope != null && rating != null && parTot != null
+            ? Math.round(hi * (slope / 113) + (rating - parTot))
+            : null;
+
+        // Sum scores over completed holes only
+        let grossTotal = 0;
+        let netAdjustment = 0;
+        let holesCompleted = 0;
+        let parPlayed = 0;
+
+        if (scoreMap) {
+          for (const [holeNum, strokes] of scoreMap) {
+            grossTotal += strokes;
+            holesCompleted++;
+            const hole = holes?.get(holeNum);
+            if (hole?.par != null) parPlayed += hole.par;
+            if (courseHcp != null) {
+              netAdjustment += strokesReceivedOnHole(courseHcp, hole?.stroke_index ?? null);
+            }
+          }
+        }
+
+        const hasScores = holesCompleted > 0;
+        const gross_total = hasScores ? grossTotal : null;
+        const net_total = hasScores && courseHcp != null ? grossTotal - netAdjustment : null;
+        const net_to_par = net_total != null && parPlayed > 0 ? net_total - parPlayed : null;
+        const par_total = hasScores && parPlayed > 0 ? parPlayed : null;
+
+        const name =
+          (prof?.name && String(prof.name)) ||
+          (typeof rp.display_name === "string" && rp.display_name) ||
+          "Player";
+
+        return {
+          profile_id: rp.profile_id ?? null,
+          name,
+          avatar_url: prof?.avatar_url ?? null,
+          gross_total,
+          net_total,
+          net_to_par,
+          par_total,
+          holes_completed: hasScores ? holesCompleted : null,
+        };
+      });
 
     return {
       id: `live:${rid}`,
@@ -444,23 +540,24 @@ export async function getLiveRoundsAsFeedItems(params: { viewerProfileId: string
       created_at: r.started_at ?? new Date().toISOString(),
       actor: null,
       subject: players?.[0]?.profile_id
-        ? { profile_id: players[0].profile_id, display_name: players[0].display_name, avatar_url: players[0].avatar_url }
+        ? { profile_id: players[0].profile_id, display_name: players[0].name, avatar_url: players[0].avatar_url }
         : null,
-      subjects: players.map((p) => ({ profile_id: p.profile_id, display_name: p.display_name, avatar_url: p.avatar_url })),
+      subjects: players.map((p: any) => ({ profile_id: p.profile_id, display_name: p.name, avatar_url: p.avatar_url })),
       audience: "followers",
       visibility: "visible",
       payload: {
         round_id: rid,
         course_name,
         tee_name: null,
-        players: players.map((p) => ({
+        players: players.map((p: any) => ({
           profile_id: p.profile_id,
-          name: p.display_name,
+          name: p.name,
           avatar_url: p.avatar_url,
-          gross_total: null,
-          net_total: null,
-          net_to_par: null,
-          par_total: null,
+          gross_total: p.gross_total,
+          net_total: p.net_total,
+          net_to_par: p.net_to_par,
+          par_total: p.par_total,
+          holes_completed: p.holes_completed,
         })),
         date: null,
       },

@@ -559,6 +559,15 @@ export default function RoundDetailPage() {
     setCustomVal("10");
   }
 
+  // After completing an action for pid on hole, advance to next unscored player or close.
+  // Excludes pid from the "missing" check since their state update may not be reflected yet.
+  function advanceAfterCompletion(pid: string, hole: number) {
+    const othersMissing = participants.filter((p) => p.id !== pid && !isHoleCompleteForPlayer(p.id, hole)).length;
+    if (othersMissing === 0) { closeEntry(); return; }
+    const nextPid = findNextUnscoredPlayerForHole(participants, pid, hole, isHoleCompleteForPlayer);
+    if (nextPid) { setEntryPid(nextPid); setEntryMode("quick"); setCustomVal("10"); } else { closeEntry(); }
+  }
+
   function openEntry(participantId: string, holeNumber: number) {
     if (!canScore || isFinished) return;
     setEntryPid(participantId);
@@ -570,24 +579,11 @@ export default function RoundDetailPage() {
 
   async function submitAndAdvance(strokes: number | null) {
     if (!entryPid || entryHole == null) return;
-
-    const ok = await setScore(entryPid, entryHole, strokes);
+    const pid = entryPid;
+    const hole = entryHole;
+    const ok = await setScore(pid, hole, strokes);
     if (!ok) return;
-
-    const missingNow = countMissingForHole(participants, entryHole, isHoleCompleteForPlayer);
-    if (missingNow === 0) {
-      closeEntry();
-      return;
-    }
-
-    const nextPid = findNextUnscoredPlayerForHole(participants, entryPid, entryHole, isHoleCompleteForPlayer);
-    if (nextPid) {
-      setEntryPid(nextPid);
-      setEntryMode("quick");
-      setCustomVal("10");
-    } else {
-      closeEntry();
-    }
+    advanceAfterCompletion(pid, hole);
   }
 
   if (loading) {
@@ -613,11 +609,11 @@ export default function RoundDetailPage() {
   return (
     <div className="min-h-screen bg-[#042713] text-slate-100 px-1.5 sm:px-2 pt-4 pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto w-full max-w-none space-y-2">
-        <header className="flex items-center justify-between gap-2">
+        <header className="flex items-center gap-2">
           <Button
             variant="ghost"
             size="sm"
-            className="px-2 text-emerald-100 hover:bg-emerald-900/30"
+            className="px-2 text-emerald-100 hover:bg-emerald-900/30 shrink-0"
             onClick={() => {
               const sp = new URLSearchParams(window.location.search);
               const from = sp.get("from");
@@ -635,40 +631,73 @@ export default function RoundDetailPage() {
             ← Back
           </Button>
 
-          <div className="text-center flex-1 px-1 min-w-0">
-            <div className="text-[15px] sm:text-base font-semibold tracking-wide text-[#f5e6b0] truncate">
-              {roundName}
-            </div>
-            <div className="text-[10px] uppercase tracking-[0.14em] text-emerald-200/70 truncate">{subtitle}</div>
-          </div>
-
-          <div className="flex flex-col items-end gap-1 shrink-0">
-            <div className="rounded-xl border border-emerald-900/70 bg-[#0b3b21]/50 p-1 flex">
-              {(["gross", "net", ...(formatDisplay ? ["format"] : [])] as FormatScoreView[]).map((v) => (
-                <button
-                  key={v}
-                  className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg ${
-                    scoreView === v
-                      ? "bg-[#f5e6b0] text-[#042713]"
-                      : "text-emerald-100/80 hover:bg-emerald-900/20"
-                  }`}
-                  onClick={() => setScoreView(v)}
-                >
-                  {v === "format" ? formatDisplay!.tabLabel : v === "gross" ? "Gross" : "Net"}
-                </button>
-              ))}
-            </div>
-
-            {canFinish ? (
-              <Button
-                size="sm"
-                className="rounded-xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c] px-3"
-                onClick={() => setFinishOpen(true)}
-              >
-                Finish
-              </Button>
-            ) : null}
-          </div>
+          {isPortrait ? (
+            <>
+              <div className="flex-1 min-w-0 px-1">
+                <div className="text-center">
+                  <div className="text-[15px] font-semibold tracking-wide text-[#f5e6b0] truncate">{roundName}</div>
+                  <div className="text-[10px] uppercase tracking-[0.14em] text-emerald-200/70 truncate">{subtitle}</div>
+                </div>
+                <div className="mt-1 flex justify-center">
+                  <div className="rounded-xl border border-emerald-900/70 bg-[#0b3b21]/50 p-1 flex">
+                    {(["gross", "net", ...(formatDisplay ? ["format"] : [])] as FormatScoreView[]).map((v) => (
+                      <button
+                        key={v}
+                        className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg ${
+                          scoreView === v ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
+                        }`}
+                        onClick={() => setScoreView(v)}
+                      >
+                        {v === "format" ? formatDisplay!.tabLabel : v === "gross" ? "Gross" : "Net"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="shrink-0">
+                {canFinish ? (
+                  <Button
+                    size="sm"
+                    className="rounded-xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c] px-3"
+                    onClick={() => setFinishOpen(true)}
+                  >
+                    Finish
+                  </Button>
+                ) : null}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="text-center flex-1 px-1 min-w-0">
+                <div className="text-[15px] font-semibold tracking-wide text-[#f5e6b0] truncate">{roundName}</div>
+                <div className="text-[10px] uppercase tracking-[0.14em] text-emerald-200/70 truncate">{subtitle}</div>
+              </div>
+              <div className="flex flex-col items-end gap-1 shrink-0">
+                {canFinish ? (
+                  <Button
+                    size="sm"
+                    className="rounded-xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c] px-3"
+                    onClick={() => setFinishOpen(true)}
+                  >
+                    Finish
+                  </Button>
+                ) : null}
+                <div className="rounded-xl border border-emerald-900/70 bg-[#0b3b21]/50 p-1 flex">
+                  {(["gross", "net", ...(formatDisplay ? ["format"] : [])] as FormatScoreView[]).map((v) => (
+                    <button
+                      key={v}
+                      className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg ${
+                        scoreView === v ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
+                      }`}
+                      onClick={() => setScoreView(v)}
+                    >
+                      {v === "format" ? formatDisplay!.tabLabel : v === "gross" ? "Gross" : "Net"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
         </header>
 
         {err ? (
@@ -766,8 +795,19 @@ export default function RoundDetailPage() {
             scoreFor={scoreFor}
             savingKey={savingKey}
             holeState={holeStateFor(entryPid, entryHole)}
-            onSetPickedUp={() => markPickedUp(entryPid, entryHole)}
-            onSetNotStarted={() => markNotStarted(entryPid, entryHole)}
+            isPortrait={isPortrait}
+            onSetPickedUp={async () => {
+              if (!entryPid || entryHole == null) return;
+              const pid = entryPid; const hole = entryHole;
+              await markPickedUp(pid, hole);
+              advanceAfterCompletion(pid, hole);
+            }}
+            onSetNotStarted={async () => {
+              if (!entryPid || entryHole == null) return;
+              const pid = entryPid; const hole = entryHole;
+              await markNotStarted(pid, hole);
+              advanceAfterCompletion(pid, hole);
+            }}
             onClose={closeEntry}
             onSubmit={submitAndAdvance}
             getParticipantLabel={getParticipantLabel}

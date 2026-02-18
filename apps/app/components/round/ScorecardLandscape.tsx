@@ -28,6 +28,31 @@ function formatToPar(toPar: number | null) {
   return toPar > 0 ? `+${toPar}` : `${toPar}`;
 }
 
+type BadgeType = "eagle" | "birdie" | "bogey" | "double" | null;
+
+function scoreBadgeType(s: string | number | null, par: number | null, scoreView: string): BadgeType {
+  if (scoreView === "format" || typeof s !== "number" || typeof par !== "number") return null;
+  const diff = s - par;
+  if (diff <= -2) return "eagle";
+  if (diff === -1) return "birdie";
+  if (diff === 1) return "bogey";
+  if (diff >= 2) return "double";
+  return null;
+}
+
+function BadgeWrap({ type, children }: { type: BadgeType; children: React.ReactNode }) {
+  if (!type) return <>{children}</>;
+  const cls =
+    type === "eagle"
+      ? "inline-flex items-center justify-center min-w-[20px] h-5 rounded-full bg-[#f5e6b0] text-[#042713] px-0.5"
+      : type === "birdie"
+      ? "inline-flex items-center justify-center min-w-[20px] h-5 rounded-full ring-1 ring-[#f5e6b0] px-0.5"
+      : type === "bogey"
+      ? "inline-flex items-center justify-center min-w-[20px] h-5 ring-1 ring-white/50 px-0.5"
+      : "inline-flex items-center justify-center min-w-[20px] h-5 bg-white/50 px-0.5";
+  return <span className={cls}>{children}</span>;
+}
+
 function StrokeDots({ count }: { count: number }) {
   const n = Math.max(0, Math.floor(count || 0));
   if (!n) return null;
@@ -209,6 +234,8 @@ export default function ScorecardLandscape(props: {
                         fmtHint === "halved" ? "text-emerald-100/70" :
                         "";
 
+                      const badge = savingKey !== key ? scoreBadgeType(s, h.par, scoreView) : null;
+
                       return (
                         <button
                           key={`cell-hole-${idx}-${key}`}
@@ -220,7 +247,9 @@ export default function ScorecardLandscape(props: {
                           onClick={() => onOpenEntry(p.id, h.hole_number)}
                           disabled={disabled}
                         >
-                          <div className="leading-none">{savingKey === key ? "…" : (s ?? "–")}</div>
+                          <BadgeWrap type={badge}>
+                            <span className="leading-none">{savingKey === key ? "…" : (s ?? "–")}</span>
+                          </BadgeWrap>
                           {scoreView === "net" && recv > 0 ? (
                             <div className="mt-1 leading-none">
                               <StrokeDots count={recv} />

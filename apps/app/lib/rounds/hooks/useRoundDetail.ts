@@ -118,20 +118,53 @@ export function useRoundDetail(roundId: string) {
       return Number.isFinite(n) ? n : null;
     };
 
-    // Fetch playing_handicap_used and team_id from round_participants (not in RPC)
+    // Fetch playing_handicap_used, team_id, and the directly-stored handicap_index from round_participants
     const rpExtras = await supabase
       .from("round_participants")
-      .select("id,playing_handicap_used,team_id")
+      .select("id,playing_handicap_used,team_id,handicap_index")
       .eq("round_id", roundId);
-    const extrasMap: Record<string, { playing_handicap_used: number | null; team_id: string | null }> = {};
+    const extrasMap: Record<string, { playing_handicap_used: number | null; team_id: string | null; handicap_index_direct: number | null }> = {};
     for (const row of (rpExtras.data ?? []) as any[]) {
       extrasMap[row.id] = {
         playing_handicap_used: toNumOrNull(row.playing_handicap_used),
         team_id: row.team_id ?? null,
+        handicap_index_direct: toNumOrNull(row.handicap_index),
       };
     }
 
-    const mappedParticipants = ((partRes.data ?? []) as any[]).map((row) => ({
+    // Fetch tee snapshot metadata so we can compute course handicap as a fallback
+    const firstTeeId = ((partRes.data ?? []) as any[]).find((r: any) => r.tee_snapshot_id)?.tee_snapshot_id ?? null;
+    let teeMeta: { rating: number; slope: number; par_total: number } | null = null;
+    if (firstTeeId) {
+      const teeMetaRes = await supabase
+        .from("round_tee_snapshots")
+        .select("rating,slope,par_total")
+        .eq("id", firstTeeId)
+        .single();
+      if (teeMetaRes.data) {
+        const { rating, slope, par_total } = teeMetaRes.data as any;
+        const r = toNumOrNull(rating), s = toNumOrNull(slope), p = toNumOrNull(par_total);
+        if (r !== null && s !== null && p !== null) teeMeta = { rating: r, slope: s, par_total: p };
+      }
+    }
+
+    const computeCH = (hi: number | null): number | null => {
+      if (hi === null || teeMeta === null) return null;
+      return Math.round(hi * (teeMeta.slope / 113) + (teeMeta.rating - teeMeta.par_total));
+    };
+
+    const mappedParticipants = ((partRes.data ?? []) as any[]).map((row) => {
+      // HI: prefer RPC "used/computed" resolved value, then direct stored value on round_participants
+      const hiResolved =
+        toNumOrNull(row.handicap_index) ??
+        toNumOrNull(row.handicap_index_computed) ??
+        toNumOrNull(extrasMap[row.id]?.handicap_index_direct);
+      // CH: prefer RPC resolved value, then compute from the resolved HI + tee snapshot
+      const chResolved =
+        toNumOrNull(row.course_handicap) ??
+        toNumOrNull(row.course_handicap_computed) ??
+        computeCH(hiResolved);
+      return {
       id: row.id,
       profile_id: row.profile_id,
       is_guest: row.is_guest,
@@ -140,9 +173,8 @@ export function useRoundDetail(roundId: string) {
       tee_snapshot_id: row.tee_snapshot_id,
       team_id: extrasMap[row.id]?.team_id ?? null,
 
-      // resolved
-      handicap_index: toNumOrNull(row.handicap_index),
-      course_handicap: toNumOrNull(row.course_handicap),
+      handicap_index: hiResolved,
+      course_handicap: chResolved,
 
       // both
       handicap_index_computed: toNumOrNull(row.handicap_index_computed),
@@ -158,7 +190,8 @@ export function useRoundDetail(roundId: string) {
         email: row.email,
         avatar_url: row.avatar_url,
       },
-    })) as Participant[];
+    };
+    }) as Participant[];
 
     setParticipants(mappedParticipants);
 

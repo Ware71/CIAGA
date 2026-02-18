@@ -103,6 +103,7 @@ export type FeedPayloadByType = {
       net_total?: number | null;
       net_to_par?: number | null;
       par_total?: number | null;
+      holes_completed?: number | null;
     }>;
 
     date?: string | null;
