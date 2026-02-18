@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { CourseSearchBar } from "@/components/course/CourseSearchBar";
 import { useLocationSearch } from "@/lib/useLocationSearch";
 import MapLocationPicker from "@/components/map-location-picker";
-import { MapPin, ArrowLeft } from "lucide-react";
+import { MapPin, ArrowLeft, X } from "lucide-react";
 
 type Course = {
   id: string;
@@ -27,18 +26,22 @@ function formatDistance(meters: number) {
   return `${(meters / 1000).toFixed(1)} km away`;
 }
 
-export default function CoursesPage() {
-  const router = useRouter();
+type Props = {
+  open: boolean;
+  onClose: () => void;
+  onSelect: (courseId: string) => void;
+};
 
+export function CoursePickerModal({ open, onClose, onSelect }: Props) {
   const [mode, setMode] = useState<"nearby" | "world">("nearby");
 
   // ── Nearby state ──
-  const [nearbyLoading, setNearbyLoading] = useState(true);
+  const [nearbyLoading, setNearbyLoading] = useState(false);
   const [nearbyError, setNearbyError] = useState<string | null>(null);
   const [nearbyCourses, setNearbyCourses] = useState<Course[]>([]);
   const [nearbyFilter, setNearbyFilter] = useState("");
 
-  // ── Worldwide state (two-step: location → courses) ──
+  // ── Worldwide state ──
   const world = useLocationSearch();
 
   // ── Shared state ──
@@ -47,10 +50,18 @@ export default function CoursesPage() {
   const [pinOpen, setPinOpen] = useState(false);
 
   const lastPosRef = useRef<{ lat: number; lng: number } | null>(null);
+  const nearbyLoadedRef = useRef(false);
 
-  // ── Nearby load (geolocation) ──
+  // ── Load nearby courses on open ──
   useEffect(() => {
+    if (!open) {
+      nearbyLoadedRef.current = false;
+      return;
+    }
+    if (mode !== "nearby" || nearbyLoadedRef.current) return;
+
     let cancelled = false;
+    nearbyLoadedRef.current = true;
 
     async function fetchNearby(lat: number, lng: number) {
       try {
@@ -70,41 +81,38 @@ export default function CoursesPage() {
       }
     }
 
-    async function loadNearby() {
-      setNearbyLoading(true);
-      setNearbyError(null);
+    setNearbyLoading(true);
+    setNearbyError(null);
 
-      if (!navigator.geolocation) {
-        setNearbyError("Geolocation not supported.");
-        setNearbyLoading(false);
-        return;
-      }
-
-      navigator.geolocation.getCurrentPosition(
-        async (pos) => {
-          const { latitude, longitude } = pos.coords;
-          lastPosRef.current = { lat: latitude, lng: longitude };
-          await fetchNearby(latitude, longitude);
-        },
-        (geoErr) => {
-          if (!cancelled) {
-            setNearbyError(
-              geoErr.code === geoErr.PERMISSION_DENIED
-                ? "Location denied. Switch to Worldwide search."
-                : geoErr.message
-            );
-            setNearbyLoading(false);
-          }
-        },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-      );
+    if (!navigator.geolocation) {
+      setNearbyError("Geolocation not supported.");
+      setNearbyLoading(false);
+      return;
     }
 
-    if (mode === "nearby") loadNearby();
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords;
+        lastPosRef.current = { lat: latitude, lng: longitude };
+        await fetchNearby(latitude, longitude);
+      },
+      (geoErr) => {
+        if (!cancelled) {
+          setNearbyError(
+            geoErr.code === geoErr.PERMISSION_DENIED
+              ? "Location denied. Switch to Worldwide search."
+              : geoErr.message
+          );
+          setNearbyLoading(false);
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+
     return () => {
       cancelled = true;
     };
-  }, [mode]);
+  }, [open, mode]);
 
   // ── Courses currently displayed ──
   const displayCourses: Course[] = useMemo(() => {
@@ -113,8 +121,9 @@ export default function CoursesPage() {
     return [];
   }, [mode, world.step, world.courses, nearbyCourses]);
 
-  // ── Overrides for current results ──
+  // ── Overrides ──
   useEffect(() => {
+    if (!open) return;
     let cancelled = false;
 
     async function loadOverrides() {
@@ -142,9 +151,9 @@ export default function CoursesPage() {
     return () => {
       cancelled = true;
     };
-  }, [displayCourses]);
+  }, [open, displayCourses]);
 
-  // ── Filter local list (nearby mode only) ──
+  // ── Filter (nearby only) ──
   const filteredCourses = useMemo(() => {
     if (mode === "world") return displayCourses;
 
@@ -157,11 +166,11 @@ export default function CoursesPage() {
     });
   }, [mode, displayCourses, nearbyFilter, overrides]);
 
-  // ── View → resolve → navigate ──
-  async function onView(c: Course) {
+  // ── Select → resolve → callback ──
+  async function onSelectCourse(c: Course) {
     const ov = overrides[c.id];
     if (ov?.course_id) {
-      router.push(`/courses/${ov.course_id}`);
+      onSelect(ov.course_id);
       return;
     }
 
@@ -183,16 +192,14 @@ export default function CoursesPage() {
       if (!res.ok)
         throw new Error(data?.error ?? data?.reason ?? "Resolve failed");
 
-      if (data?.course_id) router.push(`/courses/${data.course_id}`);
+      if (data?.course_id) onSelect(data.course_id);
     } catch (e: any) {
       console.error("Resolve error:", e?.message ?? e);
-      if (mode === "nearby") setNearbyError(e?.message ?? "Resolve failed");
     } finally {
       setResolvingId(null);
     }
   }
 
-  // ── Loading / error for current mode ──
   const loading =
     mode === "world"
       ? world.step === "search"
@@ -205,34 +212,28 @@ export default function CoursesPage() {
       ? world.locationError ?? world.coursesError
       : nearbyError;
 
-  // ── Should we show the course list? ──
   const showCourseList =
     (mode === "nearby" && !nearbyLoading && !nearbyError) ||
     (mode === "world" && world.step === "courses" && !world.coursesLoading);
 
+  if (!open) return null;
+
   return (
-    <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
-      <div className="mx-auto w-full max-w-sm space-y-4">
+    <div className="fixed inset-0 z-50 bg-[#042713] text-slate-100 overflow-y-auto">
+      <div className="mx-auto w-full max-w-sm px-4 pt-6 pb-8 space-y-4">
+        {/* Header */}
         <header className="flex items-center justify-between">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="px-2 text-emerald-100 hover:bg-emerald-900/30"
-            onClick={() => router.back()}
-          >
-            ← Back
-          </Button>
-
-          <div className="text-center flex-1">
-            <div className="text-lg font-semibold tracking-wide text-[#f5e6b0]">
-              Courses
-            </div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">
-              {mode === "nearby" ? "Nearby" : "Worldwide"}
-            </div>
+          <div className="text-lg font-semibold tracking-wide text-[#f5e6b0]">
+            Select Course
           </div>
-
-          <div className="w-[60px]" />
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl p-2 text-emerald-100/70 hover:text-emerald-100 hover:bg-emerald-900/30"
+            aria-label="Close"
+          >
+            <X size={20} />
+          </button>
         </header>
 
         {/* Mode toggle */}
@@ -263,11 +264,10 @@ export default function CoursesPage() {
           </button>
         </div>
 
-        {/* Search / Filter area */}
+        {/* Search / Filter */}
         <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-3">
           {mode === "world" ? (
             <>
-              {/* ── Worldwide: step-based UI ── */}
               {world.step === "search" && (
                 <>
                   <div className="flex items-center gap-2">
@@ -381,7 +381,6 @@ export default function CoursesPage() {
               )}
             </>
           ) : (
-            /* ── Nearby: simple filter ── */
             <input
               value={nearbyFilter}
               onChange={(e) => setNearbyFilter(e.target.value)}
@@ -447,10 +446,10 @@ export default function CoursesPage() {
                       size="sm"
                       variant="outline"
                       className="shrink-0 rounded-xl border-emerald-200/40 bg-[#0a341c]/60 text-emerald-100 hover:bg-[#0a341c]/80"
-                      onClick={() => onView(c)}
+                      onClick={() => onSelectCourse(c)}
                       disabled={isResolving}
                     >
-                      {isResolving ? "Loading…" : "View"}
+                      {isResolving ? "Loading…" : "Select"}
                     </Button>
                   </div>
                 </li>
@@ -464,7 +463,7 @@ export default function CoursesPage() {
         </footer>
       </div>
 
-      {/* Map location picker modal (Worldwide tab) */}
+      {/* Map location picker */}
       {pinOpen && (
         <MapLocationPicker
           initial={null}

@@ -8,6 +8,12 @@ type Body = {
   name?: string | null;
   visibility?: "private" | "link" | "public";
   pending_tee_box_id?: string | null;
+  format_type?: string;
+  format_config?: Record<string, any>;
+  side_games?: Array<any>;
+  scheduled_at?: string | null;
+  default_playing_handicap_mode?: "none" | "allowance_pct" | "fixed";
+  default_playing_handicap_value?: number;
 };
 
 export async function POST(req: Request) {
@@ -36,8 +42,14 @@ export async function POST(req: Request) {
         course_id: body.course_id ?? null,
         name: body.name ?? null,
         visibility: body.visibility ?? "private",
-        status: "draft",
+        status: body.scheduled_at ? "scheduled" : "draft",
         pending_tee_box_id: body.pending_tee_box_id ?? null,
+        format_type: body.format_type ?? "strokeplay",
+        format_config: body.format_config ?? {},
+        side_games: body.side_games ?? [],
+        scheduled_at: body.scheduled_at ?? null,
+        default_playing_handicap_mode: body.default_playing_handicap_mode ?? "allowance_pct",
+        default_playing_handicap_value: body.default_playing_handicap_value ?? 100,
       })
       .select("id")
       .single();

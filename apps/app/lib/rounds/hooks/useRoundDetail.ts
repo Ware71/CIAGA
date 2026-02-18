@@ -6,6 +6,14 @@ import { getMyProfileIdByAuthUserId } from "@/lib/myProfile";
 
 type ProfileEmbed = { name: string | null; email: string | null; avatar_url: string | null };
 
+export type RoundFormatType =
+  | "strokeplay" | "stableford" | "matchplay"
+  | "team_strokeplay" | "team_stableford" | "team_bestball"
+  | "scramble" | "greensomes" | "foursomes"
+  | "skins" | "wolf";
+
+export type Team = { id: string; round_id: string; name: string; team_number: number };
+
 export type Participant = {
   id: string;
   profile_id: string | null;
@@ -13,6 +21,7 @@ export type Participant = {
   display_name: string | null;
   role: "owner" | "scorer" | "player";
   tee_snapshot_id: string | null;
+  team_id?: string | null;
 
   // Resolved for UI usage (live => computed, finished => used fallback)
   handicap_index?: number | null;
@@ -23,6 +32,9 @@ export type Participant = {
   course_handicap_computed?: number | null;
   handicap_index_used?: number | null;
   course_handicap_used?: number | null;
+
+  // Format scoring
+  playing_handicap_used?: number | null;
 
   profiles?: ProfileEmbed | ProfileEmbed[] | null;
 };
@@ -51,8 +63,11 @@ export function useRoundDetail(roundId: string) {
   const [status, setStatus] = useState<string>("draft");
   const [courseLabel, setCourseLabel] = useState<string>("");
   const [playedOnIso, setPlayedOnIso] = useState<string | null>(null);
+  const [formatType, setFormatType] = useState<RoundFormatType>("strokeplay");
+  const [formatConfig, setFormatConfig] = useState<Record<string, any>>({});
 
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
   const [teeSnapshotId, setTeeSnapshotId] = useState<string | null>(null);
   const [holes, setHoles] = useState<Hole[]>([]);
   const [scoresByKey, setScoresByKey] = useState<Record<string, Score>>({});
@@ -78,7 +93,7 @@ export function useRoundDetail(roundId: string) {
     // Round meta
     const roundRes = await supabase
       .from("rounds")
-      .select("id,name,status, started_at, created_at, course:courses(name)")
+      .select("id,name,status,started_at,created_at,format_type,format_config,course:courses(name)")
       .eq("id", roundId)
       .single();
     if (roundRes.error) throw roundRes.error;
@@ -90,6 +105,8 @@ export function useRoundDetail(roundId: string) {
     setStatus(r.status);
     setCourseLabel(courseName);
     setPlayedOnIso((r.started_at as string | null) ?? (r.created_at as string | null) ?? null);
+    setFormatType((r.format_type as RoundFormatType) || "strokeplay");
+    setFormatConfig((r.format_config as Record<string, any>) || {});
 
     // Participants via RPC
     const partRes = await supabase.rpc("get_round_participants", { _round_id: roundId });
@@ -101,17 +118,63 @@ export function useRoundDetail(roundId: string) {
       return Number.isFinite(n) ? n : null;
     };
 
-    const mappedParticipants = ((partRes.data ?? []) as any[]).map((row) => ({
+    // Fetch playing_handicap_used, team_id, and the directly-stored handicap_index from round_participants
+    const rpExtras = await supabase
+      .from("round_participants")
+      .select("id,playing_handicap_used,team_id,handicap_index")
+      .eq("round_id", roundId);
+    const extrasMap: Record<string, { playing_handicap_used: number | null; team_id: string | null; handicap_index_direct: number | null }> = {};
+    for (const row of (rpExtras.data ?? []) as any[]) {
+      extrasMap[row.id] = {
+        playing_handicap_used: toNumOrNull(row.playing_handicap_used),
+        team_id: row.team_id ?? null,
+        handicap_index_direct: toNumOrNull(row.handicap_index),
+      };
+    }
+
+    // Fetch tee snapshot metadata so we can compute course handicap as a fallback
+    const firstTeeId = ((partRes.data ?? []) as any[]).find((r: any) => r.tee_snapshot_id)?.tee_snapshot_id ?? null;
+    let teeMeta: { rating: number; slope: number; par_total: number } | null = null;
+    if (firstTeeId) {
+      const teeMetaRes = await supabase
+        .from("round_tee_snapshots")
+        .select("rating,slope,par_total")
+        .eq("id", firstTeeId)
+        .single();
+      if (teeMetaRes.data) {
+        const { rating, slope, par_total } = teeMetaRes.data as any;
+        const r = toNumOrNull(rating), s = toNumOrNull(slope), p = toNumOrNull(par_total);
+        if (r !== null && s !== null && p !== null) teeMeta = { rating: r, slope: s, par_total: p };
+      }
+    }
+
+    const computeCH = (hi: number | null): number | null => {
+      if (hi === null || teeMeta === null) return null;
+      return Math.round(hi * (teeMeta.slope / 113) + (teeMeta.rating - teeMeta.par_total));
+    };
+
+    const mappedParticipants = ((partRes.data ?? []) as any[]).map((row) => {
+      // HI: prefer RPC "used/computed" resolved value, then direct stored value on round_participants
+      const hiResolved =
+        toNumOrNull(row.handicap_index) ??
+        toNumOrNull(row.handicap_index_computed) ??
+        toNumOrNull(extrasMap[row.id]?.handicap_index_direct);
+      // CH: prefer RPC resolved value, then compute from the resolved HI + tee snapshot
+      const chResolved =
+        toNumOrNull(row.course_handicap) ??
+        toNumOrNull(row.course_handicap_computed) ??
+        computeCH(hiResolved);
+      return {
       id: row.id,
       profile_id: row.profile_id,
       is_guest: row.is_guest,
       display_name: row.display_name,
       role: row.role,
       tee_snapshot_id: row.tee_snapshot_id,
+      team_id: extrasMap[row.id]?.team_id ?? null,
 
-      // resolved
-      handicap_index: toNumOrNull(row.handicap_index),
-      course_handicap: toNumOrNull(row.course_handicap),
+      handicap_index: hiResolved,
+      course_handicap: chResolved,
 
       // both
       handicap_index_computed: toNumOrNull(row.handicap_index_computed),
@@ -119,17 +182,29 @@ export function useRoundDetail(roundId: string) {
       handicap_index_used: toNumOrNull(row.handicap_index_used),
       course_handicap_used: toNumOrNull(row.course_handicap_used),
 
+      // format scoring
+      playing_handicap_used: extrasMap[row.id]?.playing_handicap_used ?? null,
+
       profiles: {
         name: row.name,
         email: row.email,
         avatar_url: row.avatar_url,
       },
-    })) as Participant[];
+    };
+    }) as Participant[];
 
     setParticipants(mappedParticipants);
 
     const teeId = mappedParticipants.find((p: any) => p.tee_snapshot_id)?.tee_snapshot_id ?? null;
     setTeeSnapshotId(teeId);
+
+    // Teams (for team formats)
+    const teamsRes = await supabase
+      .from("round_teams")
+      .select("id,round_id,name,team_number")
+      .eq("round_id", roundId)
+      .order("team_number", { ascending: true });
+    setTeams((teamsRes.data ?? []) as Team[]);
 
     // Holes snapshot
     if (teeId) {
@@ -295,8 +370,11 @@ export function useRoundDetail(roundId: string) {
     setStatus,
     courseLabel,
     playedOnIso,
+    formatType,
+    formatConfig,
 
     participants,
+    teams,
     teeSnapshotId,
     holes,
 

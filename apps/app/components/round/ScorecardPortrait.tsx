@@ -3,6 +3,8 @@
 import React from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import type { Participant, Hole } from "@/lib/rounds/hooks/useRoundDetail";
+import type { FormatScoreView, FormatDisplayData } from "@/lib/rounds/formatScoring";
+import { strokesReceivedOnHole } from "@/lib/rounds/handicapUtils";
 
 type SumKind = "OUT" | "IN" | "TOT";
 
@@ -19,15 +21,29 @@ function formatToPar(toPar: number | null) {
   return toPar > 0 ? `+${toPar}` : `${toPar}`;
 }
 
-function strokesReceivedOnHole(courseHcp: number | null | undefined, holeStrokeIndex: number | null) {
-  const hcp = typeof courseHcp === "number" && Number.isFinite(courseHcp) ? Math.max(0, Math.floor(courseHcp)) : 0;
-  const si = typeof holeStrokeIndex === "number" && Number.isFinite(holeStrokeIndex) ? holeStrokeIndex : null;
-  if (!hcp || !si) return 0;
+type BadgeType = "eagle" | "birdie" | "bogey" | "double" | null;
 
-  const base = Math.floor(hcp / 18);
-  const rem = hcp % 18;
+function scoreBadgeType(s: string | number | null, par: number | null, scoreView: string): BadgeType {
+  if (scoreView === "format" || typeof s !== "number" || typeof par !== "number") return null;
+  const diff = s - par;
+  if (diff <= -2) return "eagle";
+  if (diff === -1) return "birdie";
+  if (diff === 1) return "bogey";
+  if (diff >= 2) return "double";
+  return null;
+}
 
-  return base + (si <= rem ? 1 : 0);
+function BadgeWrap({ type, children }: { type: BadgeType; children: React.ReactNode }) {
+  if (!type) return <>{children}</>;
+  const cls =
+    type === "eagle"
+      ? "inline-flex items-center justify-center min-w-[20px] h-5 rounded-full bg-[#f5e6b0] text-[#042713] px-0.5"
+      : type === "birdie"
+      ? "inline-flex items-center justify-center min-w-[20px] h-5 rounded-full ring-1 ring-[#f5e6b0] px-0.5"
+      : type === "bogey"
+      ? "inline-flex items-center justify-center min-w-[20px] h-5 ring-1 ring-white/50 px-0.5"
+      : "inline-flex items-center justify-center min-w-[20px] h-5 bg-white/50 px-0.5";
+  return <span className={cls}>{children}</span>;
 }
 
 function StrokeDots({ count }: { count: number }) {
@@ -60,7 +76,8 @@ export default function ScorecardPortrait(props: {
   isFinished: boolean;
   activeHole: number;
   savingKey: string | null;
-  scoreView: "gross" | "net";
+  scoreView: FormatScoreView;
+  formatDisplay: FormatDisplayData | null;
 
   metaSums: {
     parOut: number | null;
@@ -90,6 +107,7 @@ export default function ScorecardPortrait(props: {
     activeHole,
     savingKey,
     scoreView,
+    formatDisplay,
     metaSums,
     totals,
     displayedScoreFor,
@@ -188,18 +206,36 @@ export default function ScorecardPortrait(props: {
                   ? strokesReceivedOnHole(p.course_handicap ?? null, h.stroke_index ?? null)
                   : 0;
 
-              nodes.push(
+              const fmtHint =
+                scoreView === "format" && formatDisplay
+                  ? formatDisplay.holeResults[key]?.cssHint
+                  : undefined;
+
+              const fmtColor =
+                fmtHint === "positive" ? "text-green-300" :
+                fmtHint === "won" ? "text-green-300" :
+                fmtHint === "negative" ? "text-emerald-100/50" :
+                fmtHint === "lost" ? "text-red-300/80" :
+                fmtHint === "halved" ? "text-emerald-100/70" :
+                "";
+
+              const badge = savingKey !== key ? scoreBadgeType(s, h.par, scoreView) : null;
+
+            nodes.push(
                 <button
                   key={`sc-${key}`}
                   className={`h-9 border-b border-r border-emerald-900/60 flex flex-col items-center justify-center font-semibold tabular-nums
                     ${compactPlayers ? "text-[12px]" : "text-[13px]"}
                     ${isActive ? "bg-[#042713] text-[#f5e6b0]" : "bg-[#0b3b21]/15 text-emerald-50"}
                     ${disabled ? "opacity-80 cursor-default" : "hover:bg-emerald-900/20"}
+                    ${fmtColor}
                   `}
                   onClick={() => onOpenEntry(p.id, h.hole_number)}
                   disabled={disabled}
                 >
-                  <div className="leading-none">{savingKey === key ? "…" : (s ?? "–")}</div>
+                  <BadgeWrap type={badge}>
+                    <span className="leading-none">{savingKey === key ? "…" : (s ?? "–")}</span>
+                  </BadgeWrap>
                   {scoreView === "net" && recv > 0 ? (
                     <div className="mt-1 leading-none">
                       <StrokeDots count={recv} />

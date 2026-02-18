@@ -6,15 +6,27 @@ import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { getMyProfileIdByAuthUserId } from "@/lib/myProfile";
 import { Button } from "@/components/ui/button";
+import { RoundFormatSectionEnhanced } from "@/components/rounds/RoundFormatSectionEnhanced";
+import { ParticipantsList } from "@/components/rounds/ParticipantsList";
+import { CourseAndTeeSection } from "@/components/rounds/CourseAndTeeSection";
+import type { RoundFormatType } from "@/components/rounds/FormatSelector";
+import type { PlayingHandicapMode } from "@/components/rounds/PlayingHandicapSettings";
 
 type Round = {
   id: string;
   name: string | null;
-  status: "draft" | "live" | "finished";
+  status: "draft" | "scheduled" | "starting" | "live" | "finished";
   course_id: string | null;
   pending_tee_box_id: string | null;
   started_at: string | null;
   courses?: { name: string | null }[] | { name: string | null } | null;
+  // Format and handicap fields
+  format_type?: RoundFormatType;
+  format_config?: Record<string, any>;
+  side_games?: Array<any>;
+  scheduled_at?: string | null;
+  default_playing_handicap_mode?: PlayingHandicapMode;
+  default_playing_handicap_value?: number;
 };
 
 type ProfileJoin = {
@@ -33,6 +45,12 @@ type Participant = {
   display_name: string | null;
   role: "owner" | "scorer" | "player";
   profiles?: ProfileJoin | ProfileJoin[] | null;
+  // Handicap fields
+  handicap_index?: number | null;
+  assigned_playing_handicap?: number | null;
+  assigned_handicap_index?: number | null;
+  playing_handicap_used?: number | null;
+  course_handicap_used?: number | null;
 };
 
 type ProfileLite = {
@@ -153,6 +171,12 @@ type SetupParticipantRow = {
   profile_name: string | null;
   profile_email: string | null;
   profile_avatar_url: string | null;
+  // Handicap fields
+  handicap_index?: number | null;
+  assigned_playing_handicap?: number | null;
+  assigned_handicap_index?: number | null;
+  playing_handicap_used?: number | null;
+  course_handicap_used?: number | null;
 };
 
 /* ---------------- Swipe Row (participants) ---------------- */
@@ -298,6 +322,10 @@ export default function RoundSetupPage() {
 
   const [round, setRound] = useState<Round | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const [nameEdit, setNameEdit] = useState<string>("");
+  const [nameSaving, setNameSaving] = useState(false);
+  const [scheduledEdit, setScheduledEdit] = useState<string>("");
+  const detailsUpdatingRef = useRef(false);
 
   const [starting, setStarting] = useState(false);
 
@@ -336,10 +364,89 @@ export default function RoundSetupPage() {
     return me?.role === "owner";
   }, [participants, meId]);
 
-  const title = useMemo(() => {
-    if (!round) return "Round setup";
-    return round.name || courseNameFromJoin(round) || "Round setup";
-  }, [round]);
+  // Sync name and scheduled date from round state (skip during saves to prevent reset loops)
+  useEffect(() => {
+    if (!detailsUpdatingRef.current) {
+      setNameEdit(round?.name ?? "");
+    }
+  }, [round?.name]);
+
+  useEffect(() => {
+    if (!detailsUpdatingRef.current) {
+      if (round?.scheduled_at) {
+        const dt = new Date(round.scheduled_at);
+        const local = new Date(dt.getTime() - dt.getTimezoneOffset() * 60000)
+          .toISOString()
+          .slice(0, 16);
+        setScheduledEdit(local);
+      } else {
+        setScheduledEdit("");
+      }
+    }
+  }, [round?.scheduled_at]);
+
+  async function saveNameOnBlur() {
+    const trimmed = nameEdit.trim();
+    if (trimmed === (round?.name ?? "")) return;
+    detailsUpdatingRef.current = true;
+    setNameSaving(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) throw new Error("Not authenticated");
+
+      const res = await fetch("/api/rounds/update-settings", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ round_id: roundId, name: trimmed }),
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || "Failed to update name");
+      await fetchAll();
+    } catch (e: any) {
+      setErr(e?.message || "Failed to save name");
+    } finally {
+      setNameSaving(false);
+      setTimeout(() => { detailsUpdatingRef.current = false; }, 500);
+    }
+  }
+
+  async function saveSchedule(localValue: string) {
+    detailsUpdatingRef.current = true;
+    const iso = localValue ? new Date(localValue).toISOString() : null;
+    const currentIso = round?.scheduled_at ?? null;
+    if (iso === currentIso) {
+      detailsUpdatingRef.current = false;
+      return;
+    }
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) throw new Error("Not authenticated");
+
+      const res = await fetch("/api/rounds/update-settings", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ round_id: roundId, scheduled_at: iso }),
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || "Failed to schedule round");
+      await fetchAll();
+    } catch (e: any) {
+      setErr(e?.message || "Failed to schedule round");
+    } finally {
+      setTimeout(() => { detailsUpdatingRef.current = false; }, 500);
+    }
+  }
 
   function displayParticipant(p: Participant) {
     if (p.is_guest) {
@@ -355,7 +462,11 @@ export default function RoundSetupPage() {
 
   async function fetchAll() {
     setErr(null);
-    setLoading(true);
+    // Only show loading spinner on initial load (no round data yet).
+    // Background refreshes (realtime, post-save) update data silently
+    // so components stay mounted and don't lose local state.
+    const isInitial = !round;
+    if (isInitial) setLoading(true);
 
     const { data: auth } = await supabase.auth.getUser();
     if (!auth.user) {
@@ -368,13 +479,27 @@ export default function RoundSetupPage() {
 
     const rRes = await supabase
       .from("rounds")
-      .select("id,name,status,course_id,pending_tee_box_id,started_at, courses(name)")
+      .select(`
+        id,
+        name,
+        status,
+        course_id,
+        pending_tee_box_id,
+        started_at,
+        format_type,
+        format_config,
+        side_games,
+        scheduled_at,
+        default_playing_handicap_mode,
+        default_playing_handicap_value,
+        courses(name)
+      `)
       .eq("id", roundId)
       .single();
 
     if (rRes.error) {
       setErr(rRes.error.message);
-      setLoading(false);
+      if (isInitial) setLoading(false);
       return;
     }
 
@@ -388,12 +513,13 @@ export default function RoundSetupPage() {
     const pRes = await supabase.rpc("get_round_setup_participants", { _round_id: roundId });
     if (pRes.error) {
       setErr(pRes.error.message);
-      setLoading(false);
+      if (isInitial) setLoading(false);
       return;
     }
 
     const rows = (pRes.data ?? []) as SetupParticipantRow[];
 
+    // Handicap data is now included in RPC response - no separate query needed!
     const mapped = rows.map((row) => {
       const role = (row.role as any) as "owner" | "scorer" | "player";
       return {
@@ -410,12 +536,18 @@ export default function RoundSetupPage() {
               avatar_url: row.profile_avatar_url,
             }
           : null,
+        // Include handicap fields
+        handicap_index: row.handicap_index,
+        assigned_playing_handicap: row.assigned_playing_handicap,
+        assigned_handicap_index: row.assigned_handicap_index ?? row.assigned_playing_handicap ?? null,
+        playing_handicap_used: row.playing_handicap_used,
+        course_handicap_used: row.course_handicap_used,
       } as Participant;
     });
 
     setRound(rRes.data as any);
     setParticipants(mapped);
-    setLoading(false);
+    if (isInitial) setLoading(false);
   }
 
   async function fetchFollowing(myProfileId: string) {
@@ -781,7 +913,7 @@ export default function RoundSetupPage() {
   const canEdit = isOwner && !starting;
 
   return (
-    <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
+    <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[calc(env(safe-area-inset-bottom)+3rem)]">
       <div className="mx-auto w-full max-w-sm space-y-4">
         {/* Header */}
         <header className="flex items-center justify-between">
@@ -797,7 +929,6 @@ export default function RoundSetupPage() {
 
           <div className="text-center flex-1">
             <div className="text-lg font-semibold tracking-wide text-[#f5e6b0]">Round setup</div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">{title}</div>
           </div>
 
           <div className="w-[60px]" />
@@ -827,216 +958,307 @@ export default function RoundSetupPage() {
           </div>
         ) : null}
 
-        {/* Participants */}
-        <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
-          <div className="flex items-center justify-between">
+        {/* Round Details */}
+        {!loading && round && round.status !== "live" ? (
+          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 space-y-4">
+            <div className="text-sm font-semibold text-emerald-50">Round Details</div>
+
+            {/* Round Name */}
             <div>
-              <div className="text-sm font-semibold text-emerald-50">Players</div>
-              <div className="text-[11px] text-emerald-100/70">Added to this round</div>
+              <label className="text-[11px] text-emerald-100/70 block mb-1">Round name</label>
+              <div className="relative">
+                <input
+                  value={nameEdit}
+                  onChange={(e) => setNameEdit(e.target.value)}
+                  onBlur={() => saveNameOnBlur()}
+                  placeholder={courseNameFromJoin(round) || "Round name"}
+                  className="w-full px-3 py-2 rounded-xl bg-[#042713] border border-emerald-900/70 text-sm text-emerald-100 outline-none focus:border-emerald-600 transition-colors"
+                  disabled={!canEdit}
+                />
+                {nameSaving ? (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-emerald-100/50">Saving...</span>
+                ) : null}
+              </div>
             </div>
-            <div className="text-[11px] text-emerald-100/60">{participants.length}</div>
-          </div>
 
-          <div className="mt-3 space-y-2">
-            {participants.map((p) => {
-              const d = displayParticipant(p);
-
-              const removable =
-                isOwner &&
-                !starting &&
-                round?.status !== "live" &&
-                p.role !== "owner" &&
-                !(p.profile_id && p.profile_id === meId);
-
-              const hi = p.profile_id ? hiByProfileId[p.profile_id] : null;
-              const ch = p.profile_id ? chByProfileId[p.profile_id] : null;
-
-              return (
-                <SwipeToRemoveRow
-                  key={p.id}
-                  disabled={!removable}
-                  isOpen={openSwipeId === p.id}
-                  setOpen={(open) => setOpenSwipeId(open ? p.id : null)}
-                  onRemove={() => removeParticipant(p)}
+            {/* Scheduled Date */}
+            <div>
+              <label className="text-[11px] text-emerald-100/70 block mb-1">Scheduled date & time</label>
+              <div className="overflow-hidden rounded-xl border border-emerald-900/70 bg-[#042713]">
+                <input
+                  type="datetime-local"
+                  value={scheduledEdit}
+                  onChange={(e) => {
+                    setScheduledEdit(e.target.value);
+                    saveSchedule(e.target.value);
+                  }}
+                  className="w-full px-3 py-2 bg-transparent text-sm text-emerald-100 outline-none [color-scheme:dark]"
+                  disabled={!canEdit}
+                />
+              </div>
+              {scheduledEdit ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setScheduledEdit("");
+                    saveSchedule("");
+                  }}
+                  className="mt-1 text-[10px] text-emerald-100/50 hover:text-emerald-100/80"
+                  disabled={!canEdit}
                 >
-                  <div className="p-3 flex items-center gap-3">
-                    <Avatar name={d.name} url={d.avatar_url} size={36} />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-semibold text-emerald-50 truncate">{d.name}</div>
-                      <div className="text-[11px] text-emerald-100/60">
-                        {p.is_guest ? "Guest" : p.profile_id === meId ? "You" : "Player"} · {p.role}
-                        {!p.is_guest ? (
-                          <span className="ml-2 text-[10px] text-emerald-100/70 tabular-nums">
-                            HI {typeof hi === "number" ? hi.toFixed(1) : "—"} · CH {typeof ch === "number" ? ch : "—"}
-                          </span>
-                        ) : null}
-                        {removable ? (
-                          <span className="ml-2 text-[10px] text-emerald-100/50">Swipe to remove</span>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-                </SwipeToRemoveRow>
-              );
-            })}
-
-            {participants.length === 0 ? (
-              <div className="text-[11px] text-emerald-100/60 mt-2">No players yet.</div>
-            ) : null}
-          </div>
-        </div>
-
-        {/* Add players */}
-        <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm font-semibold text-emerald-50">Add players</div>
-              <div className="text-[11px] text-emerald-100/70">From your following first</div>
-            </div>
-
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-emerald-100 hover:bg-emerald-900/30"
-              onClick={() => meId && fetchFollowing(meId)}
-              disabled={!meId || loadingFollowing}
-            >
-              {loadingFollowing ? "…" : "Refresh"}
-            </Button>
-          </div>
-
-          <input
-            className="w-full rounded-xl bg-[#042713] border border-emerald-900/70 px-3 py-2 text-sm outline-none"
-            placeholder="Search following…"
-            value={followFilter}
-            onChange={(e) => setFollowFilter(e.target.value)}
-            disabled={!canEdit}
-          />
-
-          {/* ✅ show ~3 people, scroll for more */}
-          <div className="max-h-[220px] overflow-y-auto overscroll-contain pr-1">
-            <div className="space-y-2">
-              {filteredFollowing.map((p) => {
-                const name = pickNickname(p);
-                return (
-                  <button
-                    key={p.id}
-                    onClick={() => addProfile(p.id)}
-                    disabled={!canEdit}
-                    className="w-full text-left rounded-2xl border border-emerald-900/70 bg-[#042713]/60 p-3 flex items-center gap-3 hover:bg-[#07341c]/70 disabled:opacity-60"
-                  >
-                    <Avatar name={name} url={p.avatar_url} size={34} />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-semibold text-emerald-50 truncate">{name}</div>
-                      <div className="text-[11px] text-emerald-100/60 truncate">{p.email ?? ""}</div>
-                    </div>
-                    <div className="text-[12px] text-emerald-100/70">Add</div>
-                  </button>
-                );
-              })}
-
-              {filteredFollowing.length === 0 ? (
-                <div className="text-[11px] text-emerald-100/60">
-                  {loadingFollowing ? "Loading…" : "No matches in your following."}
-                </div>
+                  Clear schedule (revert to draft)
+                </button>
               ) : null}
             </div>
           </div>
+        ) : null}
 
-          <div className="pt-2 flex gap-2">
-            <Button
-              variant="ghost"
-              className="flex-1 rounded-2xl border border-emerald-900/70 text-emerald-100 hover:bg-emerald-900/20"
-              onClick={() => setShowSearchMore((v) => !v)}
-              disabled={!canEdit}
-            >
-              {showSearchMore ? "Hide search" : "Search more"}
-            </Button>
+        {/* Course & Tee Selection */}
+        {!loading && round && round.status !== "live" ? (
+          <CourseAndTeeSection
+            roundId={roundId}
+            courseId={round.course_id}
+            pendingTeeBoxId={round.pending_tee_box_id}
+            isOwner={isOwner}
+            isEditable={round.status === "draft" || round.status === "scheduled"}
+            onUpdate={fetchAll}
+          />
+        ) : null}
 
-            <Button
-              variant="ghost"
-              className="flex-1 rounded-2xl border border-emerald-900/70 text-emerald-100 hover:bg-emerald-900/20"
-              onClick={() => setShowGuest((v) => !v)}
-              disabled={!canEdit}
-            >
-              {showGuest ? "Cancel guest" : "Add guest"}
-            </Button>
-          </div>
+        {/* Round Format & Handicap Settings */}
+        {!loading && round && round.status !== "live" ? (
+          <RoundFormatSectionEnhanced
+            roundId={roundId}
+            initialFormat={(round.format_type as any) || "strokeplay"}
+            initialFormatConfig={round.format_config || {}}
+            initialSideGames={round.side_games || []}
+            initialHandicapMode={(round.default_playing_handicap_mode as any) || "allowance_pct"}
+            initialHandicapValue={round.default_playing_handicap_value || 100}
+            isOwner={isOwner}
+            isEditable={round.status === "draft" || round.status === "scheduled"}
+            onUpdate={fetchAll}
+          />
+        ) : null}
 
-          {showSearchMore ? (
-            <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/50 p-3 space-y-2">
-              <div className="text-[11px] text-emerald-100/70">Search by email or nickname</div>
+        {/* ====== Players Section ====== */}
+        {!loading && round && round.status !== "live" ? (
+          <div className="space-y-3">
+            {/* Section heading */}
+            <div className="px-1">
+              <div className="text-sm font-semibold text-[#f5e6b0]">Players</div>
+              <div className="text-[10px] text-emerald-100/50">
+                {participants.length} player{participants.length !== 1 ? "s" : ""} in this round
+              </div>
+            </div>
+
+            {/* Roster */}
+            <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
+              <div className="text-[11px] font-medium text-emerald-100/80 uppercase tracking-wider mb-2">Roster</div>
+
+              <div className="space-y-2">
+                {participants.map((p) => {
+                  const d = displayParticipant(p);
+
+                  const removable =
+                    isOwner &&
+                    !starting &&
+                    round?.status !== "live" &&
+                    p.role !== "owner" &&
+                    !(p.profile_id && p.profile_id === meId);
+
+                  const hi = p.profile_id ? hiByProfileId[p.profile_id] : null;
+                  const ch = p.profile_id ? chByProfileId[p.profile_id] : null;
+
+                  return (
+                    <SwipeToRemoveRow
+                      key={p.id}
+                      disabled={!removable}
+                      isOpen={openSwipeId === p.id}
+                      setOpen={(open) => setOpenSwipeId(open ? p.id : null)}
+                      onRemove={() => removeParticipant(p)}
+                    >
+                      <div className="p-3 flex items-center gap-3">
+                        <Avatar name={d.name} url={d.avatar_url} size={36} />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-semibold text-emerald-50 truncate">{d.name}</div>
+                          <div className="text-[11px] text-emerald-100/60">
+                            {p.is_guest ? "Guest" : p.profile_id === meId ? "You" : "Player"} · {p.role}
+                            {!p.is_guest ? (
+                              <span className="ml-2 text-[10px] text-emerald-100/70 tabular-nums">
+                                HI {typeof hi === "number" ? hi.toFixed(1) : "—"} · CH {typeof ch === "number" ? ch : "—"}
+                              </span>
+                            ) : null}
+                            {removable ? (
+                              <span className="ml-2 text-[10px] text-emerald-100/50">Swipe to remove</span>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    </SwipeToRemoveRow>
+                  );
+                })}
+
+                {participants.length === 0 ? (
+                  <div className="text-[11px] text-emerald-100/60 mt-2">No players yet.</div>
+                ) : null}
+              </div>
+            </div>
+
+            {/* Add Players */}
+            <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="text-[11px] font-medium text-emerald-100/80 uppercase tracking-wider">Add Players</div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-emerald-100 hover:bg-emerald-900/30"
+                  onClick={() => meId && fetchFollowing(meId)}
+                  disabled={!meId || loadingFollowing}
+                >
+                  {loadingFollowing ? "…" : "Refresh"}
+                </Button>
+              </div>
+
               <input
                 className="w-full rounded-xl bg-[#042713] border border-emerald-900/70 px-3 py-2 text-sm outline-none"
-                placeholder="Type to search…"
-                value={moreQuery}
-                onChange={(e) => setMoreQuery(e.target.value)}
+                placeholder="Search following…"
+                value={followFilter}
+                onChange={(e) => setFollowFilter(e.target.value)}
                 disabled={!canEdit}
               />
 
-              {searchingMore ? (
-                <div className="text-[11px] text-emerald-100/60">Searching…</div>
-              ) : moreQuery.trim() && moreResults.length === 0 ? (
-                <div className="text-[11px] text-emerald-100/60">No results.</div>
-              ) : null}
+              <div className="max-h-[220px] overflow-y-auto overscroll-contain pr-1">
+                <div className="space-y-2">
+                  {filteredFollowing.map((p) => {
+                    const name = pickNickname(p);
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => addProfile(p.id)}
+                        disabled={!canEdit}
+                        className="w-full text-left rounded-2xl border border-emerald-900/70 bg-[#042713]/60 p-3 flex items-center gap-3 hover:bg-[#07341c]/70 disabled:opacity-60"
+                      >
+                        <Avatar name={name} url={p.avatar_url} size={34} />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-semibold text-emerald-50 truncate">{name}</div>
+                          <div className="text-[11px] text-emerald-100/60 truncate">{p.email ?? ""}</div>
+                        </div>
+                        <div className="text-[12px] text-emerald-100/70">Add</div>
+                      </button>
+                    );
+                  })}
 
-              <div className="space-y-2">
-                {moreResults.map((p) => {
-                  const name = pickNickname(p);
-                  return (
-                    <button
-                      key={p.id}
-                      onClick={() => addProfile(p.id)}
-                      disabled={!canEdit}
-                      className="w-full text-left rounded-2xl border border-emerald-900/70 bg-[#042713]/60 p-3 flex items-center gap-3 hover:bg-[#07341c]/70 disabled:opacity-60"
-                    >
-                      <Avatar name={name} url={p.avatar_url} size={34} />
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-semibold text-emerald-50 truncate">{name}</div>
-                        <div className="text-[11px] text-emerald-100/60 truncate">{p.email ?? ""}</div>
-                      </div>
-                      <div className="text-[12px] text-emerald-100/70">Add</div>
-                    </button>
-                  );
-                })}
+                  {filteredFollowing.length === 0 ? (
+                    <div className="text-[11px] text-emerald-100/60">
+                      {loadingFollowing ? "Loading…" : "No matches in your following."}
+                    </div>
+                  ) : null}
+                </div>
               </div>
-            </div>
-          ) : null}
 
-          {showGuest ? (
-            <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/50 p-3 space-y-2">
-              <div className="text-[11px] text-emerald-100/70">Guest name</div>
-              <div className="flex gap-2">
-                <input
-                  className="flex-1 rounded-xl bg-[#042713] border border-emerald-900/70 px-3 py-2 text-sm outline-none"
-                  placeholder="e.g. Dan"
-                  value={guestName}
-                  onChange={(e) => setGuestName(e.target.value)}
-                  disabled={!canEdit || addingGuest}
-                />
+              <div className="pt-2 flex gap-2">
                 <Button
-                  className="rounded-xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c]"
-                  onClick={addGuest}
-                  disabled={!canEdit || addingGuest || !guestName.trim()}
+                  variant="ghost"
+                  className="flex-1 rounded-2xl border border-emerald-900/70 text-emerald-100 hover:bg-emerald-900/20"
+                  onClick={() => setShowSearchMore((v) => !v)}
+                  disabled={!canEdit}
                 >
-                  {addingGuest ? "…" : "Add"}
+                  {showSearchMore ? "Hide search" : "Search more"}
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  className="flex-1 rounded-2xl border border-emerald-900/70 text-emerald-100 hover:bg-emerald-900/20"
+                  onClick={() => setShowGuest((v) => !v)}
+                  disabled={!canEdit}
+                >
+                  {showGuest ? "Cancel guest" : "Add guest"}
                 </Button>
               </div>
-            </div>
-          ) : null}
 
-          {!isOwner ? (
-            <div className="text-center text-[10px] text-emerald-100/60">
-              Only the round owner can add players and start the round.
-            </div>
-          ) : null}
+              {showSearchMore ? (
+                <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/50 p-3 space-y-2">
+                  <div className="text-[11px] text-emerald-100/70">Search by email or nickname</div>
+                  <input
+                    className="w-full rounded-xl bg-[#042713] border border-emerald-900/70 px-3 py-2 text-sm outline-none"
+                    placeholder="Type to search…"
+                    value={moreQuery}
+                    onChange={(e) => setMoreQuery(e.target.value)}
+                    disabled={!canEdit}
+                  />
 
-          {isOwner && round?.status !== "live" ? (
-            <div className="text-center text-[10px] text-emerald-100/50">
-              Tip: swipe a player in the “Players” list to remove them.
+                  {searchingMore ? (
+                    <div className="text-[11px] text-emerald-100/60">Searching…</div>
+                  ) : moreQuery.trim() && moreResults.length === 0 ? (
+                    <div className="text-[11px] text-emerald-100/60">No results.</div>
+                  ) : null}
+
+                  <div className="space-y-2">
+                    {moreResults.map((p) => {
+                      const name = pickNickname(p);
+                      return (
+                        <button
+                          key={p.id}
+                          onClick={() => addProfile(p.id)}
+                          disabled={!canEdit}
+                          className="w-full text-left rounded-2xl border border-emerald-900/70 bg-[#042713]/60 p-3 flex items-center gap-3 hover:bg-[#07341c]/70 disabled:opacity-60"
+                        >
+                          <Avatar name={name} url={p.avatar_url} size={34} />
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm font-semibold text-emerald-50 truncate">{name}</div>
+                            <div className="text-[11px] text-emerald-100/60 truncate">{p.email ?? ""}</div>
+                          </div>
+                          <div className="text-[12px] text-emerald-100/70">Add</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+
+              {showGuest ? (
+                <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/50 p-3 space-y-2">
+                  <div className="text-[11px] text-emerald-100/70">Guest name</div>
+                  <div className="flex gap-2">
+                    <input
+                      className="flex-1 rounded-xl bg-[#042713] border border-emerald-900/70 px-3 py-2 text-sm outline-none"
+                      placeholder="e.g. Dan"
+                      value={guestName}
+                      onChange={(e) => setGuestName(e.target.value)}
+                      disabled={!canEdit || addingGuest}
+                    />
+                    <Button
+                      className="rounded-xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c]"
+                      onClick={addGuest}
+                      disabled={!canEdit || addingGuest || !guestName.trim()}
+                    >
+                      {addingGuest ? "…" : "Add"}
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
             </div>
-          ) : null}
-        </div>
+
+            {/* Player Handicaps */}
+            {participants.length > 0 ? (
+              <ParticipantsList
+                roundId={roundId}
+                participants={participants}
+                myProfileId={meId}
+                isOwner={isOwner}
+                isEditable={round.status === "draft" || round.status === "scheduled"}
+                onUpdate={fetchAll}
+                getDisplayName={displayParticipant as any}
+              />
+            ) : null}
+
+            {!isOwner ? (
+              <div className="text-center text-[10px] text-emerald-100/60">
+                Only the round owner can add players and start the round.
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         <Button
           className="w-full rounded-2xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c] disabled:opacity-60"

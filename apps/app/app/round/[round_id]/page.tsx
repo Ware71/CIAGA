@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { finishRound as finishRoundApi } from "@/lib/rounds/api";
 import { useRoundDetail } from "@/lib/rounds/hooks/useRoundDetail";
 import type { Participant, Hole, HoleState } from "@/lib/rounds/hooks/useRoundDetail";
+import { strokesReceivedOnHole, netFromGross } from "@/lib/rounds/handicapUtils";
+import { computeFormatDisplay, type FormatScoreView, type FormatDisplayData } from "@/lib/rounds/formatScoring";
 
 import ConfirmSheet from "@/components/round/ConfirmSheet";
 import ScoreEntrySheet from "@/components/round/ScoreEntrySheet";
@@ -157,21 +159,6 @@ function sumMeta(holes: Hole[]) {
   };
 }
 
-function strokesReceivedOnHole(courseHcp: number | null | undefined, holeStrokeIndex: number | null) {
-  const hcp = typeof courseHcp === "number" && Number.isFinite(courseHcp) ? Math.max(0, Math.floor(courseHcp)) : 0;
-  const si = typeof holeStrokeIndex === "number" && Number.isFinite(holeStrokeIndex) ? holeStrokeIndex : null;
-  if (!hcp || !si) return 0;
-
-  const base = Math.floor(hcp / 18);
-  const rem = hcp % 18;
-
-  return base + (si <= rem ? 1 : 0);
-}
-
-function netFromGross(gross: number, recv: number) {
-  return Math.max(1, gross - recv);
-}
-
 function stableNumber(n: any): number | null {
   return typeof n === "number" && Number.isFinite(n) ? n : null;
 }
@@ -231,7 +218,10 @@ export default function RoundDetailPage() {
     setStatus,
     courseLabel,
     playedOnIso,
+    formatType,
+    formatConfig,
     participants,
+    teams,
     teeSnapshotId,
     holes,
     scoresByKey,
@@ -240,7 +230,7 @@ export default function RoundDetailPage() {
     canScore,
   } = useRoundDetail(roundId);
 
-  const [scoreView, setScoreView] = useState<"gross" | "net">("gross");
+  const [scoreView, setScoreView] = useState<FormatScoreView>("gross");
 
   const [activeHole, setActiveHole] = useState<number>(1);
   const [savingKey, setSavingKey] = useState<string | null>(null);
@@ -300,12 +290,21 @@ export default function RoundDetailPage() {
     return prof?.avatar_url || null;
   }, []);
 
+  const formatDisplay = useMemo<FormatDisplayData | null>(() => {
+    return computeFormatDisplay(formatType, formatConfig, participants, holesList, scoresByKey, holeStatesByKey, teams);
+  }, [formatType, formatConfig, participants, holesList, scoresByKey, holeStatesByKey, teams]);
+
   // Displayed score:
   // - not_started => null (render blank)
   // - picked_up   => "PU"
-  // - completed   => number (gross or net)
+  // - completed   => number (gross or net) or format value
   const displayedScoreFor = useCallback(
     (participantId: string, holeNumber: number): string | number | null => {
+      if (scoreView === "format" && formatDisplay) {
+        const r = formatDisplay.holeResults[`${participantId}:${holeNumber}`];
+        return r?.displayValue ?? null;
+      }
+
       const st = holeStateFor(participantId, holeNumber);
       if (st === "not_started") return null;
       if (st === "picked_up") return "PU";
@@ -320,10 +319,27 @@ export default function RoundDetailPage() {
       const recv = strokesReceivedOnHole(p?.course_handicap ?? null, h?.stroke_index ?? null);
       return netFromGross(gross, recv);
     },
-    [holeStateFor, scoreFor, scoreView, participants, holesList]
+    [holeStateFor, scoreFor, scoreView, participants, holesList, formatDisplay]
   );
 
   const totals = useMemo(() => {
+    // Format view uses its own summaries
+    if (scoreView === "format" && formatDisplay) {
+      const byId: Record<string, { out: number; in: number; total: number }> = {};
+      for (const s of formatDisplay.summaries) {
+        byId[s.participantId] = {
+          out: typeof s.out === "number" ? s.out : 0,
+          in: typeof s.inn === "number" ? s.inn : 0,
+          total: typeof s.total === "number" ? s.total : 0,
+        };
+      }
+      // Fill missing participants with zeros
+      for (const p of participants) {
+        if (!byId[p.id]) byId[p.id] = { out: 0, in: 0, total: 0 };
+      }
+      return byId;
+    }
+
     const byParticipant: Record<string, { out: number; in: number; total: number }> = {};
     for (const p of participants) {
       let out = 0,
@@ -342,7 +358,7 @@ export default function RoundDetailPage() {
       byParticipant[p.id] = { out, in: inn, total };
     }
     return byParticipant;
-  }, [participants, holesList, displayedScoreFor]);
+  }, [participants, holesList, displayedScoreFor, scoreView, formatDisplay]);
 
   const toParTotalByParticipant = useMemo(() => {
     const map: Record<string, number | null> = {};
@@ -375,9 +391,13 @@ export default function RoundDetailPage() {
 
   const finalRows = useMemo(() => {
     const rows = buildFinalRows(participants, totals, toParTotalByParticipant, getParticipantLabel, getParticipantAvatar);
-    rows.sort((a, b) => a.total - b.total || a.name.localeCompare(b.name));
+    if (formatDisplay?.higherIsBetter) {
+      rows.sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+    } else {
+      rows.sort((a, b) => a.total - b.total || a.name.localeCompare(b.name));
+    }
     return rows;
-  }, [participants, totals, toParTotalByParticipant, getParticipantLabel, getParticipantAvatar]);
+  }, [participants, totals, toParTotalByParticipant, getParticipantLabel, getParticipantAvatar, formatDisplay]);
 
   const winner = finalRows[0] ?? null;
 
@@ -539,6 +559,15 @@ export default function RoundDetailPage() {
     setCustomVal("10");
   }
 
+  // After completing an action for pid on hole, advance to next unscored player or close.
+  // Excludes pid from the "missing" check since their state update may not be reflected yet.
+  function advanceAfterCompletion(pid: string, hole: number) {
+    const othersMissing = participants.filter((p) => p.id !== pid && !isHoleCompleteForPlayer(p.id, hole)).length;
+    if (othersMissing === 0) { closeEntry(); return; }
+    const nextPid = findNextUnscoredPlayerForHole(participants, pid, hole, isHoleCompleteForPlayer);
+    if (nextPid) { setEntryPid(nextPid); setEntryMode("quick"); setCustomVal("10"); } else { closeEntry(); }
+  }
+
   function openEntry(participantId: string, holeNumber: number) {
     if (!canScore || isFinished) return;
     setEntryPid(participantId);
@@ -550,24 +579,11 @@ export default function RoundDetailPage() {
 
   async function submitAndAdvance(strokes: number | null) {
     if (!entryPid || entryHole == null) return;
-
-    const ok = await setScore(entryPid, entryHole, strokes);
+    const pid = entryPid;
+    const hole = entryHole;
+    const ok = await setScore(pid, hole, strokes);
     if (!ok) return;
-
-    const missingNow = countMissingForHole(participants, entryHole, isHoleCompleteForPlayer);
-    if (missingNow === 0) {
-      closeEntry();
-      return;
-    }
-
-    const nextPid = findNextUnscoredPlayerForHole(participants, entryPid, entryHole, isHoleCompleteForPlayer);
-    if (nextPid) {
-      setEntryPid(nextPid);
-      setEntryMode("quick");
-      setCustomVal("10");
-    } else {
-      closeEntry();
-    }
+    advanceAfterCompletion(pid, hole);
   }
 
   if (loading) {
@@ -593,11 +609,11 @@ export default function RoundDetailPage() {
   return (
     <div className="min-h-screen bg-[#042713] text-slate-100 px-1.5 sm:px-2 pt-4 pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto w-full max-w-none space-y-2">
-        <header className="flex items-center justify-between gap-2">
+        <header className="flex items-center gap-2">
           <Button
             variant="ghost"
             size="sm"
-            className="px-2 text-emerald-100 hover:bg-emerald-900/30"
+            className="px-2 text-emerald-100 hover:bg-emerald-900/30 shrink-0"
             onClick={() => {
               const sp = new URLSearchParams(window.location.search);
               const from = sp.get("from");
@@ -615,47 +631,73 @@ export default function RoundDetailPage() {
             ← Back
           </Button>
 
-          <div className="text-center flex-1 px-1 min-w-0">
-            <div className="text-[15px] sm:text-base font-semibold tracking-wide text-[#f5e6b0] truncate">
-              {roundName}
-            </div>
-            <div className="text-[10px] uppercase tracking-[0.14em] text-emerald-200/70 truncate">{subtitle}</div>
-          </div>
-
-          <div className="flex flex-col items-end gap-1 shrink-0">
-            <div className="rounded-xl border border-emerald-900/70 bg-[#0b3b21]/50 p-1 flex">
-              <button
-                className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg ${
-                  scoreView === "gross"
-                    ? "bg-[#f5e6b0] text-[#042713]"
-                    : "text-emerald-100/80 hover:bg-emerald-900/20"
-                }`}
-                onClick={() => setScoreView("gross")}
-              >
-                Gross
-              </button>
-              <button
-                className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg ${
-                  scoreView === "net"
-                    ? "bg-[#f5e6b0] text-[#042713]"
-                    : "text-emerald-100/80 hover:bg-emerald-900/20"
-                }`}
-                onClick={() => setScoreView("net")}
-              >
-                Net
-              </button>
-            </div>
-
-            {canFinish ? (
-              <Button
-                size="sm"
-                className="rounded-xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c] px-3"
-                onClick={() => setFinishOpen(true)}
-              >
-                Finish
-              </Button>
-            ) : null}
-          </div>
+          {isPortrait ? (
+            <>
+              <div className="flex-1 min-w-0 px-1">
+                <div className="text-center">
+                  <div className="text-[15px] font-semibold tracking-wide text-[#f5e6b0] truncate">{roundName}</div>
+                  <div className="text-[10px] uppercase tracking-[0.14em] text-emerald-200/70 truncate">{subtitle}</div>
+                </div>
+                <div className="mt-1 flex justify-center">
+                  <div className="rounded-xl border border-emerald-900/70 bg-[#0b3b21]/50 p-1 flex">
+                    {(["gross", "net", ...(formatDisplay ? ["format"] : [])] as FormatScoreView[]).map((v) => (
+                      <button
+                        key={v}
+                        className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg ${
+                          scoreView === v ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
+                        }`}
+                        onClick={() => setScoreView(v)}
+                      >
+                        {v === "format" ? formatDisplay!.tabLabel : v === "gross" ? "Gross" : "Net"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="shrink-0">
+                {canFinish ? (
+                  <Button
+                    size="sm"
+                    className="rounded-xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c] px-3"
+                    onClick={() => setFinishOpen(true)}
+                  >
+                    Finish
+                  </Button>
+                ) : null}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="text-center flex-1 px-1 min-w-0">
+                <div className="text-[15px] font-semibold tracking-wide text-[#f5e6b0] truncate">{roundName}</div>
+                <div className="text-[10px] uppercase tracking-[0.14em] text-emerald-200/70 truncate">{subtitle}</div>
+              </div>
+              <div className="flex flex-col items-end gap-1 shrink-0">
+                {canFinish ? (
+                  <Button
+                    size="sm"
+                    className="rounded-xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c] px-3"
+                    onClick={() => setFinishOpen(true)}
+                  >
+                    Finish
+                  </Button>
+                ) : null}
+                <div className="rounded-xl border border-emerald-900/70 bg-[#0b3b21]/50 p-1 flex">
+                  {(["gross", "net", ...(formatDisplay ? ["format"] : [])] as FormatScoreView[]).map((v) => (
+                    <button
+                      key={v}
+                      className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg ${
+                        scoreView === v ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
+                      }`}
+                      onClick={() => setScoreView(v)}
+                    >
+                      {v === "format" ? formatDisplay!.tabLabel : v === "gross" ? "Gross" : "Net"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
         </header>
 
         {err ? (
@@ -683,7 +725,7 @@ export default function RoundDetailPage() {
           </div>
         ) : null}
 
-        {!needsSetup && isFinished && winner ? <FinalResultsPanel winner={winner} finalRows={finalRows} /> : null}
+        {!needsSetup && isFinished && winner ? <FinalResultsPanel winner={winner} finalRows={finalRows} formatDisplay={formatDisplay} /> : null}
 
         {!needsSetup ? (
           isPortrait ? (
@@ -697,6 +739,7 @@ export default function RoundDetailPage() {
               activeHole={activeHole}
               savingKey={savingKey}
               scoreView={scoreView}
+              formatDisplay={formatDisplay}
               metaSums={metaSums}
               totals={totals}
               displayedScoreFor={displayedScoreFor}
@@ -715,6 +758,7 @@ export default function RoundDetailPage() {
               activeHole={activeHole}
               savingKey={savingKey}
               scoreView={scoreView}
+              formatDisplay={formatDisplay}
               metaSums={metaSums}
               totals={totals}
               displayedScoreFor={displayedScoreFor}
@@ -751,8 +795,19 @@ export default function RoundDetailPage() {
             scoreFor={scoreFor}
             savingKey={savingKey}
             holeState={holeStateFor(entryPid, entryHole)}
-            onSetPickedUp={() => markPickedUp(entryPid, entryHole)}
-            onSetNotStarted={() => markNotStarted(entryPid, entryHole)}
+            isPortrait={isPortrait}
+            onSetPickedUp={async () => {
+              if (!entryPid || entryHole == null) return;
+              const pid = entryPid; const hole = entryHole;
+              await markPickedUp(pid, hole);
+              advanceAfterCompletion(pid, hole);
+            }}
+            onSetNotStarted={async () => {
+              if (!entryPid || entryHole == null) return;
+              const pid = entryPid; const hole = entryHole;
+              await markNotStarted(pid, hole);
+              advanceAfterCompletion(pid, hole);
+            }}
             onClose={closeEntry}
             onSubmit={submitAndAdvance}
             getParticipantLabel={getParticipantLabel}

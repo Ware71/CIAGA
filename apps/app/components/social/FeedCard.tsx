@@ -243,6 +243,7 @@ function RoundPlayedBody({ payload }: { payload: any }) {
             const net = safeNum(p?.net_total);
             const netToPar = safeNum(p?.net_to_par);
             const parTotal = safeNum(p?.par_total);
+            const holesCompleted = safeNum(p?.holes_completed);
 
             return (
               <div
@@ -262,7 +263,9 @@ function RoundPlayedBody({ payload }: { payload: any }) {
 
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-extrabold text-emerald-50 truncate">{p?.name ?? "Player"}</div>
-                  {parTotal !== null ? (
+                  {holesCompleted !== null ? (
+                    <div className="text-[11px] font-semibold text-emerald-100/55">Thru {holesCompleted}</div>
+                  ) : parTotal !== null ? (
                     <div className="text-[11px] font-semibold text-emerald-100/55">Par {parTotal}</div>
                   ) : null}
                 </div>

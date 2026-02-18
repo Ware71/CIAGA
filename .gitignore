@@ -43,3 +43,13 @@ next-env.d.ts
 # monorepo
 /apps/**/node_modules/
 /apps/**/.next/
+
+# AI assistant files
+.claude/
+ai.md
+AI.md
+claude.md
+CLAUDE.md
+
+# Windows artifacts
+nul

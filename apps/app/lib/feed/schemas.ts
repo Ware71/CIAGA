@@ -103,6 +103,7 @@ function isRoundPlayedPlayers(
   net_total?: number | null;
   par_total?: number | null;
   net_to_par?: number | null;
+  holes_completed?: number | null;
 }> {
   return (
     Array.isArray(v) &&
@@ -116,7 +117,8 @@ function isRoundPlayedPlayers(
         (x.gross_total === undefined || isNumberOrNull(x.gross_total)) &&
         (x.net_total === undefined || isNumberOrNull(x.net_total)) &&
         (x.par_total === undefined || isNumberOrNull(x.par_total)) &&
-        (x.net_to_par === undefined || isNumberOrNull(x.net_to_par))
+        (x.net_to_par === undefined || isNumberOrNull(x.net_to_par)) &&
+        (x.holes_completed === undefined || isNumberOrNull(x.holes_completed))
     )
   );
 }

@@ -20,7 +20,7 @@ type HandicapHistoryRow = { as_of_date: string; handicap_index: number };
 type RoundRow = {
   id: string;
   name: string | null;
-  status: "draft" | "live" | "finished" | string;
+  status: "draft" | "scheduled" | "starting" | "live" | "finished" | string;
   started_at: string | null;
   created_at: string | null;
   course_id: string | null;
@@ -180,7 +180,7 @@ export default function RoundsHistoryPage() {
               id,
               round_id,
               tee_snapshot_id,
-              rounds:rounds (
+              rounds:rounds!round_id (
                 id,
                 name,
                 status,
