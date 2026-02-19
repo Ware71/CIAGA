@@ -115,8 +115,8 @@ export default function RoundsHistoryPage() {
   // handicap extras (for display)
   const [agsByRoundId, setAgsByRoundId] = useState<Record<string, number>>({});
   const [scoreDiffByRoundId, setScoreDiffByRoundId] = useState<Record<string, number>>({});
+  const [hiUsedByRoundId, setHiUsedByRoundId] = useState<Record<string, number>>({});
   const [hiAfterByRoundId, setHiAfterByRoundId] = useState<Record<string, number>>({});
-  const [hiBeforeByRoundId, setHiBeforeByRoundId] = useState<Record<string, number>>({}); // ✅ align with player page
 
   const [error, setError] = useState<string | null>(null);
 
@@ -290,15 +290,16 @@ export default function RoundsHistoryPage() {
 
         if (!cancelled) setMyTotalByRoundId(totalByRound);
 
-        // 4) Handicap round results (AGS + SD)
+        // 4) Handicap round results (AGS + SD + HI used)
         const agsMap: Record<string, number> = {};
         const sdMap: Record<string, number> = {};
+        const hiUsedMap: Record<string, number> = {};
 
         if (participantIds.length) {
           for (const ids of chunk(participantIds, 150)) {
             const { data: hrr, error: hErr } = await supabase
               .from("handicap_round_results")
-              .select("round_id, participant_id, adjusted_gross_score, score_differential")
+              .select("round_id, participant_id, adjusted_gross_score, score_differential, handicap_index_used")
               .in("participant_id", ids);
 
             if (hErr) continue;
@@ -306,8 +307,10 @@ export default function RoundsHistoryPage() {
               const rid = row.round_id as string;
               const ags = toNumberMaybe(row.adjusted_gross_score);
               const sd = toNumberMaybe(row.score_differential);
+              const hiUsed = toNumberMaybe(row.handicap_index_used);
               if (ags != null) agsMap[rid] = ags;
               if (sd != null) sdMap[rid] = sd;
+              if (hiUsed != null) hiUsedMap[rid] = hiUsed;
             }
           }
         }
@@ -315,6 +318,7 @@ export default function RoundsHistoryPage() {
         if (!cancelled) {
           setAgsByRoundId(agsMap);
           setScoreDiffByRoundId(sdMap);
+          setHiUsedByRoundId(hiUsedMap);
         }
 
         // 5) Handicap index history -> compute BOTH "HI after" and "HI before"
@@ -361,49 +365,17 @@ export default function RoundsHistoryPage() {
           return bestIdx >= 0 ? histRows[bestIdx].handicap_index : null;
         }
 
-        function hiAsOfStrictBefore(dateIso: string | null): number | null {
-          if (!dateIso || !histRows.length) return null;
-          const target = new Date(dateIso).getTime();
-          if (!Number.isFinite(target)) return null;
-
-          let lo = 0;
-          let hi = histRows.length - 1;
-          let bestIdx = -1;
-
-          while (lo <= hi) {
-            const mid = (lo + hi) >> 1;
-            const t = new Date(histRows[mid].as_of_date).getTime();
-            if (!Number.isFinite(t)) {
-              lo = mid + 1;
-              continue;
-            }
-            if (t < target) {
-              bestIdx = mid;
-              lo = mid + 1;
-            } else {
-              hi = mid - 1;
-            }
-          }
-
-          return bestIdx >= 0 ? histRows[bestIdx].handicap_index : null;
-        }
-
         const hiAfterMap: Record<string, number> = {};
-        const hiBeforeMap: Record<string, number> = {};
 
         for (const r of extracted) {
           const dateIso = r.started_at ?? r.created_at;
 
           const after = hiAsOfInclusive(dateIso);
           if (after != null) hiAfterMap[r.id] = after;
-
-          const before = hiAsOfStrictBefore(dateIso);
-          if (before != null) hiBeforeMap[r.id] = before;
         }
 
         if (!cancelled) {
           setHiAfterByRoundId(hiAfterMap);
-          setHiBeforeByRoundId(hiBeforeMap);
         }
 
         if (!cancelled) setLoading(false);
@@ -568,13 +540,13 @@ export default function RoundsHistoryPage() {
                         const sd = scoreDiffByRoundId[r.id];
                         const sdText = typeof sd === "number" ? `Score Diff: ${sd.toFixed(1)}` : "SD —";
 
-                        const hiBefore = hiBeforeByRoundId[r.id];
+                        const hiUsed = hiUsedByRoundId[r.id];
                         const hiAfter = hiAfterByRoundId[r.id];
 
-                        const hiText = typeof hiBefore === "number" ? `Index: ${hiBefore.toFixed(1)}` : "—";
+                        const hiText = typeof hiUsed === "number" ? `Index: ${hiUsed.toFixed(1)}` : "—";
 
                         const isExceptional =
-                          typeof hiBefore === "number" && typeof sd === "number" && sd <= hiBefore - 7;
+                          typeof hiUsed === "number" && typeof sd === "number" && sd <= hiUsed - 7;
 
                         const isCounting = countingSet.has(r.id);
                         const isCutoff = cutoffRoundId === r.id;

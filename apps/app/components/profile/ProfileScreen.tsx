@@ -31,7 +31,6 @@ type HandicapRow = {
   as_of_date: string; // date
 };
 
-type HandicapHistoryRow = { as_of_date: string; handicap_index: number };
 
 type RoundRow = {
   id: string;
@@ -170,12 +169,10 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
 
   const [rounds, setRounds] = useState<RoundRow[]>([]);
   const [teeNameByRoundId, setTeeNameByRoundId] = useState<Record<string, string>>({});
-  const [participantIdByRoundId, setParticipantIdByRoundId] = useState<Record<string, string>>({});
   const [totalByRoundId, setTotalByRoundId] = useState<Record<string, number>>({});
   const [agsByRoundId, setAgsByRoundId] = useState<Record<string, number>>({});
   const [scoreDiffByRoundId, setScoreDiffByRoundId] = useState<Record<string, number>>({});
-  const [hiAfterByRoundId, setHiAfterByRoundId] = useState<Record<string, number>>({});
-  const [hiBeforeByRoundId, setHiBeforeByRoundId] = useState<Record<string, number>>({});
+  const [hiUsedByRoundId, setHiUsedByRoundId] = useState<Record<string, number>>({});
 
   const initialsFor = (p: { name?: string | null; email?: string | null }) => {
     const label = p.name || p.email || "P";
@@ -656,7 +653,6 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
         if (cancelled) return;
 
         setRounds(extracted);
-        setParticipantIdByRoundId(pidMap);
 
         // 2) Tee names
         const teeIds = Array.from(new Set(Object.values(teeSnapIdByRound).filter(Boolean)));
@@ -721,12 +717,13 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
         // 4) Handicap round results (AGS + SD)
         const agsMap: Record<string, number> = {};
         const sdMap: Record<string, number> = {};
+        const hiUsedMap: Record<string, number> = {};
 
         if (participantIds.length) {
           for (const ids of chunk(participantIds, 150)) {
             const { data: hrr, error: hErr } = await supabase
               .from("handicap_round_results")
-              .select("round_id, participant_id, adjusted_gross_score, score_differential")
+              .select("round_id, participant_id, adjusted_gross_score, score_differential, handicap_index_used")
               .in("participant_id", ids);
 
             if (hErr) continue;
@@ -735,8 +732,10 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
               const rid = row.round_id as string;
               const ags = toNumberMaybe(row.adjusted_gross_score);
               const sd = toNumberMaybe(row.score_differential);
+              const hiUsed = toNumberMaybe(row.handicap_index_used);
               if (ags != null) agsMap[rid] = ags;
               if (sd != null) sdMap[rid] = sd;
+              if (hiUsed != null) hiUsedMap[rid] = hiUsed;
             }
           }
         }
@@ -744,96 +743,9 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
         if (!cancelled) {
           setAgsByRoundId(agsMap);
           setScoreDiffByRoundId(sdMap);
+          setHiUsedByRoundId(hiUsedMap);
         }
 
-        // 5) Handicap index history -> compute BOTH "HI after" and "HI before" per round
-        const { data: hist, error: hErr2 } = await supabase
-          .from("handicap_index_history")
-          .select("as_of_date, handicap_index")
-          .eq("profile_id", pid)
-          .not("handicap_index", "is", null)
-          .order("as_of_date", { ascending: true });
-
-        if (hErr2) throw hErr2;
-
-        const histRows = ((hist ?? []) as any[])
-          .map((r) => ({
-            as_of_date: String(r.as_of_date),
-            handicap_index: Number(r.handicap_index),
-          }))
-          .filter((r) => r.as_of_date && Number.isFinite(r.handicap_index)) as HandicapHistoryRow[];
-
-        function hiAsOfInclusive(dateIso: string | null): number | null {
-          if (!dateIso || !histRows.length) return null;
-          const target = new Date(dateIso).getTime();
-          if (!Number.isFinite(target)) return null;
-
-          let lo = 0;
-          let hi = histRows.length - 1;
-          let bestIdx = -1;
-
-          while (lo <= hi) {
-            const mid = (lo + hi) >> 1;
-            const t = new Date(histRows[mid].as_of_date).getTime();
-            if (!Number.isFinite(t)) {
-              lo = mid + 1;
-              continue;
-            }
-            if (t <= target) {
-              bestIdx = mid;
-              lo = mid + 1;
-            } else {
-              hi = mid - 1;
-            }
-          }
-
-          return bestIdx >= 0 ? histRows[bestIdx].handicap_index : null;
-        }
-
-        function hiAsOfStrictBefore(dateIso: string | null): number | null {
-          if (!dateIso || !histRows.length) return null;
-          const target = new Date(dateIso).getTime();
-          if (!Number.isFinite(target)) return null;
-
-          let lo = 0;
-          let hi = histRows.length - 1;
-          let bestIdx = -1;
-
-          while (lo <= hi) {
-            const mid = (lo + hi) >> 1;
-            const t = new Date(histRows[mid].as_of_date).getTime();
-            if (!Number.isFinite(t)) {
-              lo = mid + 1;
-              continue;
-            }
-            if (t < target) {
-              bestIdx = mid;
-              lo = mid + 1;
-            } else {
-              hi = mid - 1;
-            }
-          }
-
-          return bestIdx >= 0 ? histRows[bestIdx].handicap_index : null;
-        }
-
-        const hiAfterMap: Record<string, number> = {};
-        const hiBeforeMap: Record<string, number> = {};
-
-        for (const r of extracted) {
-          const dateIso = r.started_at ?? r.created_at;
-
-          const after = hiAsOfInclusive(dateIso);
-          if (after != null) hiAfterMap[r.id] = after;
-
-          const before = hiAsOfStrictBefore(dateIso);
-          if (before != null) hiBeforeMap[r.id] = before;
-        }
-
-        if (!cancelled) {
-          setHiAfterByRoundId(hiAfterMap);
-          setHiBeforeByRoundId(hiBeforeMap);
-        }
       } catch (e: any) {
         console.warn("History load error:", e);
         if (!cancelled) setHistoryError("Could not load round history for this player.");
@@ -1122,10 +1034,10 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
                         const sd = scoreDiffByRoundId[r.id];
                         const sdText = typeof sd === "number" ? `Score Diff: ${sd.toFixed(1)}` : "SD —";
 
-                        const hiBefore = hiBeforeByRoundId[r.id];
-                        const isExceptional = typeof hiBefore === "number" && typeof sd === "number" && sd <= hiBefore - 7;
+                        const hiForRound = hiUsedByRoundId[r.id];
+                        const isExceptional = typeof hiForRound === "number" && typeof sd === "number" && sd <= hiForRound - 7;
 
-                        const hiText2 = typeof hiBefore === "number" ? `Index: ${hiBefore.toFixed(1)}` : "—";
+                        const hiText2 = typeof hiForRound === "number" ? `Index: ${hiForRound.toFixed(1)}` : "—";
 
                         const isCounting = countingSet.has(r.id);
                         const isCutoff = cutoffRoundId === r.id;
