@@ -11,86 +11,14 @@ import { ParticipantsList } from "@/components/rounds/ParticipantsList";
 import { CourseAndTeeSection } from "@/components/rounds/CourseAndTeeSection";
 import type { RoundFormatType } from "@/components/rounds/FormatSelector";
 import type { PlayingHandicapMode } from "@/components/rounds/PlayingHandicapSettings";
-
-type Round = {
-  id: string;
-  name: string | null;
-  status: "draft" | "scheduled" | "starting" | "live" | "finished";
-  course_id: string | null;
-  pending_tee_box_id: string | null;
-  started_at: string | null;
-  courses?: { name: string | null }[] | { name: string | null } | null;
-  // Format and handicap fields
-  format_type?: RoundFormatType;
-  format_config?: Record<string, any>;
-  side_games?: Array<any>;
-  scheduled_at?: string | null;
-  default_playing_handicap_mode?: PlayingHandicapMode;
-  default_playing_handicap_value?: number;
-};
-
-type ProfileJoin = {
-  id?: string;
-  name: string | null;
-  email: string | null;
-  avatar_url: string | null;
-};
-
-// ✅ IMPORTANT: Supabase can return join as OBJECT or ARRAY depending on relationship inference.
-// So we accept both and normalize.
-type Participant = {
-  id: string;
-  profile_id: string | null;
-  is_guest: boolean;
-  display_name: string | null;
-  role: "owner" | "scorer" | "player";
-  profiles?: ProfileJoin | ProfileJoin[] | null;
-  // Handicap fields
-  handicap_index?: number | null;
-  assigned_playing_handicap?: number | null;
-  assigned_handicap_index?: number | null;
-  playing_handicap_used?: number | null;
-  course_handicap_used?: number | null;
-};
-
-type ProfileLite = {
-  id: string;
-  name: string | null;
-  email: string | null;
-  avatar_url: string | null;
-};
-
-function courseNameFromJoin(round: any): string | null {
-  const c = round?.courses;
-  if (!c) return null;
-  if (Array.isArray(c)) return c?.[0]?.name ?? null;
-  return c?.name ?? null;
-}
-
-function niceNameFromEmail(email?: string | null) {
-  if (!email) return null;
-  const left = email.split("@")[0]?.trim();
-  return left || null;
-}
-
-function pickNickname(p: { name?: string | null; email?: string | null } | null | undefined) {
-  return p?.name || niceNameFromEmail(p?.email) || p?.email || "User";
-}
-
-function getProfile(p: Participant): ProfileJoin | null {
-  const pr = p.profiles;
-  if (!pr) return null;
-  return Array.isArray(pr) ? pr[0] ?? null : pr;
-}
-
-function round1(n: number) {
-  return Math.round(n * 10) / 10;
-}
-
-// WHS: Course Handicap = HI*(Slope/113) + (Course Rating - Par)
-function calcCourseHandicap(hi: number, slope: number, rating: number, par: number) {
-  return Math.round(hi * (slope / 113) + (rating - par));
-}
+import {
+  courseNameFromJoin,
+  pickNickname,
+  getProfile,
+  calcCourseHandicap,
+} from "@/lib/rounds/setupHelpers";
+import type { Round, Participant, ProfileJoin, ProfileLite } from "@/lib/rounds/setupHelpers";
+import { round1 } from "@/lib/stats/helpers";
 
 function Avatar({
   name,
@@ -911,6 +839,8 @@ export default function RoundSetupPage() {
   }, [moreQuery, showSearchMore]);
 
   const canEdit = isOwner && !starting;
+  const roundFull = participants.length >= 4;
+  const canAdd = canEdit && !roundFull;
 
   return (
     <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[calc(env(safe-area-inset-bottom)+3rem)]">
@@ -1037,6 +967,10 @@ export default function RoundSetupPage() {
             isOwner={isOwner}
             isEditable={round.status === "draft" || round.status === "scheduled"}
             onUpdate={fetchAll}
+            participants={participants.map((p) => ({
+              id: p.id,
+              displayName: displayParticipant(p).name,
+            }))}
           />
         ) : null}
 
@@ -1047,7 +981,10 @@ export default function RoundSetupPage() {
             <div className="px-1">
               <div className="text-sm font-semibold text-[#f5e6b0]">Players</div>
               <div className="text-[10px] text-emerald-100/50">
-                {participants.length} player{participants.length !== 1 ? "s" : ""} in this round
+                {participants.length}/4 player{participants.length !== 1 ? "s" : ""} in this round
+                {participants.length >= 4 ? (
+                  <span className="ml-1 text-amber-200/80">· Round is full</span>
+                ) : null}
               </div>
             </div>
 
@@ -1124,7 +1061,7 @@ export default function RoundSetupPage() {
                 placeholder="Search following…"
                 value={followFilter}
                 onChange={(e) => setFollowFilter(e.target.value)}
-                disabled={!canEdit}
+                disabled={!canAdd}
               />
 
               <div className="max-h-[220px] overflow-y-auto overscroll-contain pr-1">
@@ -1135,7 +1072,7 @@ export default function RoundSetupPage() {
                       <button
                         key={p.id}
                         onClick={() => addProfile(p.id)}
-                        disabled={!canEdit}
+                        disabled={!canAdd}
                         className="w-full text-left rounded-2xl border border-emerald-900/70 bg-[#042713]/60 p-3 flex items-center gap-3 hover:bg-[#07341c]/70 disabled:opacity-60"
                       >
                         <Avatar name={name} url={p.avatar_url} size={34} />
@@ -1161,7 +1098,7 @@ export default function RoundSetupPage() {
                   variant="ghost"
                   className="flex-1 rounded-2xl border border-emerald-900/70 text-emerald-100 hover:bg-emerald-900/20"
                   onClick={() => setShowSearchMore((v) => !v)}
-                  disabled={!canEdit}
+                  disabled={!canAdd}
                 >
                   {showSearchMore ? "Hide search" : "Search more"}
                 </Button>
@@ -1170,7 +1107,7 @@ export default function RoundSetupPage() {
                   variant="ghost"
                   className="flex-1 rounded-2xl border border-emerald-900/70 text-emerald-100 hover:bg-emerald-900/20"
                   onClick={() => setShowGuest((v) => !v)}
-                  disabled={!canEdit}
+                  disabled={!canAdd}
                 >
                   {showGuest ? "Cancel guest" : "Add guest"}
                 </Button>
@@ -1184,7 +1121,7 @@ export default function RoundSetupPage() {
                     placeholder="Type to search…"
                     value={moreQuery}
                     onChange={(e) => setMoreQuery(e.target.value)}
-                    disabled={!canEdit}
+                    disabled={!canAdd}
                   />
 
                   {searchingMore ? (
@@ -1200,7 +1137,7 @@ export default function RoundSetupPage() {
                         <button
                           key={p.id}
                           onClick={() => addProfile(p.id)}
-                          disabled={!canEdit}
+                          disabled={!canAdd}
                           className="w-full text-left rounded-2xl border border-emerald-900/70 bg-[#042713]/60 p-3 flex items-center gap-3 hover:bg-[#07341c]/70 disabled:opacity-60"
                         >
                           <Avatar name={name} url={p.avatar_url} size={34} />
@@ -1225,12 +1162,12 @@ export default function RoundSetupPage() {
                       placeholder="e.g. Dan"
                       value={guestName}
                       onChange={(e) => setGuestName(e.target.value)}
-                      disabled={!canEdit || addingGuest}
+                      disabled={!canAdd || addingGuest}
                     />
                     <Button
                       className="rounded-xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c]"
                       onClick={addGuest}
-                      disabled={!canEdit || addingGuest || !guestName.trim()}
+                      disabled={!canAdd || addingGuest || !guestName.trim()}
                     >
                       {addingGuest ? "…" : "Add"}
                     </Button>

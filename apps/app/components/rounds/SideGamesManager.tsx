@@ -1,55 +1,99 @@
 // components/rounds/SideGamesManager.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import type { RoundFormatType } from "./FormatSelector";
+import { isTeamFormat } from "./FormatSelector";
 
-type SideGame = {
-  name: "skins" | "wolf" | "nassau";
-  enabled: boolean;
-  config?: Record<string, any>;
+type GameDef = {
+  id: "skins" | "wolf" | "nassau";
+  label: string;
+  teamLabel?: string;
+  description: string;
+  teamDescription?: string;
+  defaultConfig: Record<string, any>;
+  compat: {
+    individual: boolean;
+    team: boolean;
+    excludeFormats?: RoundFormatType[];
+  };
 };
 
-const AVAILABLE_GAMES = [
+const AVAILABLE_GAMES: GameDef[] = [
   {
-    id: "skins" as const,
+    id: "skins",
     label: "Skins",
-    description: "Lowest unique score on each hole wins",
+    teamLabel: "Team Skins",
+    description: "Lowest unique net score on each hole wins",
+    teamDescription: "Lowest team net score on each hole wins the skin",
     defaultConfig: { carryover: true, value_per_skin: 1 },
+    compat: { individual: true, team: true },
   },
   {
-    id: "wolf" as const,
+    id: "wolf",
     label: "Wolf",
     description: "Rotating team game with betting",
     defaultConfig: { points_per_hole: 1, lone_wolf_multiplier: 2 },
+    compat: { individual: true, team: false, excludeFormats: ["matchplay"] },
   },
   {
-    id: "nassau" as const,
+    id: "nassau",
     label: "Nassau",
     description: "Front 9, back 9, and total competition",
     defaultConfig: { stakes: { front: 5, back: 5, total: 10 } },
+    compat: { individual: true, team: true },
   },
 ];
+
+function isGameCompatible(game: GameDef, formatType: RoundFormatType): boolean {
+  const isTeam = isTeamFormat(formatType);
+  if (isTeam && !game.compat.team) return false;
+  if (!isTeam && !game.compat.individual) return false;
+  if (game.compat.excludeFormats?.includes(formatType)) return false;
+  return true;
+}
 
 type SideGamesManagerProps = {
   value: Array<any>;
   onChange: (games: Array<any>) => void;
   disabled?: boolean;
+  formatType?: RoundFormatType;
 };
 
-export function SideGamesManager({ value = [], onChange, disabled }: SideGamesManagerProps) {
+export function SideGamesManager({
+  value = [],
+  onChange,
+  disabled,
+  formatType = "strokeplay",
+}: SideGamesManagerProps) {
   const [expanded, setExpanded] = useState<string | null>(null);
 
+  const isTeam = isTeamFormat(formatType);
   const enabledGames = new Set(value.map((g: any) => g.name));
+
+  // Auto-remove incompatible sidegames when format changes
+  useEffect(() => {
+    const incompatible = value.filter((g: any) => {
+      const def = AVAILABLE_GAMES.find((d) => d.id === g.name);
+      return def && !isGameCompatible(def, formatType);
+    });
+    if (incompatible.length > 0) {
+      const filtered = value.filter((g: any) => {
+        const def = AVAILABLE_GAMES.find((d) => d.id === g.name);
+        return !def || isGameCompatible(def, formatType);
+      });
+      onChange(filtered);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formatType]);
 
   const toggleGame = (gameId: string) => {
     const game = AVAILABLE_GAMES.find((g) => g.id === gameId);
     if (!game) return;
 
     if (enabledGames.has(gameId)) {
-      // Remove game
       onChange(value.filter((g: any) => g.name !== gameId));
     } else {
-      // Add game with default config
       onChange([
         ...value,
         {
@@ -76,19 +120,26 @@ export function SideGamesManager({ value = [], onChange, disabled }: SideGamesMa
       </div>
 
       {AVAILABLE_GAMES.map((game) => {
+        const compatible = isGameCompatible(game, formatType);
         const isEnabled = enabledGames.has(game.id);
         const gameData = value.find((g: any) => g.name === game.id);
         const isExpanded = expanded === game.id;
+
+        const displayLabel = isTeam && game.teamLabel ? game.teamLabel : game.label;
+        const displayDesc = isTeam && game.teamDescription ? game.teamDescription : game.description;
 
         return (
           <div
             key={game.id}
             className={`
               rounded-lg border transition-colors
+              ${!compatible ? "border-emerald-900/40 bg-[#0b3b21]/20 opacity-50" : ""}
               ${
-                isEnabled
+                compatible && isEnabled
                   ? "border-emerald-700 bg-emerald-950/30"
-                  : "border-emerald-900/70 bg-[#0b3b21]/40"
+                  : compatible
+                    ? "border-emerald-900/70 bg-[#0b3b21]/40"
+                    : ""
               }
             `}
           >
@@ -100,17 +151,19 @@ export function SideGamesManager({ value = [], onChange, disabled }: SideGamesMa
                     type="checkbox"
                     checked={isEnabled}
                     onChange={() => toggleGame(game.id)}
-                    disabled={disabled}
+                    disabled={disabled || !compatible}
                     className="rounded border-emerald-700 text-emerald-600 focus:ring-emerald-500 disabled:opacity-50"
                   />
                   <label className="text-sm font-medium text-emerald-50 cursor-pointer select-none">
-                    {game.label}
+                    {displayLabel}
                   </label>
                 </div>
-                <p className="text-[11px] text-emerald-100/60 mt-0.5 ml-6">{game.description}</p>
+                <p className="text-[11px] text-emerald-100/60 mt-0.5 ml-6">
+                  {compatible ? displayDesc : `Not available for this format`}
+                </p>
               </div>
 
-              {isEnabled && (
+              {isEnabled && compatible && (
                 <button
                   onClick={() => setExpanded(isExpanded ? null : game.id)}
                   className="px-2 py-1 text-[11px] rounded border border-emerald-700 text-emerald-200 hover:bg-emerald-900/30 transition-colors"
@@ -121,7 +174,7 @@ export function SideGamesManager({ value = [], onChange, disabled }: SideGamesMa
             </div>
 
             {/* Game Config (Expanded) */}
-            {isEnabled && isExpanded && (
+            {isEnabled && isExpanded && compatible && (
               <div className="px-3 pb-3 border-t border-emerald-900/50 pt-3 space-y-2">
                 {game.id === "skins" && (
                   <>
@@ -207,7 +260,7 @@ export function SideGamesManager({ value = [], onChange, disabled }: SideGamesMa
       {enabledGames.size > 0 && (
         <div className="rounded-lg border border-blue-900/50 bg-blue-950/20 p-2">
           <p className="text-[10px] text-blue-100/90">
-            <span className="font-semibold">ℹ️ Side Games:</span> These games run alongside the main
+            <span className="font-semibold">Side Games:</span> These games run alongside the main
             format. Results are tracked separately and don't affect handicaps.
           </p>
         </div>

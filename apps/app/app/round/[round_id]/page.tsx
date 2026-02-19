@@ -10,6 +10,7 @@ import { useRoundDetail } from "@/lib/rounds/hooks/useRoundDetail";
 import type { Participant, Hole, HoleState } from "@/lib/rounds/hooks/useRoundDetail";
 import { strokesReceivedOnHole, netFromGross } from "@/lib/rounds/handicapUtils";
 import { computeFormatDisplay, type FormatScoreView, type FormatDisplayData } from "@/lib/rounds/formatScoring";
+import { useOrientationLock } from "@/lib/useOrientationLock";
 
 import ConfirmSheet from "@/components/round/ConfirmSheet";
 import ScoreEntrySheet from "@/components/round/ScoreEntrySheet";
@@ -206,6 +207,7 @@ export default function RoundDetailPage() {
   const params = useParams<{ round_id: string }>();
   const roundId = params.round_id;
 
+  useOrientationLock("any");
   const isPortrait = useMediaQuery("(orientation: portrait)");
 
   const {
@@ -600,8 +602,37 @@ export default function RoundDetailPage() {
   const needsSetup = !hasStarted || !teeSnapshotId;
   const canFinish = hasStarted && !!teeSnapshotId && canScore && !isFinished;
 
-  const compactPlayers = participants.length >= 6;
-  const portraitCols = `30px 32px 38px 30px repeat(${participants.length}, minmax(0, 1fr))`;
+  // Scramble mode: show one column per team instead of one per player.
+  // Each team's scores map to the first team member's participant ID.
+  const isScramble = formatType === "scramble";
+  const scrambleTeamParticipants = useMemo<Participant[]>(() => {
+    if (!isScramble || !teams.length) return participants;
+    // Build a virtual participant per team, using first member's ID
+    return teams.map((t) => {
+      const members = participants.filter((p) => p.team_id === t.id);
+      const first = members[0];
+      if (!first) return null;
+      return {
+        ...first,
+        display_name: t.name, // Show team name instead of player name
+      } as Participant;
+    }).filter(Boolean) as Participant[];
+  }, [isScramble, teams, participants]);
+
+  const scorecardParticipants = isScramble ? scrambleTeamParticipants : participants;
+
+  const scrambleGetLabel = useCallback((p: Participant) => {
+    if (isScramble) return p.display_name || "Team";
+    return getParticipantLabel(p);
+  }, [isScramble, getParticipantLabel]);
+
+  const scrambleGetAvatar = useCallback((p: Participant) => {
+    if (isScramble) return null; // No avatar for teams
+    return getParticipantAvatar(p);
+  }, [isScramble, getParticipantAvatar]);
+
+  const compactPlayers = scorecardParticipants.length >= 6;
+  const portraitCols = `30px 32px 38px 30px repeat(${scorecardParticipants.length}, minmax(0, 1fr))`;
   const landscapeCols = `140px repeat(${landscapePlan.length}, minmax(0, 1fr))`;
 
   const subtitle = `${status}${playedOnLabel ? ` · ${playedOnLabel}` : ""}`;
@@ -730,7 +761,7 @@ export default function RoundDetailPage() {
         {!needsSetup ? (
           isPortrait ? (
             <ScorecardPortrait
-              participants={participants}
+              participants={scorecardParticipants}
               holesList={holesList}
               portraitCols={portraitCols}
               compactPlayers={compactPlayers}
@@ -744,12 +775,12 @@ export default function RoundDetailPage() {
               totals={totals}
               displayedScoreFor={displayedScoreFor}
               onOpenEntry={openEntry}
-              getParticipantLabel={getParticipantLabel}
-              getParticipantAvatar={getParticipantAvatar}
+              getParticipantLabel={scrambleGetLabel}
+              getParticipantAvatar={scrambleGetAvatar}
             />
           ) : (
             <ScorecardLandscape
-              participants={participants}
+              participants={scorecardParticipants}
               holesList={holesList}
               landscapePlan={landscapePlan}
               landscapeCols={landscapeCols}
@@ -763,8 +794,8 @@ export default function RoundDetailPage() {
               totals={totals}
               displayedScoreFor={displayedScoreFor}
               onOpenEntry={openEntry}
-              getParticipantLabel={getParticipantLabel}
-              getParticipantAvatar={getParticipantAvatar}
+              getParticipantLabel={scrambleGetLabel}
+              getParticipantAvatar={scrambleGetAvatar}
             />
           )
         ) : null}

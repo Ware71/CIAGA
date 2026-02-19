@@ -100,6 +100,21 @@ function stablefordPoints(netRelToPar: number, pointsTable: Record<string, numbe
   return pointsTable.worse ?? DEFAULT_STABLEFORD.worse;
 }
 
+/** Compute stableford points for a single participant on a single hole */
+function playerStablefordPtsOnHole(
+  p: Participant,
+  h: Hole,
+  scoresByKey: Record<string, Score>,
+  holeStatesByKey: Record<string, HoleState>,
+  pointsTable: Record<string, number>
+): number | null {
+  const gross = grossFor(p.id, h.hole_number, scoresByKey, holeStatesByKey);
+  if (gross === null || !h.par) return null;
+  const recv = strokesReceivedOnHole(playingHcp(p), h.stroke_index);
+  const net = netFromGross(gross, recv);
+  return stablefordPoints(net - h.par, pointsTable);
+}
+
 // ── Per-format calculators ─────────────────────────────────────────────
 
 function computeStableford(
@@ -113,22 +128,17 @@ function computeStableford(
   const holeResults: Record<string, FormatHoleResult> = {};
 
   for (const p of participants) {
-    const hcp = playingHcp(p);
     for (const h of holes) {
       const key = `${p.id}:${h.hole_number}`;
-      const gross = grossFor(p.id, h.hole_number, scoresByKey, holeStatesByKey);
-      if (gross === null || !h.par) {
+      const pts = playerStablefordPtsOnHole(p, h, scoresByKey, holeStatesByKey, pointsTable);
+      if (pts === null) {
         holeResults[key] = { displayValue: null };
-        continue;
+      } else {
+        holeResults[key] = {
+          displayValue: pts,
+          cssHint: pts >= 3 ? "positive" : pts === 0 ? "negative" : "neutral",
+        };
       }
-      const recv = strokesReceivedOnHole(hcp, h.stroke_index);
-      const net = netFromGross(gross, recv);
-      const relToPar = net - h.par;
-      const pts = stablefordPoints(relToPar, pointsTable);
-      holeResults[key] = {
-        displayValue: pts,
-        cssHint: pts >= 3 ? "positive" : pts === 0 ? "negative" : "neutral",
-      };
     }
   }
 
@@ -146,16 +156,41 @@ function computeMatchPlay(
   participants: Participant[],
   holes: Hole[],
   scoresByKey: Record<string, Score>,
-  holeStatesByKey: Record<string, HoleState>
+  holeStatesByKey: Record<string, HoleState>,
+  formatConfig: Record<string, any>
 ): FormatDisplayData | null {
-  // Match play needs exactly 2 participants
-  if (participants.length !== 2) return null;
-  const [pA, pB] = participants;
+  const matchups: Array<{ player_a_id: string; player_b_id: string }> = formatConfig.matchups || [];
+
+  // If no matchups configured, fall back to auto-pair with exactly 2 players
+  if (matchups.length === 0) {
+    if (participants.length !== 2) return null;
+    return computeMatchPlayPair(
+      participants[0], participants[1], participants, holes, scoresByKey, holeStatesByKey
+    );
+  }
+
+  // Round-robin or manual matchups: compute for the first matchup for now
+  // (full round-robin display would need a multi-match view)
+  const first = matchups[0];
+  const pA = participants.find((p) => p.id === first.player_a_id);
+  const pB = participants.find((p) => p.id === first.player_b_id);
+  if (!pA || !pB) return null;
+
+  return computeMatchPlayPair(pA, pB, participants, holes, scoresByKey, holeStatesByKey);
+}
+
+function computeMatchPlayPair(
+  pA: Participant,
+  pB: Participant,
+  allParticipants: Participant[],
+  holes: Hole[],
+  scoresByKey: Record<string, Score>,
+  holeStatesByKey: Record<string, HoleState>
+): FormatDisplayData {
   const hcpA = playingHcp(pA);
   const hcpB = playingHcp(pB);
-
   const holeResults: Record<string, FormatHoleResult> = {};
-  let cumulativeState = 0; // positive = pA up, negative = pB up
+  let cumulativeState = 0;
 
   for (const h of holes) {
     const grossA = grossFor(pA.id, h.hole_number, scoresByKey, holeStatesByKey);
@@ -231,7 +266,6 @@ function computeSkins(
     const skinValue = 1 + carryover;
 
     if (bestPids.length === 1) {
-      // Unique lowest — wins skin(s)
       skinCounts[bestPids[0]] += skinValue;
       carryover = 0;
       for (const p of participants) {
@@ -243,7 +277,6 @@ function computeSkins(
         }
       }
     } else {
-      // Tie — carry over
       carryover += 1;
       for (const p of participants) {
         holeResults[`${p.id}:${h.hole_number}`] = { displayValue: "–", cssHint: "halved" };
@@ -328,13 +361,8 @@ function computeTeamStableford(
       let sum = 0;
       let anyScore = false;
       for (const p of members) {
-        const gross = grossFor(p.id, h.hole_number, scoresByKey, holeStatesByKey);
-        if (gross === null || !h.par) continue;
-        const recv = strokesReceivedOnHole(playingHcp(p), h.stroke_index);
-        const net = netFromGross(gross, recv);
-        const pts = stablefordPoints(net - h.par, pointsTable);
-        sum += pts;
-        anyScore = true;
+        const pts = playerStablefordPtsOnHole(p, h, scoresByKey, holeStatesByKey, pointsTable);
+        if (pts !== null) { sum += pts; anyScore = true; }
       }
       holeResults[`${teamId}:${h.hole_number}`] = anyScore
         ? { displayValue: sum, cssHint: sum >= 4 ? "positive" : sum === 0 ? "negative" : "neutral" }
@@ -358,25 +386,118 @@ function computeTeamBestBall(
   holes: Hole[],
   scoresByKey: Record<string, Score>,
   holeStatesByKey: Record<string, HoleState>,
-  teams: Team[]
+  teams: Team[],
+  formatConfig: Record<string, any>
 ): FormatDisplayData | null {
   if (!teams.length) return null;
   const teamMap = buildTeamMap(participants, teams);
   const holeResults: Record<string, FormatHoleResult> = {};
 
+  const scoringType: string = formatConfig.scoring_type || "net_strokes";
+  const countPerHole: number = formatConfig.count_per_hole || 1;
+  const pointsTable = { ...DEFAULT_STABLEFORD, ...(formatConfig.points_table ?? {}) };
+
   for (const [teamId, members] of teamMap) {
     for (const h of holes) {
-      let best: number | null = null;
-      for (const p of members) {
-        const gross = grossFor(p.id, h.hole_number, scoresByKey, holeStatesByKey);
-        if (gross === null) continue;
-        const recv = strokesReceivedOnHole(playingHcp(p), h.stroke_index);
-        const net = netFromGross(gross, recv);
-        if (best === null || net < best) best = net;
+      if (scoringType === "stableford") {
+        // Best X stableford points
+        const allPts: number[] = [];
+        for (const p of members) {
+          const pts = playerStablefordPtsOnHole(p, h, scoresByKey, holeStatesByKey, pointsTable);
+          if (pts !== null) allPts.push(pts);
+        }
+        if (allPts.length === 0) {
+          holeResults[`${teamId}:${h.hole_number}`] = { displayValue: null };
+        } else {
+          allPts.sort((a, b) => b - a); // highest first
+          const topN = allPts.slice(0, countPerHole);
+          const sum = topN.reduce((a, b) => a + b, 0);
+          holeResults[`${teamId}:${h.hole_number}`] = {
+            displayValue: sum,
+            cssHint: sum >= 3 ? "positive" : sum === 0 ? "negative" : "neutral",
+          };
+        }
+      } else {
+        // Best X net strokes (lowest)
+        const allNets: number[] = [];
+        for (const p of members) {
+          const gross = grossFor(p.id, h.hole_number, scoresByKey, holeStatesByKey);
+          if (gross === null) continue;
+          const recv = strokesReceivedOnHole(playingHcp(p), h.stroke_index);
+          allNets.push(netFromGross(gross, recv));
+        }
+        if (allNets.length === 0) {
+          holeResults[`${teamId}:${h.hole_number}`] = { displayValue: null };
+        } else {
+          allNets.sort((a, b) => a - b); // lowest first
+          const topN = allNets.slice(0, countPerHole);
+          const sum = topN.reduce((a, b) => a + b, 0);
+          holeResults[`${teamId}:${h.hole_number}`] = { displayValue: sum };
+        }
       }
-      holeResults[`${teamId}:${h.hole_number}`] = best !== null
-        ? { displayValue: best }
-        : { displayValue: null };
+    }
+  }
+
+  const higherIsBetter = scoringType === "stableford";
+  const summaries: FormatSummary[] = teams.map((t) => ({
+    participantId: t.id,
+    teamId: t.id,
+    out: sumRange(holeResults, t.id, holes, 1, 9),
+    inn: sumRange(holeResults, t.id, holes, 10, 18),
+    total: sumRange(holeResults, t.id, holes, 1, 18),
+  }));
+
+  return { tabLabel: "Best Ball", holeResults, summaries, higherIsBetter, isTeamView: true };
+}
+
+// ── Pairs Stableford ──────────────────────────────────────────────────
+
+function computePairsStableford(
+  participants: Participant[],
+  holes: Hole[],
+  scoresByKey: Record<string, Score>,
+  holeStatesByKey: Record<string, HoleState>,
+  teams: Team[],
+  formatConfig: Record<string, any>
+): FormatDisplayData | null {
+  if (!teams.length) return null;
+  const teamMap = buildTeamMap(participants, teams);
+  const pointsTable = { ...DEFAULT_STABLEFORD, ...(formatConfig.points_table ?? {}) };
+  const scoringMode: string = formatConfig.scoring_mode || "best";
+  const countPerHole: number = formatConfig.count_per_hole || 1;
+  const holeResults: Record<string, FormatHoleResult> = {};
+
+  for (const [teamId, members] of teamMap) {
+    for (const h of holes) {
+      const allPts: number[] = [];
+      for (const p of members) {
+        const pts = playerStablefordPtsOnHole(p, h, scoresByKey, holeStatesByKey, pointsTable);
+        if (pts !== null) allPts.push(pts);
+      }
+
+      if (allPts.length === 0) {
+        holeResults[`${teamId}:${h.hole_number}`] = { displayValue: null };
+        continue;
+      }
+
+      let teamPts: number;
+      if (scoringMode === "combined") {
+        teamPts = allPts.reduce((a, b) => a + b, 0);
+      } else if (scoringMode === "worst") {
+        allPts.sort((a, b) => a - b); // lowest first
+        const selected = allPts.slice(0, countPerHole);
+        teamPts = selected.reduce((a, b) => a + b, 0);
+      } else {
+        // "best" (default)
+        allPts.sort((a, b) => b - a); // highest first
+        const selected = allPts.slice(0, countPerHole);
+        teamPts = selected.reduce((a, b) => a + b, 0);
+      }
+
+      holeResults[`${teamId}:${h.hole_number}`] = {
+        displayValue: teamPts,
+        cssHint: teamPts >= 3 ? "positive" : teamPts === 0 ? "negative" : "neutral",
+      };
     }
   }
 
@@ -388,8 +509,10 @@ function computeTeamBestBall(
     total: sumRange(holeResults, t.id, holes, 1, 18),
   }));
 
-  return { tabLabel: "Best Ball", holeResults, summaries, higherIsBetter: false, isTeamView: true };
+  return { tabLabel: "Pairs Stblfd", holeResults, summaries, higherIsBetter: true, isTeamView: true };
 }
+
+// ── Single-score team formats ─────────────────────────────────────────
 
 function computeTeamSingleScore(
   tabLabel: string,
@@ -407,7 +530,6 @@ function computeTeamSingleScore(
 
   for (const [teamId, members] of teamMap) {
     for (const h of holes) {
-      // Use the first member who has a score (team shares one ball)
       let teamScore: number | null = null;
       for (const p of members) {
         const gross = grossFor(p.id, h.hole_number, scoresByKey, holeStatesByKey);
@@ -430,11 +552,58 @@ function computeTeamSingleScore(
   return { tabLabel, holeResults, summaries, higherIsBetter: false, isTeamView: true };
 }
 
+// ── Strokeplay format tab (conditional) ───────────────────────────────
+
+function computeStrokeplayFormatTab(
+  participants: Participant[],
+  holes: Hole[],
+  scoresByKey: Record<string, Score>,
+  holeStatesByKey: Record<string, HoleState>
+): FormatDisplayData | null {
+  // Only show format tab if any player's playing_handicap_used differs from course_handicap_used
+  // (meaning an allowance %, manual override, or compare_against_lowest was applied)
+  const hasAdjustedHandicap = participants.some((p) => {
+    const ph = typeof p.playing_handicap_used === "number" ? p.playing_handicap_used : null;
+    const ch = typeof p.course_handicap_used === "number" ? p.course_handicap_used : null;
+    if (ph === null && ch === null) return false;
+    return ph !== ch;
+  });
+
+  if (!hasAdjustedHandicap) return null;
+
+  // Show net scores using the playing handicap
+  const holeResults: Record<string, FormatHoleResult> = {};
+
+  for (const p of participants) {
+    const hcp = playingHcp(p);
+    for (const h of holes) {
+      const key = `${p.id}:${h.hole_number}`;
+      const gross = grossFor(p.id, h.hole_number, scoresByKey, holeStatesByKey);
+      if (gross === null || !h.par) {
+        holeResults[key] = { displayValue: null };
+        continue;
+      }
+      const recv = strokesReceivedOnHole(hcp, h.stroke_index);
+      const net = netFromGross(gross, recv);
+      holeResults[key] = { displayValue: net };
+    }
+  }
+
+  const summaries: FormatSummary[] = participants.map((p) => ({
+    participantId: p.id,
+    out: sumRange(holeResults, p.id, holes, 1, 9),
+    inn: sumRange(holeResults, p.id, holes, 10, 18),
+    total: sumRange(holeResults, p.id, holes, 1, 18),
+  }));
+
+  return { tabLabel: "Playing Hcp", holeResults, summaries, higherIsBetter: false, isTeamView: false };
+}
+
 // ── Main dispatcher ────────────────────────────────────────────────────
 
 /**
  * Compute format-specific display data for the "Format" tab.
- * Returns `null` when no special tab is needed (e.g. strokeplay — Gross/Net covers it).
+ * Returns `null` when no special tab is needed (e.g. strokeplay with 100% allowance).
  */
 export function computeFormatDisplay(
   formatType: RoundFormatType,
@@ -447,16 +616,19 @@ export function computeFormatDisplay(
 ): FormatDisplayData | null {
   switch (formatType) {
     case "strokeplay":
-      return null; // Gross/Net covers it
+      return computeStrokeplayFormatTab(participants, holes, scoresByKey, holeStatesByKey);
 
     case "stableford":
       return computeStableford(participants, holes, scoresByKey, holeStatesByKey, formatConfig);
 
     case "matchplay":
-      return computeMatchPlay(participants, holes, scoresByKey, holeStatesByKey);
+      return computeMatchPlay(participants, holes, scoresByKey, holeStatesByKey, formatConfig);
 
     case "skins":
       return computeSkins(participants, holes, scoresByKey, holeStatesByKey);
+
+    case "pairs_stableford":
+      return computePairsStableford(participants, holes, scoresByKey, holeStatesByKey, teams, formatConfig);
 
     case "team_strokeplay":
       return computeTeamStrokeplay(participants, holes, scoresByKey, holeStatesByKey, teams);
@@ -465,7 +637,7 @@ export function computeFormatDisplay(
       return computeTeamStableford(participants, holes, scoresByKey, holeStatesByKey, teams, formatConfig);
 
     case "team_bestball":
-      return computeTeamBestBall(participants, holes, scoresByKey, holeStatesByKey, teams);
+      return computeTeamBestBall(participants, holes, scoresByKey, holeStatesByKey, teams, formatConfig);
 
     case "scramble":
       return computeTeamSingleScore("Scramble", participants, holes, scoresByKey, holeStatesByKey, teams);

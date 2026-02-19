@@ -1,12 +1,13 @@
 // components/rounds/PlayingHandicapSettings.tsx
 "use client";
 
-export type PlayingHandicapMode = "none" | "allowance_pct" | "fixed";
+export type PlayingHandicapMode = "none" | "allowance_pct" | "fixed" | "compare_against_lowest";
 
 const MODE_LABELS: Record<PlayingHandicapMode, string> = {
   none: "No Handicap (Gross Only)",
   allowance_pct: "Percentage Allowance",
   fixed: "Fixed Handicap",
+  compare_against_lowest: "Off the Lowest",
 };
 
 const MODE_DESCRIPTIONS: Record<PlayingHandicapMode, string> = {
@@ -14,6 +15,8 @@ const MODE_DESCRIPTIONS: Record<PlayingHandicapMode, string> = {
   allowance_pct:
     "Apply a percentage of course handicap (e.g., 100% for stroke play, 85% for match play)",
   fixed: "Use a fixed playing handicap value for all participants",
+  compare_against_lowest:
+    "Best player plays off scratch. Others receive strokes equal to the difference from the lowest handicap.",
 };
 
 type PlayingHandicapSettingsProps = {
@@ -41,10 +44,11 @@ export function PlayingHandicapSettings({
         <div className="rounded-lg border border-emerald-900/70 bg-[#0b3b21]/50 p-3">
           <div className="text-sm font-semibold text-emerald-50">
             {MODE_LABELS[mode]}
-            {mode !== "none" && (
-              <span className="text-emerald-200/80 ml-2">
-                ({mode === "allowance_pct" ? `${value}%` : value})
-              </span>
+            {mode === "allowance_pct" && (
+              <span className="text-emerald-200/80 ml-2">({value}%)</span>
+            )}
+            {mode === "fixed" && (
+              <span className="text-emerald-200/80 ml-2">({value})</span>
             )}
           </div>
           <div className="text-xs text-emerald-100/70 mt-1">{MODE_DESCRIPTIONS[mode]}</div>
@@ -70,6 +74,7 @@ export function PlayingHandicapSettings({
           if (newMode === "none") onValueChange(0);
           else if (newMode === "allowance_pct") onValueChange(100);
           else if (newMode === "fixed") onValueChange(18);
+          else if (newMode === "compare_against_lowest") onValueChange(0);
         }}
         disabled={disabled}
         className="w-full rounded-lg border border-emerald-900/70 bg-[#0b3b21]/70 px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -77,10 +82,11 @@ export function PlayingHandicapSettings({
         <option value="none">{MODE_LABELS.none}</option>
         <option value="allowance_pct">{MODE_LABELS.allowance_pct}</option>
         <option value="fixed">{MODE_LABELS.fixed}</option>
+        <option value="compare_against_lowest">{MODE_LABELS.compare_against_lowest}</option>
       </select>
 
       {/* Value Input (only shown for allowance_pct and fixed modes) */}
-      {mode !== "none" && (
+      {mode !== "none" && mode !== "compare_against_lowest" && (
         <div className="space-y-2">
           <label htmlFor="handicap-value" className="text-xs text-emerald-100/80">
             {mode === "allowance_pct" ? "Allowance Percentage" : "Fixed Handicap Value"}

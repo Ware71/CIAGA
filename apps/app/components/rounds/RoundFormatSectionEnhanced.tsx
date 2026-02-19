@@ -2,11 +2,24 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { FormatSelector, RoundFormatType } from "./FormatSelector";
+import { FormatSelector, RoundFormatType, isTeamFormat } from "./FormatSelector";
 import { PlayingHandicapSettings, PlayingHandicapMode } from "./PlayingHandicapSettings";
 import { StablefordConfigEditor } from "./StablefordConfigEditor";
 import { SideGamesManager } from "./SideGamesManager";
+import { PairsStablefordConfig, PairsScoringMode } from "./PairsStablefordConfig";
+import { BestBallConfig, BestBallScoringType } from "./BestBallConfig";
+import { MatchupEditor } from "./MatchupEditor";
 import { supabase } from "@/lib/supabaseClient";
+
+type MatchupParticipant = {
+  id: string;
+  displayName: string;
+};
+
+type MatchupTeam = {
+  id: string;
+  name: string;
+};
 
 type RoundFormatSectionEnhancedProps = {
   roundId: string;
@@ -18,6 +31,8 @@ type RoundFormatSectionEnhancedProps = {
   isOwner: boolean;
   isEditable: boolean;
   onUpdate?: () => void;
+  participants?: MatchupParticipant[];
+  teams?: MatchupTeam[];
 };
 
 export function RoundFormatSectionEnhanced({
@@ -30,6 +45,8 @@ export function RoundFormatSectionEnhanced({
   isOwner,
   isEditable,
   onUpdate,
+  participants = [],
+  teams = [],
 }: RoundFormatSectionEnhancedProps) {
   const [formatType, setFormatType] = useState<RoundFormatType>(initialFormat);
   const [formatConfig, setFormatConfig] = useState(initialFormatConfig);
@@ -115,7 +132,14 @@ export function RoundFormatSectionEnhanced({
     }
   };
 
-  const requiresConfig = formatType === "stableford" || formatType === "team_stableford";
+  const showStablefordConfig =
+    formatType === "stableford" ||
+    formatType === "team_stableford" ||
+    formatType === "pairs_stableford";
+
+  const showPairsConfig = formatType === "pairs_stableford";
+  const showBestBallConfig = formatType === "team_bestball";
+  const showMatchups = formatType === "matchplay" || (isTeamFormat(formatType) && teams.length >= 2);
 
   return (
     <div className="space-y-4">
@@ -139,8 +163,8 @@ export function RoundFormatSectionEnhanced({
         />
       </div>
 
-      {/* Format Configuration (Stableford) */}
-      {requiresConfig && (
+      {/* Format Configuration (Stableford Points) */}
+      {showStablefordConfig && (
         <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
           <div className="mb-3">
             <div className="text-sm font-semibold text-emerald-50">Stableford Points</div>
@@ -151,6 +175,74 @@ export function RoundFormatSectionEnhanced({
             value={formatConfig.stableford_points}
             onChange={async (points) => {
               const updated = { ...formatConfig, stableford_points: points };
+              setFormatConfig(updated);
+              await handleUpdateSettings({ format_config: updated });
+            }}
+            disabled={!isEditable}
+          />
+        </div>
+      )}
+
+      {/* Pairs Stableford Configuration */}
+      {showPairsConfig && (
+        <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
+          <div className="mb-3">
+            <div className="text-sm font-semibold text-emerald-50">Pairs Scoring</div>
+            <div className="text-[11px] text-emerald-100/70">How team scores are calculated</div>
+          </div>
+
+          <PairsStablefordConfig
+            scoringMode={(formatConfig.scoring_mode as PairsScoringMode) || "best"}
+            countPerHole={formatConfig.count_per_hole}
+            onChange={async (config) => {
+              const updated = { ...formatConfig, ...config };
+              setFormatConfig(updated);
+              await handleUpdateSettings({ format_config: updated });
+            }}
+            disabled={!isEditable}
+          />
+        </div>
+      )}
+
+      {/* Best Ball Configuration */}
+      {showBestBallConfig && (
+        <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
+          <div className="mb-3">
+            <div className="text-sm font-semibold text-emerald-50">Best Ball Settings</div>
+            <div className="text-[11px] text-emerald-100/70">Scoring type and count</div>
+          </div>
+
+          <BestBallConfig
+            scoringType={(formatConfig.scoring_type as BestBallScoringType) || "net_strokes"}
+            countPerHole={formatConfig.count_per_hole}
+            onChange={async (config) => {
+              const updated = { ...formatConfig, ...config };
+              setFormatConfig(updated);
+              await handleUpdateSettings({ format_config: updated });
+            }}
+            disabled={!isEditable}
+          />
+        </div>
+      )}
+
+      {/* Matchups (for matchplay or team formats with 2+ teams) */}
+      {showMatchups && (
+        <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
+          <div className="mb-3">
+            <div className="text-sm font-semibold text-emerald-50">Matchups</div>
+            <div className="text-[11px] text-emerald-100/70">
+              {formatType === "matchplay" ? "Who plays against whom" : "Team vs team pairings"}
+            </div>
+          </div>
+
+          <MatchupEditor
+            mode={formatType === "matchplay" ? "individual" : "team"}
+            participants={participants}
+            teams={teams}
+            matchups={formatConfig.matchups || []}
+            roundRobin={formatConfig.round_robin || false}
+            onChange={async (matchups, roundRobin) => {
+              const updated = { ...formatConfig, matchups, round_robin: roundRobin };
               setFormatConfig(updated);
               await handleUpdateSettings({ format_config: updated });
             }}
@@ -211,6 +303,7 @@ export function RoundFormatSectionEnhanced({
               await handleUpdateSettings({ side_games: games });
             }}
             disabled={!isEditable}
+            formatType={formatType}
           />
         )}
 

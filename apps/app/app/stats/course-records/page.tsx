@@ -6,9 +6,10 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { getMyProfileIdByAuthUserId } from "@/lib/myProfile";
 import { Button } from "@/components/ui/button";
+import { safeNum, one, chunk } from "@/lib/stats/helpers";
 
 // -----------------------------
-// Helpers
+// Helpers (page-specific)
 // -----------------------------
 function fmtDate(isoDate: string | null | undefined) {
   if (!isoDate) return "—";
@@ -21,22 +22,6 @@ function fmtDate(isoDate: string | null | undefined) {
   } catch {
     return isoDate;
   }
-}
-
-function safeNum(x: any): number | null {
-  const n = Number(x);
-  return Number.isFinite(n) ? n : null;
-}
-
-function one<T>(v: T | T[] | null | undefined): T | null {
-  if (!v) return null;
-  return Array.isArray(v) ? (v[0] ?? null) : v;
-}
-
-function chunk<T>(arr: T[], size: number) {
-  const out: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-  return out;
 }
 
 function teeTag(teeName: string | null | undefined): "front9" | "back9" | "full" {

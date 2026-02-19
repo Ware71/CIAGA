@@ -7,6 +7,7 @@ export type RoundFormatType =
   | "strokeplay"
   | "stableford"
   | "matchplay"
+  | "pairs_stableford"
   | "team_strokeplay"
   | "team_stableford"
   | "team_bestball"
@@ -16,10 +17,25 @@ export type RoundFormatType =
   | "skins"
   | "wolf";
 
+export const TEAM_FORMATS: RoundFormatType[] = [
+  "pairs_stableford",
+  "team_strokeplay",
+  "team_stableford",
+  "team_bestball",
+  "scramble",
+  "greensomes",
+  "foursomes",
+];
+
+export function isTeamFormat(format: RoundFormatType): boolean {
+  return TEAM_FORMATS.includes(format);
+}
+
 const FORMAT_LABELS: Record<RoundFormatType, string> = {
   strokeplay: "Stroke Play",
   stableford: "Stableford",
   matchplay: "Match Play",
+  pairs_stableford: "Pairs Stableford",
   team_strokeplay: "Team Stroke Play",
   team_stableford: "Team Stableford",
   team_bestball: "Best Ball",
@@ -31,17 +47,30 @@ const FORMAT_LABELS: Record<RoundFormatType, string> = {
 };
 
 const FORMAT_DESCRIPTIONS: Record<RoundFormatType, string> = {
-  strokeplay: "Traditional stroke play - lowest total score wins",
-  stableford: "Points-based scoring system",
-  matchplay: "Head-to-head match - win holes to win the match",
-  team_strokeplay: "Team format - combined stroke play scores",
-  team_stableford: "Team format - combined stableford points",
-  team_bestball: "Team format - best score per hole counts",
-  scramble: "Team format - all play from best shot",
-  greensomes: "Team format - alternate shots after tee",
-  foursomes: "Team format - alternate shots from tee",
-  skins: "Win by having the lowest unique score on a hole",
-  wolf: "Rotating team game with betting",
+  strokeplay:
+    "Each player counts every stroke. Lowest total wins.",
+  stableford:
+    "Points per hole based on net score relative to par. Highest total points wins.",
+  matchplay:
+    "Players compete head-to-head, winning individual holes. Most holes won wins the match.",
+  pairs_stableford:
+    "Teams score stableford points individually. Best, worst, or combined scores count per hole.",
+  team_strokeplay:
+    "Teams combine all members' stroke totals. Lowest combined score wins.",
+  team_stableford:
+    "Teams combine all members' stableford points. Highest combined points wins.",
+  team_bestball:
+    "Each player plays their own ball. Best scores per hole count for the team.",
+  scramble:
+    "All players hit, team plays from the best shot. One score per team per hole.",
+  greensomes:
+    "Both tee off, choose the best drive, then alternate shots until holed out.",
+  foursomes:
+    "Partners alternate shots playing one ball. One tees off odd holes, the other even.",
+  skins:
+    "Each hole is worth a skin. Lowest unique score wins. Ties can carry over.",
+  wolf:
+    "Rotating team game. The wolf picks a partner each hole or goes lone wolf for double points.",
 };
 
 type FormatSelectorProps = {
@@ -82,8 +111,11 @@ export function FormatSelector({ value, onChange, disabled, isOwner }: FormatSel
           <option value="strokeplay">{FORMAT_LABELS.strokeplay}</option>
           <option value="stableford">{FORMAT_LABELS.stableford}</option>
           <option value="matchplay">{FORMAT_LABELS.matchplay}</option>
+          <option value="skins">{FORMAT_LABELS.skins}</option>
+          <option value="wolf">{FORMAT_LABELS.wolf}</option>
         </optgroup>
         <optgroup label="Team">
+          <option value="pairs_stableford">{FORMAT_LABELS.pairs_stableford}</option>
           <option value="team_strokeplay">{FORMAT_LABELS.team_strokeplay}</option>
           <option value="team_stableford">{FORMAT_LABELS.team_stableford}</option>
           <option value="team_bestball">{FORMAT_LABELS.team_bestball}</option>

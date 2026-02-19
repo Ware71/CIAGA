@@ -7,7 +7,7 @@ import { getMyProfileIdByAuthUserId } from "@/lib/myProfile";
 type ProfileEmbed = { name: string | null; email: string | null; avatar_url: string | null };
 
 export type RoundFormatType =
-  | "strokeplay" | "stableford" | "matchplay"
+  | "strokeplay" | "stableford" | "matchplay" | "pairs_stableford"
   | "team_strokeplay" | "team_stableford" | "team_bestball"
   | "scramble" | "greensomes" | "foursomes"
   | "skins" | "wolf";

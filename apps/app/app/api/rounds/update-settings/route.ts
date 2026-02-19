@@ -8,7 +8,7 @@ type Body = {
   format_type?: string;
   format_config?: Record<string, any>;
   side_games?: Array<any>;
-  default_playing_handicap_mode?: "none" | "allowance_pct" | "fixed";
+  default_playing_handicap_mode?: "none" | "allowance_pct" | "fixed" | "compare_against_lowest";
   default_playing_handicap_value?: number;
   scheduled_at?: string | null;
   name?: string;
