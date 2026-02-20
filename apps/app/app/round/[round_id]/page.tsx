@@ -9,14 +9,16 @@ import { finishRound as finishRoundApi } from "@/lib/rounds/api";
 import { useRoundDetail } from "@/lib/rounds/hooks/useRoundDetail";
 import type { Participant, Hole, HoleState } from "@/lib/rounds/hooks/useRoundDetail";
 import { strokesReceivedOnHole, netFromGross } from "@/lib/rounds/handicapUtils";
-import { computeFormatDisplay, type FormatScoreView, type FormatDisplayData } from "@/lib/rounds/formatScoring";
+import { computeFormatDisplay, computeSideGameDisplays, isFormatView, formatViewIndex, type FormatScoreView, type FormatDisplayData } from "@/lib/rounds/formatScoring";
 import { useOrientationLock } from "@/lib/useOrientationLock";
 
+import { Menu } from "lucide-react";
 import ConfirmSheet from "@/components/round/ConfirmSheet";
 import ScoreEntrySheet from "@/components/round/ScoreEntrySheet";
 import FinalResultsPanel from "@/components/round/FinalResultsPanel";
 import ScorecardPortrait from "@/components/round/ScorecardPortrait";
 import ScorecardLandscape from "@/components/round/ScorecardLandscape";
+import RoundMenuSheet from "@/components/round/RoundMenuSheet";
 
 type ProfileEmbed = { name: string | null; email: string | null; avatar_url: string | null };
 type Score = { participant_id: string; hole_number: number; strokes: number | null; created_at: string };
@@ -164,19 +166,50 @@ function stableNumber(n: any): number | null {
   return typeof n === "number" && Number.isFinite(n) ? n : null;
 }
 
+/** WHS net double bogey penalty for a picked-up hole: par + 2 + strokes received */
+function puPenaltyGross(par: number, courseHcp: number | null, si: number | null): number {
+  return par + 2 + strokesReceivedOnHole(courseHcp, si);
+}
+
+/** Compute set of participant IDs whose rounds don't meet WHS minimum holes */
+function getNotAcceptedParticipants(
+  participants: Participant[],
+  holesList: Hole[],
+  holeStatesByKey: Record<string, string>
+): { ids: Set<string>; names: string[] } {
+  const holeCount = holesList.length || 18;
+  const minRequired = holeCount <= 9 ? 7 : 14;
+  const ids = new Set<string>();
+  const names: string[] = [];
+
+  for (const p of participants) {
+    let holesStarted = 0;
+    for (const h of holesList) {
+      const st = holeStatesByKey[`${p.id}:${h.hole_number}`] ?? "not_started";
+      if (st !== "not_started") holesStarted++;
+    }
+    if (holesStarted < minRequired) {
+      ids.add(p.id);
+      names.push(p.display_name || "A player");
+    }
+  }
+
+  return { ids, names };
+}
+
 type FinalRow = {
   participantId: string;
   name: string;
   avatarUrl: string | null;
-  total: number;
-  out: number;
-  in: number;
+  total: number | string;
+  out: number | string;
+  in: number | string;
   toPar: number | null;
 };
 
 function buildFinalRows(
   participants: Participant[],
-  totals: Record<string, { out: number; in: number; total: number }>,
+  totals: Record<string, { out: number | string; in: number | string; total: number | string }>,
   toParTot: Record<string, number | null>,
   getParticipantLabel: (p: Participant) => string,
   getParticipantAvatar: (p: Participant) => string | null
@@ -187,9 +220,9 @@ function buildFinalRows(
       participantId: p.id,
       name: getParticipantLabel(p),
       avatarUrl: getParticipantAvatar(p),
-      total: stableNumber(t.total) ?? 0,
-      out: stableNumber(t.out) ?? 0,
-      in: stableNumber(t.in) ?? 0,
+      total: typeof t.total === "string" ? t.total : (stableNumber(t.total) ?? 0),
+      out: typeof t.out === "string" ? t.out : (stableNumber(t.out) ?? 0),
+      in: typeof t.in === "string" ? t.in : (stableNumber(t.in) ?? 0),
       toPar: toParTot[p.id] ?? null,
     };
   });
@@ -222,6 +255,7 @@ export default function RoundDetailPage() {
     playedOnIso,
     formatType,
     formatConfig,
+    sideGames,
     participants,
     teams,
     teeSnapshotId,
@@ -245,6 +279,7 @@ export default function RoundDetailPage() {
 
   const [finishOpen, setFinishOpen] = useState(false);
   const [finishing, setFinishing] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const holeCount = holes.length || 18;
 
@@ -292,9 +327,24 @@ export default function RoundDetailPage() {
     return prof?.avatar_url || null;
   }, []);
 
-  const formatDisplay = useMemo<FormatDisplayData | null>(() => {
-    return computeFormatDisplay(formatType, formatConfig, participants, holesList, scoresByKey, holeStatesByKey, teams);
-  }, [formatType, formatConfig, participants, holesList, scoresByKey, holeStatesByKey, teams]);
+  const formatDisplays = useMemo<FormatDisplayData[]>(() => {
+    const main = computeFormatDisplay(formatType, formatConfig, participants, holesList, scoresByKey, holeStatesByKey, teams, getParticipantLabel);
+    const side = computeSideGameDisplays(sideGames, participants, holesList, scoresByKey, holeStatesByKey);
+    return [...main, ...side];
+  }, [formatType, formatConfig, sideGames, participants, holesList, scoresByKey, holeStatesByKey, teams, getParticipantLabel]);
+
+  const activeFormatDisplay = useMemo<FormatDisplayData | null>(() => {
+    if (!isFormatView(scoreView)) return null;
+    const idx = formatViewIndex(scoreView);
+    return formatDisplays[idx] ?? null;
+  }, [scoreView, formatDisplays]);
+
+  // Guard: reset scoreView if selected format index is out of bounds
+  useEffect(() => {
+    if (isFormatView(scoreView) && formatViewIndex(scoreView) >= formatDisplays.length) {
+      setScoreView("gross");
+    }
+  }, [scoreView, formatDisplays]);
 
   // Displayed score:
   // - not_started => null (render blank)
@@ -302,8 +352,8 @@ export default function RoundDetailPage() {
   // - completed   => number (gross or net) or format value
   const displayedScoreFor = useCallback(
     (participantId: string, holeNumber: number): string | number | null => {
-      if (scoreView === "format" && formatDisplay) {
-        const r = formatDisplay.holeResults[`${participantId}:${holeNumber}`];
+      if (isFormatView(scoreView) && activeFormatDisplay) {
+        const r = activeFormatDisplay.holeResults[`${participantId}:${holeNumber}`];
         return r?.displayValue ?? null;
       }
 
@@ -321,35 +371,64 @@ export default function RoundDetailPage() {
       const recv = strokesReceivedOnHole(p?.course_handicap ?? null, h?.stroke_index ?? null);
       return netFromGross(gross, recv);
     },
-    [holeStateFor, scoreFor, scoreView, participants, holesList, formatDisplay]
+    [holeStateFor, scoreFor, scoreView, participants, holesList, activeFormatDisplay]
+  );
+
+  // Numeric scoring value for totals (includes PU penalty, unlike displayedScoreFor which returns "PU")
+  const scoringValueFor = useCallback(
+    (participantId: string, holeNumber: number): number | null => {
+      if (isFormatView(scoreView)) return null;
+
+      const st = holeStateFor(participantId, holeNumber);
+      if (st === "not_started") return null;
+
+      if (st === "picked_up") {
+        const h = holesList.find((x) => x.hole_number === holeNumber);
+        if (!h?.par) return null;
+        const p = participants.find((x) => x.id === participantId);
+        const courseHcp = p?.course_handicap ?? null;
+        if (scoreView === "gross") return puPenaltyGross(h.par, courseHcp, h.stroke_index);
+        return h.par + 2; // net: strokes received cancel out
+      }
+
+      const gross = scoreFor(participantId, holeNumber);
+      if (typeof gross !== "number") return null;
+      if (scoreView === "gross") return gross;
+
+      const p = participants.find((x) => x.id === participantId);
+      const h = holesList.find((x) => x.hole_number === holeNumber);
+      const recv = strokesReceivedOnHole(p?.course_handicap ?? null, h?.stroke_index ?? null);
+      return netFromGross(gross, recv);
+    },
+    [holeStateFor, scoreFor, scoreView, participants, holesList]
   );
 
   const totals = useMemo(() => {
-    // Format view uses its own summaries
-    if (scoreView === "format" && formatDisplay) {
-      const byId: Record<string, { out: number; in: number; total: number }> = {};
-      for (const s of formatDisplay.summaries) {
+    // Format view uses its own summaries (may include string values like "2 UP")
+    if (isFormatView(scoreView) && activeFormatDisplay) {
+      const byId: Record<string, { out: number | string; in: number | string; total: number | string }> = {};
+      for (const s of activeFormatDisplay.summaries) {
         byId[s.participantId] = {
-          out: typeof s.out === "number" ? s.out : 0,
-          in: typeof s.inn === "number" ? s.inn : 0,
-          total: typeof s.total === "number" ? s.total : 0,
+          out: s.out,
+          in: s.inn,
+          total: s.total,
         };
       }
-      // Fill missing participants with zeros
+      // Fill missing participants with dash placeholders
       for (const p of participants) {
-        if (!byId[p.id]) byId[p.id] = { out: 0, in: 0, total: 0 };
+        if (!byId[p.id]) byId[p.id] = { out: "–", in: "–", total: "–" };
       }
       return byId;
     }
 
-    const byParticipant: Record<string, { out: number; in: number; total: number }> = {};
+    const byParticipant: Record<string, { out: number | string; in: number | string; total: number | string }> = {};
     for (const p of participants) {
       let out = 0,
         inn = 0,
         total = 0;
 
       for (const h of holesList) {
-        const s = displayedScoreFor(p.id, h.hole_number);
+        const s = scoringValueFor(p.id, h.hole_number);
         if (typeof s === "number") {
           total += s;
           if (h.hole_number <= 9) out += s;
@@ -360,7 +439,7 @@ export default function RoundDetailPage() {
       byParticipant[p.id] = { out, in: inn, total };
     }
     return byParticipant;
-  }, [participants, holesList, displayedScoreFor, scoreView, formatDisplay]);
+  }, [participants, holesList, scoringValueFor, scoreView, activeFormatDisplay]);
 
   const toParTotalByParticipant = useMemo(() => {
     const map: Record<string, number | null> = {};
@@ -371,10 +450,63 @@ export default function RoundDetailPage() {
         continue;
       }
       const t = totals[p.id]?.total ?? 0;
-      map[p.id] = t - parTot;
+      map[p.id] = typeof t === "number" ? t - parTot : null;
     }
     return map;
   }, [participants, totals, metaSums.parTot]);
+
+  // Always-available gross totals for leaderboard (independent of scoreView)
+  const grossTotals = useMemo(() => {
+    const byPid: Record<string, { out: number; in: number; total: number }> = {};
+    for (const p of participants) {
+      let out = 0, inn = 0, total = 0;
+      const courseHcp = typeof p.course_handicap === "number" ? p.course_handicap : null;
+      for (const h of holesList) {
+        const st = holeStatesByKey[`${p.id}:${h.hole_number}`] ?? "not_started";
+        if (st === "picked_up" && h.par) {
+          const penalty = puPenaltyGross(h.par, courseHcp, h.stroke_index);
+          total += penalty;
+          if (h.hole_number <= 9) out += penalty; else inn += penalty;
+        } else {
+          const s = scoreFor(p.id, h.hole_number);
+          if (typeof s === "number") {
+            total += s;
+            if (h.hole_number <= 9) out += s; else inn += s;
+          }
+        }
+      }
+      byPid[p.id] = { out, in: inn, total };
+    }
+    return byPid;
+  }, [participants, holesList, scoreFor, holeStatesByKey]);
+
+  // Always-available net totals for leaderboard
+  const netTotals = useMemo(() => {
+    const byPid: Record<string, { out: number; in: number; total: number }> = {};
+    for (const p of participants) {
+      let out = 0, inn = 0, total = 0;
+      const hcp = typeof p.course_handicap === "number" ? p.course_handicap : 0;
+      for (const h of holesList) {
+        const st = holeStatesByKey[`${p.id}:${h.hole_number}`] ?? "not_started";
+        if (st === "picked_up" && h.par) {
+          const net = h.par + 2; // PU net penalty (strokes received cancel out)
+          total += net;
+          if (h.hole_number <= 9) out += net; else inn += net;
+        } else {
+          const gross = scoreFor(p.id, h.hole_number);
+          if (typeof gross === "number" && h.par) {
+            const recv = strokesReceivedOnHole(hcp, h.stroke_index);
+            const net = netFromGross(gross, recv);
+            total += net;
+            if (h.hole_number <= 9) out += net;
+            else inn += net;
+          }
+        }
+      }
+      byPid[p.id] = { out, in: inn, total };
+    }
+    return byPid;
+  }, [participants, holesList, scoreFor, holeStatesByKey]);
 
   const landscapePlan: LandscapeCol[] = useMemo(() => {
     const front = holesList.filter((h) => h.hole_number <= 9);
@@ -393,15 +525,37 @@ export default function RoundDetailPage() {
 
   const finalRows = useMemo(() => {
     const rows = buildFinalRows(participants, totals, toParTotalByParticipant, getParticipantLabel, getParticipantAvatar);
-    if (formatDisplay?.higherIsBetter) {
-      rows.sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+    const primaryFormat = formatDisplays[0] ?? null;
+    const hasStringTotals = rows.some((r) => typeof r.total === "string");
+    if (hasStringTotals) {
+      // Matchplay: winners (W ...) sort before losers (L ...), then AS
+      rows.sort((a, b) => {
+        const aStr = String(a.total);
+        const bStr = String(b.total);
+        const aWin = aStr.startsWith("W") ? 0 : aStr.startsWith("L") ? 2 : 1;
+        const bWin = bStr.startsWith("W") ? 0 : bStr.startsWith("L") ? 2 : 1;
+        return aWin - bWin || a.name.localeCompare(b.name);
+      });
+    } else if (primaryFormat?.higherIsBetter) {
+      rows.sort((a, b) => (b.total as number) - (a.total as number) || a.name.localeCompare(b.name));
     } else {
-      rows.sort((a, b) => a.total - b.total || a.name.localeCompare(b.name));
+      rows.sort((a, b) => (a.total as number) - (b.total as number) || a.name.localeCompare(b.name));
     }
     return rows;
-  }, [participants, totals, toParTotalByParticipant, getParticipantLabel, getParticipantAvatar, formatDisplay]);
+  }, [participants, totals, toParTotalByParticipant, getParticipantLabel, getParticipantAvatar, formatDisplays]);
 
   const winner = finalRows[0] ?? null;
+
+  const { notAcceptedIds, finishWarning } = useMemo(() => {
+    const { ids, names } = getNotAcceptedParticipants(participants, holesList, holeStatesByKey);
+    if (names.length === 0) return { notAcceptedIds: ids, finishWarning: null as string | null };
+    const holeCount = holesList.length || 18;
+    const minRequired = holeCount <= 9 ? 7 : 14;
+    const warning = names.length === 1
+      ? `${names[0]} has fewer than ${minRequired} holes started. Their round will not count toward handicap.`
+      : `${names.join(", ")} have fewer than ${minRequired} holes started. Their rounds will not count toward handicap.`;
+    return { notAcceptedIds: ids, finishWarning: warning };
+  }, [participants, holesList, holeStatesByKey]);
 
   useEffect(() => {
     if (isFinished) return;
@@ -588,6 +742,52 @@ export default function RoundDetailPage() {
     advanceAfterCompletion(pid, hole);
   }
 
+  // Scramble mode: show one column per team instead of one per player.
+  // Each team's scores map to the first team member's participant ID.
+  const isScramble = formatType === "scramble";
+  const scrambleTeamParticipants = useMemo<Participant[]>(() => {
+    if (!isScramble || !teams.length) return participants;
+    // Build a virtual participant per team, using first member's ID
+    return teams
+      .map((t) => {
+        const members = participants.filter((p) => p.team_id === t.id);
+        const first = members[0];
+        if (!first) return null;
+        return {
+          ...first,
+          display_name: t.name, // Show team name instead of player name
+        } as Participant;
+      })
+      .filter(Boolean) as Participant[];
+  }, [isScramble, teams, participants]);
+
+  const scorecardParticipants = isScramble ? scrambleTeamParticipants : participants;
+
+  // When on a format tab with filtered participants, show only those
+  const visibleParticipants = useMemo(() => {
+    if (activeFormatDisplay?.filteredParticipantIds) {
+      const ids = new Set(activeFormatDisplay.filteredParticipantIds);
+      return scorecardParticipants.filter((p) => ids.has(p.id));
+    }
+    return scorecardParticipants;
+  }, [scorecardParticipants, activeFormatDisplay]);
+
+  const scrambleGetLabel = useCallback(
+    (p: Participant) => {
+      if (isScramble) return p.display_name || "Team";
+      return getParticipantLabel(p);
+    },
+    [isScramble, getParticipantLabel]
+  );
+
+  const scrambleGetAvatar = useCallback(
+    (p: Participant) => {
+      if (isScramble) return null; // No avatar for teams
+      return getParticipantAvatar(p);
+    },
+    [isScramble, getParticipantAvatar]
+  );
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#042713] text-slate-100 px-3 pt-6">
@@ -602,37 +802,8 @@ export default function RoundDetailPage() {
   const needsSetup = !hasStarted || !teeSnapshotId;
   const canFinish = hasStarted && !!teeSnapshotId && canScore && !isFinished;
 
-  // Scramble mode: show one column per team instead of one per player.
-  // Each team's scores map to the first team member's participant ID.
-  const isScramble = formatType === "scramble";
-  const scrambleTeamParticipants = useMemo<Participant[]>(() => {
-    if (!isScramble || !teams.length) return participants;
-    // Build a virtual participant per team, using first member's ID
-    return teams.map((t) => {
-      const members = participants.filter((p) => p.team_id === t.id);
-      const first = members[0];
-      if (!first) return null;
-      return {
-        ...first,
-        display_name: t.name, // Show team name instead of player name
-      } as Participant;
-    }).filter(Boolean) as Participant[];
-  }, [isScramble, teams, participants]);
-
-  const scorecardParticipants = isScramble ? scrambleTeamParticipants : participants;
-
-  const scrambleGetLabel = useCallback((p: Participant) => {
-    if (isScramble) return p.display_name || "Team";
-    return getParticipantLabel(p);
-  }, [isScramble, getParticipantLabel]);
-
-  const scrambleGetAvatar = useCallback((p: Participant) => {
-    if (isScramble) return null; // No avatar for teams
-    return getParticipantAvatar(p);
-  }, [isScramble, getParticipantAvatar]);
-
-  const compactPlayers = scorecardParticipants.length >= 6;
-  const portraitCols = `30px 32px 38px 30px repeat(${scorecardParticipants.length}, minmax(0, 1fr))`;
+  const compactPlayers = visibleParticipants.length >= 6;
+  const portraitCols = `30px 32px 38px 30px repeat(${visibleParticipants.length}, minmax(0, 1fr))`;
   const landscapeCols = `140px repeat(${landscapePlan.length}, minmax(0, 1fr))`;
 
   const subtitle = `${status}${playedOnLabel ? ` · ${playedOnLabel}` : ""}`;
@@ -670,31 +841,53 @@ export default function RoundDetailPage() {
                   <div className="text-[10px] uppercase tracking-[0.14em] text-emerald-200/70 truncate">{subtitle}</div>
                 </div>
                 <div className="mt-1 flex justify-center">
-                  <div className="rounded-xl border border-emerald-900/70 bg-[#0b3b21]/50 p-1 flex">
-                    {(["gross", "net", ...(formatDisplay ? ["format"] : [])] as FormatScoreView[]).map((v) => (
-                      <button
-                        key={v}
-                        className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg ${
-                          scoreView === v ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
-                        }`}
-                        onClick={() => setScoreView(v)}
-                      >
-                        {v === "format" ? formatDisplay!.tabLabel : v === "gross" ? "Gross" : "Net"}
-                      </button>
-                    ))}
+                  <div className="rounded-xl border border-emerald-900/70 bg-[#0b3b21]/50 p-1 flex items-center overflow-hidden max-w-full">
+                    <button
+                      className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 ${
+                        scoreView === "gross" ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
+                      }`}
+                      onClick={() => setScoreView("gross")}
+                    >
+                      Gross
+                    </button>
+                    <button
+                      className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 ${
+                        scoreView === "net" ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
+                      }`}
+                      onClick={() => setScoreView("net")}
+                    >
+                      Net
+                    </button>
+                    {formatDisplays.length > 0 && (
+                      <>
+                        <div className="w-px h-5 bg-emerald-900/50 mx-0.5 shrink-0" />
+                        <div className="flex overflow-x-auto min-w-0" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
+                          {formatDisplays.map((fd, i) => (
+                            <button
+                              key={i}
+                              className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 whitespace-nowrap ${
+                                scoreView === `format:${i}` ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
+                              }`}
+                              onClick={() => setScoreView(`format:${i}` as FormatScoreView)}
+                            >
+                              {fd.tabLabel}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
               <div className="shrink-0">
-                {canFinish ? (
-                  <Button
-                    size="sm"
-                    className="rounded-xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c] px-3"
-                    onClick={() => setFinishOpen(true)}
-                  >
-                    Finish
-                  </Button>
-                ) : null}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="px-2 text-emerald-100 hover:bg-emerald-900/30"
+                  onClick={() => setMenuOpen(true)}
+                >
+                  <Menu className="h-5 w-5" />
+                </Button>
               </div>
             </>
           ) : (
@@ -703,28 +896,50 @@ export default function RoundDetailPage() {
                 <div className="text-[15px] font-semibold tracking-wide text-[#f5e6b0] truncate">{roundName}</div>
                 <div className="text-[10px] uppercase tracking-[0.14em] text-emerald-200/70 truncate">{subtitle}</div>
               </div>
-              <div className="flex flex-col items-end gap-1 shrink-0">
-                {canFinish ? (
-                  <Button
-                    size="sm"
-                    className="rounded-xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c] px-3"
-                    onClick={() => setFinishOpen(true)}
+              <div className="flex flex-col items-end gap-1 min-w-0 overflow-hidden">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="px-2 text-emerald-100 hover:bg-emerald-900/30"
+                  onClick={() => setMenuOpen(true)}
+                >
+                  <Menu className="h-5 w-5" />
+                </Button>
+                <div className="rounded-xl border border-emerald-900/70 bg-[#0b3b21]/50 p-1 flex items-center overflow-hidden max-w-full">
+                  <button
+                    className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 ${
+                      scoreView === "gross" ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
+                    }`}
+                    onClick={() => setScoreView("gross")}
                   >
-                    Finish
-                  </Button>
-                ) : null}
-                <div className="rounded-xl border border-emerald-900/70 bg-[#0b3b21]/50 p-1 flex">
-                  {(["gross", "net", ...(formatDisplay ? ["format"] : [])] as FormatScoreView[]).map((v) => (
-                    <button
-                      key={v}
-                      className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg ${
-                        scoreView === v ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
-                      }`}
-                      onClick={() => setScoreView(v)}
-                    >
-                      {v === "format" ? formatDisplay!.tabLabel : v === "gross" ? "Gross" : "Net"}
-                    </button>
-                  ))}
+                    Gross
+                  </button>
+                  <button
+                    className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 ${
+                      scoreView === "net" ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
+                    }`}
+                    onClick={() => setScoreView("net")}
+                  >
+                    Net
+                  </button>
+                  {formatDisplays.length > 0 && (
+                    <>
+                      <div className="w-px h-5 bg-emerald-900/50 mx-0.5 shrink-0" />
+                      <div className="flex overflow-x-auto min-w-0" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
+                        {formatDisplays.map((fd, i) => (
+                          <button
+                            key={i}
+                            className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 whitespace-nowrap ${
+                              scoreView === `format:${i}` ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
+                            }`}
+                            onClick={() => setScoreView(`format:${i}` as FormatScoreView)}
+                          >
+                            {fd.tabLabel}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             </>
@@ -756,12 +971,12 @@ export default function RoundDetailPage() {
           </div>
         ) : null}
 
-        {!needsSetup && isFinished && winner ? <FinalResultsPanel winner={winner} finalRows={finalRows} formatDisplay={formatDisplay} /> : null}
+        {!needsSetup && isFinished && winner ? <FinalResultsPanel winner={winner} finalRows={finalRows} formatDisplay={formatDisplays[0] ?? null} notAcceptedIds={notAcceptedIds} /> : null}
 
         {!needsSetup ? (
           isPortrait ? (
             <ScorecardPortrait
-              participants={scorecardParticipants}
+              participants={visibleParticipants}
               holesList={holesList}
               portraitCols={portraitCols}
               compactPlayers={compactPlayers}
@@ -770,7 +985,7 @@ export default function RoundDetailPage() {
               activeHole={activeHole}
               savingKey={savingKey}
               scoreView={scoreView}
-              formatDisplay={formatDisplay}
+              formatDisplay={activeFormatDisplay}
               metaSums={metaSums}
               totals={totals}
               displayedScoreFor={displayedScoreFor}
@@ -780,7 +995,7 @@ export default function RoundDetailPage() {
             />
           ) : (
             <ScorecardLandscape
-              participants={scorecardParticipants}
+              participants={visibleParticipants}
               holesList={holesList}
               landscapePlan={landscapePlan}
               landscapeCols={landscapeCols}
@@ -789,7 +1004,7 @@ export default function RoundDetailPage() {
               activeHole={activeHole}
               savingKey={savingKey}
               scoreView={scoreView}
-              formatDisplay={formatDisplay}
+              formatDisplay={activeFormatDisplay}
               metaSums={metaSums}
               totals={totals}
               displayedScoreFor={displayedScoreFor}
@@ -800,10 +1015,34 @@ export default function RoundDetailPage() {
           )
         ) : null}
 
+        {menuOpen && (
+          <RoundMenuSheet
+            onClose={() => setMenuOpen(false)}
+            canFinish={canFinish}
+            isFinished={isFinished}
+            onFinishRound={() => {
+              setMenuOpen(false);
+              setFinishOpen(true);
+            }}
+            participants={visibleParticipants}
+            formatDisplays={formatDisplays}
+            grossTotals={grossTotals}
+            netTotals={netTotals}
+            parTotal={metaSums.parTot}
+            getParticipantLabel={scrambleGetLabel}
+            getParticipantAvatar={scrambleGetAvatar}
+            courseLabel={courseLabel}
+            formatType={formatType}
+          />
+        )}
+
         {finishOpen ? (
           <ConfirmSheet
             title="Finish round?"
-            subtitle="This will lock scoring for everyone. Any incomplete holes will be saved as Not Started (—)."
+            subtitle={<>
+              {finishWarning && <span className="text-amber-300 block mb-1">{finishWarning}</span>}
+              This will lock scoring for everyone. Any incomplete holes will be saved as Not Started (&mdash;).
+            </>}
             confirmLabel={finishing ? "Finishing…" : "Finish round"}
             confirmDisabled={finishing}
             onConfirm={finishRound}

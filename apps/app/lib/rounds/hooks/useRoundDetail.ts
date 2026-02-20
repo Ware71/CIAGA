@@ -45,6 +45,7 @@ export type Score = { participant_id: string; hole_number: number; strokes: numb
 // B: Hole states
 export type HoleState = "completed" | "picked_up" | "not_started";
 export type HoleStateRow = { participant_id: string; hole_number: number; status: HoleState };
+export type SideGame = { name: string; enabled: boolean; config: Record<string, any> };
 
 function getCourseNameFromJoin(r: any): string {
   const c = r?.course;
@@ -65,6 +66,7 @@ export function useRoundDetail(roundId: string) {
   const [playedOnIso, setPlayedOnIso] = useState<string | null>(null);
   const [formatType, setFormatType] = useState<RoundFormatType>("strokeplay");
   const [formatConfig, setFormatConfig] = useState<Record<string, any>>({});
+  const [sideGames, setSideGames] = useState<SideGame[]>([]);
 
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -93,7 +95,7 @@ export function useRoundDetail(roundId: string) {
     // Round meta
     const roundRes = await supabase
       .from("rounds")
-      .select("id,name,status,started_at,created_at,format_type,format_config,course:courses(name)")
+      .select("id,name,status,started_at,created_at,format_type,format_config,side_games,course:courses(name)")
       .eq("id", roundId)
       .single();
     if (roundRes.error) throw roundRes.error;
@@ -107,6 +109,7 @@ export function useRoundDetail(roundId: string) {
     setPlayedOnIso((r.started_at as string | null) ?? (r.created_at as string | null) ?? null);
     setFormatType((r.format_type as RoundFormatType) || "strokeplay");
     setFormatConfig((r.format_config as Record<string, any>) || {});
+    setSideGames((r.side_games as SideGame[]) || []);
 
     // Participants via RPC
     const partRes = await supabase.rpc("get_round_participants", { _round_id: roundId });
@@ -372,6 +375,7 @@ export function useRoundDetail(roundId: string) {
     playedOnIso,
     formatType,
     formatConfig,
+    sideGames,
 
     participants,
     teams,

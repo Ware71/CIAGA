@@ -1,7 +1,7 @@
 // components/rounds/MatchupEditor.tsx
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 type MatchupParticipant = {
   id: string;
@@ -87,6 +87,10 @@ export function MatchupEditor({
     return map;
   }, [mode, participants, teams]);
 
+  // State for adding a new matchup manually
+  const [newA, setNewA] = useState<string>("");
+  const [newB, setNewB] = useState<string>("");
+
   function handleRoundRobinToggle(enabled: boolean) {
     if (enabled) {
       if (mode === "individual") {
@@ -96,6 +100,29 @@ export function MatchupEditor({
       }
     } else {
       onChange([], false);
+    }
+  }
+
+  function handleAddMatchup() {
+    if (!newA || !newB || newA === newB) return;
+    if (mode === "individual") {
+      const updated = [...(matchups as Matchup[]), { player_a_id: newA, player_b_id: newB }];
+      onChange(updated, false);
+    } else {
+      const updated = [...(matchups as TeamMatchup[]), { team_a_id: newA, team_b_id: newB }];
+      onChange(updated, false);
+    }
+    setNewA("");
+    setNewB("");
+  }
+
+  function handleRemoveMatchup(index: number) {
+    if (mode === "individual") {
+      const updated = (matchups as Matchup[]).filter((_, i) => i !== index);
+      onChange(updated, false);
+    } else {
+      const updated = (matchups as TeamMatchup[]).filter((_, i) => i !== index);
+      onChange(updated, false);
     }
   }
 
@@ -130,6 +157,50 @@ export function MatchupEditor({
               Round robin (everyone plays each other)
             </label>
           </div>
+
+          {/* Manual matchup add — hidden when round robin is active */}
+          {!roundRobin && !disabled && (
+            <div className="flex items-end gap-2">
+              <div className="flex-1 min-w-0">
+                <label className="text-[10px] text-emerald-100/50 uppercase tracking-wider block mb-1">Player A</label>
+                <select
+                  value={newA}
+                  onChange={(e) => setNewA(e.target.value)}
+                  className="w-full rounded-lg border border-emerald-900/50 bg-[#042713]/70 px-2 py-1.5 text-xs text-emerald-100 focus:outline-none focus:ring-1 focus:ring-emerald-600"
+                >
+                  <option value="">Select…</option>
+                  {items.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {"displayName" in item ? item.displayName : (item as MatchupTeam).name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <span className="text-[10px] text-emerald-100/50 pb-2">vs</span>
+              <div className="flex-1 min-w-0">
+                <label className="text-[10px] text-emerald-100/50 uppercase tracking-wider block mb-1">Player B</label>
+                <select
+                  value={newB}
+                  onChange={(e) => setNewB(e.target.value)}
+                  className="w-full rounded-lg border border-emerald-900/50 bg-[#042713]/70 px-2 py-1.5 text-xs text-emerald-100 focus:outline-none focus:ring-1 focus:ring-emerald-600"
+                >
+                  <option value="">Select…</option>
+                  {items.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {"displayName" in item ? item.displayName : (item as MatchupTeam).name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                onClick={handleAddMatchup}
+                disabled={!newA || !newB || newA === newB}
+                className="shrink-0 rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-emerald-50 hover:bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Add
+              </button>
+            </div>
+          )}
         </>
       )}
 
@@ -140,6 +211,7 @@ export function MatchupEditor({
           {displayMatchups.map((m, i) => {
             const aId = "player_a_id" in m ? m.player_a_id : (m as TeamMatchup).team_a_id;
             const bId = "player_b_id" in m ? m.player_b_id : (m as TeamMatchup).team_b_id;
+            const canRemove = !disabled && !isAutoPaired && !roundRobin;
             return (
               <div
                 key={i}
@@ -147,7 +219,16 @@ export function MatchupEditor({
               >
                 <span className="font-medium">{nameMap.get(aId) ?? "?"}</span>
                 <span className="text-emerald-100/50">vs</span>
-                <span className="font-medium">{nameMap.get(bId) ?? "?"}</span>
+                <span className="font-medium flex-1">{nameMap.get(bId) ?? "?"}</span>
+                {canRemove && (
+                  <button
+                    onClick={() => handleRemoveMatchup(i)}
+                    className="shrink-0 text-emerald-100/40 hover:text-red-300 text-sm leading-none"
+                    title="Remove matchup"
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
             );
           })}
@@ -156,7 +237,7 @@ export function MatchupEditor({
 
       {!isAutoPaired && !roundRobin && (!displayMatchups || displayMatchups.length === 0) && (
         <div className="text-[11px] text-emerald-100/60">
-          Enable round robin or configure matchups above.
+          Add matches above or enable round robin.
         </div>
       )}
     </div>

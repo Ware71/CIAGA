@@ -8,9 +8,9 @@ type FinalRow = {
   participantId: string;
   name: string;
   avatarUrl: string | null;
-  total: number;
-  out: number;
-  in: number;
+  total: number | string;
+  out: number | string;
+  in: number | string;
   toPar: number | null;
 };
 
@@ -31,9 +31,12 @@ export default function FinalResultsPanel(props: {
   winner: FinalRow;
   finalRows: FinalRow[];
   formatDisplay?: FormatDisplayData | null;
+  notAcceptedIds?: Set<string>;
 }) {
-  const { winner, finalRows, formatDisplay } = props;
-  const scoreLabel = formatDisplay?.higherIsBetter ? "Points" : "Total";
+  const { winner, finalRows, formatDisplay, notAcceptedIds } = props;
+  const isStringTotal = typeof winner.total === "string";
+  const scoreLabel = isStringTotal ? "Result" : formatDisplay?.higherIsBetter ? "Points" : "Total";
+  const showOutIn = !isStringTotal;
 
   return (
     <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 overflow-hidden">
@@ -56,9 +59,14 @@ export default function FinalResultsPanel(props: {
             </Avatar>
             <div className="min-w-0">
               <div className="text-[13px] font-semibold text-emerald-50 truncate">{winner.name}</div>
-              <div className="text-[11px] text-emerald-100/70">
-                OUT {winner.out} · IN {winner.in}
-              </div>
+              {showOutIn && (
+                <div className="text-[11px] text-emerald-100/70">
+                  OUT {winner.out} · IN {winner.in}
+                </div>
+              )}
+              {notAcceptedIds?.has(winner.participantId) && (
+                <div className="text-[9px] text-amber-400/80 mt-0.5">Not accepted for handicap</div>
+              )}
             </div>
           </div>
 
@@ -66,9 +74,11 @@ export default function FinalResultsPanel(props: {
             <div className="text-[10px] uppercase tracking-[0.14em] text-emerald-100/70">{scoreLabel}</div>
             <div className="text-2xl font-extrabold tabular-nums text-[#f5e6b0]">
               {winner.total}{" "}
-              <span className="text-[12px] font-bold text-emerald-100/80 ml-1">
-                {winner.toPar != null ? `(${formatToPar(winner.toPar)})` : ""}
-              </span>
+              {!isStringTotal && (
+                <span className="text-[12px] font-bold text-emerald-100/80 ml-1">
+                  {winner.toPar != null ? `(${formatToPar(winner.toPar)})` : ""}
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -93,9 +103,14 @@ export default function FinalResultsPanel(props: {
 
                 <div className="min-w-0">
                   <div className="text-[13px] font-semibold text-emerald-50 truncate">{r.name}</div>
-                  <div className="text-[11px] text-emerald-100/70">
-                    OUT {r.out} · IN {r.in}
-                  </div>
+                  {showOutIn && (
+                    <div className="text-[11px] text-emerald-100/70">
+                      OUT {r.out} · IN {r.in}
+                    </div>
+                  )}
+                  {notAcceptedIds?.has(r.participantId) && (
+                    <div className="text-[9px] text-amber-400/80 mt-0.5">Not accepted for handicap</div>
+                  )}
                 </div>
               </div>
 
@@ -103,9 +118,11 @@ export default function FinalResultsPanel(props: {
                 <div className="text-[10px] uppercase tracking-[0.14em] text-emerald-100/70">{scoreLabel}</div>
                 <div className="text-xl font-extrabold tabular-nums text-[#f5e6b0]">
                   {r.total}{" "}
-                  <span className="text-[12px] font-bold text-emerald-100/80 ml-1">
-                    {r.toPar != null ? `(${formatToPar(r.toPar)})` : ""}
-                  </span>
+                  {!isStringTotal && (
+                    <span className="text-[12px] font-bold text-emerald-100/80 ml-1">
+                      {r.toPar != null ? `(${formatToPar(r.toPar)})` : ""}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>

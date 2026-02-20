@@ -3,7 +3,7 @@
 import React from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import type { Participant, Hole } from "@/lib/rounds/hooks/useRoundDetail";
-import type { FormatScoreView, FormatDisplayData } from "@/lib/rounds/formatScoring";
+import { isFormatView, type FormatScoreView, type FormatDisplayData } from "@/lib/rounds/formatScoring";
 import { strokesReceivedOnHole } from "@/lib/rounds/handicapUtils";
 
 type SumKind = "OUT" | "IN" | "TOT";
@@ -23,8 +23,8 @@ function formatToPar(toPar: number | null) {
 
 type BadgeType = "eagle" | "birdie" | "bogey" | "double" | null;
 
-function scoreBadgeType(s: string | number | null, par: number | null, scoreView: string): BadgeType {
-  if (scoreView === "format" || typeof s !== "number" || typeof par !== "number") return null;
+function scoreBadgeType(s: string | number | null, par: number | null, scoreView: FormatScoreView): BadgeType {
+  if (isFormatView(scoreView) || typeof s !== "number" || typeof par !== "number") return null;
   const diff = s - par;
   if (diff <= -2) return "eagle";
   if (diff === -1) return "birdie";
@@ -88,7 +88,7 @@ export default function ScorecardPortrait(props: {
     ydsTot: number | null;
   };
 
-  totals: Record<string, { out: number; in: number; total: number }>;
+  totals: Record<string, { out: number | string; in: number | string; total: number | string }>;
 
   // B: allow "PU" marker as well as numbers/null
   displayedScoreFor: (participantId: string, holeNumber: number) => string | number | null;
@@ -121,6 +121,11 @@ export default function ScorecardPortrait(props: {
   const sumPar = (k: SumKind) => (k === "OUT" ? metaSums.parOut : k === "IN" ? metaSums.parIn : metaSums.parTot);
   const sumYds = (k: SumKind) => (k === "OUT" ? metaSums.ydsOut : k === "IN" ? metaSums.ydsIn : metaSums.ydsTot);
 
+  // Suppress "to par" for formats where values aren't strokes (stableford, match play, skins, etc.)
+  const suppressToPar = isFormatView(scoreView) && formatDisplay != null && (
+    formatDisplay.higherIsBetter || formatDisplay.summaries.some(s => typeof s.total === "string")
+  );
+
   return (
     <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 overflow-hidden">
       <div className="w-full">
@@ -145,7 +150,18 @@ export default function ScorecardPortrait(props: {
             const hi = typeof p.handicap_index === "number" ? p.handicap_index.toFixed(1) : "–";
             const ch = typeof p.course_handicap === "number" ? String(p.course_handicap) : "–";
 
-            const title = `${name} · HI ${hi} · CH ${ch}`;
+            // Format tab: show assigned HI and PH; Net: show HI/CH; Gross: no handicap info
+            const isFormat = isFormatView(scoreView);
+            const ph = isFormat && formatDisplay?.playingHandicaps?.[p.id] != null
+              ? String(formatDisplay.playingHandicaps[p.id])
+              : null;
+            const hcpLabel = isFormat
+              ? `HI ${hi} · PH ${ph ?? "–"}`
+              : scoreView === "net"
+                ? `HI ${hi} · CH ${ch}`
+                : "";
+
+            const title = `${name} · HI ${hi} · CH ${ch}${ph != null ? ` · PH ${ph}` : ""}`;
 
             return (
               <div
@@ -163,9 +179,11 @@ export default function ScorecardPortrait(props: {
                     </Avatar>
                     <div className="flex flex-col items-start min-w-0">
                       <div className="text-[10px] text-emerald-50 truncate min-w-0 leading-none">{name}</div>
-                      <div className="text-[9px] text-emerald-100/60 leading-none">
-                        HI {hi} · CH {ch}
-                      </div>
+                      {hcpLabel ? (
+                        <div className="text-[9px] text-emerald-100/60 leading-none">
+                          {hcpLabel}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 )}
@@ -207,7 +225,7 @@ export default function ScorecardPortrait(props: {
                   : 0;
 
               const fmtHint =
-                scoreView === "format" && formatDisplay
+                isFormatView(scoreView) && formatDisplay
                   ? formatDisplay.holeResults[key]?.cssHint
                   : undefined;
 
@@ -236,7 +254,7 @@ export default function ScorecardPortrait(props: {
                   <BadgeWrap type={badge}>
                     <span className="leading-none">{savingKey === key ? "…" : (s ?? "–")}</span>
                   </BadgeWrap>
-                  {scoreView === "net" && recv > 0 ? (
+                  {recv > 0 ? (
                     <div className="mt-1 leading-none">
                       <StrokeDots count={recv} />
                     </div>
@@ -276,7 +294,7 @@ export default function ScorecardPortrait(props: {
               participants.forEach((p) => {
                 const par = metaSums.parOut;
                 const val = totals[p.id]?.out ?? 0;
-                const toPar = typeof par === "number" ? val - par : null;
+                const toPar = suppressToPar || typeof val !== "number" ? null : (typeof par === "number" ? val - par : null);
 
                 nodes.push(
                   <div
@@ -328,7 +346,7 @@ export default function ScorecardPortrait(props: {
             participants.forEach((p) => {
               const t = totals[p.id];
               const val = label === "OUT" ? t?.out ?? 0 : label === "IN" ? t?.in ?? 0 : t?.total ?? 0;
-              const toPar = typeof par === "number" ? val - par : null;
+              const toPar = suppressToPar || typeof val !== "number" ? null : (typeof par === "number" ? val - par : null);
 
               nodes.push(
                 <div
