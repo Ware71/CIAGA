@@ -93,6 +93,10 @@ function isTaggedProfilesOrNull(v: unknown): v is Array<{ profile_id: string; na
   );
 }
 
+function isStringOrNumberOrNull(v: unknown): v is string | number | null {
+  return v === null || typeof v === "string" || typeof v === "number";
+}
+
 function isRoundPlayedPlayers(
   v: unknown
 ): v is Array<{
@@ -104,6 +108,7 @@ function isRoundPlayedPlayers(
   par_total?: number | null;
   net_to_par?: number | null;
   holes_completed?: number | null;
+  format_score?: string | number | null;
 }> {
   return (
     Array.isArray(v) &&
@@ -118,7 +123,18 @@ function isRoundPlayedPlayers(
         (x.net_total === undefined || isNumberOrNull(x.net_total)) &&
         (x.par_total === undefined || isNumberOrNull(x.par_total)) &&
         (x.net_to_par === undefined || isNumberOrNull(x.net_to_par)) &&
-        (x.holes_completed === undefined || isNumberOrNull(x.holes_completed))
+        (x.holes_completed === undefined || isNumberOrNull(x.holes_completed)) &&
+        (x.format_score === undefined || isStringOrNumberOrNull(x.format_score))
+    )
+  );
+}
+
+function isSideGameResults(v: unknown): v is Array<{ label: string; winner: string | null }> | null {
+  if (v === null || v === undefined) return true;
+  return (
+    Array.isArray(v) &&
+    v.every(
+      (x) => isRecord(x) && typeof x.label === "string" && isStringOrNull(x.winner)
     )
   );
 }
@@ -219,6 +235,15 @@ export function parseFeedPayload<TType extends FeedItemType>(
       const players =
         "players" in payload && isRoundPlayedPlayers(payload.players) ? payload.players : null;
 
+      const format_type =
+        "format_type" in payload && isStringOrNull(payload.format_type) ? payload.format_type : null;
+      const format_label =
+        "format_label" in payload && isStringOrNull(payload.format_label) ? payload.format_label : null;
+      const format_winner =
+        "format_winner" in payload && isStringOrNull(payload.format_winner) ? payload.format_winner : null;
+      const side_game_results =
+        "side_game_results" in payload && isSideGameResults(payload.side_game_results) ? payload.side_game_results : null;
+
       if (!round_id || !course_name || !players) return null;
 
       return {
@@ -226,6 +251,10 @@ export function parseFeedPayload<TType extends FeedItemType>(
         course_id,
         course_name,
         tee_name,
+        format_type,
+        format_label,
+        format_winner,
+        side_game_results,
         players,
         date,
       } as FeedPayloadByType[TType];

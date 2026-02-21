@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 import { emitRoundPlayedFeedItem } from "@/lib/feed/generators/roundPlayed";
+import { emitHoleEventFeedItems } from "@/lib/feed/generators/holeEvents";
+import { emitAchievementFeedItems } from "@/lib/feed/generators/achievements";
 
 export async function POST(
   req: Request,
@@ -36,11 +38,17 @@ export async function POST(
 
     if (upErr) throw upErr;
 
-    // Emit feed item (best effort)
+    // Emit feed items (best effort)
     await emitRoundPlayedFeedItem({
       roundId,
       actorProfileId: profileId,
     });
+
+    // Hole events + achievements in parallel (non-blocking)
+    await Promise.allSettled([
+      emitHoleEventFeedItems({ roundId, actorProfileId: profileId }),
+      emitAchievementFeedItems({ roundId, actorProfileId: profileId }),
+    ]);
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {

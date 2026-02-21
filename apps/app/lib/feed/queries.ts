@@ -2,6 +2,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { parseFeedPayload } from "@/lib/feed/schemas";
 import type { FeedItemVM, FeedPageResponse } from "@/lib/feed/types";
 import { strokesReceivedOnHole } from "@/lib/rounds/handicapUtils";
+import { computeFormatSummaryForFeed } from "@/lib/feed/helpers/formatSummary";
 
 /**
  * NOTE:
@@ -469,10 +470,22 @@ export async function getLiveRoundsAsFeedItems(params: { viewerProfileId: string
     scoresByParticipant.get(pid)!.set(hn, strokes);
   }
 
-  return (rounds ?? []).map((r: any) => {
+  // Compute format summaries in parallel (best-effort)
+  const formatSummaries = await Promise.all(
+    (rounds ?? []).map(async (r: any) => {
+      try {
+        return await computeFormatSummaryForFeed(r.id);
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  return (rounds ?? []).map((r: any, rIdx: number) => {
     const rid = r.id as string;
     const snap = snapByRound.get(rid);
     const course_name = snap?.course_name ?? "Live round";
+    const formatSummary = formatSummaries[rIdx] ?? null;
 
     const players = rps
       .filter((x: any) => x.round_id === rid)
@@ -530,6 +543,7 @@ export async function getLiveRoundsAsFeedItems(params: { viewerProfileId: string
           net_to_par,
           par_total,
           holes_completed: hasScores ? holesCompleted : null,
+          format_score: formatSummary?.player_scores.get(rp.id) ?? null,
         };
       });
 
@@ -549,6 +563,10 @@ export async function getLiveRoundsAsFeedItems(params: { viewerProfileId: string
         round_id: rid,
         course_name,
         tee_name: null,
+        format_type: formatSummary?.format_type ?? null,
+        format_label: formatSummary?.format_label ?? null,
+        format_winner: formatSummary?.format_winner ?? null,
+        side_game_results: formatSummary?.side_game_results ?? null,
         players: players.map((p: any) => ({
           profile_id: p.profile_id,
           name: p.name,
@@ -558,6 +576,7 @@ export async function getLiveRoundsAsFeedItems(params: { viewerProfileId: string
           net_to_par: p.net_to_par,
           par_total: p.par_total,
           holes_completed: p.holes_completed,
+          format_score: p.format_score,
         })),
         date: null,
       },

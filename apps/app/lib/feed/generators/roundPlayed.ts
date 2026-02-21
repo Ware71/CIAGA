@@ -2,6 +2,7 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { parseFeedPayload } from "@/lib/feed/schemas";
 import { fanOutFeedItemToSubjectsAndFollowers } from "@/lib/feed/fanout";
+import { computeFormatSummaryForFeed } from "@/lib/feed/helpers/formatSummary";
 
 /**
  * Emits a round_played feed item for a completed round.
@@ -138,6 +139,14 @@ export async function emitRoundPlayedFeedItem(params: {
     });
   }
 
+  // Format scoring (best-effort — null if unavailable)
+  let formatSummary: Awaited<ReturnType<typeof computeFormatSummaryForFeed>> = null;
+  try {
+    formatSummary = await computeFormatSummaryForFeed(roundId);
+  } catch {
+    // Non-fatal: proceed without format data
+  }
+
   // Build players[] payload
   const players = (participants ?? []).map((rp: any) => {
     const pid = rp.id as string;
@@ -158,12 +167,15 @@ export async function emitRoundPlayedFeedItem(params: {
     const ch = courseHandicapByParticipantId.get(pid) ?? null;
     const net_total = typeof gross_total === "number" && typeof ch === "number" ? gross_total - ch : null;
 
+    const format_score = formatSummary?.player_scores.get(pid) ?? null;
+
     return {
       profile_id,
       name,
       avatar_url,
       gross_total,
       net_total,
+      format_score,
     };
   });
 
@@ -176,6 +188,10 @@ export async function emitRoundPlayedFeedItem(params: {
     course_id: courseSnap?.source_course_id ?? null,
     course_name: courseSnap?.course_name ?? "Course",
     tee_name: teeSnap?.name ?? null,
+    format_type: formatSummary?.format_type ?? null,
+    format_label: formatSummary?.format_label ?? null,
+    format_winner: formatSummary?.format_winner ?? null,
+    side_game_results: formatSummary?.side_game_results ?? null,
     players,
     date: typeof occurred_at === "string" ? occurred_at.slice(0, 10) : null,
   });
