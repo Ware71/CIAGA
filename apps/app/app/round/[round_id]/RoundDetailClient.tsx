@@ -806,6 +806,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
   const canFinish = hasStarted && !!teeSnapshotId && canScore && !isFinished;
 
   const compactPlayers = visibleParticipants.length >= 6;
+  const avatarOnlyPlayers = !compactPlayers && visibleParticipants.length >= 3;
   const portraitCols = `30px 32px 38px 30px repeat(${visibleParticipants.length}, minmax(0, 1fr))`;
   const landscapeCols = `140px repeat(${landscapePlan.length}, minmax(0, 1fr))`;
 
@@ -983,6 +984,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
               holesList={holesList}
               portraitCols={portraitCols}
               compactPlayers={compactPlayers}
+              avatarOnlyPlayers={avatarOnlyPlayers}
               canScore={canScore}
               isFinished={isFinished}
               activeHole={activeHole}

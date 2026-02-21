@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { getMyProfileIdByAuthUserId } from "@/lib/myProfile";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 type ProfileRow = {
   id: string;
@@ -395,17 +396,6 @@ export default function RoundsHistoryPage() {
     };
   }, [profileFromQuery]);
 
-  const grouped = useMemo(() => {
-    const m = new Map<string, RoundRow[]>();
-    for (const r of rounds) {
-      const k = monthKey(r.started_at ?? r.created_at);
-      const arr = m.get(k) ?? [];
-      arr.push(r);
-      m.set(k, arr);
-    }
-    return Array.from(m.entries());
-  }, [rounds]);
-
   // ✅ Counting / cutoff alignment with player page
   const scoringRoundsNewestFirst = useMemo(() => {
     return rounds
@@ -431,6 +421,118 @@ export default function RoundsHistoryPage() {
     if (!window20.length) return null;
     return window20[window20.length - 1].roundId;
   }, [window20]);
+
+  const acceptableRounds = useMemo(
+    () => rounds.filter((r) => typeof scoreDiffByRoundId[r.id] === "number"),
+    [rounds, scoreDiffByRoundId]
+  );
+
+  const nonAcceptableRounds = useMemo(
+    () => rounds.filter((r) => typeof scoreDiffByRoundId[r.id] !== "number"),
+    [rounds, scoreDiffByRoundId]
+  );
+
+  const acceptableGrouped = useMemo(() => {
+    const m = new Map<string, RoundRow[]>();
+    for (const r of acceptableRounds) {
+      const k = monthKey(r.started_at ?? r.created_at);
+      const arr = m.get(k) ?? [];
+      arr.push(r);
+      m.set(k, arr);
+    }
+    return Array.from(m.entries());
+  }, [acceptableRounds]);
+
+  const nonAcceptableGrouped = useMemo(() => {
+    const m = new Map<string, RoundRow[]>();
+    for (const r of nonAcceptableRounds) {
+      const k = monthKey(r.started_at ?? r.created_at);
+      const arr = m.get(k) ?? [];
+      arr.push(r);
+      m.set(k, arr);
+    }
+    return Array.from(m.entries());
+  }, [nonAcceptableRounds]);
+
+  function renderRoundRow(r: RoundRow, showCountingDecorations: boolean) {
+    const course = one(r.courses)?.name ?? "Unknown course";
+    const played = shortDate(r.started_at ?? r.created_at);
+    const titleText = r.name?.trim() ? r.name.trim() : course;
+    const teeName = teeNameByRoundId[r.id] ?? "\u2014";
+
+    const href = { pathname: `/round/${r.id}`, query: { from: "history" } } as const;
+
+    const total = myTotalByRoundId[r.id];
+    const scoreText = typeof total === "number" ? String(total) : "\u2014";
+
+    const ags = agsByRoundId[r.id];
+    const agsText = typeof ags === "number" ? `(${ags})` : "";
+
+    const sd = scoreDiffByRoundId[r.id];
+    const sdText = typeof sd === "number" ? `Score Diff: ${sd.toFixed(1)}` : "SD \u2014";
+
+    const hiUsed = hiUsedByRoundId[r.id];
+    const hiAfter = hiAfterByRoundId[r.id];
+
+    const hiText = typeof hiUsed === "number" ? `Index: ${hiUsed.toFixed(1)}` : "\u2014";
+
+    const isExceptional =
+      typeof hiUsed === "number" && typeof sd === "number" && sd <= hiUsed - 7;
+
+    const isCounting = showCountingDecorations && countingSet.has(r.id);
+    const isCutoff = showCountingDecorations && cutoffRoundId === r.id;
+
+    return (
+      <Link
+        key={r.id}
+        href={href}
+        className={[
+          "block p-3 sm:p-4 hover:bg-emerald-900/15 transition-colors",
+          isCounting ? "rounded-2xl ring-2 ring-[#f5e6b0]/80" : "",
+          isCutoff ? "border-b-6 border-b-[#f5e6b0]" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        title={typeof hiAfter === "number" ? `HI after: ${hiAfter.toFixed(1)}` : undefined}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-[13px] sm:text-[14px] font-semibold text-emerald-50 truncate">
+              {titleText}
+            </div>
+            <div className="text-[11px] sm:text-[12px] text-emerald-100/70 truncate">
+              {teeName} &middot; {played}
+            </div>
+          </div>
+
+          <div className="shrink-0 grid grid-cols-2 gap-4 items-center">
+            <div className="text-right">
+              <div className="text-[16px] font-extrabold tabular-nums text-emerald-50 leading-none">
+                {hiText}
+              </div>
+              <div className="mt-1 text-[10px] uppercase tracking-[0.14em] text-emerald-100/60">
+                <span className="inline-flex items-center gap-1 justify-end">
+                  {sdText}
+                  {isExceptional && (
+                    <span className="text-[#f5e6b0]/80" title="Exceptional round">
+                      ✨
+                    </span>
+                  )}
+                </span>
+              </div>
+            </div>
+
+            <div className="text-right">
+              <div className="text-[18px] font-extrabold tabular-nums text-[#f5e6b0] leading-none">
+                {scoreText}
+              </div>
+              <div className="mt-1 text-[10px] text-emerald-100/60">{agsText || "\u00A0"}</div>
+            </div>
+          </div>
+        </div>
+      </Link>
+    );
+  }
 
   const title = useMemo(() => {
     const who = profileRow?.name || profileRow?.email || (profileFromQuery ? "Player" : "You");
@@ -512,101 +614,72 @@ export default function RoundsHistoryPage() {
           )}
 
           {!loading && !error && rounds.length > 0 && (
-            <div className="space-y-4">
-              {grouped.map(([month, list]) => (
-                <section key={month} className="space-y-2">
-                  <div className="flex items-center justify-between px-1">
-                    <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70">{month}</div>
-                    <div className="text-[11px] text-emerald-100/60">{list.length}</div>
+            <Tabs defaultValue="acceptable" className="space-y-3">
+              <TabsList className="w-full bg-emerald-900/30 border border-emerald-900/70 rounded-xl p-1">
+                <TabsTrigger
+                  value="acceptable"
+                  className="flex-1 text-[11px] font-semibold rounded-lg data-[state=active]:bg-[#f5e6b0] data-[state=active]:text-[#042713] text-emerald-100/80 data-[state=active]:shadow-none border-none"
+                >
+                  Acceptable ({acceptableRounds.length})
+                </TabsTrigger>
+                <TabsTrigger
+                  value="non-acceptable"
+                  className="flex-1 text-[11px] font-semibold rounded-lg data-[state=active]:bg-[#f5e6b0] data-[state=active]:text-[#042713] text-emerald-100/80 data-[state=active]:shadow-none border-none"
+                >
+                  Non-Acceptable ({nonAcceptableRounds.length})
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="acceptable">
+                {acceptableRounds.length === 0 ? (
+                  <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/70">
+                    No acceptable rounds yet.
                   </div>
+                ) : (
+                  <div className="space-y-4">
+                    {acceptableGrouped.map(([month, list]) => (
+                      <section key={month} className="space-y-2">
+                        <div className="flex items-center justify-between px-1">
+                          <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70">{month}</div>
+                          <div className="text-[11px] text-emerald-100/60">{list.length}</div>
+                        </div>
 
-                  <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 overflow-hidden">
-                    {/* ✅ align with player page: no divide-y, allow rounded ring */}
-                    <div className="p-2 space-y-2">
-                      {list.map((r) => {
-                        const course = one(r.courses)?.name ?? "Unknown course";
-                        const played = shortDate(r.started_at ?? r.created_at);
-                        const titleText = r.name?.trim() ? r.name.trim() : course;
-                        const teeName = teeNameByRoundId[r.id] ?? "—";
-
-                        const href = { pathname: `/round/${r.id}`, query: { from: "history" } } as const;
-
-                        const total = myTotalByRoundId[r.id];
-                        const scoreText = typeof total === "number" ? String(total) : "—";
-
-                        const ags = agsByRoundId[r.id];
-                        const agsText = typeof ags === "number" ? `(${ags})` : "";
-
-                        const sd = scoreDiffByRoundId[r.id];
-                        const sdText = typeof sd === "number" ? `Score Diff: ${sd.toFixed(1)}` : "SD —";
-
-                        const hiUsed = hiUsedByRoundId[r.id];
-                        const hiAfter = hiAfterByRoundId[r.id];
-
-                        const hiText = typeof hiUsed === "number" ? `Index: ${hiUsed.toFixed(1)}` : "—";
-
-                        const isExceptional =
-                          typeof hiUsed === "number" && typeof sd === "number" && sd <= hiUsed - 7;
-
-                        const isCounting = countingSet.has(r.id);
-                        const isCutoff = cutoffRoundId === r.id;
-
-                        return (
-                          <Link
-                            key={r.id}
-                            href={href}
-                            className={[
-                              "block p-3 sm:p-4 hover:bg-emerald-900/15 transition-colors",
-                              isCounting ? "rounded-2xl ring-2 ring-[#f5e6b0]/80" : "",
-                              isCutoff ? "border-b-6 border-b-[#f5e6b0]" : "",
-                            ]
-                              .filter(Boolean)
-                              .join(" ")}
-                            title={typeof hiAfter === "number" ? `HI after: ${hiAfter.toFixed(1)}` : undefined}
-                          >
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="min-w-0">
-                                <div className="text-[13px] sm:text-[14px] font-semibold text-emerald-50 truncate">
-                                  {titleText}
-                                </div>
-                                <div className="text-[11px] sm:text-[12px] text-emerald-100/70 truncate">
-                                  {teeName} · {played}
-                                </div>
-                              </div>
-
-                              <div className="shrink-0 grid grid-cols-2 gap-4 items-center">
-                                <div className="text-right">
-                                  <div className="text-[16px] font-extrabold tabular-nums text-emerald-50 leading-none">
-                                    {hiText}
-                                  </div>
-                                  <div className="mt-1 text-[10px] uppercase tracking-[0.14em] text-emerald-100/60">
-                                    <span className="inline-flex items-center gap-1 justify-end">
-                                      {sdText}
-                                      {isExceptional && (
-                                        <span className="text-[#f5e6b0]/80" title="Exceptional round">
-                                          ✨
-                                        </span>
-                                      )}
-                                    </span>
-                                  </div>
-                                </div>
-
-                                <div className="text-right">
-                                  <div className="text-[18px] font-extrabold tabular-nums text-[#f5e6b0] leading-none">
-                                    {scoreText}
-                                  </div>
-                                  <div className="mt-1 text-[10px] text-emerald-100/60">{agsText || "\u00A0"}</div>
-                                </div>
-                              </div>
-                            </div>
-                          </Link>
-                        );
-                      })}
-                    </div>
+                        <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 overflow-hidden">
+                          <div className="p-2 space-y-2">
+                            {list.map((r) => renderRoundRow(r, true))}
+                          </div>
+                        </div>
+                      </section>
+                    ))}
                   </div>
-                </section>
-              ))}
-            </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="non-acceptable">
+                {nonAcceptableRounds.length === 0 ? (
+                  <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/70">
+                    No non-acceptable rounds.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {nonAcceptableGrouped.map(([month, list]) => (
+                      <section key={month} className="space-y-2">
+                        <div className="flex items-center justify-between px-1">
+                          <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70">{month}</div>
+                          <div className="text-[11px] text-emerald-100/60">{list.length}</div>
+                        </div>
+
+                        <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 overflow-hidden">
+                          <div className="p-2 space-y-2">
+                            {list.map((r) => renderRoundRow(r, false))}
+                          </div>
+                        </div>
+                      </section>
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
           )}
 
           {/* optional debug hint */}

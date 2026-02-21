@@ -15,14 +15,14 @@ export function shortDate(iso: string | null) {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" });
+  return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "2-digit" });
 }
 
 export function monthKey(iso: string | null) {
   if (!iso) return "Unknown";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "Unknown";
-  return d.toLocaleDateString(undefined, { year: "numeric", month: "long" });
+  return d.toLocaleDateString("en-US", { year: "numeric", month: "long" });
 }
 
 export function toNumberMaybe(v: unknown): number | null {

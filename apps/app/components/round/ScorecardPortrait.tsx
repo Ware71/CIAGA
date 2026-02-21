@@ -71,6 +71,7 @@ export default function ScorecardPortrait(props: {
   holesList: Hole[];
   portraitCols: string;
   compactPlayers: boolean;
+  avatarOnlyPlayers: boolean;
 
   canScore: boolean;
   isFinished: boolean;
@@ -102,6 +103,7 @@ export default function ScorecardPortrait(props: {
     holesList,
     portraitCols,
     compactPlayers,
+    avatarOnlyPlayers,
     canScore,
     isFinished,
     activeHole,
@@ -171,6 +173,11 @@ export default function ScorecardPortrait(props: {
               >
                 {compactPlayers ? (
                   <div className="text-[10px] font-semibold text-emerald-50">{initialsFrom(name)}</div>
+                ) : avatarOnlyPlayers ? (
+                  <Avatar className="h-5 w-5 border border-emerald-200/70 shrink-0">
+                    {avatarUrl ? <AvatarImage src={avatarUrl} /> : null}
+                    <AvatarFallback className="text-[8px]">{initialsFrom(name)}</AvatarFallback>
+                  </Avatar>
                 ) : (
                   <div className="flex items-center gap-1 min-w-0">
                     <Avatar className="h-4.5 w-4.5 border border-emerald-200/70 shrink-0">

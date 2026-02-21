@@ -11,7 +11,7 @@ import type { Participant, Hole, Score, HoleState, Team, SideGame } from "@/lib/
  * - Viewer-specific distribution for the MAIN FEED is handled via feed_item_targets.
  */
 
-function normalizeActor(profile: any) {
+export function normalizeActor(profile: any) {
   if (!profile) return null;
   return {
     profile_id: profile.id,
@@ -20,7 +20,7 @@ function normalizeActor(profile: any) {
   };
 }
 
-function buildReactionSummary(reactionCounts: Record<string, number>, topN = 3) {
+export function buildReactionSummary(reactionCounts: Record<string, number>, topN = 3) {
   const entries = Object.entries(reactionCounts ?? {});
   entries.sort((a, b) => {
     const diff = (b[1] ?? 0) - (a[1] ?? 0);
@@ -202,7 +202,7 @@ export async function getFeedPage(params: {
   return { items, next_cursor };
 }
 
-async function getReactionCounts(feedItemIds: string[]) {
+export async function getReactionCounts(feedItemIds: string[]) {
   const map = new Map<string, Record<string, number>>();
   if (!feedItemIds.length) return map;
 
@@ -224,7 +224,7 @@ async function getReactionCounts(feedItemIds: string[]) {
   return map;
 }
 
-async function getCommentCounts(feedItemIds: string[]) {
+export async function getCommentCounts(feedItemIds: string[]) {
   const map = new Map<string, number>();
   if (!feedItemIds.length) return map;
 
@@ -243,7 +243,7 @@ async function getCommentCounts(feedItemIds: string[]) {
   return map;
 }
 
-async function getMyReactions(feedItemIds: string[], viewerProfileId: string) {
+export async function getMyReactions(feedItemIds: string[], viewerProfileId: string) {
   const map = new Map<string, string | null>();
   if (!feedItemIds.length) return map;
 
@@ -277,7 +277,7 @@ async function getMyReactions(feedItemIds: string[], viewerProfileId: string) {
  *   author: { id, name, avatar_url }
  * }
  */
-async function getTopComments(feedItemIds: string[]) {
+export async function getTopComments(feedItemIds: string[]) {
   const map = new Map<string, any>();
   if (!feedItemIds.length) return map;
 
