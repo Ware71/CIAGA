@@ -7,24 +7,15 @@ import { motion, AnimatePresence } from "framer-motion";
 import { AuthUser } from "@/components/ui/auth-user";
 
 import type { FeedItemVM } from "@/lib/feed/types";
-import { fetchFeed, fetchLiveFeedItems } from "@/lib/social/api";
-
-import { supabase } from "@/lib/supabaseClient";
-import { getMyProfileIdByAuthUserId } from "@/lib/myProfile";
+import type { HomeSummary } from "@/lib/home/getHomeSummary";
 
 import {
   clamp,
-  safeNum,
   formatSigned,
-  sortByOccurredAtDesc,
-  isLiveItem,
-  occurredAtMs,
-  scoreNonLiveItems,
-  selectWithDiversity,
-  enforceAtLeastOneAchievement,
 } from "@/lib/feed/feedItemUtils";
 import { MiniFeedTeaserCard } from "@/components/social/MiniFeedTeaser";
 import { MajorsView } from "@/components/home/MajorsView";
+import { getViewerSession } from "@/lib/auth/viewerSession";
 
 type MenuItem = { id: string; label: string };
 
@@ -61,7 +52,11 @@ function EnvelopeIcon(props: { size?: number; className?: string }) {
   );
 }
 
-export default function CIAGAStarter() {
+type Props = {
+  initialData?: HomeSummary;
+};
+
+export default function CIAGAStarter({ initialData }: Props) {
   const router = useRouter();
 
   const [open, setOpen] = useState(false);
@@ -72,15 +67,15 @@ export default function CIAGAStarter() {
   const [vh, setVh] = useState(844);
 
   // ✅ Live round detection (for "Resume Round")
-  const [liveRoundId, setLiveRoundId] = useState<string | null>(null);
+  const [liveRoundId, setLiveRoundId] = useState<string | null>(initialData?.live_round_id ?? null);
 
   // ✅ Profile id (used for handicap + last round)
   const [myProfileId, setMyProfileId] = useState<string | null>(null);
 
   // ✅ Subtle home summary
-  const [handicapIndex, setHandicapIndex] = useState<number | null>(null);
-  const [handicapDelta30, setHandicapDelta30] = useState<number>(0);
-  const [roundsPlayed, setRoundsPlayed] = useState<number | null>(null);
+  const [handicapIndex, setHandicapIndex] = useState<number | null>(initialData?.handicap?.current ?? null);
+  const [handicapDelta30, setHandicapDelta30] = useState<number>(initialData?.handicap?.delta_30d ?? 0);
+  const [roundsPlayed, setRoundsPlayed] = useState<number | null>(initialData?.rounds_played ?? null);
 
   const [lastRound, setLastRound] = useState<{
     course: string | null;
@@ -88,10 +83,10 @@ export default function CIAGAStarter() {
     gross: number | null;
     net: number | null;
     diff: number | null;
-    played_at: string | null; // ISO-ish
-  } | null>(null);
+    played_at: string | null;
+  } | null>(initialData?.last_round ?? null);
 
-  const [miniFeed, setMiniFeed] = useState<FeedItemVM[]>([]);
+  const [miniFeed, setMiniFeed] = useState<FeedItemVM[]>(initialData?.mini_feed ?? []);
   const [miniFeedLoading, setMiniFeedLoading] = useState(false);
   const [miniFeedError, setMiniFeedError] = useState<string | null>(null);
 
@@ -117,329 +112,47 @@ export default function CIAGAStarter() {
     };
   }, []);
 
-  // ✅ Fetch profile id once
+  // ✅ Consolidated home data fetch (skipped when server-provided initialData exists)
   useEffect(() => {
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const { data: auth } = await supabase.auth.getUser();
-        const user = auth?.user;
-        if (!user) {
-          if (!cancelled) setMyProfileId(null);
-          return;
-        }
-
-        const pid = await getMyProfileIdByAuthUserId(user.id);
-        if (!cancelled) setMyProfileId(pid ?? null);
-      } catch {
-        if (!cancelled) setMyProfileId(null);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // ✅ Fetch whether current user has a live round
-  useEffect(() => {
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const { data: auth } = await supabase.auth.getUser();
-        const user = auth?.user;
-        if (!user) {
-          if (!cancelled) setLiveRoundId(null);
-          return;
-        }
-
-        const pid = await getMyProfileIdByAuthUserId(user.id);
-        if (!pid) {
-          if (!cancelled) setLiveRoundId(null);
-          return;
-        }
-
-        // Step 1: all round_ids I'm a participant in
-        const partRes = await supabase.from("round_participants").select("round_id").eq("profile_id", pid);
-        if (partRes.error) throw partRes.error;
-
-        const roundIds = (partRes.data ?? []).map((r: any) => r.round_id as string).filter(Boolean);
-
-        if (!roundIds.length) {
-          if (!cancelled) setLiveRoundId(null);
-          return;
-        }
-
-        // Step 2: find most recent live round among those
-        const roundsRes = await supabase
-          .from("rounds")
-          .select("id,status,started_at,created_at")
-          .in("id", roundIds)
-          .eq("status", "live")
-          .order("started_at", { ascending: false })
-          .order("created_at", { ascending: false })
-          .limit(1);
-
-        if (roundsRes.error) throw roundsRes.error;
-
-        const id = (roundsRes.data?.[0]?.id as string | undefined) ?? null;
-        if (!cancelled) setLiveRoundId(id);
-      } catch {
-        if (!cancelled) setLiveRoundId(null);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // ✅ Handicap (current + 30d delta) from handicap_index_history
-  useEffect(() => {
-    if (!myProfileId) {
-      setHandicapIndex(null);
-      setHandicapDelta30(0);
-      return;
-    }
-
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const today = new Date();
-        const since = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
-        const sinceDate = since.toISOString().slice(0, 10); // YYYY-MM-DD
-
-        const curRes = await supabase
-          .from("handicap_index_history")
-          .select("handicap_index,as_of_date")
-          .eq("profile_id", myProfileId)
-          .order("as_of_date", { ascending: false })
-          .limit(1);
-
-        const currentIndex = safeNum((curRes.data as any)?.[0]?.handicap_index);
-
-        const baseRes = await supabase
-          .from("handicap_index_history")
-          .select("handicap_index,as_of_date")
-          .eq("profile_id", myProfileId)
-          .gte("as_of_date", sinceDate)
-          .order("as_of_date", { ascending: true })
-          .limit(1);
-
-        const baselineIndex = safeNum((baseRes.data as any)?.[0]?.handicap_index);
-
-        const delta =
-          typeof currentIndex === "number" && typeof baselineIndex === "number" ? currentIndex - baselineIndex : 0;
-
-        if (!cancelled) {
-          setHandicapIndex(currentIndex);
-          setHandicapDelta30(delta);
-        }
-      } catch {
-        if (!cancelled) {
-          setHandicapIndex(null);
-          setHandicapDelta30(0);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [myProfileId]);
-
-  // ✅ Rounds played (accepted handicap rounds)
-  useEffect(() => {
-    if (!myProfileId) {
-      setRoundsPlayed(null);
-      return;
-    }
-
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const res = await supabase
-          .from("handicap_round_results")
-          .select("id", { count: "exact", head: true })
-          .eq("profile_id", myProfileId)
-          .eq("accepted", true);
-
-        if (res.error) throw res.error;
-        if (!cancelled) setRoundsPlayed(typeof res.count === "number" ? res.count : 0);
-      } catch {
-        if (!cancelled) setRoundsPlayed(null);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [myProfileId]);
-
-  // ✅ Last round summary from handicap_round_results + tee/course snapshots
-  useEffect(() => {
-    if (!myProfileId) {
-      setLastRound(null);
-      return;
-    }
-
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const rrRes = await supabase
-          .from("handicap_round_results")
-          .select("played_at,adjusted_gross_score,course_handicap_used,score_differential,tee_snapshot_id")
-          .eq("profile_id", myProfileId)
-          .eq("accepted", true)
-          .order("played_at", { ascending: false })
-          .limit(1);
-
-        if (rrRes.error) throw rrRes.error;
-
-        const rr: any = rrRes.data?.[0] ?? null;
-        if (!rr) {
-          if (!cancelled) setLastRound(null);
-          return;
-        }
-
-        const gross = safeNum(rr.adjusted_gross_score);
-        const ch = safeNum(rr.course_handicap_used);
-        const net = typeof gross === "number" && typeof ch === "number" ? gross - ch : null;
-        const diff = safeNum(rr.score_differential);
-        const teeSnapshotId = typeof rr.tee_snapshot_id === "string" ? rr.tee_snapshot_id : null;
-
-        let teeName: string | null = null;
-        let courseName: string | null = null;
-
-        if (teeSnapshotId) {
-          const teeRes = await supabase
-            .from("round_tee_snapshots")
-            .select("name,round_course_snapshot_id")
-            .eq("id", teeSnapshotId)
-            .maybeSingle();
-
-          if (!teeRes.error && teeRes.data) {
-            teeName = typeof (teeRes.data as any).name === "string" ? (teeRes.data as any).name : null;
-            const courseSnapId = (teeRes.data as any).round_course_snapshot_id as string | undefined;
-
-            if (courseSnapId) {
-              const courseRes = await supabase
-                .from("round_course_snapshots")
-                .select("course_name")
-                .eq("id", courseSnapId)
-                .maybeSingle();
-
-              if (!courseRes.error && courseRes.data) {
-                courseName =
-                  typeof (courseRes.data as any).course_name === "string" ? (courseRes.data as any).course_name : null;
-              }
-            }
-          }
-        }
-
-        if (!cancelled) {
-          setLastRound({
-            course: courseName,
-            tee: teeName,
-            gross,
-            net,
-            diff,
-            played_at: typeof rr.played_at === "string" ? rr.played_at : null,
-          });
-        }
-      } catch {
-        if (!cancelled) setLastRound(null);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [myProfileId]);
-
-  // ✅ Social Highlight (Top 5: Live reserved + scored "what's new / talked about / big achievements")
-  useEffect(() => {
-    if (!myProfileId) {
-      setMiniFeed([]);
-      setMiniFeedError(null);
-      return;
-    }
+    if (initialData) return; // Already hydrated from server component
 
     let cancelled = false;
 
     (async () => {
       setMiniFeedLoading(true);
-      setMiniFeedError(null);
-
       try {
-        const [liveRes, feedRes] = await Promise.all([fetchLiveFeedItems(), fetchFeed({ limit: 60 })]);
-
-        const liveItemsRaw = ((liveRes as any)?.items as FeedItemVM[]) ?? [];
-        const feedItemsRaw = ((feedRes as any)?.items as FeedItemVM[]) ?? [];
-
-        // 1) Live: always top slots (up to 3), most recent first
-        const liveItems = [...liveItemsRaw].sort(sortByOccurredAtDesc).slice(0, 3);
-
-        // 2) De-dupe: don't show same round twice if a live version exists
-        const liveRoundIds = new Set<string>();
-        for (const li of liveItems) {
-          if (li.type === "round_played") {
-            const rid = (li.payload as any)?.round_id as string | undefined;
-            if (rid) liveRoundIds.add(rid);
-          }
+        const session = await getViewerSession();
+        if (!session || cancelled) {
+          if (!cancelled) setMyProfileId(null);
+          return;
         }
+        if (!cancelled) setMyProfileId(session.profileId);
 
-        const filteredFeed = feedItemsRaw.filter((it) => {
-          if (isLiveItem(it)) return false; // just in case
-          if (it.type !== "round_played") return true;
-          const rid = (it.payload as any)?.round_id as string | undefined;
-          if (!rid) return true;
-          return !liveRoundIds.has(rid);
+        const res = await fetch("/api/home/summary", {
+          headers: { Authorization: `Bearer ${session.accessToken}` },
         });
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
 
-        // 3) Candidate pool is non-live feed items (recent first helps tie-break)
-        const candidateNonLive = [...filteredFeed].sort(sortByOccurredAtDesc);
-
-        const now = Date.now();
-
-        // 4) Score non-live candidates and pick remaining slots
-        const scored = scoreNonLiveItems(candidateNonLive, now);
-
-        const remainingSlots = Math.max(0, 5 - liveItems.length);
-
-        const scoredSorted = scored.sort((a, b) => {
-          if (b.baseScore !== a.baseScore) return b.baseScore - a.baseScore;
-          return occurredAtMs(b.it) - occurredAtMs(a.it);
-        });
-
-        let pickedNonLive = selectWithDiversity(scoredSorted, remainingSlots);
-
-        // 5) Must include at least 1 achievement in top5 if any exist in last 10 days
-        pickedNonLive = enforceAtLeastOneAchievement(pickedNonLive, candidateNonLive, now);
-
-        // 6) Final mini feed: live first, then scored non-live
-        const finalFeed = [...liveItems, ...pickedNonLive].slice(0, 5);
-
-        if (!cancelled) setMiniFeed(finalFeed);
+        if (!cancelled) {
+          setLiveRoundId(data.live_round_id ?? null);
+          setHandicapIndex(data.handicap?.current ?? null);
+          setHandicapDelta30(data.handicap?.delta_30d ?? 0);
+          setRoundsPlayed(data.rounds_played ?? null);
+          setLastRound(data.last_round ?? null);
+          setMiniFeed((data.mini_feed as FeedItemVM[]) ?? []);
+        }
       } catch (e: any) {
         if (!cancelled) {
-          setMiniFeed([]);
-          setMiniFeedError(e?.message ?? "Failed to load feed");
+          setMiniFeedError(e?.message ?? "Failed to load");
         }
       } finally {
         if (!cancelled) setMiniFeedLoading(false);
       }
     })();
 
-    return () => {
-      cancelled = true;
-    };
-  }, [myProfileId]);
+    return () => { cancelled = true; };
+  }, [initialData]);
 
   const homeMenuItems: MenuItem[] = useMemo(() => {
     return homeMenuItemsBase.map((it) =>

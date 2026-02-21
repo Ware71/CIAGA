@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { getMyProfileIdByAuthUserId } from "@/lib/myProfile";
+import { getViewerSession } from "@/lib/auth/viewerSession";
 
 type ProfileEmbed = { name: string | null; email: string | null; avatar_url: string | null };
 
@@ -47,14 +47,7 @@ export type HoleState = "completed" | "picked_up" | "not_started";
 export type HoleStateRow = { participant_id: string; hole_number: number; status: HoleState };
 export type SideGame = { name: string; enabled: boolean; config: Record<string, any> };
 
-function getCourseNameFromJoin(r: any): string {
-  const c = r?.course;
-  if (!c) return "";
-  if (Array.isArray(c)) return c?.[0]?.name || "";
-  return c?.name || "";
-}
-
-export function useRoundDetail(roundId: string) {
+export function useRoundDetail(roundId: string, initialSnapshot?: any) {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
@@ -77,57 +70,28 @@ export function useRoundDetail(roundId: string) {
   // B: hole states keyed by `${participant_id}:${hole_number}`
   const [holeStatesByKey, setHoleStatesByKey] = useState<Record<string, HoleState>>({});
 
-  const fetchAll = useCallback(async () => {
-    if (!roundId) return;
+  const toNumOrNull = (v: any) => {
+    if (v == null) return null;
+    const n = typeof v === "number" ? v : Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
 
-    setErr(null);
-
-    // Me profile id
-    let myProfileId: string | null = null;
-    try {
-      const { data: auth } = await supabase.auth.getUser();
-      if (auth?.user) myProfileId = await getMyProfileIdByAuthUserId(auth.user.id);
-    } catch {
-      myProfileId = null;
-    }
-    setMeId(myProfileId);
-
-    // Round meta
-    const roundRes = await supabase
-      .from("rounds")
-      .select("id,name,status,started_at,created_at,format_type,format_config,side_games,course:courses(name)")
-      .eq("id", roundId)
-      .single();
-    if (roundRes.error) throw roundRes.error;
-
-    const r = roundRes.data as any;
-    const courseName = getCourseNameFromJoin(r);
+  // Hydrate all state from a snapshot API response
+  const hydrateFromSnapshot = useCallback((snap: any) => {
+    const r = snap.round ?? {};
+    const courseName = r.course_name ?? "";
 
     setRoundName(r.name || courseName || "Round");
-    setStatus(r.status);
+    setStatus(r.status ?? "draft");
     setCourseLabel(courseName);
-    setPlayedOnIso((r.started_at as string | null) ?? (r.created_at as string | null) ?? null);
+    setPlayedOnIso(r.started_at ?? r.created_at ?? null);
     setFormatType((r.format_type as RoundFormatType) || "strokeplay");
     setFormatConfig((r.format_config as Record<string, any>) || {});
     setSideGames((r.side_games as SideGame[]) || []);
 
-    // Participants via RPC
-    const partRes = await supabase.rpc("get_round_participants", { _round_id: roundId });
-    if (partRes.error) throw partRes.error;
-
-    const toNumOrNull = (v: any) => {
-      if (v == null) return null;
-      const n = typeof v === "number" ? v : Number(v);
-      return Number.isFinite(n) ? n : null;
-    };
-
-    // Fetch playing_handicap_used, team_id, and the directly-stored handicap_index from round_participants
-    const rpExtras = await supabase
-      .from("round_participants")
-      .select("id,playing_handicap_used,team_id,handicap_index")
-      .eq("round_id", roundId);
+    // Build extras map from participant_extras
     const extrasMap: Record<string, { playing_handicap_used: number | null; team_id: string | null; handicap_index_direct: number | null }> = {};
-    for (const row of (rpExtras.data ?? []) as any[]) {
+    for (const row of (snap.participant_extras ?? []) as any[]) {
       extrasMap[row.id] = {
         playing_handicap_used: toNumOrNull(row.playing_handicap_used),
         team_id: row.team_id ?? null,
@@ -135,120 +99,96 @@ export function useRoundDetail(roundId: string) {
       };
     }
 
-    // Fetch tee snapshot metadata so we can compute course handicap as a fallback
-    const firstTeeId = ((partRes.data ?? []) as any[]).find((r: any) => r.tee_snapshot_id)?.tee_snapshot_id ?? null;
-    let teeMeta: { rating: number; slope: number; par_total: number } | null = null;
-    if (firstTeeId) {
-      const teeMetaRes = await supabase
-        .from("round_tee_snapshots")
-        .select("rating,slope,par_total")
-        .eq("id", firstTeeId)
-        .single();
-      if (teeMetaRes.data) {
-        const { rating, slope, par_total } = teeMetaRes.data as any;
-        const r = toNumOrNull(rating), s = toNumOrNull(slope), p = toNumOrNull(par_total);
-        if (r !== null && s !== null && p !== null) teeMeta = { rating: r, slope: s, par_total: p };
-      }
-    }
+    // Build tee meta for CH computation fallback
+    const teeMeta = snap.tee_snapshot
+      ? {
+          rating: toNumOrNull(snap.tee_snapshot.rating),
+          slope: toNumOrNull(snap.tee_snapshot.slope),
+          par_total: toNumOrNull(snap.tee_snapshot.par_total),
+        }
+      : null;
 
     const computeCH = (hi: number | null): number | null => {
-      if (hi === null || teeMeta === null) return null;
-      return Math.round(hi * (teeMeta.slope / 113) + (teeMeta.rating - teeMeta.par_total));
+      if (hi === null || !teeMeta || teeMeta.rating === null || teeMeta.slope === null || teeMeta.par_total === null) return null;
+      return Math.round(hi * (teeMeta.slope! / 113) + (teeMeta.rating! - teeMeta.par_total!));
     };
 
-    const mappedParticipants = ((partRes.data ?? []) as any[]).map((row) => {
-      // HI: prefer RPC "used/computed" resolved value, then direct stored value on round_participants
+    const mappedParticipants = ((snap.participants ?? []) as any[]).map((row: any) => {
       const hiResolved =
         toNumOrNull(row.handicap_index) ??
         toNumOrNull(row.handicap_index_computed) ??
         toNumOrNull(extrasMap[row.id]?.handicap_index_direct);
-      // CH: prefer RPC resolved value, then compute from the resolved HI + tee snapshot
       const chResolved =
         toNumOrNull(row.course_handicap) ??
         toNumOrNull(row.course_handicap_computed) ??
         computeCH(hiResolved);
       return {
-      id: row.id,
-      profile_id: row.profile_id,
-      is_guest: row.is_guest,
-      display_name: row.display_name,
-      role: row.role,
-      tee_snapshot_id: row.tee_snapshot_id,
-      team_id: extrasMap[row.id]?.team_id ?? null,
-
-      handicap_index: hiResolved,
-      course_handicap: chResolved,
-
-      // both
-      handicap_index_computed: toNumOrNull(row.handicap_index_computed),
-      course_handicap_computed: toNumOrNull(row.course_handicap_computed),
-      handicap_index_used: toNumOrNull(row.handicap_index_used),
-      course_handicap_used: toNumOrNull(row.course_handicap_used),
-
-      // format scoring
-      playing_handicap_used: extrasMap[row.id]?.playing_handicap_used ?? null,
-
-      profiles: {
-        name: row.name,
-        email: row.email,
-        avatar_url: row.avatar_url,
-      },
-    };
+        id: row.id,
+        profile_id: row.profile_id,
+        is_guest: row.is_guest,
+        display_name: row.display_name,
+        role: row.role,
+        tee_snapshot_id: row.tee_snapshot_id,
+        team_id: extrasMap[row.id]?.team_id ?? null,
+        handicap_index: hiResolved,
+        course_handicap: chResolved,
+        handicap_index_computed: toNumOrNull(row.handicap_index_computed),
+        course_handicap_computed: toNumOrNull(row.course_handicap_computed),
+        handicap_index_used: toNumOrNull(row.handicap_index_used),
+        course_handicap_used: toNumOrNull(row.course_handicap_used),
+        playing_handicap_used: extrasMap[row.id]?.playing_handicap_used ?? null,
+        profiles: {
+          name: row.name,
+          email: row.email,
+          avatar_url: row.avatar_url,
+        },
+      };
     }) as Participant[];
 
     setParticipants(mappedParticipants);
 
     const teeId = mappedParticipants.find((p: any) => p.tee_snapshot_id)?.tee_snapshot_id ?? null;
     setTeeSnapshotId(teeId);
+    setTeams((snap.teams ?? []) as Team[]);
+    setHoles(((snap.holes ?? []) as Hole[]).sort((a, b) => a.hole_number - b.hole_number));
 
-    // Teams (for team formats)
-    const teamsRes = await supabase
-      .from("round_teams")
-      .select("id,round_id,name,team_number")
-      .eq("round_id", roundId)
-      .order("team_number", { ascending: true });
-    setTeams((teamsRes.data ?? []) as Team[]);
-
-    // Holes snapshot
-    if (teeId) {
-      const holesRes = await supabase
-        .from("round_hole_snapshots")
-        .select("hole_number,par,yardage,stroke_index")
-        .eq("round_tee_snapshot_id", teeId)
-        .order("hole_number", { ascending: true });
-      if (holesRes.error) throw holesRes.error;
-      setHoles((holesRes.data ?? []) as Hole[]);
-    } else {
-      setHoles([]);
-    }
-
-    // Current scores
-    const scoreRes = await supabase
-      .from("round_current_scores")
-      .select("participant_id,hole_number,strokes,created_at")
-      .eq("round_id", roundId);
-    if (scoreRes.error) throw scoreRes.error;
-
-    const map: Record<string, Score> = {};
-    for (const s of (scoreRes.data ?? []) as Score[]) map[`${s.participant_id}:${s.hole_number}`] = s;
-    setScoresByKey(map);
-
-    // B: Hole states
-    const hsRes = await supabase
-      .from("round_hole_states")
-      .select("participant_id,hole_number,status")
-      .eq("round_id", roundId);
-    if (hsRes.error) throw hsRes.error;
+    const scoreMap: Record<string, Score> = {};
+    for (const s of (snap.scores ?? []) as Score[]) scoreMap[`${s.participant_id}:${s.hole_number}`] = s;
+    setScoresByKey(scoreMap);
 
     const hsMap: Record<string, HoleState> = {};
-    for (const row of (hsRes.data ?? []) as HoleStateRow[]) {
+    for (const row of (snap.hole_states ?? []) as HoleStateRow[]) {
       hsMap[`${row.participant_id}:${row.hole_number}`] = row.status;
     }
     setHoleStatesByKey(hsMap);
-  }, [roundId]);
 
-  // initial load
+    setMeId(snap.viewer_profile_id ?? null);
+  }, []);
+
+  const fetchAll = useCallback(async () => {
+    if (!roundId) return;
+
+    setErr(null);
+
+    const session = await getViewerSession();
+    if (!session) { setMeId(null); return; }
+
+    const res = await fetch(`/api/rounds/${roundId}/snapshot`, {
+      headers: { Authorization: `Bearer ${session.accessToken}` },
+    });
+    if (!res.ok) throw new Error("Failed to load round");
+    const snap = await res.json();
+    hydrateFromSnapshot(snap);
+  }, [roundId, hydrateFromSnapshot]);
+
+  // initial load — use server-provided snapshot when available
   useEffect(() => {
+    if (initialSnapshot) {
+      hydrateFromSnapshot(initialSnapshot);
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -263,6 +203,7 @@ export function useRoundDetail(roundId: string) {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchAll]);
 
   // realtime: score events
@@ -332,7 +273,13 @@ export function useRoundDetail(roundId: string) {
     };
   }, [roundId]);
 
-  // realtime: meta changes (refetch all)
+  // realtime: meta changes (refetch all, debounced to prevent burst reloads)
+  const metaDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debouncedFetchAll = useCallback(() => {
+    if (metaDebounceRef.current) clearTimeout(metaDebounceRef.current);
+    metaDebounceRef.current = setTimeout(() => fetchAll(), 300);
+  }, [fetchAll]);
+
   useEffect(() => {
     if (!roundId) return;
     const chan = supabase
@@ -340,20 +287,21 @@ export function useRoundDetail(roundId: string) {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "round_participants", filter: `round_id=eq.${roundId}` },
-        () => fetchAll()
+        () => debouncedFetchAll()
       )
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "rounds", filter: `id=eq.${roundId}` },
-        () => fetchAll()
+        () => debouncedFetchAll()
       )
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "round_hole_snapshots" }, () => fetchAll())
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "round_hole_snapshots" }, () => debouncedFetchAll())
       .subscribe();
 
     return () => {
+      if (metaDebounceRef.current) clearTimeout(metaDebounceRef.current);
       supabase.removeChannel(chan);
     };
-  }, [roundId, fetchAll]);
+  }, [roundId, debouncedFetchAll]);
 
   // Permission: any participant can score (you already changed this; keep it)
   const canScore = useMemo(() => {

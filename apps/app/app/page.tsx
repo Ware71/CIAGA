@@ -1,12 +1,13 @@
-'use client';
-
+import { redirect } from "next/navigation";
+import { getServerViewer } from "@/lib/supabaseServer";
+import { getHomeSummary, type HomeSummary } from "@/lib/home/getHomeSummary";
 import CIAGAStarter from "./CiagaStarter";
-import AuthGate from "@/components/ui/auth-gate";
 
-export default function Page() {
-  return (
-    <AuthGate>
-      <CIAGAStarter />
-    </AuthGate>
-  );
+export default async function Page() {
+  const viewer = await getServerViewer();
+  if (!viewer) redirect("/auth");
+
+  const initialData = await getHomeSummary(viewer.profileId);
+
+  return <CIAGAStarter initialData={initialData} />;
 }

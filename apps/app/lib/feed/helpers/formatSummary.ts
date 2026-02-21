@@ -32,7 +32,36 @@ export type FormatFeedSummary = {
   side_game_results: Array<{ label: string; winner: string | null }>;
 };
 
-// ── Main entry point ─────────────────────────────────────────────────
+// ── Pre-fetched data variant (used by batch RPC path) ────────────────
+
+export type FormatSummaryInput = {
+  format_type: string | null;
+  format_config: Record<string, any>;
+  side_games: SideGame[];
+  participants: Participant[];
+  teams: Team[];
+  holes: Hole[];
+  scoresByKey: Record<string, Score>;
+  holeStatesByKey: Record<string, HoleState>;
+};
+
+/**
+ * Compute format summary from pre-fetched data (no DB queries).
+ * Used by the batch RPC path to avoid per-round query fan-out.
+ */
+export function computeFormatSummaryFromData(
+  input: FormatSummaryInput,
+): FormatFeedSummary | null {
+  const formatType = input.format_type as RoundFormatType | null;
+  if (!formatType) return null;
+
+  const { format_config: formatConfig, side_games: sideGames, participants, teams, holes, scoresByKey, holeStatesByKey } = input;
+  if (!holes.length) return null;
+
+  return _computeFromParsedData(formatType, formatConfig, sideGames, participants, teams, holes, scoresByKey, holeStatesByKey);
+}
+
+// ── DB-fetching entry point (legacy, still used by non-batch callers) ─
 
 export async function computeFormatSummaryForFeed(
   roundId: string,
@@ -163,7 +192,22 @@ export async function computeFormatSummaryForFeed(
     }
   }
 
-  // 7. Compute format display
+  return _computeFromParsedData(formatType, formatConfig, sideGames, participants, teams, holes, scoresByKey, holeStatesByKey);
+}
+
+// ── Shared computation logic ─────────────────────────────────────────
+
+function _computeFromParsedData(
+  formatType: RoundFormatType,
+  formatConfig: Record<string, any>,
+  sideGames: SideGame[],
+  participants: Participant[],
+  teams: Team[],
+  holes: Hole[],
+  scoresByKey: Record<string, Score>,
+  holeStatesByKey: Record<string, HoleState>,
+): FormatFeedSummary | null {
+  // Compute format display
   const nameOf = (p: Participant) => p.display_name || "Player";
 
   const formatDisplays = computeFormatDisplay(
