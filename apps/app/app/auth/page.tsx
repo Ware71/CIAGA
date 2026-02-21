@@ -26,24 +26,41 @@ function AuthPageContent() {
   const [working, setWorking] = useState(false);
   const [msg, setMsg] = useState<{ text: string; isError: boolean } | null>(null);
 
-  // Detect recovery flow from URL param or Supabase auth event
+  // Detect recovery flow, invite errors, and already-authenticated users
   useEffect(() => {
     if (searchParams.get('recovery') === 'true') {
       setMode('reset');
       setMsg({ text: 'Enter your new password below.', isError: false });
+      return;
     }
+
+    if (searchParams.get('error') === 'invite_expired') {
+      setMsg({
+        text: 'Your invite link has expired or was already used. Enter your email below and use "Forgot password?" to set a password and access your account.',
+        isError: true,
+      });
+      return;
+    }
+
+    // If the user already has a valid session, send them to the app
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) router.replace('/');
+    });
 
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY') {
         setMode('reset');
         setMsg({ text: 'Enter your new password below.', isError: false });
       }
+      if (event === 'SIGNED_IN') {
+        router.replace('/');
+      }
     });
 
     return () => {
       sub.subscription.unsubscribe();
     };
-  }, [searchParams]);
+  }, [searchParams, router]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -139,7 +156,23 @@ function AuthPageContent() {
         });
       }
     } catch (err: any) {
-      setMsg({ text: err?.message || 'Something went wrong.', isError: true });
+      const msg: string = err?.message || 'Something went wrong.';
+      // Invited users have an auth account but no password — guide them to reset
+      const isAlreadyRegistered =
+        msg.toLowerCase().includes('already registered') ||
+        msg.toLowerCase().includes('user already exists');
+      const isInvalidCredentials =
+        msg.toLowerCase().includes('invalid login credentials') ||
+        msg.toLowerCase().includes('invalid credentials') ||
+        msg.toLowerCase().includes('email not confirmed');
+      if (isAlreadyRegistered || isInvalidCredentials) {
+        setMsg({
+          text: 'If you were invited to the app, your account was created automatically without a password. Use "Forgot password?" below to set one.',
+          isError: true,
+        });
+      } else {
+        setMsg({ text: msg, isError: true });
+      }
     } finally {
       setWorking(false);
     }
