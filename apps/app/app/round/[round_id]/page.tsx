@@ -4,11 +4,13 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import RoundDetailClient from "./RoundDetailClient";
 
 export default async function RoundDetailPage({ params }: { params: Promise<{ round_id: string }> }) {
-  const [viewer, { round_id: roundId }] = await Promise.all([
+  const [viewerResult, { round_id: roundId }] = await Promise.all([
     getServerViewer(),
     params,
   ]);
-  if (!viewer) redirect("/auth");
+  if (viewerResult.status === "signed_out") redirect("/auth");
+  if (viewerResult.status === "needs_onboarding") redirect("/onboarding/set-password");
+  const viewer = viewerResult.viewer;
 
   const { data, error } = await supabaseAdmin.rpc("get_round_detail_snapshot", { _round_id: roundId });
 
