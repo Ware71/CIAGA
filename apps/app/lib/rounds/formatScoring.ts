@@ -9,7 +9,14 @@ import { strokesReceivedOnHole, netFromGross } from "./handicapUtils";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
-export type FormatScoreView = "gross" | "net" | "format";
+export type FormatScoreView = "gross" | "net" | `format:${number}`;
+
+export function isFormatView(v: FormatScoreView): v is `format:${number}` {
+  return typeof v === "string" && v.startsWith("format:");
+}
+export function formatViewIndex(v: FormatScoreView): number {
+  return parseInt((v as string).split(":")[1], 10);
+}
 
 export type FormatHoleResult = {
   /** Display string or number for the cell (e.g. "2", "+1", "W", "—") */
@@ -37,6 +44,10 @@ export type FormatDisplayData = {
   higherIsBetter: boolean;
   /** If true, summaries are per-team rather than per-participant */
   isTeamView: boolean;
+  /** If set, only these participants should be shown on this tab's scorecard */
+  filteredParticipantIds?: string[];
+  /** Playing handicap per participant for StrokeDots on this format tab */
+  playingHandicaps?: Record<string, number>;
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -56,6 +67,12 @@ function grossFor(
 
 function playingHcp(p: Participant): number {
   return typeof p.playing_handicap_used === "number" ? p.playing_handicap_used : 0;
+}
+
+function buildPlayingHandicaps(participants: Participant[]): Record<string, number> {
+  const map: Record<string, number> = {};
+  for (const p of participants) map[p.id] = playingHcp(p);
+  return map;
 }
 
 function sumRange(
@@ -100,6 +117,25 @@ function stablefordPoints(netRelToPar: number, pointsTable: Record<string, numbe
   return pointsTable.worse ?? DEFAULT_STABLEFORD.worse;
 }
 
+/** Compute stableford points for a single participant on a single hole */
+function playerStablefordPtsOnHole(
+  p: Participant,
+  h: Hole,
+  scoresByKey: Record<string, Score>,
+  holeStatesByKey: Record<string, HoleState>,
+  pointsTable: Record<string, number>
+): number | null {
+  // PU holes always score 0 stableford points (WHS: net double bogey or worse)
+  const state = holeStatesByKey[`${p.id}:${h.hole_number}`];
+  if (state === "picked_up") return 0;
+
+  const gross = grossFor(p.id, h.hole_number, scoresByKey, holeStatesByKey);
+  if (gross === null || !h.par) return null;
+  const recv = strokesReceivedOnHole(playingHcp(p), h.stroke_index);
+  const net = netFromGross(gross, recv);
+  return stablefordPoints(net - h.par, pointsTable);
+}
+
 // ── Per-format calculators ─────────────────────────────────────────────
 
 function computeStableford(
@@ -113,22 +149,17 @@ function computeStableford(
   const holeResults: Record<string, FormatHoleResult> = {};
 
   for (const p of participants) {
-    const hcp = playingHcp(p);
     for (const h of holes) {
       const key = `${p.id}:${h.hole_number}`;
-      const gross = grossFor(p.id, h.hole_number, scoresByKey, holeStatesByKey);
-      if (gross === null || !h.par) {
+      const pts = playerStablefordPtsOnHole(p, h, scoresByKey, holeStatesByKey, pointsTable);
+      if (pts === null) {
         holeResults[key] = { displayValue: null };
-        continue;
+      } else {
+        holeResults[key] = {
+          displayValue: pts,
+          cssHint: pts >= 3 ? "positive" : pts === 0 ? "negative" : "neutral",
+        };
       }
-      const recv = strokesReceivedOnHole(hcp, h.stroke_index);
-      const net = netFromGross(gross, recv);
-      const relToPar = net - h.par;
-      const pts = stablefordPoints(relToPar, pointsTable);
-      holeResults[key] = {
-        displayValue: pts,
-        cssHint: pts >= 3 ? "positive" : pts === 0 ? "negative" : "neutral",
-      };
     }
   }
 
@@ -139,25 +170,84 @@ function computeStableford(
     total: sumRange(holeResults, p.id, holes, 1, 18),
   }));
 
-  return { tabLabel: "Stableford", holeResults, summaries, higherIsBetter: true, isTeamView: false };
+  return { tabLabel: "Stableford", holeResults, summaries, higherIsBetter: true, isTeamView: false, playingHandicaps: buildPlayingHandicaps(participants) };
 }
 
 function computeMatchPlay(
   participants: Participant[],
   holes: Hole[],
   scoresByKey: Record<string, Score>,
+  holeStatesByKey: Record<string, HoleState>,
+  formatConfig: Record<string, any>,
+  getName: (p: Participant) => string
+): FormatDisplayData[] {
+  const matchups: Array<{ player_a_id: string; player_b_id: string }> = formatConfig.matchups || [];
+
+  // If no matchups configured, fall back to auto-pair with exactly 2 players
+  if (matchups.length === 0) {
+    if (participants.length !== 2) return [];
+    const pA = participants[0], pB = participants[1];
+    const result = computeMatchPlayPair(pA, pB, participants, holes, scoresByKey, holeStatesByKey);
+    result.tabLabel = `${getName(pA)} vs ${getName(pB)}`;
+    result.filteredParticipantIds = [pA.id, pB.id];
+    result.playingHandicaps = { [pA.id]: playingHcp(pA), [pB.id]: playingHcp(pB) };
+    return [result];
+  }
+
+  // Process ALL matchups — one FormatDisplayData per match
+  return matchups
+    .map((m) => {
+      const pA = participants.find((p) => p.id === m.player_a_id);
+      const pB = participants.find((p) => p.id === m.player_b_id);
+      if (!pA || !pB) return null;
+      const result = computeMatchPlayPair(pA, pB, participants, holes, scoresByKey, holeStatesByKey);
+      result.tabLabel = `${getName(pA)} vs ${getName(pB)}`;
+      result.filteredParticipantIds = [pA.id, pB.id];
+      result.playingHandicaps = { [pA.id]: playingHcp(pA), [pB.id]: playingHcp(pB) };
+      return result;
+    })
+    .filter(Boolean) as FormatDisplayData[];
+}
+
+/**
+ * Convert final cumulative match state into standard golf notation.
+ * - "3&2" means won 3 up with 2 holes remaining
+ * - "1 UP" means won 1 up after all holes played
+ * - "AS" means all square (tied)
+ */
+export function formatMatchPlayResult(
+  lead: number,
+  holesRemaining: number
+): string {
+  if (lead === 0) return "AS";
+  if (holesRemaining > 0) return `${lead}&${holesRemaining}`;
+  return `${lead} UP`;
+}
+
+function computeMatchPlayPair(
+  pA: Participant,
+  pB: Participant,
+  allParticipants: Participant[],
+  holes: Hole[],
+  scoresByKey: Record<string, Score>,
   holeStatesByKey: Record<string, HoleState>
-): FormatDisplayData | null {
-  // Match play needs exactly 2 participants
-  if (participants.length !== 2) return null;
-  const [pA, pB] = participants;
+): FormatDisplayData {
   const hcpA = playingHcp(pA);
   const hcpB = playingHcp(pB);
-
   const holeResults: Record<string, FormatHoleResult> = {};
-  let cumulativeState = 0; // positive = pA up, negative = pB up
+  let cumulativeState = 0;
+  let holesPlayed = 0;
+  let matchDecidedAtHole: number | null = null;
+  const totalHoles = holes.length;
 
   for (const h of holes) {
+    // If match already decided, remaining holes are dormie — show dashes
+    if (matchDecidedAtHole !== null) {
+      holeResults[`${pA.id}:${h.hole_number}`] = { displayValue: null };
+      holeResults[`${pB.id}:${h.hole_number}`] = { displayValue: null };
+      continue;
+    }
+
     const grossA = grossFor(pA.id, h.hole_number, scoresByKey, holeStatesByKey);
     const grossB = grossFor(pB.id, h.hole_number, scoresByKey, holeStatesByKey);
 
@@ -167,33 +257,61 @@ function computeMatchPlay(
       continue;
     }
 
+    holesPlayed++;
+
     const netA = netFromGross(grossA, strokesReceivedOnHole(hcpA, h.stroke_index));
     const netB = netFromGross(grossB, strokesReceivedOnHole(hcpB, h.stroke_index));
 
     if (netA < netB) {
       cumulativeState += 1;
-      holeResults[`${pA.id}:${h.hole_number}`] = { displayValue: "W", cssHint: "won" };
-      holeResults[`${pB.id}:${h.hole_number}`] = { displayValue: "L", cssHint: "lost" };
     } else if (netB < netA) {
       cumulativeState -= 1;
-      holeResults[`${pA.id}:${h.hole_number}`] = { displayValue: "L", cssHint: "lost" };
-      holeResults[`${pB.id}:${h.hole_number}`] = { displayValue: "W", cssHint: "won" };
-    } else {
-      holeResults[`${pA.id}:${h.hole_number}`] = { displayValue: "–", cssHint: "halved" };
-      holeResults[`${pB.id}:${h.hole_number}`] = { displayValue: "–", cssHint: "halved" };
+    }
+
+    // Display cumulative match state from each player's perspective
+    const stateA = cumulativeState > 0 ? `${cumulativeState}UP` : cumulativeState < 0 ? `${Math.abs(cumulativeState)}DN` : "AS";
+    const stateB = cumulativeState < 0 ? `${Math.abs(cumulativeState)}UP` : cumulativeState > 0 ? `${cumulativeState}DN` : "AS";
+    const hintA: "won" | "lost" | "halved" = cumulativeState > 0 ? "won" : cumulativeState < 0 ? "lost" : "halved";
+    const hintB: "won" | "lost" | "halved" = cumulativeState < 0 ? "won" : cumulativeState > 0 ? "lost" : "halved";
+
+    holeResults[`${pA.id}:${h.hole_number}`] = { displayValue: stateA, cssHint: hintA };
+    holeResults[`${pB.id}:${h.hole_number}`] = { displayValue: stateB, cssHint: hintB };
+
+    // Check if match is decided: lead exceeds remaining holes
+    const holesRemaining = totalHoles - holesPlayed;
+    if (Math.abs(cumulativeState) > holesRemaining) {
+      matchDecidedAtHole = h.hole_number;
     }
   }
 
-  const formatState = (state: number, isA: boolean): string => {
-    const val = isA ? state : -state;
-    if (val > 0) return `${val} UP`;
-    if (val < 0) return `${Math.abs(val)} DN`;
-    return "AS";
-  };
+  // Build summary with standard matchplay notation
+  const holesRemaining = totalHoles - holesPlayed;
+  const isMatchDecided = cumulativeState !== 0 &&
+    (holesRemaining === 0 || Math.abs(cumulativeState) > holesRemaining);
+
+  let totalA: string;
+  let totalB: string;
+
+  if (isMatchDecided) {
+    const result = formatMatchPlayResult(Math.abs(cumulativeState), holesRemaining);
+    const lead = Math.abs(cumulativeState);
+    totalA = cumulativeState > 0 ? `W ${result}` : `L ${lead} DN`;
+    totalB = cumulativeState < 0 ? `W ${result}` : `L ${lead} DN`;
+  } else {
+    // In-progress: show running state
+    const formatState = (state: number, isA: boolean): string => {
+      const val = isA ? state : -state;
+      if (val > 0) return `${val} UP`;
+      if (val < 0) return `${Math.abs(val)} DN`;
+      return "AS";
+    };
+    totalA = formatState(cumulativeState, true);
+    totalB = formatState(cumulativeState, false);
+  }
 
   const summaries: FormatSummary[] = [
-    { participantId: pA.id, out: "–", inn: "–", total: formatState(cumulativeState, true) },
-    { participantId: pB.id, out: "–", inn: "–", total: formatState(cumulativeState, false) },
+    { participantId: pA.id, out: "–", inn: "–", total: totalA },
+    { participantId: pB.id, out: "–", inn: "–", total: totalB },
   ];
 
   return { tabLabel: "Match", holeResults, summaries, higherIsBetter: false, isTeamView: false };
@@ -231,7 +349,6 @@ function computeSkins(
     const skinValue = 1 + carryover;
 
     if (bestPids.length === 1) {
-      // Unique lowest — wins skin(s)
       skinCounts[bestPids[0]] += skinValue;
       carryover = 0;
       for (const p of participants) {
@@ -243,7 +360,6 @@ function computeSkins(
         }
       }
     } else {
-      // Tie — carry over
       carryover += 1;
       for (const p of participants) {
         holeResults[`${p.id}:${h.hole_number}`] = { displayValue: "–", cssHint: "halved" };
@@ -258,7 +374,7 @@ function computeSkins(
     total: skinCounts[p.id],
   }));
 
-  return { tabLabel: "Skins", holeResults, summaries, higherIsBetter: true, isTeamView: false };
+  return { tabLabel: "Skins", holeResults, summaries, higherIsBetter: true, isTeamView: false, playingHandicaps: buildPlayingHandicaps(participants) };
 }
 
 // ── Team format helpers ────────────────────────────────────────────────
@@ -328,13 +444,8 @@ function computeTeamStableford(
       let sum = 0;
       let anyScore = false;
       for (const p of members) {
-        const gross = grossFor(p.id, h.hole_number, scoresByKey, holeStatesByKey);
-        if (gross === null || !h.par) continue;
-        const recv = strokesReceivedOnHole(playingHcp(p), h.stroke_index);
-        const net = netFromGross(gross, recv);
-        const pts = stablefordPoints(net - h.par, pointsTable);
-        sum += pts;
-        anyScore = true;
+        const pts = playerStablefordPtsOnHole(p, h, scoresByKey, holeStatesByKey, pointsTable);
+        if (pts !== null) { sum += pts; anyScore = true; }
       }
       holeResults[`${teamId}:${h.hole_number}`] = anyScore
         ? { displayValue: sum, cssHint: sum >= 4 ? "positive" : sum === 0 ? "negative" : "neutral" }
@@ -358,25 +469,118 @@ function computeTeamBestBall(
   holes: Hole[],
   scoresByKey: Record<string, Score>,
   holeStatesByKey: Record<string, HoleState>,
-  teams: Team[]
+  teams: Team[],
+  formatConfig: Record<string, any>
 ): FormatDisplayData | null {
   if (!teams.length) return null;
   const teamMap = buildTeamMap(participants, teams);
   const holeResults: Record<string, FormatHoleResult> = {};
 
+  const scoringType: string = formatConfig.scoring_type || "net_strokes";
+  const countPerHole: number = formatConfig.count_per_hole || 1;
+  const pointsTable = { ...DEFAULT_STABLEFORD, ...(formatConfig.points_table ?? {}) };
+
   for (const [teamId, members] of teamMap) {
     for (const h of holes) {
-      let best: number | null = null;
-      for (const p of members) {
-        const gross = grossFor(p.id, h.hole_number, scoresByKey, holeStatesByKey);
-        if (gross === null) continue;
-        const recv = strokesReceivedOnHole(playingHcp(p), h.stroke_index);
-        const net = netFromGross(gross, recv);
-        if (best === null || net < best) best = net;
+      if (scoringType === "stableford") {
+        // Best X stableford points
+        const allPts: number[] = [];
+        for (const p of members) {
+          const pts = playerStablefordPtsOnHole(p, h, scoresByKey, holeStatesByKey, pointsTable);
+          if (pts !== null) allPts.push(pts);
+        }
+        if (allPts.length === 0) {
+          holeResults[`${teamId}:${h.hole_number}`] = { displayValue: null };
+        } else {
+          allPts.sort((a, b) => b - a); // highest first
+          const topN = allPts.slice(0, countPerHole);
+          const sum = topN.reduce((a, b) => a + b, 0);
+          holeResults[`${teamId}:${h.hole_number}`] = {
+            displayValue: sum,
+            cssHint: sum >= 3 ? "positive" : sum === 0 ? "negative" : "neutral",
+          };
+        }
+      } else {
+        // Best X net strokes (lowest)
+        const allNets: number[] = [];
+        for (const p of members) {
+          const gross = grossFor(p.id, h.hole_number, scoresByKey, holeStatesByKey);
+          if (gross === null) continue;
+          const recv = strokesReceivedOnHole(playingHcp(p), h.stroke_index);
+          allNets.push(netFromGross(gross, recv));
+        }
+        if (allNets.length === 0) {
+          holeResults[`${teamId}:${h.hole_number}`] = { displayValue: null };
+        } else {
+          allNets.sort((a, b) => a - b); // lowest first
+          const topN = allNets.slice(0, countPerHole);
+          const sum = topN.reduce((a, b) => a + b, 0);
+          holeResults[`${teamId}:${h.hole_number}`] = { displayValue: sum };
+        }
       }
-      holeResults[`${teamId}:${h.hole_number}`] = best !== null
-        ? { displayValue: best }
-        : { displayValue: null };
+    }
+  }
+
+  const higherIsBetter = scoringType === "stableford";
+  const summaries: FormatSummary[] = teams.map((t) => ({
+    participantId: t.id,
+    teamId: t.id,
+    out: sumRange(holeResults, t.id, holes, 1, 9),
+    inn: sumRange(holeResults, t.id, holes, 10, 18),
+    total: sumRange(holeResults, t.id, holes, 1, 18),
+  }));
+
+  return { tabLabel: "Best Ball", holeResults, summaries, higherIsBetter, isTeamView: true };
+}
+
+// ── Pairs Stableford ──────────────────────────────────────────────────
+
+function computePairsStableford(
+  participants: Participant[],
+  holes: Hole[],
+  scoresByKey: Record<string, Score>,
+  holeStatesByKey: Record<string, HoleState>,
+  teams: Team[],
+  formatConfig: Record<string, any>
+): FormatDisplayData | null {
+  if (!teams.length) return null;
+  const teamMap = buildTeamMap(participants, teams);
+  const pointsTable = { ...DEFAULT_STABLEFORD, ...(formatConfig.points_table ?? {}) };
+  const scoringMode: string = formatConfig.scoring_mode || "best";
+  const countPerHole: number = formatConfig.count_per_hole || 1;
+  const holeResults: Record<string, FormatHoleResult> = {};
+
+  for (const [teamId, members] of teamMap) {
+    for (const h of holes) {
+      const allPts: number[] = [];
+      for (const p of members) {
+        const pts = playerStablefordPtsOnHole(p, h, scoresByKey, holeStatesByKey, pointsTable);
+        if (pts !== null) allPts.push(pts);
+      }
+
+      if (allPts.length === 0) {
+        holeResults[`${teamId}:${h.hole_number}`] = { displayValue: null };
+        continue;
+      }
+
+      let teamPts: number;
+      if (scoringMode === "combined") {
+        teamPts = allPts.reduce((a, b) => a + b, 0);
+      } else if (scoringMode === "worst") {
+        allPts.sort((a, b) => a - b); // lowest first
+        const selected = allPts.slice(0, countPerHole);
+        teamPts = selected.reduce((a, b) => a + b, 0);
+      } else {
+        // "best" (default)
+        allPts.sort((a, b) => b - a); // highest first
+        const selected = allPts.slice(0, countPerHole);
+        teamPts = selected.reduce((a, b) => a + b, 0);
+      }
+
+      holeResults[`${teamId}:${h.hole_number}`] = {
+        displayValue: teamPts,
+        cssHint: teamPts >= 3 ? "positive" : teamPts === 0 ? "negative" : "neutral",
+      };
     }
   }
 
@@ -388,8 +592,10 @@ function computeTeamBestBall(
     total: sumRange(holeResults, t.id, holes, 1, 18),
   }));
 
-  return { tabLabel: "Best Ball", holeResults, summaries, higherIsBetter: false, isTeamView: true };
+  return { tabLabel: "Pairs Stblfd", holeResults, summaries, higherIsBetter: true, isTeamView: true };
 }
+
+// ── Single-score team formats ─────────────────────────────────────────
 
 function computeTeamSingleScore(
   tabLabel: string,
@@ -407,7 +613,6 @@ function computeTeamSingleScore(
 
   for (const [teamId, members] of teamMap) {
     for (const h of holes) {
-      // Use the first member who has a score (team shares one ball)
       let teamScore: number | null = null;
       for (const p of members) {
         const gross = grossFor(p.id, h.hole_number, scoresByKey, holeStatesByKey);
@@ -430,11 +635,101 @@ function computeTeamSingleScore(
   return { tabLabel, holeResults, summaries, higherIsBetter: false, isTeamView: true };
 }
 
+// ── Strokeplay format tab (conditional) ───────────────────────────────
+
+function computeStrokeplayFormatTab(
+  participants: Participant[],
+  holes: Hole[],
+  scoresByKey: Record<string, Score>,
+  holeStatesByKey: Record<string, HoleState>
+): FormatDisplayData | null {
+  // Only show format tab if any player's playing_handicap_used differs from course_handicap_used
+  // (meaning an allowance %, manual override, or compare_against_lowest was applied)
+  const hasAdjustedHandicap = participants.some((p) => {
+    const ph = typeof p.playing_handicap_used === "number" ? p.playing_handicap_used : null;
+    const ch = typeof p.course_handicap_used === "number" ? p.course_handicap_used : null;
+    if (ph === null && ch === null) return false;
+    return ph !== ch;
+  });
+
+  if (!hasAdjustedHandicap) return null;
+
+  // Show net scores using the playing handicap
+  const holeResults: Record<string, FormatHoleResult> = {};
+
+  for (const p of participants) {
+    const hcp = playingHcp(p);
+    for (const h of holes) {
+      const key = `${p.id}:${h.hole_number}`;
+      const gross = grossFor(p.id, h.hole_number, scoresByKey, holeStatesByKey);
+      if (gross === null || !h.par) {
+        holeResults[key] = { displayValue: null };
+        continue;
+      }
+      const recv = strokesReceivedOnHole(hcp, h.stroke_index);
+      const net = netFromGross(gross, recv);
+      holeResults[key] = { displayValue: net };
+    }
+  }
+
+  const summaries: FormatSummary[] = participants.map((p) => ({
+    participantId: p.id,
+    out: sumRange(holeResults, p.id, holes, 1, 9),
+    inn: sumRange(holeResults, p.id, holes, 10, 18),
+    total: sumRange(holeResults, p.id, holes, 1, 18),
+  }));
+
+  return { tabLabel: "Strokeplay", holeResults, summaries, higherIsBetter: false, isTeamView: false, playingHandicaps: buildPlayingHandicaps(participants) };
+}
+
+// ── Nassau side game ──────────────────────────────────────────────────
+
+function computeNassauSideGame(
+  participants: Participant[],
+  holes: Hole[],
+  scoresByKey: Record<string, Score>,
+  holeStatesByKey: Record<string, HoleState>
+): FormatDisplayData {
+  const holeResults: Record<string, FormatHoleResult> = {};
+
+  for (const p of participants) {
+    const hcp = playingHcp(p);
+    for (const h of holes) {
+      const key = `${p.id}:${h.hole_number}`;
+      const gross = grossFor(p.id, h.hole_number, scoresByKey, holeStatesByKey);
+      if (gross === null || !h.par) {
+        holeResults[key] = { displayValue: null };
+        continue;
+      }
+      const recv = strokesReceivedOnHole(hcp, h.stroke_index);
+      const net = netFromGross(gross, recv);
+      holeResults[key] = { displayValue: net };
+    }
+  }
+
+  const summaries: FormatSummary[] = participants.map((p) => ({
+    participantId: p.id,
+    out: sumRange(holeResults, p.id, holes, 1, 9),
+    inn: sumRange(holeResults, p.id, holes, 10, 18),
+    total: sumRange(holeResults, p.id, holes, 1, 18),
+  }));
+
+  return {
+    tabLabel: "Nassau (Side)",
+    holeResults,
+    summaries,
+    higherIsBetter: false,
+    isTeamView: false,
+    playingHandicaps: buildPlayingHandicaps(participants),
+  };
+}
+
 // ── Main dispatcher ────────────────────────────────────────────────────
 
 /**
- * Compute format-specific display data for the "Format" tab.
- * Returns `null` when no special tab is needed (e.g. strokeplay — Gross/Net covers it).
+ * Compute format-specific display data for the format tab(s).
+ * Returns an array of FormatDisplayData — one per tab.
+ * Empty array means no format tabs needed (e.g. strokeplay with 100% allowance).
  */
 export function computeFormatDisplay(
   formatType: RoundFormatType,
@@ -443,44 +738,98 @@ export function computeFormatDisplay(
   holes: Hole[],
   scoresByKey: Record<string, Score>,
   holeStatesByKey: Record<string, HoleState>,
-  teams: Team[]
-): FormatDisplayData | null {
+  teams: Team[],
+  getName?: (p: Participant) => string
+): FormatDisplayData[] {
+  const nameOf = getName ?? ((p: Participant) => p.display_name || "Player");
+
+  const wrap = (r: FormatDisplayData | null): FormatDisplayData[] => (r ? [r] : []);
+
   switch (formatType) {
     case "strokeplay":
-      return null; // Gross/Net covers it
+      return wrap(computeStrokeplayFormatTab(participants, holes, scoresByKey, holeStatesByKey));
 
     case "stableford":
-      return computeStableford(participants, holes, scoresByKey, holeStatesByKey, formatConfig);
+      return [computeStableford(participants, holes, scoresByKey, holeStatesByKey, formatConfig)];
 
     case "matchplay":
-      return computeMatchPlay(participants, holes, scoresByKey, holeStatesByKey);
+      return computeMatchPlay(participants, holes, scoresByKey, holeStatesByKey, formatConfig, nameOf);
 
     case "skins":
-      return computeSkins(participants, holes, scoresByKey, holeStatesByKey);
+      return [computeSkins(participants, holes, scoresByKey, holeStatesByKey)];
+
+    case "pairs_stableford":
+      return wrap(computePairsStableford(participants, holes, scoresByKey, holeStatesByKey, teams, formatConfig));
 
     case "team_strokeplay":
-      return computeTeamStrokeplay(participants, holes, scoresByKey, holeStatesByKey, teams);
+      return wrap(computeTeamStrokeplay(participants, holes, scoresByKey, holeStatesByKey, teams));
 
     case "team_stableford":
-      return computeTeamStableford(participants, holes, scoresByKey, holeStatesByKey, teams, formatConfig);
+      return wrap(computeTeamStableford(participants, holes, scoresByKey, holeStatesByKey, teams, formatConfig));
 
     case "team_bestball":
-      return computeTeamBestBall(participants, holes, scoresByKey, holeStatesByKey, teams);
+      return wrap(computeTeamBestBall(participants, holes, scoresByKey, holeStatesByKey, teams, formatConfig));
 
     case "scramble":
-      return computeTeamSingleScore("Scramble", participants, holes, scoresByKey, holeStatesByKey, teams);
+      return wrap(computeTeamSingleScore("Scramble", participants, holes, scoresByKey, holeStatesByKey, teams));
 
     case "greensomes":
-      return computeTeamSingleScore("Greensomes", participants, holes, scoresByKey, holeStatesByKey, teams);
+      return wrap(computeTeamSingleScore("Greensomes", participants, holes, scoresByKey, holeStatesByKey, teams));
 
     case "foursomes":
-      return computeTeamSingleScore("Foursomes", participants, holes, scoresByKey, holeStatesByKey, teams);
+      return wrap(computeTeamSingleScore("Foursomes", participants, holes, scoresByKey, holeStatesByKey, teams));
 
     case "wolf":
-      // Wolf is a complex rotating partner game — placeholder
-      return { tabLabel: "Wolf", holeResults: {}, summaries: [], higherIsBetter: true, isTeamView: false };
+      return [{ tabLabel: "Wolf", holeResults: {}, summaries: [], higherIsBetter: true, isTeamView: false }];
 
     default:
-      return null;
+      return [];
   }
+}
+
+// ── Side game tab dispatcher ──────────────────────────────────────────
+
+export type SideGameEntry = { name: string; enabled: boolean; config: Record<string, any> };
+
+/**
+ * Compute display data for enabled side games.
+ * Returns FormatDisplayData[] to be appended after the main format tabs.
+ */
+export function computeSideGameDisplays(
+  sideGames: SideGameEntry[],
+  participants: Participant[],
+  holes: Hole[],
+  scoresByKey: Record<string, Score>,
+  holeStatesByKey: Record<string, HoleState>
+): FormatDisplayData[] {
+  const results: FormatDisplayData[] = [];
+
+  for (const sg of sideGames) {
+    if (!sg.enabled) continue;
+
+    switch (sg.name) {
+      case "skins": {
+        const data = computeSkins(participants, holes, scoresByKey, holeStatesByKey);
+        data.tabLabel = "Skins (Side)";
+        results.push(data);
+        break;
+      }
+      case "nassau": {
+        results.push(computeNassauSideGame(participants, holes, scoresByKey, holeStatesByKey));
+        break;
+      }
+      case "wolf": {
+        results.push({
+          tabLabel: "Wolf (Side)",
+          holeResults: {},
+          summaries: [],
+          higherIsBetter: true,
+          isTeamView: false,
+        });
+        break;
+      }
+    }
+  }
+
+  return results;
 }

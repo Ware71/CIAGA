@@ -92,7 +92,13 @@ export type FeedPayloadByType = {
     course_name: string;
     tee_name?: string | null;
 
-    // For “collaboration” cards, list all players (subjects usually align)
+    // Format info
+    format_type?: string | null;
+    format_label?: string | null;
+    format_winner?: string | null;
+    side_game_results?: Array<{ label: string; winner: string | null }> | null;
+
+    // For "collaboration" cards, list all players (subjects usually align)
     players: Array<{
       profile_id?: string | null;
       name: string;
@@ -104,6 +110,7 @@ export type FeedPayloadByType = {
       net_to_par?: number | null;
       par_total?: number | null;
       holes_completed?: number | null;
+      format_score?: string | number | null;
     }>;
 
     date?: string | null;

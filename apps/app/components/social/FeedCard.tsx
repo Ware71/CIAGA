@@ -233,6 +233,9 @@ function UserPostBody({ payload }: { payload: any }) {
 
 function RoundPlayedBody({ payload }: { payload: any }) {
   const players = Array.isArray(payload?.players) ? payload.players : [];
+  const formatLabel = typeof payload?.format_label === "string" ? payload.format_label : null;
+  const formatWinner = typeof payload?.format_winner === "string" ? payload.format_winner : null;
+  const sideGameResults = Array.isArray(payload?.side_game_results) ? payload.side_game_results : [];
 
   return (
     <div className="space-y-2">
@@ -244,52 +247,64 @@ function RoundPlayedBody({ payload }: { payload: any }) {
             const netToPar = safeNum(p?.net_to_par);
             const parTotal = safeNum(p?.par_total);
             const holesCompleted = safeNum(p?.holes_completed);
+            const formatScore = p?.format_score;
+            const hasFormatScore = formatScore !== null && formatScore !== undefined;
 
             return (
               <div
                 key={`${p?.profile_id ?? p?.name ?? idx}`}
-                className="flex items-center gap-2 rounded-xl border border-emerald-900/40 bg-emerald-950/10 px-2 py-2"
+                className="rounded-xl border border-emerald-900/40 bg-emerald-950/10 px-2 py-2"
               >
-                {p?.avatar_url ? (
-                  <img
-                    src={p.avatar_url}
-                    alt=""
-                    className="h-7 w-7 rounded-full object-cover border border-emerald-900/60"
-                    loading="lazy"
-                  />
-                ) : (
-                  <div className="h-7 w-7 rounded-full border border-emerald-900/60 bg-emerald-950/20" />
-                )}
-
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-extrabold text-emerald-50 truncate">{p?.name ?? "Player"}</div>
-                  {holesCompleted !== null ? (
-                    <div className="text-[11px] font-semibold text-emerald-100/55">Thru {holesCompleted}</div>
-                  ) : parTotal !== null ? (
-                    <div className="text-[11px] font-semibold text-emerald-100/55">Par {parTotal}</div>
-                  ) : null}
-                </div>
-
+                {/* Line 1: Avatar | Name | Gross | Net */}
                 <div className="flex items-center gap-2">
-                  <div className="text-right">
-                    <div className="text-[10px] font-extrabold text-emerald-100/50">GROSS</div>
-                    <div className="text-sm font-extrabold text-[#f5e6b0]">{gross ?? "—"}</div>
+                  {p?.avatar_url ? (
+                    <img
+                      src={p.avatar_url}
+                      alt=""
+                      className="h-7 w-7 rounded-full object-cover border border-emerald-900/60"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="h-7 w-7 rounded-full border border-emerald-900/60 bg-emerald-950/20" />
+                  )}
+
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-extrabold text-emerald-50 truncate">{p?.name ?? "Player"}</div>
+                    {holesCompleted !== null ? (
+                      <div className="text-[11px] font-semibold text-emerald-100/55">Thru {holesCompleted}</div>
+                    ) : parTotal !== null ? (
+                      <div className="text-[11px] font-semibold text-emerald-100/55">Par {parTotal}</div>
+                    ) : null}
                   </div>
 
-                  <div className="w-px h-8 bg-emerald-900/40" />
+                  <div className="flex items-center gap-2">
+                    <div className="text-right">
+                      <div className="text-[10px] font-extrabold text-emerald-100/50">GROSS</div>
+                      <div className="text-sm font-extrabold text-[#f5e6b0]">{gross ?? "—"}</div>
+                    </div>
 
-                  <div className="text-right">
-                    <div className="text-[10px] font-extrabold text-emerald-100/50">NET</div>
-                    <div className="text-sm font-extrabold text-emerald-50">
-                      {net ?? "—"}
-                      {typeof netToPar === "number" ? (
-                        <span className="ml-2 text-[11px] font-extrabold text-emerald-100/65">
-                          ({formatToPar(netToPar)})
-                        </span>
-                      ) : null}
+                    <div className="w-px h-8 bg-emerald-900/40" />
+
+                    <div className="text-right">
+                      <div className="text-[10px] font-extrabold text-emerald-100/50">NET</div>
+                      <div className="text-sm font-extrabold text-emerald-50">
+                        {net ?? "—"}
+                        {typeof netToPar === "number" ? (
+                          <span className="ml-2 text-[11px] font-extrabold text-emerald-100/65">
+                            ({formatToPar(netToPar)})
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                 </div>
+
+                {/* Line 2: Format score */}
+                {hasFormatScore && formatLabel ? (
+                  <div className="mt-1 pl-9 text-[11px] font-semibold text-emerald-100/55">
+                    {formatLabel}: {formatScore}
+                  </div>
+                ) : null}
               </div>
             );
           })}
@@ -297,6 +312,22 @@ function RoundPlayedBody({ payload }: { payload: any }) {
       ) : (
         <div className="text-sm font-semibold text-emerald-100/70">Round completed.</div>
       )}
+
+      {/* Format winner summary */}
+      {formatWinner ? (
+        <div className="text-xs font-extrabold text-[#f5e6b0]">{formatWinner}</div>
+      ) : null}
+
+      {/* Side game results */}
+      {sideGameResults.length > 0 ? (
+        <div className="space-y-0.5">
+          {sideGameResults.map((sg: any, i: number) => (
+            <div key={i} className="text-[11px] font-semibold text-emerald-100/50">
+              {sg?.label}: {sg?.winner ?? "No winner"}
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -102,13 +102,19 @@ function AuthPageContent() {
       setMsg({ text: 'Please enter your email.', isError: true });
       return;
     }
-    if (password.length < 8) {
-      setMsg({ text: 'Password must be at least 8 characters.', isError: true });
+    if (!password) {
+      setMsg({ text: 'Please enter your password.', isError: true });
       return;
     }
-    if (mode === 'sign-up' && password !== confirmPassword) {
-      setMsg({ text: 'Passwords do not match.', isError: true });
-      return;
+    if (mode === 'sign-up') {
+      if (password.length < 8) {
+        setMsg({ text: 'Password must be at least 8 characters.', isError: true });
+        return;
+      }
+      if (password !== confirmPassword) {
+        setMsg({ text: 'Passwords do not match.', isError: true });
+        return;
+      }
     }
 
     setWorking(true);

@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabaseClient";
 export type FeedFetchResponse = {
   items: any[];
   next_cursor: string | null;
+  live_items?: any[];
 };
 
 async function authedFetch(input: RequestInfo, init?: RequestInit) {
@@ -96,7 +97,11 @@ export type FeedComment = {
   i_liked?: boolean;
 };
 
-export async function fetchFeed(params: { limit: number; cursor?: string | null }) {
+export async function fetchFeed(params: {
+  limit: number;
+  cursor?: string | null;
+  include_live?: boolean;
+}) {
   const qs = new URLSearchParams();
 
   // harden in case callers ever pass weird values
@@ -104,6 +109,8 @@ export async function fetchFeed(params: { limit: number; cursor?: string | null 
 
   const cursorStr = getCursorString(params.cursor);
   if (cursorStr) qs.set("cursor", cursorStr);
+
+  if (params.include_live) qs.set("include_live", "1");
 
   const res = await authedFetch(`/api/feed?${qs.toString()}`, { method: "GET" });
   if (!res.ok) await throwReadableError(res);
@@ -197,4 +204,28 @@ export async function toggleCommentLike(commentId: string) {
   });
   if (!res.ok) await throwReadableError(res);
   return (await res.json()) as { liked: boolean; count: number };
+}
+
+/**
+ * Fetch feed items where a given profile is the subject.
+ * Used on profile pages to show a player's activity feed.
+ */
+export async function fetchProfileFeed(params: {
+  profileId: string;
+  limit: number;
+  cursor?: string | null;
+  sort?: "newest" | "oldest" | "most_interacted";
+}) {
+  const qs = new URLSearchParams();
+  qs.set("profile_id", params.profileId);
+  qs.set("limit", String(getLimitFromMaybeOptions(params.limit, 20)));
+
+  const cursorStr = getCursorString(params.cursor);
+  if (cursorStr) qs.set("cursor", cursorStr);
+
+  if (params.sort) qs.set("sort", params.sort);
+
+  const res = await authedFetch(`/api/feed/profile?${qs.toString()}`, { method: "GET" });
+  if (!res.ok) await throwReadableError(res);
+  return (await res.json()) as FeedFetchResponse;
 }

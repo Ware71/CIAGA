@@ -6,82 +6,16 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { getMyProfileIdByAuthUserId } from "@/lib/myProfile";
 import { Button } from "@/components/ui/button";
+import {
+  round1, rms, safeNum, parseYMD, daysAgo, monthsAgo,
+  fmtDate, fmtSigned, mean, stdev,
+  normalizeTeeName, normalizeHoleNumberForNine,
+} from "@/lib/stats/helpers";
+import { fetchAllHoleScoringSource } from "@/lib/stats/queries";
 
 // -----------------------------
-// Helpers
+// Helpers (page-specific)
 // -----------------------------
-function round1(n: number) {
-  return Math.round(n * 10) / 10;
-}
-function rms(a: number, b: number) {
-  return Math.sqrt((a * a + b * b) / 2);
-}
-function safeNum(x: any): number | null {
-  const n = Number(x);
-  return Number.isFinite(n) ? n : null;
-}
-function parseYMD(s: string | null): number | null {
-  if (!s) return null;
-  const t = Date.parse(s);
-  return Number.isFinite(t) ? t : null;
-}
-function daysAgo(n: number) {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return d.getTime();
-}
-function monthsAgo(n: number) {
-  const d = new Date();
-  d.setMonth(d.getMonth() - n);
-  return d.getTime();
-}
-function fmtDate(d: Date) {
-  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-}
-function fmtSigned(n: number) {
-  const s = round1(n);
-  if (s > 0) return `+${s}`;
-  if (s === 0) return "E";
-  return `${s}`;
-}
-function mean(xs: number[]) {
-  if (!xs.length) return null;
-  return xs.reduce((a, b) => a + b, 0) / xs.length;
-}
-function stdev(xs: number[]) {
-  if (xs.length < 2) return null;
-  const m = mean(xs)!;
-  const v = mean(xs.map((x) => (x - m) * (x - m)))!;
-  return Math.sqrt(v);
-}
-
-function normalizeTeeName(teeName: string | null) {
-  const raw = (teeName ?? "").trim();
-  if (!raw) return { base: "Tee", nine: "full" as const };
-
-  if (/\(front 9\)/i.test(raw))
-    return { base: raw.replace(/\s*\(front 9\)\s*/i, "").trim(), nine: "front" as const };
-  if (/\(back 9\)/i.test(raw))
-    return { base: raw.replace(/\s*\(back 9\)\s*/i, "").trim(), nine: "back" as const };
-  return { base: raw, nine: "full" as const };
-}
-
-// White(front9) hole2 == White hole2
-// White(back9) hole9 == White hole18
-function normalizeHoleNumberForNine(teeName: string | null, holeNumber: number | null) {
-  const hn = holeNumber == null ? null : Math.round(holeNumber);
-  if (!hn) return null;
-
-  const { nine } = normalizeTeeName(teeName);
-
-  if (nine === "front") return hn;
-  if (nine === "back") {
-    if (hn >= 1 && hn <= 9) return hn + 9;
-    return hn;
-  }
-  return hn;
-}
-
 function rangeToText(r: { start: number; end: number } | null) {
   if (!r) return "—";
   const a = new Date(r.start);
@@ -93,38 +27,6 @@ function rangeToText(r: { start: number; end: number } | null) {
 function goRound(router: any, roundId: string | null | undefined) {
   if (!roundId) return;
   router.push(`/round/${roundId}`);
-}
-
-// -----------------------------
-// Data fetch
-// -----------------------------
-async function fetchAllHoleScoringSource(profileId: string) {
-  const pageSize = 1000;
-  let from = 0;
-  const out: any[] = [];
-
-  while (true) {
-    const to = from + pageSize - 1;
-
-    const { data, error } = await supabase
-      .from("hole_scoring_source")
-      .select(
-        "profile_id, round_id, played_at, course_id, course_name, tee_box_id, tee_name, hole_number, par, strokes, to_par, net_strokes, net_to_par"
-      )
-      .eq("profile_id", profileId)
-      .order("played_at", { ascending: false })
-      .range(from, to);
-
-    if (error) throw error;
-
-    const chunk = (data ?? []) as any[];
-    out.push(...chunk);
-
-    if (chunk.length < pageSize) break;
-    from += pageSize;
-  }
-
-  return out;
 }
 
 // -----------------------------

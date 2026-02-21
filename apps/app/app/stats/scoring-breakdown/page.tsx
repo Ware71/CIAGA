@@ -6,36 +6,8 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { getMyProfileIdByAuthUserId } from "@/lib/myProfile";
 import { Button } from "@/components/ui/button";
-
-// -----------------------------
-// Helpers (match hole-scoring style)
-// -----------------------------
-function round1(n: number) {
-  return Math.round(n * 10) / 10;
-}
-function pct(n: number) {
-  if (!Number.isFinite(n)) return "—";
-  return `${Math.round(n * 100)}%`;
-}
-function safeNum(x: any): number | null {
-  const n = Number(x);
-  return Number.isFinite(n) ? n : null;
-}
-function parseYMD(s: string | null): number | null {
-  if (!s) return null;
-  const t = Date.parse(s);
-  return Number.isFinite(t) ? t : null;
-}
-function daysAgo(n: number) {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return d.getTime();
-}
-function monthsAgo(n: number) {
-  const d = new Date();
-  d.setMonth(d.getMonth() - n);
-  return d.getTime();
-}
+import { pct, safeNum, parseYMD, daysAgo, monthsAgo } from "@/lib/stats/helpers";
+import { fetchAllHoleScoringSource } from "@/lib/stats/queries";
 
 type Option = { id: string; name: string };
 
@@ -69,38 +41,6 @@ type BreakdownRow = {
 };
 
 type TimePreset = "all" | "12m" | "6m" | "30d" | "40r" | "20r" | "10r" | "5r";
-
-async function fetchAllHoleScoringSource(profileId: string) {
-  const pageSize = 1000;
-  let from = 0;
-
-  const out: any[] = [];
-
-  while (true) {
-    const to = from + pageSize - 1;
-
-    const { data, error } = await supabase
-      .from("hole_scoring_source")
-      .select(
-        "profile_id, round_id, played_at, course_id, course_name, tee_box_id, tee_name, hole_number, par, yardage, stroke_index, strokes, to_par, net_strokes, net_to_par, strokes_received, is_double_plus, is_triple_plus"
-      )
-      .eq("profile_id", profileId)
-      .order("played_at", { ascending: false })
-      .range(from, to);
-
-    if (error) throw error;
-
-    const chunk = (data ?? []) as any[];
-    out.push(...chunk);
-
-    // Stop once we get less than a full page
-    if (chunk.length < pageSize) break;
-
-    from += pageSize;
-  }
-
-  return out;
-}
 
 export default function ScoringBreakdownPage() {
   const router = useRouter();

@@ -1,10 +1,11 @@
 "use client";
 
+import React from "react";
 import { Button } from "@/components/ui/button";
 
 export default function ConfirmSheet(props: {
   title: string;
-  subtitle?: string;
+  subtitle?: React.ReactNode;
   confirmLabel: string;
   confirmDisabled?: boolean;
   onConfirm: () => void | Promise<void>;

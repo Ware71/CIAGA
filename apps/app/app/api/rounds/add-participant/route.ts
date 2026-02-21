@@ -58,6 +58,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Only owner can add participants" }, { status: 403 });
     }
 
+    // --- Player limit (max 4) ---
+    const { count, error: countErr } = await supabaseAdmin
+      .from("round_participants")
+      .select("id", { count: "exact", head: true })
+      .eq("round_id", body.round_id);
+
+    if (countErr) {
+      return NextResponse.json({ error: countErr.message }, { status: 500 });
+    }
+    if ((count ?? 0) >= 4) {
+      return NextResponse.json({ error: "Maximum 4 players per round" }, { status: 400 });
+    }
+
     const role = "role" in body && body.role ? body.role : "player";
 
     // --- Add profile participant ---

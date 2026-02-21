@@ -1,12 +1,20 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { getMyProfileIdByAuthUserId } from "@/lib/myProfile";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { one, chunk } from "@/lib/stats/helpers";
+import {
+  isFinishedStatus, parseDateMs,
+  toNumberMaybe, shortDate,
+} from "@/lib/profile/helpers";
+import ProfileFeedTab from "@/components/profile/ProfileFeedTab";
+import AcceptableRoundsTab from "@/components/profile/AcceptableRoundsTab";
+import NonAcceptableRoundsTab from "@/components/profile/NonAcceptableRoundsTab";
 
 type User = {
   id: string; // auth.users.id
@@ -58,66 +66,6 @@ type Props = {
 };
 
 const AVATAR_BUCKET = "avatars";
-
-// normalize join payloads
-function one<T>(v: T | T[] | null | undefined): T | null {
-  if (!v) return null;
-  return Array.isArray(v) ? (v[0] ?? null) : v;
-}
-
-function isFinishedStatus(s: string | null | undefined) {
-  const v = (s ?? "").toLowerCase();
-  return v === "finished" || v === "completed" || v === "ended";
-}
-
-function parseDateMs(iso: string | null) {
-  if (!iso) return 0;
-  const t = new Date(iso).getTime();
-  return Number.isFinite(t) ? t : 0;
-}
-
-function shortDate(iso: string | null) {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" });
-}
-
-function monthKey(iso: string | null) {
-  if (!iso) return "Unknown";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "Unknown";
-  return d.toLocaleDateString(undefined, { year: "numeric", month: "long" });
-}
-
-function chunk<T>(arr: T[], size: number) {
-  const out: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-  return out;
-}
-
-function toNumberMaybe(v: unknown): number | null {
-  if (typeof v === "number") return Number.isFinite(v) ? v : null;
-  if (typeof v === "string") {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  }
-  return null;
-}
-
-// ✅ WHS "used differentials" count table
-function usedDifferentialsCount(n: number) {
-  if (n <= 0) return 0;
-  if (n <= 2) return 0; // need 3+ to produce an index
-  if (n <= 5) return 1; // 3–5 -> 1
-  if (n <= 8) return 2; // 6–8 -> 2
-  if (n <= 11) return 3; // 9–11 -> 3
-  if (n <= 14) return 4; // 12–14 -> 4
-  if (n <= 16) return 5; // 15–16 -> 5
-  if (n <= 18) return 6; // 17–18 -> 6
-  if (n === 19) return 7; // 19 -> 7
-  return 8; // 20 -> 8
-}
 
 export default function ProfileScreen({ mode, profileId, initialProfile }: Props) {
   const router = useRouter();
@@ -772,43 +720,8 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
 
   const hiSub = useMemo(() => {
     if (!handicap?.as_of_date) return "";
-    return `As of ${handicap.as_of_date}`;
+    return `As of ${shortDate(handicap.as_of_date)}`;
   }, [handicap]);
-
-  const grouped = useMemo(() => {
-    const m = new Map<string, RoundRow[]>();
-    for (const r of rounds) {
-      const k = monthKey(r.started_at ?? r.created_at);
-      const arr = m.get(k) ?? [];
-      arr.push(r);
-      m.set(k, arr);
-    }
-    return Array.from(m.entries());
-  }, [rounds]);
-
-  const scoringRoundsNewestFirst = useMemo(() => {
-    return rounds
-      .map((r) => {
-        const sd = scoreDiffByRoundId[r.id];
-        return typeof sd === "number" ? { roundId: r.id, sd } : null;
-      })
-      .filter(Boolean) as { roundId: string; sd: number }[];
-  }, [rounds, scoreDiffByRoundId]);
-
-  const window20 = useMemo(() => scoringRoundsNewestFirst.slice(0, 20), [scoringRoundsNewestFirst]);
-  const usedCount = useMemo(() => usedDifferentialsCount(window20.length), [window20.length]);
-
-  const countingSet = useMemo(() => {
-    if (usedCount <= 0) return new Set<string>();
-    const sortedBySd = [...window20].sort((a, b) => a.sd - b.sd);
-    const used = sortedBySd.slice(0, usedCount).map((x) => x.roundId);
-    return new Set(used);
-  }, [window20, usedCount]);
-
-  const cutoffRoundId = useMemo(() => {
-    if (!window20.length) return null;
-    return window20[window20.length - 1].roundId;
-  }, [window20]);
 
   if (loading) {
     return (
@@ -979,120 +892,59 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
           </div>
         </div>
 
-        {/* Round History section */}
-        <div className="mt-2">
-          <div className="flex items-center justify-between px-1">
-            <div>
-              <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">Round History</div>
-              <div className="mt-0.5 text-[10px] text-emerald-100/60">
-                {window20.length >= 3 && usedCount > 0 ? `${usedCount} of ${window20.length} counting` : window20.length > 0 ? `Scoring rounds: ${window20.length}` : ""}
-              </div>
-            </div>
+        {/* Tabbed content: Feed / Acceptable / Non-Acceptable */}
+        <Tabs defaultValue="feed" className="mt-4">
+          <TabsList className="w-full bg-emerald-900/30 border border-emerald-900/70 rounded-xl p-1">
+            <TabsTrigger
+              value="feed"
+              className="flex-1 text-[11px] font-semibold rounded-lg data-[state=active]:bg-[#f5e6b0] data-[state=active]:text-[#042713] text-emerald-100/80 data-[state=active]:shadow-none border-none"
+            >
+              Feed
+            </TabsTrigger>
+            <TabsTrigger
+              value="acceptable"
+              className="flex-1 text-[11px] font-semibold rounded-lg data-[state=active]:bg-[#f5e6b0] data-[state=active]:text-[#042713] text-emerald-100/80 data-[state=active]:shadow-none border-none"
+            >
+              Acceptable
+            </TabsTrigger>
+            <TabsTrigger
+              value="non-acceptable"
+              className="flex-1 text-[11px] font-semibold rounded-lg data-[state=active]:bg-[#f5e6b0] data-[state=active]:text-[#042713] text-emerald-100/80 data-[state=active]:shadow-none border-none"
+            >
+              Non-Acceptable
+            </TabsTrigger>
+          </TabsList>
 
-            <Button asChild variant="ghost" size="sm" className="h-8 px-2 text-emerald-100 hover:bg-emerald-900/20">
-              <Link href={`/history?profile=${profile.id}`}>All</Link>
-            </Button>
-          </div>
+          <TabsContent value="feed">
+            <ProfileFeedTab profileId={profile.id} />
+          </TabsContent>
 
-          {historyLoading && (
-            <div className="mt-2 rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">Loading history…</div>
-          )}
+          <TabsContent value="acceptable">
+            <AcceptableRoundsTab
+              rounds={rounds}
+              teeNameByRoundId={teeNameByRoundId}
+              totalByRoundId={totalByRoundId}
+              agsByRoundId={agsByRoundId}
+              scoreDiffByRoundId={scoreDiffByRoundId}
+              hiUsedByRoundId={hiUsedByRoundId}
+              loading={historyLoading}
+              error={historyError}
+            />
+          </TabsContent>
 
-          {!historyLoading && historyError && (
-            <div className="mt-2 rounded-2xl border border-red-900/50 bg-red-950/30 p-4 text-sm text-red-100">{historyError}</div>
-          )}
-
-          {!historyLoading && !historyError && rounds.length === 0 && (
-            <div className="mt-2 rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/70">No finished rounds yet.</div>
-          )}
-
-          {!historyLoading && !historyError && rounds.length > 0 && (
-            <div className="mt-2 space-y-4">
-              {grouped.map(([month, list]) => (
-                <section key={month} className="space-y-2">
-                  <div className="flex items-center justify-between px-1">
-                    <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70">{month}</div>
-                    <div className="text-[11px] text-emerald-100/60">{list.length}</div>
-                  </div>
-
-                  <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 overflow-hidden">
-                    <div className="p-2 space-y-2">
-                      {list.map((r) => {
-                        const course = one(r.courses)?.name ?? "Unknown course";
-                        const played = shortDate(r.started_at ?? r.created_at);
-                        const titleText = r.name?.trim() ? r.name.trim() : course;
-                        const teeName = teeNameByRoundId[r.id] ?? "—";
-
-                        const href = { pathname: `/round/${r.id}`, query: { from: "player" } } as const;
-
-                        const total = totalByRoundId[r.id];
-                        const scoreText = typeof total === "number" ? String(total) : "—";
-
-                        const ags = agsByRoundId[r.id];
-                        const agsText = typeof ags === "number" ? `(${ags})` : "";
-
-                        const sd = scoreDiffByRoundId[r.id];
-                        const sdText = typeof sd === "number" ? `Score Diff: ${sd.toFixed(1)}` : "SD —";
-
-                        const hiForRound = hiUsedByRoundId[r.id];
-                        const isExceptional = typeof hiForRound === "number" && typeof sd === "number" && sd <= hiForRound - 7;
-
-                        const hiText2 = typeof hiForRound === "number" ? `Index: ${hiForRound.toFixed(1)}` : "—";
-
-                        const isCounting = countingSet.has(r.id);
-                        const isCutoff = cutoffRoundId === r.id;
-
-                        return (
-                          <Link
-                            key={r.id}
-                            href={href}
-                            className={[
-                              "block p-3 hover:bg-emerald-900/15 transition-colors",
-                              isCounting ? "rounded-2xl ring-2 ring-[#f5e6b0]/80" : "",
-                              isCutoff ? "border-b-6 border-b-[#f5e6b0]" : "",
-                            ]
-                              .filter(Boolean)
-                              .join(" ")}
-                          >
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="min-w-0">
-                                <div className="text-[13px] font-semibold text-emerald-50 truncate">{titleText}</div>
-                                <div className="text-[11px] text-emerald-100/70 truncate">
-                                  {teeName} · {played}
-                                </div>
-                              </div>
-
-                              <div className="shrink-0 grid grid-cols-2 gap-4 items-center">
-                                <div className="text-right">
-                                  <div className="text-[16px] font-extrabold tabular-nums text-emerald-50 leading-none">{hiText2}</div>
-                                  <div className="mt-1 text-[10px] uppercase tracking-[0.14em] text-emerald-100/60">
-                                    <span className="inline-flex items-center gap-1 justify-end">
-                                      {sdText}
-                                      {isExceptional && (
-                                        <span className="text-[#f5e6b0]/80" title="Exceptional round">
-                                          ✨
-                                        </span>
-                                      )}
-                                    </span>
-                                  </div>
-                                </div>
-
-                                <div className="text-right">
-                                  <div className="text-[18px] font-extrabold tabular-nums text-[#f5e6b0] leading-none">{scoreText}</div>
-                                  <div className="mt-1 text-[10px] text-emerald-100/60">{agsText || "\u00A0"}</div>
-                                </div>
-                              </div>
-                            </div>
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </section>
-              ))}
-            </div>
-          )}
-        </div>
+          <TabsContent value="non-acceptable">
+            <NonAcceptableRoundsTab
+              rounds={rounds}
+              teeNameByRoundId={teeNameByRoundId}
+              totalByRoundId={totalByRoundId}
+              agsByRoundId={agsByRoundId}
+              scoreDiffByRoundId={scoreDiffByRoundId}
+              hiUsedByRoundId={hiUsedByRoundId}
+              loading={historyLoading}
+              error={historyError}
+            />
+          </TabsContent>
+        </Tabs>
 
         <div className="pb-4" />
       </div>

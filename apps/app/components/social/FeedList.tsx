@@ -2,13 +2,18 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { fetchFeed, fetchLiveFeedItems } from "@/lib/social/api";
+import { fetchFeed } from "@/lib/social/api";
 import type { FeedItemVM } from "@/lib/feed/types";
 import FeedCard from "@/components/social/FeedCard";
 import { Button } from "@/components/ui/button";
 
 type Props = {
   refreshKey?: number;
+  initialData?: {
+    items: FeedItemVM[];
+    liveItems: FeedItemVM[];
+    nextCursor: string | null;
+  };
 };
 
 function sortByOccurredAtDesc(a: FeedItemVM, b: FeedItemVM) {
@@ -25,10 +30,10 @@ function sortByOccurredAtDesc(a: FeedItemVM, b: FeedItemVM) {
   return 0;
 }
 
-export default function FeedList({ refreshKey }: Props) {
-  const [items, setItems] = useState<FeedItemVM[]>([]);
-  const [liveItems, setLiveItems] = useState<FeedItemVM[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
+export default function FeedList({ refreshKey, initialData }: Props) {
+  const [items, setItems] = useState<FeedItemVM[]>(initialData?.items ?? []);
+  const [liveItems, setLiveItems] = useState<FeedItemVM[]>(initialData?.liveItems ?? []);
+  const [nextCursor, setNextCursor] = useState<string | null>(initialData?.nextCursor ?? null);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,11 +43,10 @@ export default function FeedList({ refreshKey }: Props) {
     setError(null);
 
     try {
-      const [liveRes, feedRes] = await Promise.all([fetchLiveFeedItems(), fetchFeed({ limit: 20 })]);
-
-      setLiveItems((liveRes.items as FeedItemVM[]) ?? []);
-      setItems((feedRes.items as FeedItemVM[]) ?? []);
-      setNextCursor(feedRes.next_cursor);
+      const res = await fetchFeed({ limit: 20, include_live: true });
+      setItems((res.items as FeedItemVM[]) ?? []);
+      setLiveItems((res.live_items as FeedItemVM[]) ?? []);
+      setNextCursor(res.next_cursor);
     } catch (e: any) {
       setError(e?.message ?? "Failed to load feed");
     } finally {
@@ -69,6 +73,8 @@ export default function FeedList({ refreshKey }: Props) {
   }
 
   useEffect(() => {
+    // Skip initial fetch when server-provided data exists (refreshKey=0 means first mount)
+    if (initialData && refreshKey === 0) return;
     void loadInitial();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey]);
