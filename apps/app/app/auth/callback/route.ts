@@ -35,6 +35,9 @@ export async function GET(req: NextRequest) {
       }
       return response;
     }
+
+    // Code exchange failed (expired, already used, etc.) — send to auth with a clear error
+    return NextResponse.redirect(new URL("/auth?error=invite_expired", url.origin));
   }
 
   return NextResponse.redirect(new URL(next, url.origin));
