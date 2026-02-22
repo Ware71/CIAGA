@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -17,6 +17,14 @@ type InviteState =
   | { status: "chosen"; choice: "claim" | "create" };
 
 export default function SetPasswordPage() {
+  return (
+    <Suspense>
+      <SetPasswordPageContent />
+    </Suspense>
+  );
+}
+
+function SetPasswordPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 

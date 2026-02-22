@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 type InviteErrorCode =
@@ -28,6 +28,14 @@ function messageForError(code: InviteErrorCode) {
 }
 
 export default function InviteStartPage() {
+  return (
+    <Suspense>
+      <InviteStartPageContent />
+    </Suspense>
+  );
+}
+
+function InviteStartPageContent() {
   const searchParams = useSearchParams();
   const inviteId = useMemo(() => String(searchParams.get("invite_id") ?? "").trim(), [searchParams]);
 
