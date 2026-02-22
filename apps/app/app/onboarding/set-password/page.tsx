@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
 type ProfilePreview = {
@@ -18,17 +18,30 @@ type InviteState =
 
 export default function SetPasswordPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [working, setWorking] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [invite, setInvite] = useState<InviteState>({ status: "loading" });
   const [accessToken, setAccessToken] = useState<string | null>(null);
+  const passwordAlreadySet = searchParams.get("password") === "already-set";
 
-  async function ensurePasswordSetOrThrow() {
+  async function maybeSetPasswordOrThrow(required: boolean) {
     const nextPassword = password.trim();
+    const nextConfirmPassword = confirmPassword.trim();
+
+    if (!nextPassword) {
+      if (required) throw new Error("Password is required.");
+      return;
+    }
+
     if (nextPassword.length < 8) {
       throw new Error("Password must be at least 8 characters.");
+    }
+    if (nextPassword !== nextConfirmPassword) {
+      throw new Error("Passwords do not match.");
     }
 
     const { error: pwErr } = await supabase.auth.updateUser({ password: nextPassword });
@@ -100,7 +113,7 @@ export default function SetPasswordPage() {
     setWorking(true);
 
     try {
-      await ensurePasswordSetOrThrow();
+      await maybeSetPasswordOrThrow(!passwordAlreadySet);
 
       const res = await fetch("/api/invites/accept", {
         method: "POST",
@@ -137,7 +150,7 @@ export default function SetPasswordPage() {
     setWorking(true);
 
     try {
-      await ensurePasswordSetOrThrow();
+      await maybeSetPasswordOrThrow(!passwordAlreadySet);
 
       const res = await fetch("/api/profiles/ensure", {
         method: "POST",
@@ -164,7 +177,7 @@ export default function SetPasswordPage() {
     setWorking(true);
 
     try {
-      await ensurePasswordSetOrThrow();
+      await maybeSetPasswordOrThrow(true);
 
       router.replace("/");
     } catch (e: any) {
@@ -227,14 +240,30 @@ export default function SetPasswordPage() {
           {/* Password field */}
           <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 space-y-3">
             <div className="text-sm text-emerald-100/80">
-              Set a password (required) so you can sign in normally next time.
+              {passwordAlreadySet
+                ? "Your password was just reset. Continue to claim your invite, or enter a new password to change it now."
+                : "Set a password (required) so you can sign in normally next time."}
             </div>
 
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="New password (min 8 characters)"
+              placeholder={
+                passwordAlreadySet
+                  ? "New password (optional, min 8 chars)"
+                  : "New password (min 8 characters)"
+              }
+              className="w-full rounded-xl border border-emerald-900/70 bg-[#08341b] px-3 py-2 text-base outline-none placeholder:text-emerald-200/40"
+            />
+
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder={
+                passwordAlreadySet ? "Confirm new password (if changing)" : "Confirm new password"
+              }
               className="w-full rounded-xl border border-emerald-900/70 bg-[#08341b] px-3 py-2 text-base outline-none placeholder:text-emerald-200/40"
             />
           </div>
@@ -284,6 +313,14 @@ export default function SetPasswordPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="New password"
+            className="w-full rounded-xl border border-emerald-900/70 bg-[#08341b] px-3 py-2 text-base outline-none placeholder:text-emerald-200/40"
+          />
+
+          <input
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="Confirm new password"
             className="w-full rounded-xl border border-emerald-900/70 bg-[#08341b] px-3 py-2 text-base outline-none placeholder:text-emerald-200/40"
           />
 

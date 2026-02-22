@@ -26,6 +26,31 @@ function AuthPageContent() {
   const [working, setWorking] = useState(false);
   const [msg, setMsg] = useState<{ text: string; isError: boolean } | null>(null);
 
+  async function routeAfterRecoveryPasswordSet() {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+
+    if (!token) {
+      router.replace('/');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/invites/pending', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json?.pending) {
+        router.replace('/onboarding/set-password?password=already-set');
+        return;
+      }
+    } catch {
+      // fall through to app home
+    }
+
+    router.replace('/');
+  }
+
   // Detect recovery/invite states and keep auth session redirects active.
   useEffect(() => {
     const type = searchParams.get('type');
@@ -133,7 +158,7 @@ function AuthPageContent() {
         const { error } = await supabase.auth.updateUser({ password });
         if (error) throw error;
         setMsg({ text: 'Password updated. Redirecting...', isError: false });
-        setTimeout(() => router.replace('/'), 1500);
+        await routeAfterRecoveryPasswordSet();
       } catch (err: any) {
         setMsg({ text: err?.message || 'Something went wrong.', isError: true });
       } finally {
