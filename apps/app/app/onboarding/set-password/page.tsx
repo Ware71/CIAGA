@@ -25,6 +25,16 @@ export default function SetPasswordPage() {
   const [invite, setInvite] = useState<InviteState>({ status: "loading" });
   const [accessToken, setAccessToken] = useState<string | null>(null);
 
+  async function ensurePasswordSetOrThrow() {
+    const nextPassword = password.trim();
+    if (nextPassword.length < 8) {
+      throw new Error("Password must be at least 8 characters.");
+    }
+
+    const { error: pwErr } = await supabase.auth.updateUser({ password: nextPassword });
+    if (pwErr) throw pwErr;
+  }
+
   // On load: check for pending invite
   useEffect(() => {
     let alive = true;
@@ -90,15 +100,7 @@ export default function SetPasswordPage() {
     setWorking(true);
 
     try {
-      // If password is set, require it to be valid before claiming
-      if (password.trim().length > 0) {
-        if (password.trim().length < 8) {
-          setMsg("Password must be at least 8 characters.");
-          return;
-        }
-        const { error: pwErr } = await supabase.auth.updateUser({ password });
-        if (pwErr) throw pwErr;
-      }
+      await ensurePasswordSetOrThrow();
 
       const res = await fetch("/api/invites/accept", {
         method: "POST",
@@ -135,15 +137,7 @@ export default function SetPasswordPage() {
     setWorking(true);
 
     try {
-      // If password is set, require it to be valid
-      if (password.trim().length > 0) {
-        if (password.trim().length < 8) {
-          setMsg("Password must be at least 8 characters.");
-          return;
-        }
-        const { error: pwErr } = await supabase.auth.updateUser({ password });
-        if (pwErr) throw pwErr;
-      }
+      await ensurePasswordSetOrThrow();
 
       const res = await fetch("/api/profiles/ensure", {
         method: "POST",
@@ -170,13 +164,7 @@ export default function SetPasswordPage() {
     setWorking(true);
 
     try {
-      if (password.trim().length < 8) {
-        setMsg("Password must be at least 8 characters.");
-        return;
-      }
-
-      const { error: pwErr } = await supabase.auth.updateUser({ password });
-      if (pwErr) throw pwErr;
+      await ensurePasswordSetOrThrow();
 
       router.replace("/");
     } catch (e: any) {
@@ -239,7 +227,7 @@ export default function SetPasswordPage() {
           {/* Password field */}
           <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 space-y-3">
             <div className="text-sm text-emerald-100/80">
-              Set a password so you can sign in normally next time.
+              Set a password (required) so you can sign in normally next time.
             </div>
 
             <input

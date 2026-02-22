@@ -26,23 +26,47 @@ function AuthPageContent() {
   const [working, setWorking] = useState(false);
   const [msg, setMsg] = useState<{ text: string; isError: boolean } | null>(null);
 
-  // Detect recovery flow, invite errors, and already-authenticated users
+  // Detect recovery/invite states and keep auth session redirects active.
   useEffect(() => {
-    if (searchParams.get('recovery') === 'true') {
-      setMode('reset');
-      setMsg({ text: 'Enter your new password below.', isError: false });
+    const type = searchParams.get('type');
+    const code = searchParams.get('code');
+    const tokenHash = searchParams.get('token_hash');
+    const next = searchParams.get('next');
+
+    // Fallback: if auth params land on /auth directly, route through callback.
+    if (code || (tokenHash && type)) {
+      const callbackUrl = new URL('/auth/callback', window.location.origin);
+      callbackUrl.search = window.location.search;
+      if (!next) {
+        const defaultNext =
+          type === 'invite'
+            ? '/onboarding/set-password'
+            : type === 'recovery'
+              ? '/auth?recovery=true'
+              : '/';
+        callbackUrl.searchParams.set('next', defaultNext);
+      }
+      router.replace(`${callbackUrl.pathname}?${callbackUrl.searchParams.toString()}`);
       return;
     }
 
-    if (searchParams.get('error') === 'invite_expired') {
+    if (searchParams.get('recovery') === 'true') {
+      setMode('reset');
+      setMsg({ text: 'Enter your new password below.', isError: false });
+    } else if (searchParams.get('error') === 'invite_expired') {
       setMsg({
         text: 'Your invite link has expired or was already used. Enter your email below and use "Forgot password?" to set a password and access your account.',
         isError: true,
       });
-      return;
+    } else if (searchParams.get('error') === 'recovery_expired') {
+      setMode('forgot');
+      setMsg({
+        text: 'Your password reset link has expired or was already used. Enter your email below to request a new reset link.',
+        isError: true,
+      });
     }
 
-    // If the user already has a valid session, send them to the app
+    // If the user already has a valid session, send them to the app.
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) router.replace('/');
     });
@@ -66,7 +90,7 @@ function AuthPageContent() {
     e.preventDefault();
     setMsg(null);
 
-    // Forgot mode — only needs email
+    // Forgot mode - only needs email.
     if (mode === 'forgot') {
       const trimmedEmail = email.trim();
       if (!trimmedEmail) {
@@ -75,7 +99,12 @@ function AuthPageContent() {
       }
       setWorking(true);
       try {
-        const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail);
+        const redirectUrl = new URL('/auth/callback', window.location.origin);
+        redirectUrl.searchParams.set('next', '/auth?recovery=true');
+
+        const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
+          redirectTo: redirectUrl.toString(),
+        });
         if (error) throw error;
         setMsg({
           text: 'Check your email for a password reset link.',
@@ -89,7 +118,7 @@ function AuthPageContent() {
       return;
     }
 
-    // Reset mode — set new password
+    // Reset mode - set new password.
     if (mode === 'reset') {
       if (password.length < 8) {
         setMsg({ text: 'Password must be at least 8 characters.', isError: true });
@@ -113,7 +142,7 @@ function AuthPageContent() {
       return;
     }
 
-    // Sign-in / sign-up
+    // Sign-in / sign-up.
     const trimmedEmail = email.trim();
     if (!trimmedEmail) {
       setMsg({ text: 'Please enter your email.', isError: true });
@@ -157,7 +186,7 @@ function AuthPageContent() {
       }
     } catch (err: any) {
       const msg: string = err?.message || 'Something went wrong.';
-      // Invited users have an auth account but no password — guide them to reset
+      // Invited users have an auth account but no password - guide them to reset.
       const isAlreadyRegistered =
         msg.toLowerCase().includes('already registered') ||
         msg.toLowerCase().includes('user already exists');
@@ -202,7 +231,7 @@ function AuthPageContent() {
           </h1>
         </div>
 
-        {/* Mode toggle — hidden during reset/forgot */}
+        {/* Mode toggle - hidden during reset/forgot */}
         {mode !== 'reset' && mode !== 'forgot' && (
           <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-2 flex gap-2">
             <button
@@ -259,7 +288,7 @@ function AuthPageContent() {
                     : 'Choose a new password for your account.'}
             </div>
 
-            {/* Email — shown for sign-in, sign-up, and forgot */}
+            {/* Email - shown for sign-in, sign-up, and forgot */}
             {mode !== 'reset' && (
               <input
                 type="email"
@@ -271,7 +300,7 @@ function AuthPageContent() {
               />
             )}
 
-            {/* Password — shown for sign-in, sign-up, and reset */}
+            {/* Password - shown for sign-in, sign-up, and reset */}
             {mode !== 'forgot' && (
               <input
                 type="password"
@@ -283,7 +312,7 @@ function AuthPageContent() {
               />
             )}
 
-            {/* Confirm password — shown for sign-up and reset */}
+            {/* Confirm password - shown for sign-up and reset */}
             {(mode === 'sign-up' || mode === 'reset') && (
               <input
                 type="password"
@@ -332,7 +361,6 @@ function AuthPageContent() {
             )}
           </div>
         </form>
-
       </div>
     </div>
   );

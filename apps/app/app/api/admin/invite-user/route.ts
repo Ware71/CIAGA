@@ -66,9 +66,14 @@ export async function POST(req: Request) {
     }
 
     // 5) Send Supabase invite email
+    const requestOrigin = new URL(req.url).origin;
+    const siteOrigin = process.env.NEXT_PUBLIC_SITE_URL || requestOrigin;
+    const redirectUrl = new URL("/auth/callback", siteOrigin);
+    redirectUrl.searchParams.set("next", "/onboarding/set-password");
+
     const { data: inviteData, error: inviteEmailErr } =
       await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback?next=/onboarding/set-password`,
+        redirectTo: redirectUrl.toString(),
         data: { profile_id, invite_id: inviteRow.id },
       });
 
