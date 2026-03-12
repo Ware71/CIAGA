@@ -123,11 +123,16 @@ function playerStablefordPtsOnHole(
   h: Hole,
   scoresByKey: Record<string, Score>,
   holeStatesByKey: Record<string, HoleState>,
-  pointsTable: Record<string, number>
+  pointsTable: Record<string, number>,
+  notAcceptedIds: Set<string> = new Set()
 ): number | null {
+  const state = holeStatesByKey[`${p.id}:${h.hole_number}`] ?? "not_started";
   // PU holes always score 0 stableford points (WHS: net double bogey or worse)
-  const state = holeStatesByKey[`${p.id}:${h.hole_number}`];
   if (state === "picked_up") return 0;
+  // not_started: acceptable scorecard → 0 pts (net double bogey); else exclude
+  if (state === "not_started") {
+    return notAcceptedIds.has(p.id) ? null : 0;
+  }
 
   const gross = grossFor(p.id, h.hole_number, scoresByKey, holeStatesByKey);
   if (gross === null || !h.par) return null;
@@ -143,7 +148,8 @@ function computeStableford(
   holes: Hole[],
   scoresByKey: Record<string, Score>,
   holeStatesByKey: Record<string, HoleState>,
-  formatConfig: Record<string, any>
+  formatConfig: Record<string, any>,
+  notAcceptedIds: Set<string> = new Set()
 ): FormatDisplayData {
   const pointsTable = { ...DEFAULT_STABLEFORD, ...(formatConfig.points_table ?? {}) };
   const holeResults: Record<string, FormatHoleResult> = {};
@@ -151,7 +157,7 @@ function computeStableford(
   for (const p of participants) {
     for (const h of holes) {
       const key = `${p.id}:${h.hole_number}`;
-      const pts = playerStablefordPtsOnHole(p, h, scoresByKey, holeStatesByKey, pointsTable);
+      const pts = playerStablefordPtsOnHole(p, h, scoresByKey, holeStatesByKey, pointsTable, notAcceptedIds);
       if (pts === null) {
         holeResults[key] = { displayValue: null };
       } else {
@@ -432,7 +438,8 @@ function computeTeamStableford(
   scoresByKey: Record<string, Score>,
   holeStatesByKey: Record<string, HoleState>,
   teams: Team[],
-  formatConfig: Record<string, any>
+  formatConfig: Record<string, any>,
+  notAcceptedIds: Set<string> = new Set()
 ): FormatDisplayData | null {
   if (!teams.length) return null;
   const teamMap = buildTeamMap(participants, teams);
@@ -444,7 +451,7 @@ function computeTeamStableford(
       let sum = 0;
       let anyScore = false;
       for (const p of members) {
-        const pts = playerStablefordPtsOnHole(p, h, scoresByKey, holeStatesByKey, pointsTable);
+        const pts = playerStablefordPtsOnHole(p, h, scoresByKey, holeStatesByKey, pointsTable, notAcceptedIds);
         if (pts !== null) { sum += pts; anyScore = true; }
       }
       holeResults[`${teamId}:${h.hole_number}`] = anyScore
@@ -470,7 +477,8 @@ function computeTeamBestBall(
   scoresByKey: Record<string, Score>,
   holeStatesByKey: Record<string, HoleState>,
   teams: Team[],
-  formatConfig: Record<string, any>
+  formatConfig: Record<string, any>,
+  notAcceptedIds: Set<string> = new Set()
 ): FormatDisplayData | null {
   if (!teams.length) return null;
   const teamMap = buildTeamMap(participants, teams);
@@ -486,7 +494,7 @@ function computeTeamBestBall(
         // Best X stableford points
         const allPts: number[] = [];
         for (const p of members) {
-          const pts = playerStablefordPtsOnHole(p, h, scoresByKey, holeStatesByKey, pointsTable);
+          const pts = playerStablefordPtsOnHole(p, h, scoresByKey, holeStatesByKey, pointsTable, notAcceptedIds);
           if (pts !== null) allPts.push(pts);
         }
         if (allPts.length === 0) {
@@ -541,7 +549,8 @@ function computePairsStableford(
   scoresByKey: Record<string, Score>,
   holeStatesByKey: Record<string, HoleState>,
   teams: Team[],
-  formatConfig: Record<string, any>
+  formatConfig: Record<string, any>,
+  notAcceptedIds: Set<string> = new Set()
 ): FormatDisplayData | null {
   if (!teams.length) return null;
   const teamMap = buildTeamMap(participants, teams);
@@ -554,7 +563,7 @@ function computePairsStableford(
     for (const h of holes) {
       const allPts: number[] = [];
       for (const p of members) {
-        const pts = playerStablefordPtsOnHole(p, h, scoresByKey, holeStatesByKey, pointsTable);
+        const pts = playerStablefordPtsOnHole(p, h, scoresByKey, holeStatesByKey, pointsTable, notAcceptedIds);
         if (pts !== null) allPts.push(pts);
       }
 
@@ -739,7 +748,8 @@ export function computeFormatDisplay(
   scoresByKey: Record<string, Score>,
   holeStatesByKey: Record<string, HoleState>,
   teams: Team[],
-  getName?: (p: Participant) => string
+  getName?: (p: Participant) => string,
+  notAcceptedIds: Set<string> = new Set()
 ): FormatDisplayData[] {
   const nameOf = getName ?? ((p: Participant) => p.display_name || "Player");
 
@@ -750,7 +760,7 @@ export function computeFormatDisplay(
       return wrap(computeStrokeplayFormatTab(participants, holes, scoresByKey, holeStatesByKey));
 
     case "stableford":
-      return [computeStableford(participants, holes, scoresByKey, holeStatesByKey, formatConfig)];
+      return [computeStableford(participants, holes, scoresByKey, holeStatesByKey, formatConfig, notAcceptedIds)];
 
     case "matchplay":
       return computeMatchPlay(participants, holes, scoresByKey, holeStatesByKey, formatConfig, nameOf);
@@ -759,16 +769,16 @@ export function computeFormatDisplay(
       return [computeSkins(participants, holes, scoresByKey, holeStatesByKey)];
 
     case "pairs_stableford":
-      return wrap(computePairsStableford(participants, holes, scoresByKey, holeStatesByKey, teams, formatConfig));
+      return wrap(computePairsStableford(participants, holes, scoresByKey, holeStatesByKey, teams, formatConfig, notAcceptedIds));
 
     case "team_strokeplay":
       return wrap(computeTeamStrokeplay(participants, holes, scoresByKey, holeStatesByKey, teams));
 
     case "team_stableford":
-      return wrap(computeTeamStableford(participants, holes, scoresByKey, holeStatesByKey, teams, formatConfig));
+      return wrap(computeTeamStableford(participants, holes, scoresByKey, holeStatesByKey, teams, formatConfig, notAcceptedIds));
 
     case "team_bestball":
-      return wrap(computeTeamBestBall(participants, holes, scoresByKey, holeStatesByKey, teams, formatConfig));
+      return wrap(computeTeamBestBall(participants, holes, scoresByKey, holeStatesByKey, teams, formatConfig, notAcceptedIds));
 
     case "scramble":
       return wrap(computeTeamSingleScore("Scramble", participants, holes, scoresByKey, holeStatesByKey, teams));
