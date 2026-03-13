@@ -65,6 +65,29 @@ function grossFor(
   return typeof s?.strokes === "number" ? s.strokes : null;
 }
 
+/**
+ * Effective gross for matchplay calculations.
+ * - completed → actual gross
+ * - picked_up → net double bogey penalty gross (par + 2 + strokes received)
+ * - not_started → null (caller must handle as loss of hole if opponent has a score)
+ */
+function grossForMatchplay(
+  pid: string,
+  hole: number,
+  scoresByKey: Record<string, Score>,
+  holeStatesByKey: Record<string, HoleState>,
+  par: number,
+  playingHcp: number,
+  si: number | null
+): number | null {
+  const key = `${pid}:${hole}`;
+  const state = holeStatesByKey[key] ?? "not_started";
+  if (state === "not_started") return null;
+  if (state === "picked_up") return par + 2 + strokesReceivedOnHole(playingHcp, si);
+  const s = scoresByKey[key];
+  return typeof s?.strokes === "number" ? s.strokes : null;
+}
+
 function playingHcp(p: Participant): number {
   return typeof p.playing_handicap_used === "number" ? p.playing_handicap_used : 0;
 }
@@ -254,10 +277,17 @@ function computeMatchPlayPair(
       continue;
     }
 
-    const grossA = grossFor(pA.id, h.hole_number, scoresByKey, holeStatesByKey);
-    const grossB = grossFor(pB.id, h.hole_number, scoresByKey, holeStatesByKey);
+    if (!h.par) {
+      holeResults[`${pA.id}:${h.hole_number}`] = { displayValue: null };
+      holeResults[`${pB.id}:${h.hole_number}`] = { displayValue: null };
+      continue;
+    }
 
-    if (grossA === null || grossB === null || !h.par) {
+    const grossA = grossForMatchplay(pA.id, h.hole_number, scoresByKey, holeStatesByKey, h.par, hcpA, h.stroke_index);
+    const grossB = grossForMatchplay(pB.id, h.hole_number, scoresByKey, holeStatesByKey, h.par, hcpB, h.stroke_index);
+
+    // Neither player has a score yet — hole not yet in play
+    if (grossA === null && grossB === null) {
       holeResults[`${pA.id}:${h.hole_number}`] = { displayValue: null };
       holeResults[`${pB.id}:${h.hole_number}`] = { displayValue: null };
       continue;
@@ -265,13 +295,19 @@ function computeMatchPlayPair(
 
     holesPlayed++;
 
-    const netA = netFromGross(grossA, strokesReceivedOnHole(hcpA, h.stroke_index));
-    const netB = netFromGross(grossB, strokesReceivedOnHole(hcpB, h.stroke_index));
-
-    if (netA < netB) {
-      cumulativeState += 1;
-    } else if (netB < netA) {
+    // One player is not_started while opponent has a score → loss of hole
+    if (grossA === null) {
       cumulativeState -= 1;
+    } else if (grossB === null) {
+      cumulativeState += 1;
+    } else {
+      const netA = netFromGross(grossA, strokesReceivedOnHole(hcpA, h.stroke_index));
+      const netB = netFromGross(grossB, strokesReceivedOnHole(hcpB, h.stroke_index));
+      if (netA < netB) {
+        cumulativeState += 1;
+      } else if (netB < netA) {
+        cumulativeState -= 1;
+      }
     }
 
     // Display cumulative match state from each player's perspective
