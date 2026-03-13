@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import ProfileScreen from "@/components/profile/ProfileScreen";
 import { ensureProfile } from "@/lib/profile";
 
@@ -93,8 +94,14 @@ export default function ProfilePage() {
             <div className="w-[60px]" />
           </header>
 
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">
-            Loading…
+          <div className="space-y-4">
+            <div className="flex flex-col items-center gap-3 py-4">
+              <Skeleton className="h-16 w-16 rounded-full" />
+              <Skeleton className="h-5 w-32" />
+              <Skeleton className="h-3 w-24" />
+            </div>
+            <Skeleton className="h-24 w-full rounded-2xl bg-emerald-900/20" />
+            <Skeleton className="h-16 w-full rounded-2xl bg-emerald-900/20" />
           </div>
         </div>
       </div>

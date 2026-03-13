@@ -13,6 +13,7 @@ import { computeFormatDisplay, computeSideGameDisplays, isFormatView, formatView
 import { useOrientationLock } from "@/lib/useOrientationLock";
 
 import { Menu } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import ConfirmSheet from "@/components/round/ConfirmSheet";
 import ScoreEntrySheet from "@/components/round/ScoreEntrySheet";
 import FinalResultsPanel from "@/components/round/FinalResultsPanel";
@@ -169,6 +170,17 @@ function stableNumber(n: any): number | null {
 /** WHS net double bogey penalty for a picked-up hole: par + 2 + strokes received */
 function puPenaltyGross(par: number, courseHcp: number | null, si: number | null): number {
   return par + 2 + strokesReceivedOnHole(courseHcp, si);
+}
+
+/** Returns true if the participant has any holes not yet started */
+function hasIncompleteHoles(
+  participantId: string,
+  holesList: Hole[],
+  holeStatesByKey: Record<string, string>
+): boolean {
+  return holesList.some(
+    (h) => (holeStatesByKey[`${participantId}:${h.hole_number}`] ?? "not_started") === "not_started"
+  );
 }
 
 /** Compute set of participant IDs whose rounds don't meet WHS minimum holes */
@@ -619,7 +631,20 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     return rows;
   }, [participants, totals, toParTotalByParticipant, getParticipantLabel, getParticipantAvatar, formatDisplays]);
 
-  const winner = finalRows[0] ?? null;
+  const winner = useMemo(() => {
+    if (!finalRows.length) return null;
+    const primaryFormat = formatDisplays[0] ?? null;
+    const hasStringTotals = finalRows.some((r) => typeof r.total === "string");
+    // For stroke-based formats (lower score wins), players with incomplete holes can't win
+    if (!hasStringTotals && primaryFormat && !primaryFormat.higherIsBetter) {
+      return (
+        finalRows.find((r) => !hasIncompleteHoles(r.participantId, holesList, holeStatesByKey)) ??
+        finalRows[0] ??
+        null
+      );
+    }
+    return finalRows[0] ?? null;
+  }, [finalRows, formatDisplays, holesList, holeStatesByKey]);
 
   const finishWarning = useMemo<string | null>(() => {
     const { names } = getNotAcceptedParticipants(participants, holesList, holeStatesByKey);
@@ -925,6 +950,10 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
 
   async function finishRound() {
     if (!canScore || isFinished) return;
+    if (pendingKeys.size > 0) {
+      setErr("Offline scores are still syncing. Please wait for sync to complete before finishing.");
+      return;
+    }
     setErr(null);
     setFinishing(true);
     try {
@@ -1022,9 +1051,27 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#042713] text-slate-100 px-3 pt-6">
-        <div className="mx-auto w-full max-w-sm rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">
-          Loading…
+      <div className="min-h-screen bg-[#042713] text-slate-100 px-1.5 sm:px-2 pt-4 pb-[env(safe-area-inset-bottom)]">
+        <div className="mx-auto w-full max-w-none space-y-2">
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-8 w-16 shrink-0" />
+            <div className="flex-1 min-w-0 px-1 flex flex-col items-center gap-1">
+              <Skeleton className="h-4 w-36" />
+              <Skeleton className="h-3 w-24" />
+              <Skeleton className="h-7 w-48 rounded-xl mt-1" />
+            </div>
+          </div>
+          <div className="space-y-1.5 pt-2">
+            <Skeleton className="h-8 w-full rounded-lg bg-emerald-900/20" />
+            {Array.from({ length: 9 }).map((_, i) => (
+              <Skeleton key={i} className="h-9 w-full rounded-lg bg-emerald-900/20" />
+            ))}
+            <Skeleton className="h-9 w-full rounded-lg bg-emerald-900/30" />
+            {Array.from({ length: 9 }).map((_, i) => (
+              <Skeleton key={i + 9} className="h-9 w-full rounded-lg bg-emerald-900/20" />
+            ))}
+            <Skeleton className="h-10 w-full rounded-lg bg-emerald-900/30" />
+          </div>
         </div>
       </div>
     );
@@ -1179,17 +1226,6 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
           )}
         </header>
 
-        {pendingKeys.size > 0 ? (
-          <div className="rounded-2xl border border-amber-800/50 bg-amber-950/30 p-2.5 flex items-center justify-between gap-2 text-xs text-amber-200">
-            <span>Scores saved offline — syncing when connected</span>
-            <button
-              className="shrink-0 text-amber-300 underline hover:text-amber-100"
-              onClick={() => flushPendingOps()}
-            >
-              Retry
-            </button>
-          </div>
-        ) : null}
 
         {err ? (
           <div className="rounded-2xl border border-red-900/50 bg-red-950/30 p-3 text-sm text-red-100">{err}</div>
@@ -1286,11 +1322,12 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
           <ConfirmSheet
             title="Finish round?"
             subtitle={<>
+              {pendingKeys.size > 0 && <span className="text-amber-300 block mb-1">Offline scores are syncing — please wait before finishing.</span>}
               {finishWarning && <span className="text-amber-300 block mb-1">{finishWarning}</span>}
               This will lock scoring for everyone. Any incomplete holes will be saved as Not Started (&mdash;).
             </>}
             confirmLabel={finishing ? "Finishing…" : "Finish round"}
-            confirmDisabled={finishing}
+            confirmDisabled={finishing || pendingKeys.size > 0}
             onConfirm={finishRound}
             onClose={() => setFinishOpen(false)}
           />

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { OrientationManager } from "@/components/OrientationManager";
+import NextTopLoader from "nextjs-toploader";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -75,6 +76,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-[#042713] text-slate-100`}
       >
+        <NextTopLoader color="#f5e6b0" height={3} showSpinner={false} shadow="0 0 10px #f5e6b080" />
         <OrientationManager />
         {children}
       </body>
