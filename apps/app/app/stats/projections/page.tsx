@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { getMyProfileIdByAuthUserId } from "@/lib/myProfile";
 import { Button } from "@/components/ui/button";
+import { BackButton } from "@/components/ui/BackButton";
 
 import type { HiPoint } from "@/lib/stats/timeModel";
 import {
@@ -465,14 +466,10 @@ export default function StatsPage() {
       <div className="mx-auto w-full max-w-sm space-y-6">
         {/* Header (centered, back is absolute so title stays centered) */}
         <header className="relative flex items-center justify-center">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="absolute left-0 px-2 text-emerald-100 hover:bg-emerald-900/30 font-semibold"
+          <BackButton
+            className="absolute left-0 font-semibold"
             onClick={() => router.back()}
-          >
-            ← Back
-          </Button>
+          />
 
           <div className="text-center">
             <div className="text-lg font-extrabold tracking-wide text-[#f5e6b0]">Stats</div>

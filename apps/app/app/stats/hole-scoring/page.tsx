@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { getMyProfileIdByAuthUserId } from "@/lib/myProfile";
 import { Button } from "@/components/ui/button";
+import { BackButton } from "@/components/ui/BackButton";
 import {
   round1, pct, safeNum, parseYMD, daysAgo, monthsAgo,
   normalizeTeeName, normalizeHoleNumberForNine,
@@ -526,14 +527,7 @@ export default function HoleScoringPage() {
       <div className="mx-auto w-full max-w-3xl h-full flex flex-col">
         <header className="sticky top-0 z-20 bg-[#042713] pb-3">
           <div className="flex items-center justify-between gap-2 px-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="px-2 text-emerald-100 hover:bg-emerald-900/30"
-              onClick={() => router.back()}
-            >
-              ← Back
-            </Button>
+            <BackButton onClick={() => router.back()} />
 
             <div className="text-center flex-1 min-w-0 px-2">
               <div className="text-[15px] sm:text-base font-semibold tracking-wide text-[#f5e6b0] truncate">

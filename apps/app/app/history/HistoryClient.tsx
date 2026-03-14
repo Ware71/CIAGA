@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { getMyProfileIdByAuthUserId } from "@/lib/myProfile";
 import { Button } from "@/components/ui/button";
+import { BackButton } from "@/components/ui/BackButton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { formatHI } from "@/lib/rounds/handicapUtils";
 
@@ -548,14 +549,7 @@ export default function RoundsHistoryPage() {
         {/* ✅ Sticky Header */}
         <header className="sticky top-0 z-20 bg-[#042713] pb-3">
           <div className="flex items-center justify-between gap-2 px-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="px-2 text-emerald-100 hover:bg-emerald-900/30"
-              onClick={() => router.replace("/")}
-            >
-              ← Back
-            </Button>
+            <BackButton onClick={() => router.replace("/")} />
 
             <div className="text-center flex-1 min-w-0 px-2">
               <div className="text-[15px] sm:text-base font-semibold tracking-wide text-[#f5e6b0] truncate">{title}</div>

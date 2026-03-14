@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 import { Button } from "@/components/ui/button";
+import { BackButton } from "@/components/ui/BackButton";
 import { RoundFormatSectionEnhanced } from "@/components/rounds/RoundFormatSectionEnhanced";
 import { ParticipantsList } from "@/components/rounds/ParticipantsList";
 import { CourseAndTeeSection } from "@/components/rounds/CourseAndTeeSection";
@@ -256,6 +257,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId 
   const [nameSaving, setNameSaving] = useState(false);
   const [scheduledEdit, setScheduledEdit] = useState<string>("");
   const detailsUpdatingRef = useRef(false);
+  const hasInitialDataRef = useRef(!!initialSnapshot);
 
   const [starting, setStarting] = useState(false);
 
@@ -392,10 +394,11 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId 
 
   async function fetchAll() {
     setErr(null);
-    // Only show loading spinner on initial load (no round data yet).
-    // Background refreshes (realtime, post-save) update data silently
-    // so components stay mounted and don't lose local state.
-    const isInitial = !round;
+    // Use a ref (not `round` state) to determine if this is the initial load.
+    // The realtime subscription captures a stale `fetchAll` closure where
+    // `round = null`, so checking `!round` would cause setLoading(true) on
+    // every background refresh. The ref is stable across closures.
+    const isInitial = !hasInitialDataRef.current;
     if (isInitial) setLoading(true);
 
     try {
@@ -444,6 +447,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId 
         } as Participant;
       });
 
+      hasInitialDataRef.current = true;
       setRound(snap.round);
       setParticipants(mapped);
       setHiByProfileId(snap.handicap_indexes ?? {});
@@ -511,6 +515,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId 
         } as Participant;
       });
 
+      hasInitialDataRef.current = true;
       setRound(snap.round);
       setParticipants(mapped);
       setHiByProfileId(snap.handicap_indexes ?? {});
@@ -782,15 +787,10 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId 
       <div className="mx-auto w-full max-w-sm space-y-4">
         {/* Header */}
         <header className="flex items-center justify-between">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="px-2 text-emerald-100 hover:bg-emerald-900/30"
+          <BackButton
             onClick={() => router.push("/round")}
             disabled={starting}
-          >
-            ← Back
-          </Button>
+          />
 
           <div className="text-center flex-1">
             <div className="text-lg font-semibold tracking-wide text-[#f5e6b0]">Round setup</div>

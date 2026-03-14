@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
+import { BackButton } from "@/components/ui/BackButton";
 
 import { finishRound as finishRoundApi } from "@/lib/rounds/api";
 import { useRoundDetail } from "@/lib/rounds/hooks/useRoundDetail";
@@ -963,13 +964,16 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
 
   async function finishRound() {
     if (!canScore || isFinished) return;
-    if (pendingKeys.size > 0) {
-      setErr("Offline scores are still syncing. Please wait for sync to complete before finishing.");
-      return;
-    }
     setErr(null);
     setFinishing(true);
     try {
+      if (pendingKeys.size > 0) {
+        await flushPendingOps();
+        if (loadQueue().length > 0) {
+          setErr("Some offline scores couldn't sync. Please check your connection and try again.");
+          return;
+        }
+      }
       await finishRoundApi(roundId);
       setFinishOpen(false);
       setStatus("finished");
@@ -1105,10 +1109,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     <div className="min-h-screen bg-[#042713] text-slate-100 px-1.5 sm:px-2 pt-4 pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto w-full max-w-none space-y-2">
         <header className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="px-2 text-emerald-100 hover:bg-emerald-900/30 shrink-0"
+          <BackButton
             onClick={() => {
               const sp = new URLSearchParams(window.location.search);
               const from = sp.get("from");
@@ -1122,9 +1123,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
                 router.push("/round");
               }
             }}
-          >
-            ← Back
-          </Button>
+          />
 
           {isPortrait ? (
             <>
@@ -1337,12 +1336,12 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
           <ConfirmSheet
             title="Finish round?"
             subtitle={<>
-              {pendingKeys.size > 0 && <span className="text-amber-300 block mb-1">Offline scores are syncing — please wait before finishing.</span>}
+              {pendingKeys.size > 0 && <span className="text-amber-300 block mb-1">Offline scores will be synced before finishing.</span>}
               {finishWarning && <span className="text-amber-300 block mb-1">{finishWarning}</span>}
               This will lock scoring for everyone. Any incomplete holes will be saved as Not Started (&mdash;).
             </>}
             confirmLabel={finishing ? "Finishing…" : "Finish round"}
-            confirmDisabled={finishing || pendingKeys.size > 0}
+            confirmDisabled={finishing}
             onConfirm={finishRound}
             onClose={() => setFinishOpen(false)}
           />

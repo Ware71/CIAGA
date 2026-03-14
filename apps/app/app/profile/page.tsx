@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
+import { BackButton } from "@/components/ui/BackButton";
 import { Skeleton } from "@/components/ui/skeleton";
 import ProfileScreen from "@/components/profile/ProfileScreen";
 import { ensureProfile } from "@/lib/profile";
@@ -79,14 +80,7 @@ export default function ProfilePage() {
       <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
         <div className="mx-auto w-full max-w-sm space-y-4">
           <header className="flex items-center justify-between">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="px-2 text-emerald-100 hover:bg-emerald-900/30"
-              onClick={() => router.back()}
-            >
-              ← Back
-            </Button>
+            <BackButton onClick={() => router.back()} />
             <div className="text-center flex-1">
               <div className="text-lg font-semibold tracking-wide text-[#f5e6b0]">Profile</div>
               <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">Account</div>
@@ -113,14 +107,7 @@ export default function ProfilePage() {
       <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
         <div className="mx-auto w-full max-w-sm space-y-4">
           <header className="flex items-center justify-between">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="px-2 text-emerald-100 hover:bg-emerald-900/30"
-              onClick={() => router.back()}
-            >
-              ← Back
-            </Button>
+            <BackButton onClick={() => router.back()} />
             <div className="text-center flex-1">
               <div className="text-lg font-semibold tracking-wide text-[#f5e6b0]">Profile</div>
               <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">Account</div>
@@ -141,14 +128,7 @@ export default function ProfilePage() {
       <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
         <div className="mx-auto w-full max-w-sm space-y-4">
           <header className="flex items-center justify-between">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="px-2 text-emerald-100 hover:bg-emerald-900/30"
-              onClick={() => router.back()}
-            >
-              ← Back
-            </Button>
+            <BackButton onClick={() => router.back()} />
             <div className="text-center flex-1">
               <div className="text-lg font-semibold tracking-wide text-[#f5e6b0]">Profile</div>
               <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">Account</div>

@@ -363,8 +363,10 @@ function computeSkins(
   participants: Participant[],
   holes: Hole[],
   scoresByKey: Record<string, Score>,
-  holeStatesByKey: Record<string, HoleState>
+  holeStatesByKey: Record<string, HoleState>,
+  config?: Record<string, any>
 ): FormatDisplayData {
+  const useGross = config?.scoring === "gross";
   const holeResults: Record<string, FormatHoleResult> = {};
   const skinCounts: Record<string, number> = {};
   for (const p of participants) skinCounts[p.id] = 0;
@@ -372,18 +374,17 @@ function computeSkins(
   let carryover = 0;
 
   for (const h of holes) {
-    let bestNet = Infinity;
+    let best = Infinity;
     let bestPids: string[] = [];
 
     for (const p of participants) {
       const gross = grossFor(p.id, h.hole_number, scoresByKey, holeStatesByKey);
       if (gross === null || !h.par) continue;
-      const recv = strokesReceivedOnHole(playingHcp(p), h.stroke_index);
-      const net = netFromGross(gross, recv);
-      if (net < bestNet) {
-        bestNet = net;
+      const score = useGross ? gross : netFromGross(gross, strokesReceivedOnHole(playingHcp(p), h.stroke_index));
+      if (score < best) {
+        best = score;
         bestPids = [p.id];
-      } else if (net === bestNet) {
+      } else if (score === best) {
         bestPids.push(p.id);
       }
     }
@@ -398,7 +399,7 @@ function computeSkins(
         if (p.id === bestPids[0]) {
           holeResults[key] = { displayValue: skinValue, cssHint: "won" };
         } else {
-          holeResults[key] = { displayValue: 0, cssHint: "neutral" };
+          holeResults[key] = { displayValue: "–", cssHint: "neutral" };
         }
       }
     } else {
@@ -733,10 +734,13 @@ function computeNassauSideGame(
   participants: Participant[],
   holes: Hole[],
   scoresByKey: Record<string, Score>,
-  holeStatesByKey: Record<string, HoleState>
+  holeStatesByKey: Record<string, HoleState>,
+  config?: Record<string, any>
 ): FormatDisplayData {
+  const points = typeof config?.points === "number" && config.points > 0 ? config.points : 2;
   const holeResults: Record<string, FormatHoleResult> = {};
 
+  // Build per-hole net scores for display context
   for (const p of participants) {
     const hcp = playingHcp(p);
     for (const h of holes) {
@@ -752,18 +756,74 @@ function computeNassauSideGame(
     }
   }
 
+  // Award points per section (front 9, back 9, overall 18)
+  function sectionPoints(start: number, end: number): Record<string, number> {
+    const totals: Record<string, number> = {};
+    const sectionHoles = holes.filter((h) => h.hole_number >= start && h.hole_number <= end);
+    // Only award points if all holes in the section have scores for all players
+    const allComplete = participants.every((p) =>
+      sectionHoles.every((h) => holeResults[`${p.id}:${h.hole_number}`]?.displayValue !== null &&
+        holeResults[`${p.id}:${h.hole_number}`]?.displayValue !== undefined)
+    );
+    if (!allComplete || sectionHoles.length === 0) {
+      for (const p of participants) totals[p.id] = 0;
+      return totals;
+    }
+    // Sum net scores per player in this section
+    const netTotals: Record<string, number> = {};
+    for (const p of participants) {
+      netTotals[p.id] = sectionHoles.reduce((sum, h) => {
+        const v = holeResults[`${p.id}:${h.hole_number}`]?.displayValue;
+        return sum + (typeof v === "number" ? v : 0);
+      }, 0);
+    }
+    const best = Math.min(...Object.values(netTotals));
+    const winners = participants.filter((p) => netTotals[p.id] === best);
+    if (winners.length === 1) {
+      // One winner: +points for winner, -points for all others
+      for (const p of participants) {
+        totals[p.id] = p.id === winners[0].id ? points : -points;
+      }
+    } else {
+      // All-square
+      for (const p of participants) totals[p.id] = 0;
+    }
+    return totals;
+  }
+
+  const frontPts = sectionPoints(1, 9);
+  const backPts = sectionPoints(10, 18);
+  const overallPts = sectionPoints(1, 18);
+
+  // Check section completeness for display
+  function isSectionComplete(start: number, end: number): boolean {
+    const sectionHoles = holes.filter((h) => h.hole_number >= start && h.hole_number <= end);
+    return sectionHoles.length > 0 && participants.every((p) =>
+      sectionHoles.every((h) => {
+        const v = holeResults[`${p.id}:${h.hole_number}`]?.displayValue;
+        return v !== null && v !== undefined;
+      })
+    );
+  }
+
+  const frontComplete = isSectionComplete(1, 9);
+  const backComplete = isSectionComplete(10, 18);
+  const overallComplete = isSectionComplete(1, 18);
+
   const summaries: FormatSummary[] = participants.map((p) => ({
     participantId: p.id,
-    out: sumRange(holeResults, p.id, holes, 1, 9),
-    inn: sumRange(holeResults, p.id, holes, 10, 18),
-    total: sumRange(holeResults, p.id, holes, 1, 18),
+    out: frontComplete ? (frontPts[p.id] > 0 ? `+${frontPts[p.id]}` : String(frontPts[p.id])) : "–",
+    inn: backComplete ? (backPts[p.id] > 0 ? `+${backPts[p.id]}` : String(backPts[p.id])) : "–",
+    total: (frontComplete || backComplete || overallComplete)
+      ? (frontPts[p.id] ?? 0) + (backPts[p.id] ?? 0) + (overallPts[p.id] ?? 0)
+      : "–",
   }));
 
   return {
     tabLabel: "Nassau (Side)",
     holeResults,
     summaries,
-    higherIsBetter: false,
+    higherIsBetter: true,
     isTeamView: false,
     playingHandicaps: buildPlayingHandicaps(participants),
   };
@@ -802,7 +862,7 @@ export function computeFormatDisplay(
       return computeMatchPlay(participants, holes, scoresByKey, holeStatesByKey, formatConfig, nameOf);
 
     case "skins":
-      return [computeSkins(participants, holes, scoresByKey, holeStatesByKey)];
+      return [computeSkins(participants, holes, scoresByKey, holeStatesByKey, formatConfig)];
 
     case "pairs_stableford":
       return wrap(computePairsStableford(participants, holes, scoresByKey, holeStatesByKey, teams, formatConfig, notAcceptedIds));
@@ -855,13 +915,13 @@ export function computeSideGameDisplays(
 
     switch (sg.name) {
       case "skins": {
-        const data = computeSkins(participants, holes, scoresByKey, holeStatesByKey);
+        const data = computeSkins(participants, holes, scoresByKey, holeStatesByKey, sg.config);
         data.tabLabel = "Skins (Side)";
         results.push(data);
         break;
       }
       case "nassau": {
-        results.push(computeNassauSideGame(participants, holes, scoresByKey, holeStatesByKey));
+        results.push(computeNassauSideGame(participants, holes, scoresByKey, holeStatesByKey, sg.config));
         break;
       }
       case "wolf": {

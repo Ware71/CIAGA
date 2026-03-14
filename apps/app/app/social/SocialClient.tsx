@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { BackButton } from "@/components/ui/BackButton";
 import PostComposer from "@/components/social/PostComposer";
 import FeedList from "@/components/social/FeedList";
 import type { FeedItemVM } from "@/lib/feed/types";
@@ -26,14 +27,10 @@ export default function SocialClient({ initialFeedData }: Props) {
       <div className="mx-auto w-full max-w-sm space-y-6">
         {/* Header (match Stats pages) */}
         <header className="relative flex items-center justify-center">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="absolute left-0 px-2 text-emerald-100 hover:bg-emerald-900/30 font-semibold"
+          <BackButton
+            className="absolute left-0 font-semibold"
             onClick={() => router.push("/")}
-          >
-            ← Back
-          </Button>
+          />
 
           <div className="text-center">
             <div className="text-lg font-extrabold tracking-wide text-[#f5e6b0]">

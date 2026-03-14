@@ -243,7 +243,7 @@ export default function ScorecardPortrait(props: {
               const disabled = !canScore || isFinished;
 
               const state = holeStateFor(p.id, h.hole_number);
-              const puLabel = state === "picked_up" ? "PU" : (state === "not_started" && s !== null) ? "NS" : null;
+              const puLabel = state === "picked_up" ? "PU" : (isFinished && state === "not_started" && s !== null) ? "NS" : null;
 
               const recv =
                 scoreView === "net" && !puLabel
