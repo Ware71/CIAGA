@@ -53,6 +53,13 @@ type RoundRow = {
 
 type TeeSnap = { id: string; name: string | null };
 
+function strokesReceivedOnHole(courseHcp: number, si: number | null): number {
+  if (si == null || si < 1 || si > 18) return 0;
+  const base = Math.floor(courseHcp / 18);
+  const rem = ((courseHcp % 18) + 18) % 18;
+  return base + (rem > 0 && si <= rem ? 1 : 0);
+}
+
 type ParticipantRow = {
   id: string; // participant_id (round_participants.id)
   round_id: string;
@@ -655,36 +662,32 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
           }
         }
 
-        const totalByRound: Record<string, number> = {};
-        for (const roundId of Object.keys(pidMap)) {
-          const participantId = pidMap[roundId];
-          const count = countsByParticipant[participantId] ?? 0;
-          if (count > 0) totalByRound[roundId] = totalsByParticipant[participantId] ?? 0;
-        }
-        if (!cancelled) setTotalByRoundId(totalByRound);
-
-        // 4) Handicap round results (AGS + SD)
+        // 4) Handicap round results (AGS + SD + course handicap)
         const agsMap: Record<string, number> = {};
         const sdMap: Record<string, number> = {};
         const hiUsedMap: Record<string, number> = {};
+        const courseHcpByPid: Record<string, number> = {};
 
         if (participantIds.length) {
           for (const ids of chunk(participantIds, 150)) {
             const { data: hrr, error: hErr } = await supabase
               .from("handicap_round_results")
-              .select("round_id, participant_id, adjusted_gross_score, score_differential, handicap_index_used")
+              .select("round_id, participant_id, adjusted_gross_score, score_differential, handicap_index_used, course_handicap_used")
               .in("participant_id", ids);
 
             if (hErr) continue;
 
             for (const row of (hrr ?? []) as any[]) {
               const rid = row.round_id as string;
+              const pid2 = row.participant_id as string;
               const ags = toNumberMaybe(row.adjusted_gross_score);
               const sd = toNumberMaybe(row.score_differential);
               const hiUsed = toNumberMaybe(row.handicap_index_used);
+              const chcp = toNumberMaybe(row.course_handicap_used);
               if (ags != null) agsMap[rid] = ags;
               if (sd != null) sdMap[rid] = sd;
               if (hiUsed != null) hiUsedMap[rid] = hiUsed;
+              if (chcp != null) courseHcpByPid[pid2] = chcp;
             }
           }
         }
@@ -694,6 +697,73 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
           setScoreDiffByRoundId(sdMap);
           setHiUsedByRoundId(hiUsedMap);
         }
+
+        // 4.5) Apply WHS penalties for PU/NS holes to gross totals
+        if (participantIds.length) {
+          const teeSnapByPid: Record<string, string> = {};
+          for (const [roundId, participantId] of Object.entries(pidMap)) {
+            const tsid = teeSnapIdByRound[roundId];
+            if (tsid) teeSnapByPid[participantId] = tsid;
+          }
+
+          const allTeeSnapIds = Array.from(new Set(Object.values(teeSnapIdByRound).filter(Boolean)));
+          const holeDataByTeeSnap: Record<string, Record<number, { par: number; si: number | null }>> = {};
+          for (const ids of chunk(allTeeSnapIds, 50)) {
+            const { data: hs } = await supabase
+              .from("round_hole_snapshots")
+              .select("round_tee_snapshot_id, hole_number, par, stroke_index")
+              .in("round_tee_snapshot_id", ids);
+            for (const row of (hs ?? []) as any[]) {
+              const tid = row.round_tee_snapshot_id as string;
+              if (!holeDataByTeeSnap[tid]) holeDataByTeeSnap[tid] = {};
+              holeDataByTeeSnap[tid][row.hole_number as number] = {
+                par: row.par as number,
+                si: row.stroke_index ?? null,
+              };
+            }
+          }
+
+          const acceptablePids = new Set<string>(
+            Object.keys(pidMap).filter((rid) => agsMap[rid] != null).map((rid) => pidMap[rid])
+          );
+
+          for (const ids of chunk(participantIds, 150)) {
+            const { data: hs } = await supabase
+              .from("round_hole_states")
+              .select("participant_id, hole_number, status")
+              .in("participant_id", ids)
+              .in("status", ["picked_up", "not_started"]);
+
+            for (const row of (hs ?? []) as any[]) {
+              const participantId = row.participant_id as string;
+              const holeNumber = row.hole_number as number;
+              const status = row.status as string;
+
+              if (status === "not_started" && !acceptablePids.has(participantId)) continue;
+
+              const teeSnapId = teeSnapByPid[participantId];
+              if (!teeSnapId) continue;
+
+              const holeData = holeDataByTeeSnap[teeSnapId]?.[holeNumber];
+              if (!holeData?.par) continue;
+
+              const courseHcp = courseHcpByPid[participantId] ?? 0;
+              const penalty = holeData.par + 2 + strokesReceivedOnHole(courseHcp, holeData.si);
+
+              totalsByParticipant[participantId] = (totalsByParticipant[participantId] ?? 0) + penalty;
+              countsByParticipant[participantId] = (countsByParticipant[participantId] ?? 0) + 1;
+            }
+          }
+        }
+
+        // Finalise totals now that PU/NS penalties have been applied
+        const totalByRound: Record<string, number> = {};
+        for (const roundId of Object.keys(pidMap)) {
+          const participantId = pidMap[roundId];
+          const count = countsByParticipant[participantId] ?? 0;
+          if (count > 0) totalByRound[roundId] = totalsByParticipant[participantId] ?? 0;
+        }
+        if (!cancelled) setTotalByRoundId(totalByRound);
 
       } catch (e: any) {
         console.warn("History load error:", e);
