@@ -424,9 +424,10 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
   }, [formatType, formatDisplays.length]);
 
   // Displayed score:
-  // - not_started => null (render blank)
-  // - picked_up   => "PU"
-  // - completed   => number (gross or net) or format value
+  // - not_started (non-acceptable) => null (render blank)
+  // - not_started (acceptable)     => penalty score (cell shows NS badge)
+  // - picked_up                    => penalty score (cell shows PU badge)
+  // - completed                    => number (gross or net) or format value
   const displayedScoreFor = useCallback(
     (participantId: string, holeNumber: number): string | number | null => {
       if (isFormatView(scoreView) && activeFormatDisplay) {
@@ -435,20 +436,32 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
       }
 
       const st = holeStateFor(participantId, holeNumber);
-      if (st === "not_started") return null;
-      if (st === "picked_up") return "PU";
+      const p = participants.find((x) => x.id === participantId);
+      const h = holesList.find((x) => x.hole_number === holeNumber);
+
+      if (st === "not_started") {
+        // Non-acceptable round: blank
+        if (notAcceptedIds.has(participantId)) return null;
+        // Acceptable round: show the penalty being applied
+        if (!h?.par) return null;
+        if (scoreView === "gross") return puPenaltyGross(h.par, p?.course_handicap ?? null, h.stroke_index);
+        return h.par + 2;
+      }
+
+      if (st === "picked_up") {
+        if (!h?.par) return null;
+        if (scoreView === "gross") return puPenaltyGross(h.par, p?.course_handicap ?? null, h.stroke_index);
+        return h.par + 2;
+      }
 
       const gross = scoreFor(participantId, holeNumber);
       if (typeof gross !== "number") return null;
       if (scoreView === "gross") return gross;
 
-      const p = participants.find((x) => x.id === participantId);
-      const h = holesList.find((x) => x.hole_number === holeNumber);
-
       const recv = strokesReceivedOnHole(p?.course_handicap ?? null, h?.stroke_index ?? null);
       return netFromGross(gross, recv);
     },
-    [holeStateFor, scoreFor, scoreView, participants, holesList, activeFormatDisplay]
+    [holeStateFor, scoreFor, scoreView, participants, holesList, activeFormatDisplay, notAcceptedIds]
   );
 
   // Numeric scoring value for totals (includes PU penalty, unlike displayedScoreFor which returns "PU")
@@ -1271,6 +1284,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
               metaSums={metaSums}
               totals={totals}
               displayedScoreFor={displayedScoreFor}
+              holeStateFor={holeStateFor}
               onOpenEntry={openEntry}
               getParticipantLabel={scrambleGetLabel}
               getParticipantAvatar={scrambleGetAvatar}
@@ -1290,6 +1304,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
               metaSums={metaSums}
               totals={totals}
               displayedScoreFor={displayedScoreFor}
+              holeStateFor={holeStateFor}
               onOpenEntry={openEntry}
               getParticipantLabel={scrambleGetLabel}
               getParticipantAvatar={scrambleGetAvatar}

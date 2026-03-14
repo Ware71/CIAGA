@@ -4,6 +4,7 @@ import React, { useMemo } from "react";
 import Link from "next/link";
 import { one } from "@/lib/stats/helpers";
 import { shortDate, monthKey } from "@/lib/profile/helpers";
+import { formatHI } from "@/lib/rounds/handicapUtils";
 
 type RoundRow = {
   id: string;
@@ -91,7 +92,7 @@ export default function RoundHistoryList({
                 const isExceptional =
                   typeof hiForRound === "number" && typeof sd === "number" && sd <= hiForRound - 7;
 
-                const hiText2 = typeof hiForRound === "number" ? `Index: ${hiForRound.toFixed(1)}` : "\u2014";
+                const hiText2 = typeof hiForRound === "number" ? `Index: ${formatHI(hiForRound)}` : "\u2014";
 
                 const isCounting = countingSet?.has(r.id) ?? false;
                 const isCutoff = cutoffRoundId === r.id;

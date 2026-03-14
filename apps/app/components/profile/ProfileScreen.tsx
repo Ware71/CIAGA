@@ -12,6 +12,7 @@ import {
   isFinishedStatus, parseDateMs,
   toNumberMaybe, shortDate,
 } from "@/lib/profile/helpers";
+import { formatHI } from "@/lib/rounds/handicapUtils";
 import ProfileFeedTab from "@/components/profile/ProfileFeedTab";
 import AcceptableRoundsTab from "@/components/profile/AcceptableRoundsTab";
 import NonAcceptableRoundsTab from "@/components/profile/NonAcceptableRoundsTab";
@@ -715,7 +716,7 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
 
   const hiText = useMemo(() => {
     if (!handicap?.handicap_index && handicap?.handicap_index !== 0) return "No HI yet";
-    return Number(handicap.handicap_index).toFixed(1);
+    return formatHI(Number(handicap.handicap_index));
   }, [handicap]);
 
   const hiSub = useMemo(() => {

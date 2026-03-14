@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { getMyProfileIdByAuthUserId } from "@/lib/myProfile";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { formatHI } from "@/lib/rounds/handicapUtils";
 
 type ProfileRow = {
   id: string;
@@ -474,7 +475,7 @@ export default function RoundsHistoryPage() {
     const hiUsed = hiUsedByRoundId[r.id];
     const hiAfter = hiAfterByRoundId[r.id];
 
-    const hiText = typeof hiUsed === "number" ? `Index: ${hiUsed.toFixed(1)}` : "\u2014";
+    const hiText = typeof hiUsed === "number" ? `Index: ${formatHI(hiUsed)}` : "\u2014";
 
     const isExceptional =
       typeof hiUsed === "number" && typeof sd === "number" && sd <= hiUsed - 7;
@@ -493,7 +494,7 @@ export default function RoundsHistoryPage() {
         ]
           .filter(Boolean)
           .join(" ")}
-        title={typeof hiAfter === "number" ? `HI after: ${hiAfter.toFixed(1)}` : undefined}
+        title={typeof hiAfter === "number" ? `HI after: ${formatHI(hiAfter)}` : undefined}
       >
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">

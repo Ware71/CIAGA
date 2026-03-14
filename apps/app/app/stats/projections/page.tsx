@@ -23,6 +23,7 @@ import {
 
 import type { FollowProfile } from "@/lib/stats/data";
 import { getHandicapHistoryPoints, getFollowedProfiles } from "@/lib/stats/data";
+import { formatHI } from "@/lib/rounds/handicapUtils";
 
 import { Modal } from "@/components/stats/Modal";
 import { Wheel } from "@/components/stats/Wheel";
@@ -328,7 +329,7 @@ export default function StatsPage() {
         const daysFromToday = Math.round(daysBetween(today, date));
         const aVAt = aPredictAbs(tHit);
         const bVAt = bPredictAbs(tHit);
-        const atHi = Number.isFinite(aVAt) && Number.isFinite(bVAt) ? `HI ${round1(aVAt)}` : "";
+        const atHi = Number.isFinite(aVAt) && Number.isFinite(bVAt) ? `HI ${formatHI(aVAt)}` : "";
         nextInterceptLabel = `${iso(date)} (${daysFromToday >= 0 ? "in " : ""}${daysFromToday}d) ${atHi}`;
 
         if (tHit >= absStart && tHit <= absEnd) {
@@ -558,14 +559,14 @@ export default function StatsPage() {
                 <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/45 p-3">
                   <div className="text-[11px] text-emerald-100/70 font-semibold">{computed.names.a}</div>
                   <div className="mt-1 text-sm font-extrabold text-emerald-50 tabular-nums">
-                    HI {computed.last.aLast ? round1(computed.last.aLast.hi) : "—"}
+                    HI {computed.last.aLast ? formatHI(computed.last.aLast.hi) : "—"}
                   </div>
                 </div>
 
                 <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/45 p-3">
                   <div className="text-[11px] text-emerald-100/70 font-semibold">{computed.names.b}</div>
                   <div className="mt-1 text-sm font-extrabold text-emerald-50 tabular-nums">
-                    HI {computed.last.bLast ? round1(computed.last.bLast.hi) : "—"}
+                    HI {computed.last.bLast ? formatHI(computed.last.bLast.hi) : "—"}
                   </div>
                 </div>
               </div>
@@ -573,7 +574,7 @@ export default function StatsPage() {
               <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/45 p-3">
                 <div className="text-[11px] text-emerald-100/70 font-semibold">You</div>
                 <div className="mt-1 text-sm font-extrabold text-emerald-50 tabular-nums">
-                  HI {computed.last.aLast ? round1(computed.last.aLast.hi) : "—"}
+                  HI {computed.last.aLast ? formatHI(computed.last.aLast.hi) : "—"}
                 </div>
               </div>
             )}
@@ -805,7 +806,7 @@ export default function StatsPage() {
               <div key={r.id} className="rounded-2xl border border-emerald-900/70 bg-[#042713]/55 p-3">
                 <div className="flex items-center justify-between">
                   <div className="text-sm font-extrabold text-emerald-50">{r.name}</div>
-                  <div className="text-[11px] font-bold text-emerald-100/70 tabular-nums">{r.hiNow !== null ? `HI ${r.hiNow}` : "—"}</div>
+                  <div className="text-[11px] font-bold text-emerald-100/70 tabular-nums">{r.hiNow !== null ? `HI ${formatHI(r.hiNow)}` : "—"}</div>
                 </div>
                 <div className="mt-2 flex items-center justify-between">
                   <div className="text-[11px] text-emerald-100/65 font-semibold">ETA</div>
