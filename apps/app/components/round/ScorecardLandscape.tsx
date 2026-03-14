@@ -73,6 +73,21 @@ function StrokeDots({ count }: { count: number }) {
   );
 }
 
+function PlusIndicator({ count }: { count: number }) {
+  const n = Math.max(0, Math.floor(count || 0));
+  if (!n) return null;
+  const shown = Math.min(n, 3);
+  const extra = n - shown;
+  return (
+    <span className="inline-flex items-center gap-0.5">
+      {Array.from({ length: shown }).map((_, i) => (
+        <span key={i} className="text-[9px] font-bold text-[#f5e6b0]/60 leading-none">+</span>
+      ))}
+      {extra > 0 ? <span className="text-[9px] text-emerald-100/50">+{extra}</span> : null}
+    </span>
+  );
+}
+
 export default function ScorecardLandscape(props: {
   participants: Participant[];
   holesList: Hole[];
@@ -235,7 +250,7 @@ export default function ScorecardLandscape(props: {
                       const disabled = !canScore || isFinished;
 
                       const state = holeStateFor(p.id, h.hole_number);
-                      const puLabel = state === "picked_up" ? "PU" : state === "not_started" ? "NS" : null;
+                      const puLabel = state === "picked_up" ? "PU" : (state === "not_started" && s !== null) ? "NS" : null;
 
                       const recv =
                         scoreView === "net" && !puLabel
@@ -276,6 +291,10 @@ export default function ScorecardLandscape(props: {
                           ) : recv > 0 ? (
                             <div className="mt-1 leading-none">
                               <StrokeDots count={recv} />
+                            </div>
+                          ) : recv < 0 ? (
+                            <div className="mt-0.5 leading-none">
+                              <PlusIndicator count={Math.abs(recv)} />
                             </div>
                           ) : (
                             <div className="h-[6px]" />
