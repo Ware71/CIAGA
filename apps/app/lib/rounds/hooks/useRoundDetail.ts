@@ -176,7 +176,10 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
     const res = await fetch(`/api/rounds/${roundId}/snapshot`, {
       headers: { Authorization: `Bearer ${session.accessToken}` },
     });
-    if (!res.ok) throw new Error("Failed to load round");
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body?.error || `Failed to load round (${res.status})`);
+    }
     const snap = await res.json();
     hydrateFromSnapshot(snap);
   }, [roundId, hydrateFromSnapshot]);

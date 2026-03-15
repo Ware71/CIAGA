@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { BackButton } from "@/components/ui/BackButton";
 
 type Profile = {
   id: string;
@@ -215,13 +216,7 @@ export default function AdminPage() {
 
         {/* HEADER */}
         <header className="flex items-center justify-between">
-          <button
-            type="button"
-            className="px-2 text-emerald-100 hover:bg-emerald-900/30 rounded-xl text-sm"
-            onClick={() => router.back()}
-          >
-            ← Back
-          </button>
+          <BackButton onClick={() => router.back()} />
 
           <div className="text-center flex-1">
             <div className="text-lg font-semibold tracking-wide text-[#f5e6b0]">

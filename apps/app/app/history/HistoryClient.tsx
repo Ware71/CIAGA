@@ -7,7 +7,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { getMyProfileIdByAuthUserId } from "@/lib/myProfile";
 import { Button } from "@/components/ui/button";
+import { BackButton } from "@/components/ui/BackButton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { formatHI, strokesReceivedOnHole } from "@/lib/rounds/handicapUtils";
 
 type ProfileRow = {
   id: string;
@@ -83,6 +85,7 @@ function toNumberMaybe(v: unknown): number | null {
   return null;
 }
 
+
 // ✅ WHS "used differentials" count table (same as player page)
 function usedDifferentialsCount(n: number) {
   if (n <= 0) return 0;
@@ -115,6 +118,7 @@ export default function RoundsHistoryPage() {
 
   // handicap extras (for display)
   const [agsByRoundId, setAgsByRoundId] = useState<Record<string, number>>({});
+  const [netByRoundId, setNetByRoundId] = useState<Record<string, number>>({});
   const [scoreDiffByRoundId, setScoreDiffByRoundId] = useState<Record<string, number>>({});
   const [hiUsedByRoundId, setHiUsedByRoundId] = useState<Record<string, number>>({});
   const [hiAfterByRoundId, setHiAfterByRoundId] = useState<Record<string, number>>({});
@@ -282,36 +286,31 @@ export default function RoundsHistoryPage() {
           }
         }
 
-        const totalByRound: Record<string, number> = {};
-        for (const roundId of Object.keys(pidMap)) {
-          const participantId = pidMap[roundId];
-          const count = countsByParticipant[participantId] ?? 0;
-          if (count > 0) totalByRound[roundId] = totalsByParticipant[participantId] ?? 0;
-        }
-
-        if (!cancelled) setMyTotalByRoundId(totalByRound);
-
-        // 4) Handicap round results (AGS + SD + HI used)
+        // 4) Handicap round results (AGS + SD + HI used + course handicap)
         const agsMap: Record<string, number> = {};
         const sdMap: Record<string, number> = {};
         const hiUsedMap: Record<string, number> = {};
+        const courseHcpByPid: Record<string, number> = {};
 
         if (participantIds.length) {
           for (const ids of chunk(participantIds, 150)) {
             const { data: hrr, error: hErr } = await supabase
               .from("handicap_round_results")
-              .select("round_id, participant_id, adjusted_gross_score, score_differential, handicap_index_used")
+              .select("round_id, participant_id, adjusted_gross_score, score_differential, handicap_index_used, course_handicap_used")
               .in("participant_id", ids);
 
             if (hErr) continue;
             for (const row of (hrr ?? []) as any[]) {
               const rid = row.round_id as string;
+              const pid2 = row.participant_id as string;
               const ags = toNumberMaybe(row.adjusted_gross_score);
               const sd = toNumberMaybe(row.score_differential);
               const hiUsed = toNumberMaybe(row.handicap_index_used);
+              const chcp = toNumberMaybe(row.course_handicap_used);
               if (ags != null) agsMap[rid] = ags;
               if (sd != null) sdMap[rid] = sd;
               if (hiUsed != null) hiUsedMap[rid] = hiUsed;
+              if (chcp != null) courseHcpByPid[pid2] = chcp;
             }
           }
         }
@@ -320,6 +319,89 @@ export default function RoundsHistoryPage() {
           setAgsByRoundId(agsMap);
           setScoreDiffByRoundId(sdMap);
           setHiUsedByRoundId(hiUsedMap);
+        }
+
+        // 4.5) Apply WHS penalties for PU/NS holes to gross totals
+        if (participantIds.length) {
+          // Build tee_snapshot_id lookup by participant_id
+          const teeSnapByPid: Record<string, string> = {};
+          for (const [roundId, participantId] of Object.entries(pidMap)) {
+            const tsid = teeSnapIdByRound[roundId];
+            if (tsid) teeSnapByPid[participantId] = tsid;
+          }
+
+          // Fetch hole metadata (par + stroke_index) for each tee snapshot
+          const allTeeSnapIds = Array.from(new Set(Object.values(teeSnapIdByRound).filter(Boolean)));
+          const holeDataByTeeSnap: Record<string, Record<number, { par: number; si: number | null }>> = {};
+          for (const ids of chunk(allTeeSnapIds, 50)) {
+            const { data: hs } = await supabase
+              .from("round_hole_snapshots")
+              .select("round_tee_snapshot_id, hole_number, par, stroke_index")
+              .in("round_tee_snapshot_id", ids);
+            for (const row of (hs ?? []) as any[]) {
+              const tid = row.round_tee_snapshot_id as string;
+              if (!holeDataByTeeSnap[tid]) holeDataByTeeSnap[tid] = {};
+              holeDataByTeeSnap[tid][row.hole_number as number] = {
+                par: row.par as number,
+                si: row.stroke_index ?? null,
+              };
+            }
+          }
+
+          // Participants whose rounds are acceptable (have a score differential)
+          const acceptablePids = new Set<string>(
+            Object.keys(pidMap).filter((rid) => agsMap[rid] != null).map((rid) => pidMap[rid])
+          );
+
+          // Fetch PU and NS hole states for all participants
+          for (const ids of chunk(participantIds, 150)) {
+            const { data: hs } = await supabase
+              .from("round_hole_states")
+              .select("participant_id, hole_number, status")
+              .in("participant_id", ids)
+              .in("status", ["picked_up", "not_started"]);
+
+            for (const row of (hs ?? []) as any[]) {
+              const participantId = row.participant_id as string;
+              const holeNumber = row.hole_number as number;
+              const status = row.status as string;
+
+              // NS holes only count for acceptable rounds
+              if (status === "not_started" && !acceptablePids.has(participantId)) continue;
+
+              const teeSnapId = teeSnapByPid[participantId];
+              if (!teeSnapId) continue;
+
+              const holeData = holeDataByTeeSnap[teeSnapId]?.[holeNumber];
+              if (!holeData?.par) continue;
+
+              const courseHcp = courseHcpByPid[participantId] ?? 0;
+              const penalty = holeData.par + 2 + strokesReceivedOnHole(courseHcp, holeData.si);
+
+              totalsByParticipant[participantId] = (totalsByParticipant[participantId] ?? 0) + penalty;
+              countsByParticipant[participantId] = (countsByParticipant[participantId] ?? 0) + 1;
+            }
+          }
+        }
+
+        // Finalise totals now that PU/NS penalties have been applied
+        const totalByRound: Record<string, number> = {};
+        for (const roundId of Object.keys(pidMap)) {
+          const participantId = pidMap[roundId];
+          const count = countsByParticipant[participantId] ?? 0;
+          if (count > 0) totalByRound[roundId] = totalsByParticipant[participantId] ?? 0;
+        }
+
+        const finalNetMap: Record<string, number> = {};
+        for (const [roundId, participantId] of Object.entries(pidMap)) {
+          const gross = totalByRound[roundId] ?? agsMap[roundId];
+          const ch = courseHcpByPid[participantId];
+          if (gross != null && ch != null) finalNetMap[roundId] = gross - ch;
+        }
+
+        if (!cancelled) {
+          setMyTotalByRoundId(totalByRound);
+          setNetByRoundId(finalNetMap);
         }
 
         // 5) Handicap index history -> compute BOTH "HI after" and "HI before"
@@ -462,11 +544,13 @@ export default function RoundsHistoryPage() {
 
     const href = { pathname: `/round/${r.id}`, query: { from: "history" } } as const;
 
-    const total = myTotalByRoundId[r.id];
-    const scoreText = typeof total === "number" ? String(total) : "\u2014";
-
     const ags = agsByRoundId[r.id];
-    const agsText = typeof ags === "number" ? `(${ags})` : "";
+    const total = myTotalByRoundId[r.id];
+    const displayScore = total ?? ags;
+    const scoreText = typeof displayScore === "number" ? String(displayScore) : "\u2014";
+
+    const net = netByRoundId[r.id];
+    const netText = typeof net === "number" ? `Net: ${net}` : "";
 
     const sd = scoreDiffByRoundId[r.id];
     const sdText = typeof sd === "number" ? `Score Diff: ${sd.toFixed(1)}` : "SD \u2014";
@@ -474,7 +558,7 @@ export default function RoundsHistoryPage() {
     const hiUsed = hiUsedByRoundId[r.id];
     const hiAfter = hiAfterByRoundId[r.id];
 
-    const hiText = typeof hiUsed === "number" ? `Index: ${hiUsed.toFixed(1)}` : "\u2014";
+    const hiText = typeof hiUsed === "number" ? `Index: ${formatHI(hiUsed)}` : "\u2014";
 
     const isExceptional =
       typeof hiUsed === "number" && typeof sd === "number" && sd <= hiUsed - 7;
@@ -493,7 +577,7 @@ export default function RoundsHistoryPage() {
         ]
           .filter(Boolean)
           .join(" ")}
-        title={typeof hiAfter === "number" ? `HI after: ${hiAfter.toFixed(1)}` : undefined}
+        title={typeof hiAfter === "number" ? `HI after: ${formatHI(hiAfter)}` : undefined}
       >
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
@@ -526,7 +610,7 @@ export default function RoundsHistoryPage() {
               <div className="text-[18px] font-extrabold tabular-nums text-[#f5e6b0] leading-none">
                 {scoreText}
               </div>
-              <div className="mt-1 text-[10px] text-emerald-100/60">{agsText || "\u00A0"}</div>
+              <div className="mt-1 text-[10px] text-emerald-100/60">{netText || "\u00A0"}</div>
             </div>
           </div>
         </div>
@@ -547,14 +631,7 @@ export default function RoundsHistoryPage() {
         {/* ✅ Sticky Header */}
         <header className="sticky top-0 z-20 bg-[#042713] pb-3">
           <div className="flex items-center justify-between gap-2 px-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="px-2 text-emerald-100 hover:bg-emerald-900/30"
-              onClick={() => router.replace("/")}
-            >
-              ← Back
-            </Button>
+            <BackButton onClick={() => router.replace("/")} />
 
             <div className="text-center flex-1 min-w-0 px-2">
               <div className="text-[15px] sm:text-base font-semibold tracking-wide text-[#f5e6b0] truncate">{title}</div>

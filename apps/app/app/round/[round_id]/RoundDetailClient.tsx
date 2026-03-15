@@ -4,15 +4,17 @@ import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
+import { BackButton } from "@/components/ui/BackButton";
 
 import { finishRound as finishRoundApi } from "@/lib/rounds/api";
 import { useRoundDetail } from "@/lib/rounds/hooks/useRoundDetail";
-import type { Participant, Hole, HoleState } from "@/lib/rounds/hooks/useRoundDetail";
+import type { Participant, Hole, HoleState, RoundFormatType } from "@/lib/rounds/hooks/useRoundDetail";
 import { strokesReceivedOnHole, netFromGross } from "@/lib/rounds/handicapUtils";
 import { computeFormatDisplay, computeSideGameDisplays, isFormatView, formatViewIndex, type FormatScoreView, type FormatDisplayData } from "@/lib/rounds/formatScoring";
 import { useOrientationLock } from "@/lib/useOrientationLock";
 
 import { Menu } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import ConfirmSheet from "@/components/round/ConfirmSheet";
 import ScoreEntrySheet from "@/components/round/ScoreEntrySheet";
 import FinalResultsPanel from "@/components/round/FinalResultsPanel";
@@ -171,6 +173,17 @@ function puPenaltyGross(par: number, courseHcp: number | null, si: number | null
   return par + 2 + strokesReceivedOnHole(courseHcp, si);
 }
 
+/** Returns true if the participant has any holes not yet started */
+function hasIncompleteHoles(
+  participantId: string,
+  holesList: Hole[],
+  holeStatesByKey: Record<string, string>
+): boolean {
+  return holesList.some(
+    (h) => (holeStatesByKey[`${participantId}:${h.hole_number}`] ?? "not_started") === "not_started"
+  );
+}
+
 /** Compute set of participant IDs whose rounds don't meet WHS minimum holes */
 function getNotAcceptedParticipants(
   participants: Participant[],
@@ -266,8 +279,12 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     scoresByKey,
     setScoresByKey,
     holeStatesByKey,
+    setHoleStatesByKey,
     canScore,
   } = useRoundDetail(roundId, initialSnapshot);
+
+  // Tracks hole keys with scores not yet confirmed by the server
+  const [pendingKeys, setPendingKeys] = useState<Set<string>>(new Set());
 
   const [scoreView, setScoreView] = useState<FormatScoreView>("gross");
 
@@ -283,6 +300,49 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
   const [finishOpen, setFinishOpen] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // ── Offline queue helpers ──────────────────────────────────────────────
+  type PendingOp = {
+    key: string;
+    roundId: string;
+    participantId: string;
+    holeNumber: number;
+    strokes: number | null;
+    enteredBy: string;
+    holeStatus: HoleState | null;
+    timestamp: number;
+  };
+
+  const queueStorageKey = `ciaga:pendingOps:${roundId}`;
+
+  function loadQueue(): PendingOp[] {
+    try {
+      return JSON.parse(localStorage.getItem(queueStorageKey) ?? "[]");
+    } catch {
+      return [];
+    }
+  }
+
+  function saveQueue(ops: PendingOp[]): void {
+    try {
+      localStorage.setItem(queueStorageKey, JSON.stringify(ops));
+    } catch {}
+  }
+
+  function upsertQueueOp(op: PendingOp): void {
+    const existing = loadQueue().filter((o) => o.key !== op.key);
+    saveQueue([...existing, op]);
+  }
+
+  function removeQueueOp(key: string): void {
+    saveQueue(loadQueue().filter((o) => o.key !== key));
+  }
+
+  function isNetworkError(e: any): boolean {
+    if (typeof navigator !== "undefined" && !navigator.onLine) return true;
+    const msg = String(e?.message ?? "").toLowerCase();
+    return msg.includes("failed to fetch") || msg.includes("networkerror") || msg.includes("network request failed");
+  }
 
   const holeCount = holes.length || 18;
 
@@ -330,11 +390,17 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     return prof?.avatar_url || null;
   }, []);
 
+  // Compute up front so it's available for both scoringValueFor and formatDisplays
+  const notAcceptedIds = useMemo<Set<string>>(() => {
+    const { ids } = getNotAcceptedParticipants(participants, holesList, holeStatesByKey);
+    return ids;
+  }, [participants, holesList, holeStatesByKey]);
+
   const formatDisplays = useMemo<FormatDisplayData[]>(() => {
-    const main = computeFormatDisplay(formatType, formatConfig, participants, holesList, scoresByKey, holeStatesByKey, teams, getParticipantLabel);
+    const main = computeFormatDisplay(formatType, formatConfig, participants, holesList, scoresByKey, holeStatesByKey, teams, getParticipantLabel, notAcceptedIds);
     const side = computeSideGameDisplays(sideGames, participants, holesList, scoresByKey, holeStatesByKey);
     return [...main, ...side];
-  }, [formatType, formatConfig, sideGames, participants, holesList, scoresByKey, holeStatesByKey, teams, getParticipantLabel]);
+  }, [formatType, formatConfig, sideGames, participants, holesList, scoresByKey, holeStatesByKey, teams, getParticipantLabel, notAcceptedIds]);
 
   const activeFormatDisplay = useMemo<FormatDisplayData | null>(() => {
     if (!isFormatView(scoreView)) return null;
@@ -349,10 +415,20 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     }
   }, [scoreView, formatDisplays]);
 
+  // For stableford-based formats, default to the format (points) tab once it's available
+  useEffect(() => {
+    const stablefordFormats: RoundFormatType[] = ["stableford", "pairs_stableford", "team_stableford", "team_bestball"];
+    if (stablefordFormats.includes(formatType) && formatDisplays.length > 0 && scoreView === "gross") {
+      setScoreView("format:0" as FormatScoreView);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formatType, formatDisplays.length]);
+
   // Displayed score:
-  // - not_started => null (render blank)
-  // - picked_up   => "PU"
-  // - completed   => number (gross or net) or format value
+  // - not_started (non-acceptable) => null (render blank)
+  // - not_started (acceptable)     => penalty score (cell shows NS badge)
+  // - picked_up                    => penalty score (cell shows PU badge)
+  // - completed                    => number (gross or net) or format value
   const displayedScoreFor = useCallback(
     (participantId: string, holeNumber: number): string | number | null => {
       if (isFormatView(scoreView) && activeFormatDisplay) {
@@ -361,20 +437,32 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
       }
 
       const st = holeStateFor(participantId, holeNumber);
-      if (st === "not_started") return null;
-      if (st === "picked_up") return "PU";
+      const p = participants.find((x) => x.id === participantId);
+      const h = holesList.find((x) => x.hole_number === holeNumber);
+
+      if (st === "not_started") {
+        // Non-acceptable round: blank
+        if (notAcceptedIds.has(participantId)) return null;
+        // Acceptable round: show the penalty being applied
+        if (!h?.par) return null;
+        if (scoreView === "gross") return puPenaltyGross(h.par, p?.course_handicap ?? null, h.stroke_index);
+        return h.par + 2;
+      }
+
+      if (st === "picked_up") {
+        if (!h?.par) return null;
+        if (scoreView === "gross") return puPenaltyGross(h.par, p?.course_handicap ?? null, h.stroke_index);
+        return h.par + 2;
+      }
 
       const gross = scoreFor(participantId, holeNumber);
       if (typeof gross !== "number") return null;
       if (scoreView === "gross") return gross;
 
-      const p = participants.find((x) => x.id === participantId);
-      const h = holesList.find((x) => x.hole_number === holeNumber);
-
       const recv = strokesReceivedOnHole(p?.course_handicap ?? null, h?.stroke_index ?? null);
       return netFromGross(gross, recv);
     },
-    [holeStateFor, scoreFor, scoreView, participants, holesList, activeFormatDisplay]
+    [holeStateFor, scoreFor, scoreView, participants, holesList, activeFormatDisplay, notAcceptedIds]
   );
 
   // Numeric scoring value for totals (includes PU penalty, unlike displayedScoreFor which returns "PU")
@@ -383,7 +471,17 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
       if (isFormatView(scoreView)) return null;
 
       const st = holeStateFor(participantId, holeNumber);
-      if (st === "not_started") return null;
+
+      if (st === "not_started") {
+        // Acceptable scorecards: incomplete holes count as net double bogey (WHS rule)
+        if (notAcceptedIds.has(participantId)) return null;
+        const h = holesList.find((x) => x.hole_number === holeNumber);
+        if (!h?.par) return null;
+        const p = participants.find((x) => x.id === participantId);
+        const courseHcp = p?.course_handicap ?? null;
+        if (scoreView === "gross") return puPenaltyGross(h.par, courseHcp, h.stroke_index);
+        return h.par + 2; // net: strokes received cancel out
+      }
 
       if (st === "picked_up") {
         const h = holesList.find((x) => x.hole_number === holeNumber);
@@ -403,7 +501,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
       const recv = strokesReceivedOnHole(p?.course_handicap ?? null, h?.stroke_index ?? null);
       return netFromGross(gross, recv);
     },
-    [holeStateFor, scoreFor, scoreView, participants, holesList]
+    [holeStateFor, scoreFor, scoreView, participants, holesList, notAcceptedIds]
   );
 
   const totals = useMemo(() => {
@@ -547,17 +645,29 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     return rows;
   }, [participants, totals, toParTotalByParticipant, getParticipantLabel, getParticipantAvatar, formatDisplays]);
 
-  const winner = finalRows[0] ?? null;
+  const winner = useMemo(() => {
+    if (!finalRows.length) return null;
+    const primaryFormat = formatDisplays[0] ?? null;
+    const hasStringTotals = finalRows.some((r) => typeof r.total === "string");
+    // For stroke-based formats (lower score wins), players with incomplete holes can't win
+    if (!hasStringTotals && primaryFormat && !primaryFormat.higherIsBetter) {
+      return (
+        finalRows.find((r) => !hasIncompleteHoles(r.participantId, holesList, holeStatesByKey)) ??
+        finalRows[0] ??
+        null
+      );
+    }
+    return finalRows[0] ?? null;
+  }, [finalRows, formatDisplays, holesList, holeStatesByKey]);
 
-  const { notAcceptedIds, finishWarning } = useMemo(() => {
-    const { ids, names } = getNotAcceptedParticipants(participants, holesList, holeStatesByKey);
-    if (names.length === 0) return { notAcceptedIds: ids, finishWarning: null as string | null };
-    const holeCount = holesList.length || 18;
-    const minRequired = holeCount <= 9 ? 7 : 14;
-    const warning = names.length === 1
+  const finishWarning = useMemo<string | null>(() => {
+    const { names } = getNotAcceptedParticipants(participants, holesList, holeStatesByKey);
+    if (names.length === 0) return null;
+    const hc = holesList.length || 18;
+    const minRequired = hc <= 9 ? 7 : 14;
+    return names.length === 1
       ? `${names[0]} has fewer than ${minRequired} holes started. Their round will not count toward handicap.`
       : `${names.join(", ")} have fewer than ${minRequired} holes started. Their rounds will not count toward handicap.`;
-    return { notAcceptedIds: ids, finishWarning: warning };
   }, [participants, holesList, holeStatesByKey]);
 
   useEffect(() => {
@@ -567,13 +677,72 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     setActiveHole((prev) => (prev === next ? prev : next));
   }, [participants, holesList, isHoleCompleteForPlayer, isFinished]);
 
+  // Flush pending offline ops when connection is restored
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const flushPendingOps = useCallback(async () => {
+    if (!meId) return;
+    const ops = loadQueue().sort((a, b) => a.timestamp - b.timestamp);
+    if (!ops.length) return;
+
+    const flushed: string[] = [];
+    for (const op of ops) {
+      try {
+        if (op.strokes !== undefined) {
+          const { error: scoreErr } = await supabase.from("round_score_events").insert({
+            round_id: op.roundId,
+            participant_id: op.participantId,
+            hole_number: op.holeNumber,
+            strokes: op.strokes,
+            entered_by: op.enteredBy,
+          });
+          if (scoreErr) throw scoreErr;
+        }
+        if (op.holeStatus) {
+          const { error: stateErr } = await supabase
+            .from("round_hole_states")
+            .upsert(
+              { round_id: op.roundId, participant_id: op.participantId, hole_number: op.holeNumber, status: op.holeStatus },
+              { onConflict: "participant_id,hole_number" }
+            );
+          if (stateErr) throw stateErr;
+        }
+        flushed.push(op.key);
+        removeQueueOp(op.key);
+      } catch {
+        // Stop flushing on first failure — network still down
+        break;
+      }
+    }
+    if (flushed.length) {
+      setPendingKeys((prev) => {
+        const next = new Set(prev);
+        flushed.forEach((k) => next.delete(k));
+        return next;
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meId, roundId]);
+
+  useEffect(() => {
+    flushPendingOps();
+    window.addEventListener("online", flushPendingOps);
+    return () => window.removeEventListener("online", flushPendingOps);
+  }, [flushPendingOps]);
+
   async function setHoleState(participantId: string, holeNumber: number, nextState: HoleState) {
     if (!canScore || isFinished) return false;
 
     const key = `${participantId}:${holeNumber}`;
-    setSavingKey(key);
     setErr(null);
 
+    // Optimistic local update
+    setHoleStatesByKey((prev) => ({ ...prev, [key]: nextState }));
+
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      return true; // Will be captured by the caller's queue op
+    }
+
+    setSavingKey(key);
     try {
       const { error } = await supabase
         .from("round_hole_states")
@@ -585,8 +754,11 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
 
       return true;
     } catch (e: any) {
-      setErr(e?.message || "Failed to save hole status");
-      return false;
+      if (!isNetworkError(e)) {
+        setErr(e?.message || "Failed to save hole status");
+        return false;
+      }
+      return true; // Will be synced when back online via caller's queue op
     } finally {
       setSavingKey(null);
     }
@@ -598,6 +770,18 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     if (!canScore || isFinished) return false;
 
     const key = `${participantId}:${holeNumber}`;
+    setErr(null);
+
+    // Optimistic local update
+    setScoresByKey((prev) => ({
+      ...prev,
+      [key]: { participant_id: participantId, hole_number: holeNumber, strokes: null, created_at: new Date().toISOString() } as Score,
+    }));
+
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      return true; // Handled via markPickedUp/markNotStarted queue op
+    }
+
     setSavingKey(key);
     setErr(null);
 
@@ -611,27 +795,15 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
       });
       if (error) throw error;
 
-      setScoresByKey((prev) => ({
-        ...prev,
-        [key]: {
-          participant_id: participantId,
-          hole_number: holeNumber,
-          strokes: null,
-          created_at: new Date().toISOString(),
-        } as Score,
-      }));
-
       return true;
     } catch (e: any) {
-      setErr(e?.message || "Failed to clear score");
-      return false;
+      if (!isNetworkError(e)) setErr(e?.message || "Failed to clear score");
+      return true; // Keep optimistic state; will sync when back online
     } finally {
       setSavingKey(null);
     }
   }
 
-  // We keep your event-sourced scoring.
-  // Additionally, when a numeric score is entered, mark the hole as completed.
   async function setScore(participantId: string, holeNumber: number, strokes: number | null) {
     if (!meId) return false;
     if (!canScore) {
@@ -644,9 +816,25 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     }
 
     const key = `${participantId}:${holeNumber}`;
-    setSavingKey(key);
     setErr(null);
 
+    // 1. Optimistic state updates — appear instant to the player
+    setScoresByKey((prev) => ({
+      ...prev,
+      [key]: { participant_id: participantId, hole_number: holeNumber, strokes, created_at: new Date().toISOString() } as Score,
+    }));
+    if (typeof strokes === "number") {
+      setHoleStatesByKey((prev) => ({ ...prev, [key]: "completed" }));
+    }
+
+    // 2. If offline, queue the op and return success
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      upsertQueueOp({ key, roundId, participantId, holeNumber, strokes, enteredBy: meId, holeStatus: typeof strokes === "number" ? "completed" : null, timestamp: Date.now() });
+      setPendingKeys((prev) => { const next = new Set(prev); next.add(key); return next; });
+      return true;
+    }
+
+    setSavingKey(key);
     try {
       const { error } = await supabase.from("round_score_events").insert({
         round_id: roundId,
@@ -657,24 +845,28 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
       });
       if (error) throw error;
 
-      setScoresByKey((prev) => ({
-        ...prev,
-        [key]: {
-          participant_id: participantId,
-          hole_number: holeNumber,
-          strokes,
-          created_at: new Date().toISOString(),
-        } as Score,
-      }));
-
-      // If user entered a number, the hole is completed.
-      // If strokes is null, we do NOT force state (use explicit PU/Not Started buttons).
+      // If user entered a number, also persist the hole state
       if (typeof strokes === "number") {
-        await setHoleState(participantId, holeNumber, "completed");
+        await supabase
+          .from("round_hole_states")
+          .upsert(
+            { round_id: roundId, participant_id: participantId, hole_number: holeNumber, status: "completed" },
+            { onConflict: "participant_id,hole_number" }
+          );
       }
+
+      // Clear from pending queue if it was there
+      removeQueueOp(key);
+      setPendingKeys((prev) => { const next = new Set(prev); next.delete(key); return next; });
 
       return true;
     } catch (e: any) {
+      if (isNetworkError(e)) {
+        // Queue for later sync; optimistic state already applied
+        upsertQueueOp({ key, roundId, participantId, holeNumber, strokes, enteredBy: meId, holeStatus: typeof strokes === "number" ? "completed" : null, timestamp: Date.now() });
+        setPendingKeys((prev) => { const next = new Set(prev); next.add(key); return next; });
+        return true;
+      }
       setErr(e?.message || "Failed to save score");
       return false;
     } finally {
@@ -683,15 +875,91 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
   }
 
   async function markPickedUp(participantId: string, holeNumber: number) {
-    const ok = await setHoleState(participantId, holeNumber, "picked_up");
-    if (!ok) return;
-    await clearScoreEvent(participantId, holeNumber);
+    if (!meId || !canScore || isFinished) return;
+    const key = `${participantId}:${holeNumber}`;
+
+    // Optimistic updates
+    setHoleStatesByKey((prev) => ({ ...prev, [key]: "picked_up" }));
+    setScoresByKey((prev) => ({
+      ...prev,
+      [key]: { participant_id: participantId, hole_number: holeNumber, strokes: null, created_at: new Date().toISOString() } as Score,
+    }));
+
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      upsertQueueOp({ key, roundId, participantId, holeNumber, strokes: null, enteredBy: meId, holeStatus: "picked_up", timestamp: Date.now() });
+      setPendingKeys((prev) => { const next = new Set(prev); next.add(key); return next; });
+      return;
+    }
+
+    setSavingKey(key);
+    try {
+      const { error: stErr } = await supabase.from("round_hole_states").upsert(
+        { round_id: roundId, participant_id: participantId, hole_number: holeNumber, status: "picked_up" },
+        { onConflict: "participant_id,hole_number" }
+      );
+      if (stErr) throw stErr;
+      const { error: scErr } = await supabase.from("round_score_events").insert({
+        round_id: roundId, participant_id: participantId, hole_number: holeNumber, strokes: null, entered_by: meId,
+      });
+      if (scErr) throw scErr;
+      removeQueueOp(key);
+      setPendingKeys((prev) => { const next = new Set(prev); next.delete(key); return next; });
+    } catch (e: any) {
+      if (isNetworkError(e)) {
+        upsertQueueOp({ key, roundId, participantId, holeNumber, strokes: null, enteredBy: meId, holeStatus: "picked_up", timestamp: Date.now() });
+        setPendingKeys((prev) => { const next = new Set(prev); next.add(key); return next; });
+      } else {
+        setErr(e?.message || "Failed to mark picked up");
+      }
+    } finally {
+      setSavingKey(null);
+    }
   }
 
   async function markNotStarted(participantId: string, holeNumber: number) {
-    const ok = await setHoleState(participantId, holeNumber, "not_started");
-    if (!ok) return;
-    await clearScoreEvent(participantId, holeNumber);
+    if (!meId || !canScore || isFinished) return;
+    const key = `${participantId}:${holeNumber}`;
+
+    // Optimistic updates
+    setHoleStatesByKey((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+    setScoresByKey((prev) => ({
+      ...prev,
+      [key]: { participant_id: participantId, hole_number: holeNumber, strokes: null, created_at: new Date().toISOString() } as Score,
+    }));
+
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      upsertQueueOp({ key, roundId, participantId, holeNumber, strokes: null, enteredBy: meId, holeStatus: "not_started", timestamp: Date.now() });
+      setPendingKeys((prev) => { const next = new Set(prev); next.add(key); return next; });
+      return;
+    }
+
+    setSavingKey(key);
+    try {
+      const { error: stErr } = await supabase.from("round_hole_states").upsert(
+        { round_id: roundId, participant_id: participantId, hole_number: holeNumber, status: "not_started" },
+        { onConflict: "participant_id,hole_number" }
+      );
+      if (stErr) throw stErr;
+      const { error: scErr } = await supabase.from("round_score_events").insert({
+        round_id: roundId, participant_id: participantId, hole_number: holeNumber, strokes: null, entered_by: meId,
+      });
+      if (scErr) throw scErr;
+      removeQueueOp(key);
+      setPendingKeys((prev) => { const next = new Set(prev); next.delete(key); return next; });
+    } catch (e: any) {
+      if (isNetworkError(e)) {
+        upsertQueueOp({ key, roundId, participantId, holeNumber, strokes: null, enteredBy: meId, holeStatus: "not_started", timestamp: Date.now() });
+        setPendingKeys((prev) => { const next = new Set(prev); next.add(key); return next; });
+      } else {
+        setErr(e?.message || "Failed to mark not started");
+      }
+    } finally {
+      setSavingKey(null);
+    }
   }
 
   async function finishRound() {
@@ -699,6 +967,13 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     setErr(null);
     setFinishing(true);
     try {
+      if (pendingKeys.size > 0) {
+        await flushPendingOps();
+        if (loadQueue().length > 0) {
+          setErr("Some offline scores couldn't sync. Please check your connection and try again.");
+          return;
+        }
+      }
       await finishRoundApi(roundId);
       setFinishOpen(false);
       setStatus("finished");
@@ -793,9 +1068,27 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#042713] text-slate-100 px-3 pt-6">
-        <div className="mx-auto w-full max-w-sm rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">
-          Loading…
+      <div className="min-h-screen bg-[#042713] text-slate-100 px-1.5 sm:px-2 pt-4 pb-[env(safe-area-inset-bottom)]">
+        <div className="mx-auto w-full max-w-none space-y-2">
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-8 w-16 shrink-0" />
+            <div className="flex-1 min-w-0 px-1 flex flex-col items-center gap-1">
+              <Skeleton className="h-4 w-36" />
+              <Skeleton className="h-3 w-24" />
+              <Skeleton className="h-7 w-48 rounded-xl mt-1" />
+            </div>
+          </div>
+          <div className="space-y-1.5 pt-2">
+            <Skeleton className="h-8 w-full rounded-lg bg-emerald-900/20" />
+            {Array.from({ length: 9 }).map((_, i) => (
+              <Skeleton key={i} className="h-9 w-full rounded-lg bg-emerald-900/20" />
+            ))}
+            <Skeleton className="h-9 w-full rounded-lg bg-emerald-900/30" />
+            {Array.from({ length: 9 }).map((_, i) => (
+              <Skeleton key={i + 9} className="h-9 w-full rounded-lg bg-emerald-900/20" />
+            ))}
+            <Skeleton className="h-10 w-full rounded-lg bg-emerald-900/30" />
+          </div>
         </div>
       </div>
     );
@@ -816,10 +1109,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     <div className="min-h-screen bg-[#042713] text-slate-100 px-1.5 sm:px-2 pt-4 pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto w-full max-w-none space-y-2">
         <header className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="px-2 text-emerald-100 hover:bg-emerald-900/30 shrink-0"
+          <BackButton
             onClick={() => {
               const sp = new URLSearchParams(window.location.search);
               const from = sp.get("from");
@@ -833,9 +1123,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
                 router.push("/round");
               }
             }}
-          >
-            ← Back
-          </Button>
+          />
 
           {isPortrait ? (
             <>
@@ -950,6 +1238,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
           )}
         </header>
 
+
         {err ? (
           <div className="rounded-2xl border border-red-900/50 bg-red-950/30 p-3 text-sm text-red-100">{err}</div>
         ) : null}
@@ -994,6 +1283,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
               metaSums={metaSums}
               totals={totals}
               displayedScoreFor={displayedScoreFor}
+              holeStateFor={holeStateFor}
               onOpenEntry={openEntry}
               getParticipantLabel={scrambleGetLabel}
               getParticipantAvatar={scrambleGetAvatar}
@@ -1013,6 +1303,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
               metaSums={metaSums}
               totals={totals}
               displayedScoreFor={displayedScoreFor}
+              holeStateFor={holeStateFor}
               onOpenEntry={openEntry}
               getParticipantLabel={scrambleGetLabel}
               getParticipantAvatar={scrambleGetAvatar}
@@ -1045,6 +1336,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
           <ConfirmSheet
             title="Finish round?"
             subtitle={<>
+              {pendingKeys.size > 0 && <span className="text-amber-300 block mb-1">Offline scores will be synced before finishing.</span>}
               {finishWarning && <span className="text-amber-300 block mb-1">{finishWarning}</span>}
               This will lock scoring for everyone. Any incomplete holes will be saved as Not Started (&mdash;).
             </>}

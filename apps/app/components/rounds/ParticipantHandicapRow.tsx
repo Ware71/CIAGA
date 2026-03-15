@@ -2,6 +2,7 @@
 "use client";
 
 import { useState } from "react";
+import { formatHI } from "@/lib/rounds/handicapUtils";
 
 type ParticipantHandicapRowProps = {
   participantId: string;
@@ -77,7 +78,7 @@ export function ParticipantHandicapRow({
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium text-emerald-50 truncate">{participantName}</div>
         <div className="text-xs text-emerald-100/60 mt-0.5">
-          HI: {handicapIndex !== null ? handicapIndex.toFixed(1) : "—"}
+          HI: {handicapIndex !== null ? formatHI(handicapIndex) : "—"}
           {courseHandicap !== null && ` • CH: ${courseHandicap}`}
         </div>
       </div>

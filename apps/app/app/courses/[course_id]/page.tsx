@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { BackButton } from "@/components/ui/BackButton";
 
 type Hole = {
   id?: string;
@@ -455,15 +456,10 @@ export default function CourseDetailPage() {
       <div className="mx-auto w-full max-w-sm space-y-4">
         {/* Header */}
         <header className="flex items-center justify-between">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="px-2 text-emerald-100 hover:bg-emerald-900/30"
+          <BackButton
             onClick={() => router.back()}
             disabled={saving || addingTee}
-          >
-            ← Back
-          </Button>
+          />
 
           <div className="text-center flex-1 min-w-0">
             <div className="text-lg font-semibold tracking-wide text-[#f5e6b0] truncate">

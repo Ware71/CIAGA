@@ -13,6 +13,7 @@ import {
   clamp,
   formatSigned,
 } from "@/lib/feed/feedItemUtils";
+import { formatHI } from "@/lib/rounds/handicapUtils";
 import { MiniFeedTeaserCard } from "@/components/social/MiniFeedTeaser";
 import { MajorsView } from "@/components/home/MajorsView";
 import { getViewerSession } from "@/lib/auth/viewerSession";
@@ -360,7 +361,7 @@ export default function CIAGAStarter({ initialData }: Props) {
                 <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/65">Handicap</div>
                 <div className="mt-1 flex items-baseline gap-3">
                   <span className="text-2xl font-extrabold text-[#f5e6b0] leading-none">
-                    {typeof handicapIndex === "number" ? handicapIndex.toFixed(1) : "—"}
+                    {typeof handicapIndex === "number" ? formatHI(handicapIndex) : "—"}
                   </span>
                   <span className="text-[11px] font-extrabold text-emerald-50/90">
                     {formatSigned(handicapDelta30, 1)}{" "}

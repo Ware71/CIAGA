@@ -24,9 +24,9 @@ const AVAILABLE_GAMES: GameDef[] = [
     id: "skins",
     label: "Skins",
     teamLabel: "Team Skins",
-    description: "Lowest unique net score on each hole wins",
-    teamDescription: "Lowest team net score on each hole wins the skin",
-    defaultConfig: { carryover: true, value_per_skin: 1 },
+    description: "Lowest unique score on each hole wins",
+    teamDescription: "Lowest team score on each hole wins the skin",
+    defaultConfig: { carryover: true, value_per_skin: 1, scoring: "net" },
     compat: { individual: true, team: true },
   },
   {
@@ -40,7 +40,7 @@ const AVAILABLE_GAMES: GameDef[] = [
     id: "nassau",
     label: "Nassau",
     description: "Front 9, back 9, and total competition",
-    defaultConfig: { stakes: { front: 5, back: 5, total: 10 } },
+    defaultConfig: { points: 2 },
     compat: { individual: true, team: true },
   },
 ];
@@ -206,6 +206,20 @@ export function SideGamesManager({
                         className="w-20 px-2 py-1 rounded border border-emerald-900/70 bg-[#0b3b21]/70 text-xs text-emerald-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                       />
                     </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-emerald-100">Scoring:</label>
+                      <select
+                        value={gameData?.config?.scoring ?? "net"}
+                        onChange={(e) =>
+                          updateGameConfig(game.id, { scoring: e.target.value })
+                        }
+                        disabled={disabled}
+                        className="px-2 py-1 rounded border border-emerald-900/70 bg-[#0b3b21]/70 text-xs text-emerald-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      >
+                        <option value="net">Net</option>
+                        <option value="gross">Gross</option>
+                      </select>
+                    </div>
                   </>
                 )}
 
@@ -247,9 +261,20 @@ export function SideGamesManager({
                 )}
 
                 {game.id === "nassau" && (
-                  <p className="text-[11px] text-emerald-100/60 italic">
-                    Standard rules apply - no additional configuration needed
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-emerald-100">Points per section:</label>
+                    <input
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={gameData?.config?.points ?? 2}
+                      onChange={(e) =>
+                        updateGameConfig(game.id, { points: parseInt(e.target.value) })
+                      }
+                      disabled={disabled}
+                      className="w-20 px-2 py-1 rounded border border-emerald-900/70 bg-[#0b3b21]/70 text-xs text-emerald-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
                 )}
               </div>
             )}

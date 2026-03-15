@@ -7,6 +7,8 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { getMyProfileIdByAuthUserId } from "@/lib/myProfile";
 import { Button } from "@/components/ui/button";
+import { BackButton } from "@/components/ui/BackButton";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type RoundRow = {
   id: string;
@@ -329,14 +331,7 @@ export default function RoundHomePage() {
     <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto w-full max-w-sm space-y-6">
         <header className="flex items-center justify-between">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="px-2 text-emerald-100 hover:bg-emerald-900/30"
-            onClick={() => router.replace("/")}
-          >
-            ← Back
-          </Button>
+          <BackButton onClick={() => router.replace("/")} />
 
           <div className="text-center flex-1">
             <div className="text-lg font-semibold tracking-wide text-[#f5e6b0]">Rounds</div>
@@ -355,8 +350,10 @@ export default function RoundHomePage() {
         </Button>
 
         {loading ? (
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">
-            Loading…
+          <div className="space-y-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-20 w-full rounded-2xl bg-emerald-900/20" />
+            ))}
           </div>
         ) : err ? (
           <div className="rounded-2xl border border-red-900/50 bg-red-950/30 p-4 text-sm text-red-100">{err}</div>

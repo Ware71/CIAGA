@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { strokesReceivedOnHole } from "@/lib/rounds/handicapUtils";
 import { getFeedPage, getLiveRoundsAsFeedItems } from "@/lib/feed/queries";
 import type { FeedItemVM } from "@/lib/feed/types";
 import {
@@ -90,7 +91,7 @@ export async function fetchRoundsPlayed(profileId: string): Promise<number | nul
 export async function fetchLastRound(profileId: string) {
   const rrRes = await supabaseAdmin
     .from("handicap_round_results")
-    .select("played_at,adjusted_gross_score,course_handicap_used,score_differential,tee_snapshot_id")
+    .select("round_id,participant_id,played_at,adjusted_gross_score,course_handicap_used,score_differential,tee_snapshot_id")
     .eq("profile_id", profileId)
     .eq("accepted", true)
     .order("played_at", { ascending: false })
@@ -100,11 +101,61 @@ export async function fetchLastRound(profileId: string) {
   const rr: any = rrRes.data?.[0] ?? null;
   if (!rr) return null;
 
-  const gross = safeNum(rr.adjusted_gross_score);
+  const storedAgs = safeNum(rr.adjusted_gross_score);
   const ch = safeNum(rr.course_handicap_used);
-  const net = typeof gross === "number" && typeof ch === "number" ? gross - ch : null;
   const diff = safeNum(rr.score_differential);
   const teeSnapshotId = typeof rr.tee_snapshot_id === "string" ? rr.tee_snapshot_id : null;
+  const participantId = typeof rr.participant_id === "string" ? rr.participant_id : null;
+  const roundId = typeof rr.round_id === "string" ? rr.round_id : null;
+
+  // Compute dynamic gross (raw scores + WHS NS/PU penalties) to override stale stored AGS
+  let dynamicGross: number | null = null;
+  if (participantId && roundId && teeSnapshotId && typeof ch === "number") {
+    try {
+      const [scoresRes, holeSnapsRes, holeStatesRes] = await Promise.all([
+        supabaseAdmin
+          .from("round_current_scores")
+          .select("strokes")
+          .eq("participant_id", participantId)
+          .eq("round_id", roundId),
+        supabaseAdmin
+          .from("round_hole_snapshots")
+          .select("hole_number,par,stroke_index")
+          .eq("round_tee_snapshot_id", teeSnapshotId),
+        supabaseAdmin
+          .from("round_hole_states")
+          .select("hole_number,status")
+          .eq("participant_id", participantId)
+          .in("status", ["picked_up", "not_started"]),
+      ]);
+
+      let total = 0;
+      let count = 0;
+      for (const s of (scoresRes.data ?? []) as any[]) {
+        const n = safeNum(s.strokes);
+        if (typeof n === "number") { total += n; count++; }
+      }
+
+      const holeData: Record<number, { par: number; si: number | null }> = {};
+      for (const h of (holeSnapsRes.data ?? []) as any[]) {
+        holeData[h.hole_number as number] = { par: h.par as number, si: h.stroke_index ?? null };
+      }
+
+      for (const hs of (holeStatesRes.data ?? []) as any[]) {
+        const hd = holeData[hs.hole_number as number];
+        if (!hd?.par) continue;
+        total += hd.par + 2 + strokesReceivedOnHole(ch, hd.si);
+        count++;
+      }
+
+      if (count > 0) dynamicGross = total;
+    } catch {
+      // fall back to stored AGS on error
+    }
+  }
+
+  const gross = dynamicGross ?? storedAgs;
+  const net = typeof gross === "number" && typeof ch === "number" ? gross - ch : null;
 
   let tee: string | null = null;
   let course: string | null = null;

@@ -4,6 +4,7 @@ import React, { useMemo } from "react";
 import Link from "next/link";
 import { one } from "@/lib/stats/helpers";
 import { shortDate, monthKey } from "@/lib/profile/helpers";
+import { formatHI } from "@/lib/rounds/handicapUtils";
 
 type RoundRow = {
   id: string;
@@ -20,6 +21,7 @@ type Props = {
   teeNameByRoundId: Record<string, string>;
   totalByRoundId: Record<string, number>;
   agsByRoundId: Record<string, number>;
+  netByRoundId?: Record<string, number>;
   scoreDiffByRoundId: Record<string, number>;
   hiUsedByRoundId: Record<string, number>;
   countingSet?: Set<string>;
@@ -33,6 +35,7 @@ export default function RoundHistoryList({
   teeNameByRoundId,
   totalByRoundId,
   agsByRoundId,
+  netByRoundId,
   scoreDiffByRoundId,
   hiUsedByRoundId,
   countingSet,
@@ -78,11 +81,13 @@ export default function RoundHistoryList({
 
                 const href = { pathname: `/round/${r.id}`, query: { from: fromContext } } as const;
 
-                const total = totalByRoundId[r.id];
-                const scoreText = typeof total === "number" ? String(total) : "\u2014";
-
                 const ags = agsByRoundId[r.id];
-                const agsText = typeof ags === "number" ? `(${ags})` : "";
+                const total = totalByRoundId[r.id];
+                const displayScore = total ?? ags;
+                const scoreText = typeof displayScore === "number" ? String(displayScore) : "\u2014";
+
+                const net = netByRoundId?.[r.id];
+                const netText = typeof net === "number" ? `Net: ${net}` : "";
 
                 const sd = scoreDiffByRoundId[r.id];
                 const sdText = typeof sd === "number" ? `Score Diff: ${sd.toFixed(1)}` : "SD \u2014";
@@ -91,7 +96,7 @@ export default function RoundHistoryList({
                 const isExceptional =
                   typeof hiForRound === "number" && typeof sd === "number" && sd <= hiForRound - 7;
 
-                const hiText2 = typeof hiForRound === "number" ? `Index: ${hiForRound.toFixed(1)}` : "\u2014";
+                const hiText2 = typeof hiForRound === "number" ? `Index: ${formatHI(hiForRound)}` : "\u2014";
 
                 const isCounting = countingSet?.has(r.id) ?? false;
                 const isCutoff = cutoffRoundId === r.id;
@@ -137,7 +142,7 @@ export default function RoundHistoryList({
                           <div className="text-[18px] font-extrabold tabular-nums text-[#f5e6b0] leading-none">
                             {scoreText}
                           </div>
-                          <div className="mt-1 text-[10px] text-emerald-100/60">{agsText || "\u00A0"}</div>
+                          <div className="mt-1 text-[10px] text-emerald-100/60">{netText || "\u00A0"}</div>
                         </div>
                       </div>
                     </div>
