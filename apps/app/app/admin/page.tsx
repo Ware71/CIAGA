@@ -236,6 +236,26 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* QUICK LINKS */}
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => router.push("/admin/add-round")}
+            className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-left hover:bg-emerald-900/30 transition-colors"
+          >
+            <div className="text-sm font-semibold text-[#f5e6b0]">Add Historical Round</div>
+            <div className="text-xs text-emerald-100/50 mt-1">Enter a past round with a custom date</div>
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push("/admin/bulk-load")}
+            className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-left hover:bg-emerald-900/30 transition-colors"
+          >
+            <div className="text-sm font-semibold text-[#f5e6b0]">Bulk Load (CSV)</div>
+            <div className="text-xs text-emerald-100/50 mt-1">Import multiple rounds via CSV file</div>
+          </button>
+        </div>
+
         {/* CREATE PROFILE */}
         <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
           <div className="text-sm text-emerald-100/80 mb-3">
