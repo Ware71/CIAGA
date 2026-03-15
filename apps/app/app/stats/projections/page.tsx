@@ -66,7 +66,7 @@ export default function StatsPage() {
   // Goal (wheel modal)
   const targetValues = useMemo(() => {
     const out: number[] = [];
-    for (let i = 0; i <= 540; i++) out.push(i / 10);
+    for (let i = -54; i <= 540; i++) out.push(Math.round(i) / 10);
     return out;
   }, []);
   const [target, setTarget] = useState<number>(18.0);

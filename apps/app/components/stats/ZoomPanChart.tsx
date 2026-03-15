@@ -38,7 +38,7 @@ function catmullRomPath(points: XY[], tension = 0.85) {
 }
 
 // -----------------------------
-// Zoom + Scroll SVG chart
+// Zoom + Pan SVG chart (data-driven axes)
 // -----------------------------
 export function ZoomPanChart({
   aActual,
@@ -61,21 +61,31 @@ export function ZoomPanChart({
   height?: number;
   formatXLabel?: (t: number) => string;
 }) {
-  const scrollerRef = useRef<HTMLDivElement | null>(null);
-  const didAutoScrollRef = useRef(false);
+  const svgRef = useRef<SVGSVGElement | null>(null);
 
-  const [scale, setScale] = useState(1);
-  const pinchRef = useRef<{ active: boolean; d0: number; s0: number } | null>(null);
+  // Touch gesture state: mode, pinch anchor, or pan tracking
+  const touchRef = useRef<{
+    mode: "pan" | "pinch";
+    lastX?: number;   // pan: last clientX
+    d0?: number;      // pinch: initial pixel distance
+    midT?: number;    // pinch: T at midpoint (fixed at gesture start)
+    vMin0?: number;   // pinch: viewMinT at gesture start
+    vMax0?: number;   // pinch: viewMaxT at gesture start
+  } | null>(null);
 
-  const clampScale = (s: number) => clamp(s, 1, 4);
+  const dragRef = useRef<{ active: boolean; lastClientX: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
-  // Base chart width (bigger => more history visible + more scroll room)
+  // The visible time window (null = show full range)
+  const [viewMinT, setViewMinT] = useState<number | null>(null);
+  const [viewMaxT, setViewMaxT] = useState<number | null>(null);
+
   const baseWidth = 1400;
-  const width = baseWidth; // SVG coordinate width stays stable; we scale the container width
   const padL = 48;
   const padR = 22;
   const padT = 16;
   const padB = 40;
+  const MIN_WINDOW_DAYS = 7;
 
   const allSeries: SeriesT[] = [
     ...aActual,
@@ -87,51 +97,16 @@ export function ZoomPanChart({
     ...(intercept ? [{ t: intercept.t, v: intercept.aV }, { t: intercept.t, v: intercept.bV }] : []),
   ].filter((p) => Number.isFinite(p.v) && Number.isFinite(p.t));
 
-  // Auto-scroll to most recent once
+  const absoluteMinT = allSeries.length >= 2 ? Math.min(...allSeries.map((p) => p.t)) : 0;
+  const absoluteMaxT = allSeries.length >= 2 ? Math.max(...allSeries.map((p) => p.t)) : 1;
+
+  // Initialise / reset view window when absolute range changes (e.g., switching players)
   useEffect(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    if (didAutoScrollRef.current) return;
     if (allSeries.length < 2) return;
-
-    didAutoScrollRef.current = true;
-    requestAnimationFrame(() => {
-      el.scrollLeft = el.scrollWidth;
-    });
-  }, [allSeries.length]);
-
-  const onWheel = (e: React.WheelEvent) => {
-    // Desktop zoom: Ctrl/Cmd + wheel
-    if (!(e.ctrlKey || e.metaKey)) return;
-    e.preventDefault();
-
-    const next = clampScale(scale * Math.exp(-e.deltaY * 0.0022));
-    setScale(next);
-  };
-
-  const onTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length === 2) {
-      const dx = e.touches[0].clientX - e.touches[1].clientX;
-      const dy = e.touches[0].clientY - e.touches[1].clientY;
-      const d0 = Math.hypot(dx, dy);
-      pinchRef.current = { active: true, d0, s0: scale };
-    }
-  };
-
-  const onTouchMove = (e: React.TouchEvent) => {
-    if (e.touches.length === 2 && pinchRef.current?.active) {
-      e.preventDefault();
-      const dx = e.touches[0].clientX - e.touches[1].clientX;
-      const dy = e.touches[0].clientY - e.touches[1].clientY;
-      const d = Math.hypot(dx, dy);
-      const next = clampScale(pinchRef.current.s0 * (d / Math.max(1, pinchRef.current.d0)));
-      setScale(next);
-    }
-  };
-
-  const onTouchEnd = () => {
-    pinchRef.current = null;
-  };
+    setViewMinT(absoluteMinT);
+    setViewMaxT(absoluteMaxT);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [absoluteMinT, absoluteMaxT]);
 
   if (allSeries.length < 2) {
     return (
@@ -141,16 +116,149 @@ export function ZoomPanChart({
     );
   }
 
-  const minT = Math.min(...allSeries.map((p) => p.t));
-  const maxT = Math.max(...allSeries.map((p) => p.t));
-  const spanT = Math.max(0.001, maxT - minT);
-  const xScale = (t: number) => padL + ((t - minT) / spanT) * (width - padL - padR);
+  // Resolved view window
+  const vMin = viewMinT ?? absoluteMinT;
+  const vMax = viewMaxT ?? absoluteMaxT;
+  const viewSpan = Math.max(0.001, vMax - vMin);
 
-  const actualOnly: SeriesT[] = [...aActual, ...(bActual ?? [])].filter((p) => Number.isFinite(p.v) && Number.isFinite(p.t));
-  const base = actualOnly.length >= 2 ? actualOnly : allSeries;
+  const xScale = (t: number) => padL + ((t - vMin) / viewSpan) * (baseWidth - padL - padR);
 
-  const minBase = Math.min(...base.map((p) => p.v));
-  const maxBase = Math.max(...base.map((p) => p.v));
+  // Coordinate conversion: client pixel → T value
+  function clientXToT(clientX: number): number {
+    if (!svgRef.current) return vMin;
+    const rect = svgRef.current.getBoundingClientRect();
+    const svgX = ((clientX - rect.left) / rect.width) * baseWidth;
+    return vMin + ((svgX - padL) / (baseWidth - padL - padR)) * viewSpan;
+  }
+
+  // Pixel delta → T delta
+  function pixelDeltaToT(dxPixels: number): number {
+    if (!svgRef.current) return 0;
+    const rect = svgRef.current.getBoundingClientRect();
+    return (dxPixels / rect.width) * (baseWidth / (baseWidth - padL - padR)) * viewSpan;
+  }
+
+  function applyZoom(pivotT: number, zoomFactor: number) {
+    const span = vMax - vMin;
+    const newSpan = Math.max(MIN_WINDOW_DAYS, span / zoomFactor);
+    const f = (pivotT - vMin) / Math.max(0.001, span);
+    let newMin = pivotT - f * newSpan;
+    let newMax = pivotT + (1 - f) * newSpan;
+    if (newMin < absoluteMinT) { newMin = absoluteMinT; newMax = Math.min(absoluteMaxT, newMin + newSpan); }
+    if (newMax > absoluteMaxT) { newMax = absoluteMaxT; newMin = Math.max(absoluteMinT, newMax - newSpan); }
+    setViewMinT(newMin);
+    setViewMaxT(newMax);
+  }
+
+  function applyPan(dtDays: number) {
+    const span = vMax - vMin;
+    let newMin = vMin - dtDays; // drag right → earlier data
+    let newMax = vMax - dtDays;
+    if (newMin < absoluteMinT) { newMin = absoluteMinT; newMax = absoluteMinT + span; }
+    if (newMax > absoluteMaxT) { newMax = absoluteMaxT; newMin = absoluteMaxT - span; }
+    setViewMinT(newMin);
+    setViewMaxT(newMax);
+  }
+
+  // ---------- Event handlers ----------
+
+  const onWheel = (e: React.WheelEvent) => {
+    if (!svgRef.current) return;
+    e.preventDefault();
+    if (e.ctrlKey || e.metaKey) {
+      applyZoom(clientXToT(e.clientX), Math.exp(-e.deltaY * 0.0022));
+    } else {
+      applyPan(pixelDeltaToT(e.deltaX !== 0 ? e.deltaX : e.deltaY));
+    }
+  };
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      const d0 = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+      const midClientX = (t1.clientX + t2.clientX) / 2;
+      touchRef.current = {
+        mode: "pinch",
+        d0,
+        midT: clientXToT(midClientX),
+        vMin0: vMin,
+        vMax0: vMax,
+      };
+    } else if (e.touches.length === 1) {
+      touchRef.current = { mode: "pan", lastX: e.touches[0].clientX };
+    }
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (!touchRef.current) return;
+    e.preventDefault();
+
+    if (touchRef.current.mode === "pinch" && e.touches.length === 2) {
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      const d = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+      const { d0, midT, vMin0, vMax0 } = touchRef.current;
+      if (!d0 || midT == null || vMin0 == null || vMax0 == null) return;
+
+      const zoomFactor = d / Math.max(1, d0);
+      const span0 = vMax0 - vMin0;
+      const newSpan = Math.max(MIN_WINDOW_DAYS, span0 / zoomFactor);
+      const f = (midT - vMin0) / Math.max(0.001, span0);
+      let newMin = midT - f * newSpan;
+      let newMax = midT + (1 - f) * newSpan;
+      if (newMin < absoluteMinT) { newMin = absoluteMinT; newMax = Math.min(absoluteMaxT, newMin + newSpan); }
+      if (newMax > absoluteMaxT) { newMax = absoluteMaxT; newMin = Math.max(absoluteMinT, newMax - newSpan); }
+      setViewMinT(newMin);
+      setViewMaxT(newMax);
+    } else if (touchRef.current.mode === "pan" && e.touches.length === 1) {
+      const clientX = e.touches[0].clientX;
+      const dxPixels = clientX - (touchRef.current.lastX ?? clientX);
+      touchRef.current.lastX = clientX;
+      applyPan(pixelDeltaToT(dxPixels));
+    }
+  };
+
+  const onTouchEnd = () => { touchRef.current = null; };
+
+  const onMouseDown = (e: React.MouseEvent) => {
+    dragRef.current = { active: true, lastClientX: e.clientX };
+    setIsDragging(true);
+  };
+
+  const onMouseMove = (e: React.MouseEvent) => {
+    if (!dragRef.current?.active) return;
+    const dxPixels = e.clientX - dragRef.current.lastClientX;
+    dragRef.current.lastClientX = e.clientX;
+    applyPan(pixelDeltaToT(dxPixels));
+  };
+
+  const onMouseUp = () => { dragRef.current = null; setIsDragging(false); };
+  const onMouseLeave = () => { dragRef.current = null; setIsDragging(false); };
+
+  // ---------- Y-axis (auto-scales to visible window) ----------
+
+  const visiblePoints = (series: SeriesT[]) =>
+    series.filter((p) => p.t >= vMin && p.t <= vMax && Number.isFinite(p.v) && Number.isFinite(p.t));
+
+  const actualOnly: SeriesT[] = [...aActual, ...(bActual ?? [])].filter(
+    (p) => Number.isFinite(p.v) && Number.isFinite(p.t)
+  );
+
+  const visActual = [
+    ...visiblePoints(aActual),
+    ...(bActual ? visiblePoints(bActual) : []),
+  ];
+
+  const baseForY =
+    visActual.length >= 1
+      ? visActual
+      : actualOnly.length >= 2
+      ? actualOnly
+      : allSeries;
+
+  const minBase = Math.min(...baseForY.map((p) => p.v));
+  const maxBase = Math.max(...baseForY.map((p) => p.v));
   const spanBase = Math.max(0.001, maxBase - minBase);
 
   const minAll = Math.min(...allSeries.map((p) => p.v));
@@ -184,33 +292,65 @@ export function ZoomPanChart({
   const bTrendPath = bTrendPts ? catmullRomPath(bTrendPts, 0.85) : "";
   const bProjPath = bProjPts ? catmullRomPath(bProjPts, 0.85) : "";
 
-  const xStep = niceStep(spanT, 6);
-  const xTick0 = Math.ceil(minT / xStep) * xStep;
+  // ---------- X-ticks (based on visible window) ----------
+
+  const xStep = niceStep(viewSpan, 6);
+  const xTick0 = Math.ceil(vMin / xStep) * xStep;
   const xTicks: number[] = [];
-  for (let t = xTick0; t <= maxT + 1e-9; t += xStep) xTicks.push(t);
+  for (let t = xTick0; t <= vMax + 1e-9; t += xStep) xTicks.push(t);
+
+  // ---------- Y-axis labels ----------
 
   const yTop = round1(maxBase);
   const yMid = round1((maxBase + minBase) / 2);
   const yBot = round1(minBase);
 
+  // ---------- Intercept marker ----------
+
   const ix = intercept ? xScale(intercept.t) : null;
   const iyA = intercept ? yScale(intercept.aV) : null;
   const iyB = intercept ? yScale(intercept.bV) : null;
 
-  const innerWidthPx = `${Math.round(baseWidth * scale)}px`;
+  // ---------- Reset button visibility ----------
+
+  const isZoomed =
+    viewMinT !== null &&
+    (Math.abs(viewMinT - absoluteMinT) > 0.5 || Math.abs((viewMaxT ?? absoluteMaxT) - absoluteMaxT) > 0.5);
 
   return (
     <div
-      ref={scrollerRef}
-      className="w-full overflow-x-auto overscroll-x-contain rounded-2xl border border-emerald-900/70 bg-[#042713]/55"
-      style={{ WebkitOverflowScrolling: "touch" }}
+      className="w-full rounded-2xl border border-emerald-900/70 bg-[#042713]/55"
+      style={{ touchAction: "none" }}
       onWheel={onWheel}
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
+      onMouseDown={onMouseDown}
+      onMouseMove={onMouseMove}
+      onMouseUp={onMouseUp}
+      onMouseLeave={onMouseLeave}
     >
-      <div className="px-2 py-3" style={{ width: innerWidthPx }}>
-        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto" role="img" aria-label="HI projections">
+      <div className="px-2 py-3">
+        <svg
+          ref={svgRef}
+          viewBox={`0 0 ${baseWidth} ${height}`}
+          className="w-full h-auto"
+          role="img"
+          aria-label="HI projections"
+          style={{ cursor: isDragging ? "grabbing" : "grab" }}
+        >
+          <defs>
+            <clipPath id="chart-area">
+              <rect
+                x={padL}
+                y={padT}
+                width={baseWidth - padL - padR}
+                height={height - padT - padB}
+              />
+            </clipPath>
+          </defs>
+
+          {/* Vertical grid lines */}
           <g opacity={0.22}>
             {xTicks.map((t) => {
               const x = xScale(t);
@@ -228,12 +368,13 @@ export function ZoomPanChart({
             })}
           </g>
 
+          {/* Horizontal guides */}
           <g opacity={0.22}>
-            <line x1={padL} y1={padT} x2={width - padR} y2={padT} stroke="rgba(245,230,176,0.34)" strokeWidth={1.5} />
+            <line x1={padL} y1={padT} x2={baseWidth - padR} y2={padT} stroke="rgba(245,230,176,0.34)" strokeWidth={1.5} />
             <line
               x1={padL}
               y1={(height - padB + padT) / 2}
-              x2={width - padR}
+              x2={baseWidth - padR}
               y2={(height - padB + padT) / 2}
               stroke="rgba(245,230,176,0.26)"
               strokeWidth={1.25}
@@ -241,25 +382,21 @@ export function ZoomPanChart({
             <line
               x1={padL}
               y1={height - padB}
-              x2={width - padR}
+              x2={baseWidth - padR}
               y2={height - padB}
               stroke="rgba(245,230,176,0.20)"
               strokeWidth={1.25}
             />
           </g>
 
+          {/* Y-axis labels */}
           <g fill="rgba(226,252,231,0.70)" fontSize="12" fontFamily="ui-sans-serif, system-ui" fontWeight={900}>
-            <text x={4} y={padT + 12}>
-              {yTop}
-            </text>
-            <text x={4} y={(height - padB + padT) / 2 + 6}>
-              {yMid}
-            </text>
-            <text x={4} y={height - padB + 6}>
-              {yBot}
-            </text>
+            <text x={4} y={padT + 12}>{yTop}</text>
+            <text x={4} y={(height - padB + padT) / 2 + 6}>{yMid}</text>
+            <text x={4} y={height - padB + 6}>{yBot}</text>
           </g>
 
+          {/* X-axis labels */}
           <g fill="rgba(226,252,231,0.62)" fontSize="11" fontFamily="ui-sans-serif, system-ui" fontWeight={800}>
             {xTicks.map((t) => {
               const x = xScale(t);
@@ -272,40 +409,52 @@ export function ZoomPanChart({
             })}
           </g>
 
-          {intercept && ix !== null ? (
+          {/* Data elements — clipped to chart area */}
+          <g clipPath="url(#chart-area)">
+            {/* Intercept marker */}
+            {intercept && ix !== null ? (
+              <g>
+                <line
+                  x1={ix}
+                  y1={padT}
+                  x2={ix}
+                  y2={height - padB}
+                  stroke="rgba(245,230,176,0.55)"
+                  strokeWidth={2.0}
+                  strokeDasharray="5 8"
+                />
+                {iyA !== null ? <circle cx={ix} cy={iyA} r={4.0} fill="rgb(167,243,208)" /> : null}
+                {iyB !== null ? <circle cx={ix} cy={iyB} r={4.0} fill="rgba(245,230,176,0.98)" /> : null}
+              </g>
+            ) : null}
+
+            {bTrendPts && <path d={bTrendPath} fill="none" stroke="rgba(245,230,176,0.92)" strokeWidth={3.0} />}
+            {bProjPts && <path d={bProjPath} fill="none" stroke="rgba(245,230,176,0.96)" strokeWidth={3.0} strokeDasharray="10 8" />}
+            {bActualPts && <path d={bActualPath} fill="none" stroke="rgba(110,231,183,0.58)" strokeWidth={3.3} />}
+
+            {aTrendPts && <path d={aTrendPath} fill="none" stroke="rgba(245,230,176,0.86)" strokeWidth={2.8} opacity={0.9} />}
+            {aProjPts && <path d={aProjPath} fill="none" stroke="rgba(245,230,176,0.92)" strokeWidth={2.8} strokeDasharray="10 8" opacity={0.98} />}
+            <path d={aActualPath} fill="none" stroke="rgb(167,243,208)" strokeWidth={3.8} opacity={0.98} />
+
             <g>
-              <line
-                x1={ix}
-                y1={padT}
-                x2={ix}
-                y2={height - padB}
-                stroke="rgba(245,230,176,0.55)"
-                strokeWidth={2.0}
-                strokeDasharray="5 8"
-              />
-              {iyA !== null ? <circle cx={ix} cy={iyA} r={4.0} fill="rgb(167,243,208)" /> : null}
-              {iyB !== null ? <circle cx={ix} cy={iyB} r={4.0} fill="rgba(245,230,176,0.98)" /> : null}
+              {aActualPts.map((p, i) => (
+                <circle key={i} cx={p.x} cy={p.y} r={2.6} fill="rgb(167,243,208)" opacity={0.98} />
+              ))}
             </g>
-          ) : null}
-
-          {bTrendPts && <path d={bTrendPath} fill="none" stroke="rgba(245,230,176,0.92)" strokeWidth={3.0} />}
-          {bProjPts && <path d={bProjPath} fill="none" stroke="rgba(245,230,176,0.96)" strokeWidth={3.0} strokeDasharray="10 8" />}
-          {bActualPts && <path d={bActualPath} fill="none" stroke="rgba(110,231,183,0.58)" strokeWidth={3.3} />}
-
-          {aTrendPts && <path d={aTrendPath} fill="none" stroke="rgba(245,230,176,0.86)" strokeWidth={2.8} opacity={0.9} />}
-          {aProjPts && <path d={aProjPath} fill="none" stroke="rgba(245,230,176,0.92)" strokeWidth={2.8} strokeDasharray="10 8" opacity={0.98} />}
-          <path d={aActualPath} fill="none" stroke="rgb(167,243,208)" strokeWidth={3.8} opacity={0.98} />
-
-          <g>
-            {aActualPts.map((p, i) => (
-              <circle key={i} cx={p.x} cy={p.y} r={2.6} fill="rgb(167,243,208)" opacity={0.98} />
-            ))}
           </g>
         </svg>
 
         <div className="mt-2 flex items-center justify-between text-[11px] font-semibold text-emerald-100/65">
-          <div>Swipe to scroll · Pinch to zoom</div>
-          <div className="text-[#f5e6b0]">×{scale.toFixed(1)}</div>
+          <div>Drag to pan · Pinch to zoom</div>
+          {isZoomed && (
+            <button
+              type="button"
+              onClick={() => { setViewMinT(absoluteMinT); setViewMaxT(absoluteMaxT); }}
+              className="text-[#f5e6b0] underline underline-offset-2"
+            >
+              Reset
+            </button>
+          )}
         </div>
       </div>
     </div>

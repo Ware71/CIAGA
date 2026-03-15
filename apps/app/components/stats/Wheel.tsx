@@ -48,7 +48,8 @@ export function Wheel({
       <div
         ref={ref}
         onScroll={onScroll}
-        className="h-52 overflow-y-auto scroll-smooth snap-y snap-mandatory py-8"
+        className="h-52 overflow-y-auto scroll-smooth snap-y snap-mandatory"
+          style={{ paddingTop: 84, paddingBottom: 84 }}
         style={{ WebkitOverflowScrolling: "touch" }}
       >
         {values.map((v) => {
