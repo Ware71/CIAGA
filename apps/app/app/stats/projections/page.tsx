@@ -624,7 +624,7 @@ export default function StatsPage() {
                   bTrend={compareActive ? computed.series.bTrend : undefined}
                   bProj={compareActive ? computed.series.bProj : undefined}
                   intercept={compareActive ? (computed.interceptMarker as any) : undefined}
-                  height={340}
+                  height={480}
                   formatXLabel={timeXLabel}
                 />
               </>
