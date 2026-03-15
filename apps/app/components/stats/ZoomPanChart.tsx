@@ -81,10 +81,10 @@ export function ZoomPanChart({
   const [viewMaxT, setViewMaxT] = useState<number | null>(null);
 
   const baseWidth = 1400;
-  const padL = 48;
-  const padR = 22;
-  const padT = 16;
-  const padB = 40;
+  const padL = 96;
+  const padR = 28;
+  const padT = 20;
+  const padB = 60;
   const MIN_WINDOW_DAYS = 7;
 
   const allSeries: SeriesT[] = [
@@ -390,19 +390,19 @@ export function ZoomPanChart({
           </g>
 
           {/* Y-axis labels */}
-          <g fill="rgba(226,252,231,0.70)" fontSize="12" fontFamily="ui-sans-serif, system-ui" fontWeight={900}>
-            <text x={4} y={padT + 12}>{yTop}</text>
-            <text x={4} y={(height - padB + padT) / 2 + 6}>{yMid}</text>
-            <text x={4} y={height - padB + 6}>{yBot}</text>
+          <g fill="rgba(226,252,231,0.70)" fontSize="28" fontFamily="ui-sans-serif, system-ui" fontWeight={900} textAnchor="end">
+            <text x={padL - 8} y={padT + 22}>{yTop}</text>
+            <text x={padL - 8} y={(height - padB + padT) / 2 + 10}>{yMid}</text>
+            <text x={padL - 8} y={height - padB + 10}>{yBot}</text>
           </g>
 
           {/* X-axis labels */}
-          <g fill="rgba(226,252,231,0.62)" fontSize="11" fontFamily="ui-sans-serif, system-ui" fontWeight={800}>
+          <g fill="rgba(226,252,231,0.62)" fontSize="26" fontFamily="ui-sans-serif, system-ui" fontWeight={800}>
             {xTicks.map((t) => {
               const x = xScale(t);
               const label = formatXLabel ? formatXLabel(t) : `${Math.round(t)}`;
               return (
-                <text key={t} x={x} y={height - 12} textAnchor="middle">
+                <text key={t} x={x} y={height - 18} textAnchor="middle">
                   {label}
                 </text>
               );
