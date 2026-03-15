@@ -48,7 +48,7 @@ export function ZoomPanChart({
   bTrend,
   bProj,
   intercept,
-  height = 480,
+  height = 960,
   formatXLabel,
 }: {
   aActual: SeriesT[];
