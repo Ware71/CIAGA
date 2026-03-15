@@ -124,6 +124,7 @@ export default function RoundsHistoryPage() {
 
   // handicap extras (for display)
   const [agsByRoundId, setAgsByRoundId] = useState<Record<string, number>>({});
+  const [netByRoundId, setNetByRoundId] = useState<Record<string, number>>({});
   const [scoreDiffByRoundId, setScoreDiffByRoundId] = useState<Record<string, number>>({});
   const [hiUsedByRoundId, setHiUsedByRoundId] = useState<Record<string, number>>({});
   const [hiAfterByRoundId, setHiAfterByRoundId] = useState<Record<string, number>>({});
@@ -320,8 +321,16 @@ export default function RoundsHistoryPage() {
           }
         }
 
+        const netMap: Record<string, number> = {};
+        for (const [roundId, participantId] of Object.entries(pidMap)) {
+          const ags = agsMap[roundId];
+          const ch = courseHcpByPid[participantId];
+          if (ags != null && ch != null) netMap[roundId] = ags - ch;
+        }
+
         if (!cancelled) {
           setAgsByRoundId(agsMap);
+          setNetByRoundId(netMap);
           setScoreDiffByRoundId(sdMap);
           setHiUsedByRoundId(hiUsedMap);
         }
@@ -539,11 +548,13 @@ export default function RoundsHistoryPage() {
 
     const href = { pathname: `/round/${r.id}`, query: { from: "history" } } as const;
 
-    const total = myTotalByRoundId[r.id];
-    const scoreText = typeof total === "number" ? String(total) : "\u2014";
-
     const ags = agsByRoundId[r.id];
-    const agsText = typeof ags === "number" ? `(${ags})` : "";
+    const total = myTotalByRoundId[r.id];
+    const displayScore = ags ?? total;
+    const scoreText = typeof displayScore === "number" ? String(displayScore) : "\u2014";
+
+    const net = netByRoundId[r.id];
+    const netText = typeof net === "number" ? `Net: ${net}` : "";
 
     const sd = scoreDiffByRoundId[r.id];
     const sdText = typeof sd === "number" ? `Score Diff: ${sd.toFixed(1)}` : "SD \u2014";
@@ -603,7 +614,7 @@ export default function RoundsHistoryPage() {
               <div className="text-[18px] font-extrabold tabular-nums text-[#f5e6b0] leading-none">
                 {scoreText}
               </div>
-              <div className="mt-1 text-[10px] text-emerald-100/60">{agsText || "\u00A0"}</div>
+              <div className="mt-1 text-[10px] text-emerald-100/60">{netText || "\u00A0"}</div>
             </div>
           </div>
         </div>

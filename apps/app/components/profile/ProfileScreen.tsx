@@ -127,6 +127,7 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
   const [teeNameByRoundId, setTeeNameByRoundId] = useState<Record<string, string>>({});
   const [totalByRoundId, setTotalByRoundId] = useState<Record<string, number>>({});
   const [agsByRoundId, setAgsByRoundId] = useState<Record<string, number>>({});
+  const [netByRoundId, setNetByRoundId] = useState<Record<string, number>>({});
   const [scoreDiffByRoundId, setScoreDiffByRoundId] = useState<Record<string, number>>({});
   const [hiUsedByRoundId, setHiUsedByRoundId] = useState<Record<string, number>>({});
 
@@ -692,8 +693,16 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
           }
         }
 
+        const netMap: Record<string, number> = {};
+        for (const [roundId, participantId] of Object.entries(pidMap)) {
+          const ags = agsMap[roundId];
+          const ch = courseHcpByPid[participantId];
+          if (ags != null && ch != null) netMap[roundId] = ags - ch;
+        }
+
         if (!cancelled) {
           setAgsByRoundId(agsMap);
+          setNetByRoundId(netMap);
           setScoreDiffByRoundId(sdMap);
           setHiUsedByRoundId(hiUsedMap);
         }
@@ -996,6 +1005,7 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
               teeNameByRoundId={teeNameByRoundId}
               totalByRoundId={totalByRoundId}
               agsByRoundId={agsByRoundId}
+              netByRoundId={netByRoundId}
               scoreDiffByRoundId={scoreDiffByRoundId}
               hiUsedByRoundId={hiUsedByRoundId}
               loading={historyLoading}
@@ -1009,6 +1019,7 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
               teeNameByRoundId={teeNameByRoundId}
               totalByRoundId={totalByRoundId}
               agsByRoundId={agsByRoundId}
+              netByRoundId={netByRoundId}
               scoreDiffByRoundId={scoreDiffByRoundId}
               hiUsedByRoundId={hiUsedByRoundId}
               loading={historyLoading}

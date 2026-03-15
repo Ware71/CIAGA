@@ -19,6 +19,7 @@ type Props = {
   teeNameByRoundId: Record<string, string>;
   totalByRoundId: Record<string, number>;
   agsByRoundId: Record<string, number>;
+  netByRoundId?: Record<string, number>;
   scoreDiffByRoundId: Record<string, number>;
   hiUsedByRoundId: Record<string, number>;
   loading?: boolean;
@@ -31,6 +32,7 @@ export default function AcceptableRoundsTab({
   teeNameByRoundId,
   totalByRoundId,
   agsByRoundId,
+  netByRoundId,
   scoreDiffByRoundId,
   hiUsedByRoundId,
   loading,
@@ -94,6 +96,7 @@ export default function AcceptableRoundsTab({
         teeNameByRoundId={teeNameByRoundId}
         totalByRoundId={totalByRoundId}
         agsByRoundId={agsByRoundId}
+        netByRoundId={netByRoundId}
         scoreDiffByRoundId={scoreDiffByRoundId}
         hiUsedByRoundId={hiUsedByRoundId}
         countingSet={countingSet}
