@@ -12,7 +12,7 @@ import {
   isFinishedStatus, parseDateMs,
   toNumberMaybe, shortDate,
 } from "@/lib/profile/helpers";
-import { formatHI } from "@/lib/rounds/handicapUtils";
+import { formatHI, strokesReceivedOnHole } from "@/lib/rounds/handicapUtils";
 import ProfileFeedTab from "@/components/profile/ProfileFeedTab";
 import AcceptableRoundsTab from "@/components/profile/AcceptableRoundsTab";
 import NonAcceptableRoundsTab from "@/components/profile/NonAcceptableRoundsTab";
@@ -52,13 +52,6 @@ type RoundRow = {
 };
 
 type TeeSnap = { id: string; name: string | null };
-
-function strokesReceivedOnHole(courseHcp: number, si: number | null): number {
-  if (si == null || si < 1 || si > 18) return 0;
-  const base = Math.floor(courseHcp / 18);
-  const rem = ((courseHcp % 18) + 18) % 18;
-  return base + (rem > 0 && si <= rem ? 1 : 0);
-}
 
 type ParticipantRow = {
   id: string; // participant_id (round_participants.id)
@@ -693,16 +686,8 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
           }
         }
 
-        const netMap: Record<string, number> = {};
-        for (const [roundId, participantId] of Object.entries(pidMap)) {
-          const ags = agsMap[roundId];
-          const ch = courseHcpByPid[participantId];
-          if (ags != null && ch != null) netMap[roundId] = ags - ch;
-        }
-
         if (!cancelled) {
           setAgsByRoundId(agsMap);
-          setNetByRoundId(netMap);
           setScoreDiffByRoundId(sdMap);
           setHiUsedByRoundId(hiUsedMap);
         }
@@ -772,7 +757,17 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
           const count = countsByParticipant[participantId] ?? 0;
           if (count > 0) totalByRound[roundId] = totalsByParticipant[participantId] ?? 0;
         }
-        if (!cancelled) setTotalByRoundId(totalByRound);
+        const finalNetMap: Record<string, number> = {};
+        for (const [roundId, participantId] of Object.entries(pidMap)) {
+          const gross = totalByRound[roundId] ?? agsMap[roundId];
+          const ch = courseHcpByPid[participantId];
+          if (gross != null && ch != null) finalNetMap[roundId] = gross - ch;
+        }
+
+        if (!cancelled) {
+          setTotalByRoundId(totalByRound);
+          setNetByRoundId(finalNetMap);
+        }
 
       } catch (e: any) {
         console.warn("History load error:", e);

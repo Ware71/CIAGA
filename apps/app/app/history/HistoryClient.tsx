@@ -9,7 +9,7 @@ import { getMyProfileIdByAuthUserId } from "@/lib/myProfile";
 import { Button } from "@/components/ui/button";
 import { BackButton } from "@/components/ui/BackButton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { formatHI } from "@/lib/rounds/handicapUtils";
+import { formatHI, strokesReceivedOnHole } from "@/lib/rounds/handicapUtils";
 
 type ProfileRow = {
   id: string;
@@ -85,12 +85,6 @@ function toNumberMaybe(v: unknown): number | null {
   return null;
 }
 
-function strokesReceivedOnHole(courseHcp: number, si: number | null): number {
-  if (si == null || si < 1 || si > 18) return 0;
-  const base = Math.floor(courseHcp / 18);
-  const rem = ((courseHcp % 18) + 18) % 18; // handles plus (negative) handicaps
-  return base + (rem > 0 && si <= rem ? 1 : 0);
-}
 
 // ✅ WHS "used differentials" count table (same as player page)
 function usedDifferentialsCount(n: number) {
@@ -321,16 +315,8 @@ export default function RoundsHistoryPage() {
           }
         }
 
-        const netMap: Record<string, number> = {};
-        for (const [roundId, participantId] of Object.entries(pidMap)) {
-          const ags = agsMap[roundId];
-          const ch = courseHcpByPid[participantId];
-          if (ags != null && ch != null) netMap[roundId] = ags - ch;
-        }
-
         if (!cancelled) {
           setAgsByRoundId(agsMap);
-          setNetByRoundId(netMap);
           setScoreDiffByRoundId(sdMap);
           setHiUsedByRoundId(hiUsedMap);
         }
@@ -406,7 +392,17 @@ export default function RoundsHistoryPage() {
           if (count > 0) totalByRound[roundId] = totalsByParticipant[participantId] ?? 0;
         }
 
-        if (!cancelled) setMyTotalByRoundId(totalByRound);
+        const finalNetMap: Record<string, number> = {};
+        for (const [roundId, participantId] of Object.entries(pidMap)) {
+          const gross = totalByRound[roundId] ?? agsMap[roundId];
+          const ch = courseHcpByPid[participantId];
+          if (gross != null && ch != null) finalNetMap[roundId] = gross - ch;
+        }
+
+        if (!cancelled) {
+          setMyTotalByRoundId(totalByRound);
+          setNetByRoundId(finalNetMap);
+        }
 
         // 5) Handicap index history -> compute BOTH "HI after" and "HI before"
         const { data: hist, error: hErr2 } = await supabase
@@ -550,7 +546,7 @@ export default function RoundsHistoryPage() {
 
     const ags = agsByRoundId[r.id];
     const total = myTotalByRoundId[r.id];
-    const displayScore = ags ?? total;
+    const displayScore = total ?? ags;
     const scoreText = typeof displayScore === "number" ? String(displayScore) : "\u2014";
 
     const net = netByRoundId[r.id];

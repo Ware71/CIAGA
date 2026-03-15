@@ -83,7 +83,7 @@ export default function RoundHistoryList({
 
                 const ags = agsByRoundId[r.id];
                 const total = totalByRoundId[r.id];
-                const displayScore = ags ?? total;
+                const displayScore = total ?? ags;
                 const scoreText = typeof displayScore === "number" ? String(displayScore) : "\u2014";
 
                 const net = netByRoundId?.[r.id];
