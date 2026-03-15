@@ -398,7 +398,8 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
       setUploading(true);
 
       const ext = file.name.split(".").pop() || "jpg";
-      const folder = targetProfileId;
+      const folder = authUser?.id;
+      if (!folder) throw new Error("Not logged in");
       const path = `${folder}/${Date.now()}.${ext}`;
 
       const { error: uploadError } = await supabase.storage.from(AVATAR_BUCKET).upload(path, file, {
