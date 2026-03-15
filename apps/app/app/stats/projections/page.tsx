@@ -263,7 +263,14 @@ export default function StatsPage() {
     const aFit = aN ? fitExpBestFloor(aSorted, (p, _idx, fd) => daysBetween(fd, new Date(p.date))) : null;
     const bFit = bN ? fitExpBestFloor(bSorted, (p, _idx, fd) => daysBetween(fd, new Date(p.date))) : null;
 
-    const windowStart = addDays(today, -TIME_LOOKBACK_DAYS);
+    const allDates = [
+      ...(aSorted.length ? [new Date(aSorted[0].date)] : []),
+      ...(bSorted.length ? [new Date(bSorted[0].date)] : []),
+    ];
+    const earliestDate = allDates.length
+      ? allDates.reduce((a, b) => (a < b ? a : b))
+      : addDays(today, -TIME_LOOKBACK_DAYS);
+    const windowStart = earliestDate;
     const windowEnd = addDays(today, TIME_FUTURE_DAYS);
     const anchor = windowStart;
 
