@@ -376,7 +376,8 @@ export default function RoundsHistoryPage() {
               if (!holeData?.par) continue;
 
               const courseHcp = courseHcpByPid[participantId] ?? 0;
-              const penalty = holeData.par + 2 + strokesReceivedOnHole(courseHcp, holeData.si);
+              const holeCount = Object.keys(holeDataByTeeSnap[teeSnapId]).length || 18;
+              const penalty = holeData.par + 2 + strokesReceivedOnHole(courseHcp, holeData.si, holeCount);
 
               totalsByParticipant[participantId] = (totalsByParticipant[participantId] ?? 0) + penalty;
               countsByParticipant[participantId] = (countsByParticipant[participantId] ?? 0) + 1;

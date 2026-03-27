@@ -519,7 +519,7 @@ export async function getLiveRoundsAsFeedItems(params: { viewerProfileId: string
           const hole = holeMap.get(holeNum);
           if (hole?.par != null) parPlayed += hole.par;
           if (courseHcp != null) {
-            netAdjustment += strokesReceivedOnHole(courseHcp, hole?.stroke_index ?? null);
+            netAdjustment += strokesReceivedOnHole(courseHcp, hole?.stroke_index ?? null, holeMap.size || 18);
           }
         }
       }

@@ -141,10 +141,11 @@ export async function fetchLastRound(profileId: string) {
         holeData[h.hole_number as number] = { par: h.par as number, si: h.stroke_index ?? null };
       }
 
+      const holeCount = Object.keys(holeData).length || 18;
       for (const hs of (holeStatesRes.data ?? []) as any[]) {
         const hd = holeData[hs.hole_number as number];
         if (!hd?.par) continue;
-        total += hd.par + 2 + strokesReceivedOnHole(ch, hd.si);
+        total += hd.par + 2 + strokesReceivedOnHole(ch, hd.si, holeCount);
         count++;
       }
 

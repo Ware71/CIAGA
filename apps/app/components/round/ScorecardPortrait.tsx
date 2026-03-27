@@ -247,7 +247,7 @@ export default function ScorecardPortrait(props: {
 
               const recv =
                 scoreView === "net" && !puLabel
-                  ? strokesReceivedOnHole(p.course_handicap ?? null, h.stroke_index ?? null)
+                  ? strokesReceivedOnHole(p.course_handicap ?? null, h.stroke_index ?? null, holesList.length)
                   : 0;
 
               const fmtHint =

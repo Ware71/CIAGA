@@ -5,7 +5,8 @@
 
 export function strokesReceivedOnHole(
   courseHcp: number | null | undefined,
-  holeStrokeIndex: number | null
+  holeStrokeIndex: number | null,
+  holeCount: number = 18
 ): number {
   const raw =
     typeof courseHcp === "number" && Number.isFinite(courseHcp)
@@ -19,8 +20,8 @@ export function strokesReceivedOnHole(
 
   const sign = raw < 0 ? -1 : 1;
   const abs = Math.abs(raw);
-  const base = Math.floor(abs / 18);
-  const rem = abs % 18;
+  const base = Math.floor(abs / holeCount);
+  const rem = abs % holeCount;
 
   return sign * (base + (si <= rem ? 1 : 0));
 }

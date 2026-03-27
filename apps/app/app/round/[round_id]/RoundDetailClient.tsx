@@ -169,8 +169,8 @@ function stableNumber(n: any): number | null {
 }
 
 /** WHS net double bogey penalty for a picked-up hole: par + 2 + strokes received */
-function puPenaltyGross(par: number, courseHcp: number | null, si: number | null): number {
-  return par + 2 + strokesReceivedOnHole(courseHcp, si);
+function puPenaltyGross(par: number, courseHcp: number | null, si: number | null, holeCount: number = 18): number {
+  return par + 2 + strokesReceivedOnHole(courseHcp, si, holeCount);
 }
 
 /** Returns true if the participant has any holes not yet started */
@@ -390,11 +390,14 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     return prof?.avatar_url || null;
   }, []);
 
-  // Compute up front so it's available for both scoringValueFor and formatDisplays
+  // Compute up front so it's available for both scoringValueFor and formatDisplays.
+  // Only apply WHS not-accepted logic after the round is finished — during a live
+  // round all not_started holes should show as blank, not as penalty scores.
   const notAcceptedIds = useMemo<Set<string>>(() => {
+    if (!isFinished) return new Set(participants.map((p) => p.id));
     const { ids } = getNotAcceptedParticipants(participants, holesList, holeStatesByKey);
     return ids;
-  }, [participants, holesList, holeStatesByKey]);
+  }, [isFinished, participants, holesList, holeStatesByKey]);
 
   const formatDisplays = useMemo<FormatDisplayData[]>(() => {
     const main = computeFormatDisplay(formatType, formatConfig, participants, holesList, scoresByKey, holeStatesByKey, teams, getParticipantLabel, notAcceptedIds);
@@ -445,13 +448,13 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
         if (notAcceptedIds.has(participantId)) return null;
         // Acceptable round: show the penalty being applied
         if (!h?.par) return null;
-        if (scoreView === "gross") return puPenaltyGross(h.par, p?.course_handicap ?? null, h.stroke_index);
+        if (scoreView === "gross") return puPenaltyGross(h.par, p?.course_handicap ?? null, h.stroke_index, holesList.length);
         return h.par + 2;
       }
 
       if (st === "picked_up") {
         if (!h?.par) return null;
-        if (scoreView === "gross") return puPenaltyGross(h.par, p?.course_handicap ?? null, h.stroke_index);
+        if (scoreView === "gross") return puPenaltyGross(h.par, p?.course_handicap ?? null, h.stroke_index, holesList.length);
         return h.par + 2;
       }
 
@@ -459,7 +462,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
       if (typeof gross !== "number") return null;
       if (scoreView === "gross") return gross;
 
-      const recv = strokesReceivedOnHole(p?.course_handicap ?? null, h?.stroke_index ?? null);
+      const recv = strokesReceivedOnHole(p?.course_handicap ?? null, h?.stroke_index ?? null, holesList.length);
       return netFromGross(gross, recv);
     },
     [holeStateFor, scoreFor, scoreView, participants, holesList, activeFormatDisplay, notAcceptedIds]
@@ -479,7 +482,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
         if (!h?.par) return null;
         const p = participants.find((x) => x.id === participantId);
         const courseHcp = p?.course_handicap ?? null;
-        if (scoreView === "gross") return puPenaltyGross(h.par, courseHcp, h.stroke_index);
+        if (scoreView === "gross") return puPenaltyGross(h.par, courseHcp, h.stroke_index, holesList.length);
         return h.par + 2; // net: strokes received cancel out
       }
 
@@ -488,7 +491,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
         if (!h?.par) return null;
         const p = participants.find((x) => x.id === participantId);
         const courseHcp = p?.course_handicap ?? null;
-        if (scoreView === "gross") return puPenaltyGross(h.par, courseHcp, h.stroke_index);
+        if (scoreView === "gross") return puPenaltyGross(h.par, courseHcp, h.stroke_index, holesList.length);
         return h.par + 2; // net: strokes received cancel out
       }
 
@@ -498,7 +501,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
 
       const p = participants.find((x) => x.id === participantId);
       const h = holesList.find((x) => x.hole_number === holeNumber);
-      const recv = strokesReceivedOnHole(p?.course_handicap ?? null, h?.stroke_index ?? null);
+      const recv = strokesReceivedOnHole(p?.course_handicap ?? null, h?.stroke_index ?? null, holesList.length);
       return netFromGross(gross, recv);
     },
     [holeStateFor, scoreFor, scoreView, participants, holesList, notAcceptedIds]
@@ -596,7 +599,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
         } else {
           const gross = scoreFor(p.id, h.hole_number);
           if (typeof gross === "number" && h.par) {
-            const recv = strokesReceivedOnHole(hcp, h.stroke_index);
+            const recv = strokesReceivedOnHole(hcp, h.stroke_index, holesList.length);
             const net = netFromGross(gross, recv);
             total += net;
             if (h.hole_number <= 9) out += net;
