@@ -42,7 +42,7 @@ type EtaStatus = "insufficient" | "reached" | "unreachable" | "unknown" | "estim
 const TIME_FUTURE_DAYS = 60;
 const RECENCY_DECAY = 0.006; // half-weight ≈ 116 days back (chart trend only)
 
-const EPS_VIS = 1.0;
+const FLOOR_VELOCITY_THRESHOLD = 0.2; // HI/month — below this is negligible improvement
 const INTERCEPT_MAX_DAYS_AHEAD = 3650; // 10y
 const ME = "__me__";
 
@@ -388,13 +388,22 @@ export default function StatsPage() {
     const aDirection = directionLabel(aSlopePerMonth !== null ? aSlopePerMonth * 30 : null);
     const bDirection = directionLabel(bSlopePerMonth !== null ? bSlopePerMonth * 30 : null);
 
-    // Potential floor — from full fit (stable long-term)
+    // Potential floor — from full fit, using velocity threshold
     const potentialFloor = (fit: ReturnType<typeof fitExpBestFloor> | null) => {
       if (!fit) return { value: null as number | null, etaISO: null as string | null, note: "Not enough data" };
-      const pf = round1(fit.c + EPS_VIS);
-      const tTo = fit.practicalFloorT(EPS_VIS);
-      const etaISO = tTo !== null ? iso(addDays(fit.firstDate, tTo)) : null;
-      return { value: pf, etaISO, note: "" };
+
+      const tToday = daysBetween(fit.firstDate, today);
+      const tSlow = fit.slowdownT(FLOOR_VELOCITY_THRESHOLD);
+
+      if (tSlow === null || tSlow <= tToday) {
+        // Already improving slower than threshold — currently near floor
+        const floorValue = round1(Math.max(fit.predict(tToday), fit.c));
+        return { value: floorValue, etaISO: null as string | null, note: "Near floor" };
+      }
+
+      const floorValue = round1(fit.predict(tSlow));
+      const floorDate = addDays(fit.firstDate, tSlow);
+      return { value: floorValue, etaISO: iso(floorDate), note: "" };
     };
 
     const aPF = potentialFloor(aFitFull);
@@ -923,26 +932,34 @@ export default function StatsPage() {
           {/* Potential floor */}
           <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/45 p-4">
             <div className="text-sm font-extrabold text-emerald-50">Potential floor</div>
-            <div className="mt-1 text-[11px] text-emerald-100/55 font-semibold">Model asymptote + {EPS_VIS.toFixed(1)} HI (visual threshold)</div>
+            <div className="mt-1 text-[11px] text-emerald-100/55 font-semibold">Est. HI when improvement &lt; {FLOOR_VELOCITY_THRESHOLD}/mo</div>
 
             {compareActive ? (
               <div className="mt-3 grid grid-cols-2 gap-3">
-                <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/55 p-3">
-                  <div className="text-[11px] text-emerald-100/70 font-bold">{computed.names.a}</div>
-                  <div className="mt-1 text-base font-extrabold text-emerald-50 tabular-nums">{computed.potentialFloor.a.value ?? "—"}</div>
-                  <div className="mt-1 text-[10px] text-emerald-100/55 font-semibold">Approx. by {computed.potentialFloor.a.etaISO ?? "—"}</div>
-                </div>
-                <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/55 p-3">
-                  <div className="text-[11px] text-emerald-100/70 font-bold">{computed.names.b}</div>
-                  <div className="mt-1 text-base font-extrabold text-emerald-50 tabular-nums">{computed.potentialFloor.b.value ?? "—"}</div>
-                  <div className="mt-1 text-[10px] text-emerald-100/55 font-semibold">Approx. by {computed.potentialFloor.b.etaISO ?? "—"}</div>
-                </div>
+                {[{ key: "a" as const, label: computed.names.a }, { key: "b" as const, label: computed.names.b }].map((p) => {
+                  const pf = computed.potentialFloor[p.key];
+                  return (
+                    <div key={p.key} className="rounded-2xl border border-emerald-900/70 bg-[#042713]/55 p-3">
+                      <div className="text-[11px] text-emerald-100/70 font-bold">{p.label}</div>
+                      <div className="mt-1 text-base font-extrabold text-emerald-50 tabular-nums">{pf.value ?? "—"}</div>
+                      <div className="mt-1 text-[10px] text-emerald-100/55 font-semibold">
+                        {pf.note ? pf.note : pf.etaISO ? `Approx. by ${pf.etaISO}` : "—"}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <div className="mt-3 rounded-2xl border border-emerald-900/70 bg-[#042713]/55 p-3">
                 <div className="text-[11px] text-emerald-100/70 font-bold">You</div>
                 <div className="mt-1 text-base font-extrabold text-emerald-50 tabular-nums">{computed.potentialFloor.a.value ?? "—"}</div>
-                <div className="mt-1 text-[10px] text-emerald-100/55 font-semibold">Approx. by {computed.potentialFloor.a.etaISO ?? "—"}</div>
+                <div className="mt-1 text-[10px] text-emerald-100/55 font-semibold">
+                  {computed.potentialFloor.a.note
+                    ? computed.potentialFloor.a.note
+                    : computed.potentialFloor.a.etaISO
+                    ? `Approx. by ${computed.potentialFloor.a.etaISO}`
+                    : "—"}
+                </div>
               </div>
             )}
           </div>

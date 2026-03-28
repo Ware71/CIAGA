@@ -146,7 +146,17 @@ export function fitExpBestFloor(
     return Number.isFinite(t) ? t : null;
   };
 
-  return { a: best.a, b: best.b, c: best.c, predict, firstDate, practicalFloorT };
+  // Time when improvement rate drops below thresholdPerMonth HI/month
+  const slowdownT = (thresholdPerMonth: number) => {
+    if (best!.b <= 0 || best!.a <= 0) return null;
+    const thresholdPerDay = thresholdPerMonth / 30;
+    const ratio = (best!.a * best!.b) / thresholdPerDay;
+    if (ratio <= 1) return 0; // already at or below threshold velocity
+    const t = Math.log(ratio) / best!.b;
+    return Number.isFinite(t) ? t : null;
+  };
+
+  return { a: best.a, b: best.b, c: best.c, predict, firstDate, practicalFloorT, slowdownT };
 }
 
 // -----------------------------
