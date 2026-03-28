@@ -422,7 +422,7 @@ export default function MilestonesPage() {
   }, [filteredHoles]);
 
   const roundsAggAsc = useMemo(() => {
-    return roundsAggDesc.slice().sort((a, b) => (parseYMD(a.played_at) ?? 0) - (parseYMD(a.played_at) ?? 0));
+    return roundsAggDesc.slice().sort((a, b) => (parseYMD(a.played_at) ?? 0) - (parseYMD(b.played_at) ?? 0));
   }, [roundsAggDesc]);
 
   const presetLabel = (p: TimePreset) => {
