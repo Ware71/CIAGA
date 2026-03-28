@@ -23,7 +23,6 @@ type Props = {
   format: RoundFormatType;
   teams: TeamBuilderTeam[];
   participants: TeamBuilderParticipant[];
-  onClose: () => void;
   onMutated: () => void;
   getToken: () => Promise<string | null>;
 };
@@ -58,7 +57,7 @@ async function apiCall(url: string, body: object, token: string) {
   return json;
 }
 
-export function TeamBuilderSheet({ roundId, format, teams, participants, onClose, onMutated, getToken }: Props) {
+export function TeamBuilderSheet({ roundId, format, teams, participants, onMutated, getToken }: Props) {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -233,23 +232,13 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onClose
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="fixed inset-0 z-50">
-      <button className="absolute inset-0 bg-black/60" onClick={onClose} aria-label="Close" />
-      <div className="absolute left-0 right-0 bottom-0 px-3 pb-[env(safe-area-inset-bottom)]">
-        <div
-          className="mx-auto w-full max-w-[520px] rounded-t-3xl border border-emerald-900/70 bg-[#061f12] shadow-2xl overflow-hidden max-h-[85vh] flex flex-col"
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerCancel={resetDrag}
-          style={{ touchAction: draggingId ? "none" : undefined }}
-        >
-          {/* Header */}
-          <div className="p-4 border-b border-emerald-900/60 flex items-center justify-between shrink-0">
-            <div className="text-sm font-semibold text-emerald-50">Set Up Teams</div>
-            <button className="text-emerald-100/70 hover:text-emerald-50 text-lg px-1" onClick={onClose} aria-label="Close">✕</button>
-          </div>
-
-          <div className="overflow-y-auto flex-1 p-4 space-y-3" style={{ scrollbarWidth: "thin" }}>
+    <div
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={resetDrag}
+      style={{ touchAction: draggingId ? "none" : undefined }}
+    >
+      <div className="space-y-3">
             {err && (
               <div className="rounded-xl border border-red-900/50 bg-red-950/30 p-3 text-sm text-red-100">{err}</div>
             )}
@@ -396,8 +385,6 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onClose
                 <div className="text-[10px] text-emerald-100/40 mt-0.5">Applied to the team at round start</div>
               </div>
             )}
-          </div>
-        </div>
       </div>
 
       {/* Drag ghost — follows pointer */}
@@ -417,3 +404,4 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onClose
     </div>
   );
 }
+

@@ -30,9 +30,11 @@ type Props = {
   open: boolean;
   onClose: () => void;
   onSelect: (courseId: string) => void;
+  preloadedNearby?: Course[] | null;
+  nearbyGpsPos?: { lat: number; lng: number } | null;
 };
 
-export function CoursePickerModal({ open, onClose, onSelect }: Props) {
+export function CoursePickerModal({ open, onClose, onSelect, preloadedNearby, nearbyGpsPos }: Props) {
   const [mode, setMode] = useState<"nearby" | "world">("nearby");
 
   // ── Nearby state ──
@@ -66,8 +68,17 @@ export function CoursePickerModal({ open, onClose, onSelect }: Props) {
     }
     if (mode !== "nearby" || nearbyLoadedRef.current) return;
 
-    let cancelled = false;
     nearbyLoadedRef.current = true;
+
+    // Use preloaded data from page-load GPS fetch if available
+    if (preloadedNearby && preloadedNearby.length > 0) {
+      setNearbyAll5km(preloadedNearby);
+      setNearbyLoadStep(0);
+      if (nearbyGpsPos) lastPosRef.current = nearbyGpsPos;
+      return;
+    }
+
+    let cancelled = false;
 
     async function fetchNearby(lat: number, lng: number) {
       try {

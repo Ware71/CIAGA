@@ -54,6 +54,16 @@ function fmtNum(n: number | null | undefined, digits = 1) {
   return x.toFixed(digits);
 }
 
+type NearbyCourseLite = {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  distance_m: number;
+  website: string | null;
+  phone: string | null;
+};
+
 type Props = {
   roundId: string;
   courseId: string | null;
@@ -61,6 +71,8 @@ type Props = {
   isOwner: boolean;
   isEditable: boolean;
   onUpdate: () => void;
+  preloadedNearby?: NearbyCourseLite[] | null;
+  nearbyGpsPos?: { lat: number; lng: number } | null;
 };
 
 export function CourseAndTeeSection({
@@ -70,8 +82,9 @@ export function CourseAndTeeSection({
   isOwner,
   isEditable,
   onUpdate,
+  preloadedNearby,
+  nearbyGpsPos,
 }: Props) {
-  const [detecting, setDetecting] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -124,58 +137,6 @@ export function CourseAndTeeSection({
       cancelled = true;
     };
   }, [courseId, pendingTeeBoxId]);
-
-  // Auto-detect nearest course on mount
-  useEffect(() => {
-    if (!courseId && isOwner && isEditable && !detecting) {
-      autoDetectNearestCourse();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  async function autoDetectNearestCourse() {
-    setDetecting(true);
-    try {
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          timeout: 8000,
-          maximumAge: 300_000,
-        });
-      });
-
-      const res = await fetch(
-        `/api/courses/nearby?lat=${position.coords.latitude}&lng=${position.coords.longitude}&radius=5000`
-      );
-      if (!res.ok) return;
-      const data = await res.json();
-
-      // Nearby API returns { items: [...] } sorted nearest-first
-      const nearest = Array.isArray(data?.items) ? data.items[0] : null;
-      if (!nearest) return;
-
-      // Resolve OSM ID → database course_id (name/lat/lng are required by the API)
-      const resolveRes = await fetch("/api/courses/resolve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          osm_id: nearest.id,
-          name: nearest.name,
-          lat: nearest.lat,
-          lng: nearest.lng,
-        }),
-      });
-      const resolved = await resolveRes.json();
-
-      if (resolved.course_id) {
-        await updateCourse(resolved.course_id, null);
-        onUpdate();
-      }
-    } catch {
-      // Silently fail — user can manually select
-    } finally {
-      setDetecting(false);
-    }
-  }
 
   async function updateCourse(newCourseId: string | null, newTeeId: string | null) {
     setError(null);
@@ -269,6 +230,8 @@ export function CourseAndTeeSection({
         setPickerOpen(false);
         await updateCourse(selectedCourseId, null);
       }}
+      preloadedNearby={preloadedNearby}
+      nearbyGpsPos={nearbyGpsPos}
     />
   );
 
@@ -290,9 +253,7 @@ export function CourseAndTeeSection({
             <div className="text-2xl mb-2">🏌️</div>
             <div className="text-sm text-emerald-100/70 mb-3">No course selected yet</div>
 
-            {detecting ? (
-              <div className="text-xs text-emerald-100/60">Detecting nearest course...</div>
-            ) : canEdit ? (
+            {canEdit ? (
               <Button
                 size="sm"
                 className="rounded-xl bg-emerald-700/80 hover:bg-emerald-700"

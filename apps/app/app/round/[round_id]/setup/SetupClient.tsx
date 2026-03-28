@@ -274,6 +274,16 @@ type SetupClientProps = {
   viewerProfileId?: string;
 };
 
+type NearbyCourseLite = {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  distance_m: number;
+  website: string | null;
+  phone: string | null;
+};
+
 export default function SetupClient({ roundId, initialSnapshot, viewerProfileId }: SetupClientProps) {
   const router = useRouter();
 
@@ -286,7 +296,11 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId 
   const [round, setRound] = useState<Round | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [teams, setTeams] = useState<TeamBuilderTeam[]>([]);
-  const [teamSheet, setTeamSheet] = useState(false);
+
+  // Nearby courses preloaded at page load for instant picker open
+  const [nearbyForPicker, setNearbyForPicker] = useState<NearbyCourseLite[] | null>(null);
+  const nearbyGpsPosRef = useRef<{ lat: number; lng: number } | null>(null);
+  const nearbyAutoDetectDoneRef = useRef(false);
   const [nameEdit, setNameEdit] = useState<string>("");
   const [nameSaving, setNameSaving] = useState(false);
   const [scheduledEdit, setScheduledEdit] = useState<string>("");
@@ -329,6 +343,62 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId 
     const me = participants.find((p) => p.profile_id === meId);
     return me?.role === "owner";
   }, [participants, meId]);
+
+  // GPS + nearby courses fetch at page load (for instant picker + auto-detect)
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        nearbyGpsPosRef.current = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        try {
+          const res = await fetch(
+            `/api/courses/nearby?lat=${pos.coords.latitude}&lng=${pos.coords.longitude}&radius=5000`,
+            { cache: "no-store" }
+          );
+          const data = await res.json();
+          if (res.ok) setNearbyForPicker(Array.isArray(data?.items) ? data.items : []);
+        } catch {}
+      },
+      () => {},
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  }, []);
+
+  // Auto-detect nearest course once nearby data + round are available
+  useEffect(() => {
+    if (nearbyAutoDetectDoneRef.current) return;
+    if (!nearbyForPicker || nearbyForPicker.length === 0) return;
+    if (!round) return;
+    if (round.course_id) return;
+    if (!isOwner) return;
+    if (round.status !== "draft" && round.status !== "scheduled") return;
+
+    nearbyAutoDetectDoneRef.current = true;
+    const nearest = nearbyForPicker[0];
+
+    (async () => {
+      try {
+        const resolveRes = await fetch("/api/courses/resolve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ osm_id: nearest.id, name: nearest.name, lat: nearest.lat, lng: nearest.lng }),
+        });
+        const resolved = await resolveRes.json();
+        if (resolved.course_id) {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const token = sessionData.session?.access_token;
+          if (!token) return;
+          await fetch("/api/rounds/set-course", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ round_id: roundId, course_id: resolved.course_id, pending_tee_box_id: null }),
+          });
+          fetchAll();
+        }
+      } catch {}
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nearbyForPicker, round?.course_id, isOwner]);
 
   // Sync name and scheduled date from round state (skip during saves to prevent reset loops)
   useEffect(() => {
@@ -926,6 +996,8 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId 
               isOwner={isOwner}
               isEditable={round.status === "draft" || round.status === "scheduled"}
               onUpdate={fetchAll}
+              preloadedNearby={nearbyForPicker}
+              nearbyGpsPos={nearbyGpsPosRef.current}
             />
           </SectionCard>
         ) : null}
@@ -954,23 +1026,28 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId 
         {/* Team Setup (team formats only) */}
         {!loading && round && round.status !== "live" && isTeamFormat(round.format_type as any) ? (
           <SectionCard title="Teams">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="text-[11px] text-emerald-100/60">
-                  {teams.length === 0 ? "No teams set up yet" : `${teams.length} team${teams.length !== 1 ? "s" : ""} · ${participants.filter((p) => (p as any).team_id).length}/${participants.length} assigned`}
-                </div>
-                {isOwner && (round.status === "draft" || round.status === "scheduled") ? (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="rounded-xl border border-emerald-900/70 text-emerald-100 hover:bg-emerald-900/20"
-                    onClick={() => setTeamSheet(true)}
-                  >
-                    Set Up Teams
-                  </Button>
-                ) : null}
+            <div className="space-y-3">
+              <div className="text-[11px] text-emerald-100/60">
+                {teams.length === 0 ? "No teams set up yet" : `${teams.length} team${teams.length !== 1 ? "s" : ""} · ${participants.filter((p) => (p as any).team_id).length}/${participants.length} assigned`}
               </div>
-              {teams.length > 0 && (
+              {isOwner && (round.status === "draft" || round.status === "scheduled") ? (
+                <TeamBuilderSheet
+                  roundId={roundId}
+                  format={round.format_type as any}
+                  teams={teams}
+                  participants={participants.map((p) => ({
+                    id: p.id,
+                    name: displayParticipant(p).name,
+                    avatarUrl: displayParticipant(p).avatar_url,
+                    team_id: (p as any).team_id ?? null,
+                  }))}
+                  onMutated={() => { fetchAll(); }}
+                  getToken={async () => {
+                    const { data } = await supabase.auth.getSession();
+                    return data.session?.access_token ?? null;
+                  }}
+                />
+              ) : teams.length > 0 ? (
                 <div className="space-y-1">
                   {teams.map((t) => {
                     const members = participants.filter((p) => (p as any).team_id === t.id);
@@ -982,30 +1059,9 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId 
                     );
                   })}
                 </div>
-              )}
+              ) : null}
             </div>
           </SectionCard>
-        ) : null}
-
-        {/* Team Builder Sheet */}
-        {teamSheet && round ? (
-          <TeamBuilderSheet
-            roundId={roundId}
-            format={round.format_type as any}
-            teams={teams}
-            participants={participants.map((p) => ({
-              id: p.id,
-              name: displayParticipant(p).name,
-              avatarUrl: displayParticipant(p).avatar_url,
-              team_id: (p as any).team_id ?? null,
-            }))}
-            onClose={() => setTeamSheet(false)}
-            onMutated={() => { fetchAll(); }}
-            getToken={async () => {
-              const { data } = await supabase.auth.getSession();
-              return data.session?.access_token ?? null;
-            }}
-          />
         ) : null}
 
         {/* ====== Players Section ====== */}
