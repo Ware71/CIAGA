@@ -1655,7 +1655,7 @@ create or replace view "public"."hole_scoring_source" as  WITH latest AS (
         )
  SELECT rp.profile_id,
     l.round_id,
-    COALESCE(r.started_at, r.created_at) AS played_at,
+    COALESCE(hrr.played_at::timestamptz, r.finished_at, r.started_at, r.created_at) AS played_at,
     rcs.source_course_id AS course_id,
     rcs.course_name,
     rts.source_tee_box_id AS tee_box_id,
