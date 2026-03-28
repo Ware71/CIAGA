@@ -2,7 +2,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { calcCourseHandicap } from "@/lib/rounds/setupHelpers";
 
 export async function getSetupSnapshot(roundId: string) {
-  const [roundRes, participantsRes] = await Promise.all([
+  const [roundRes, participantsRes, teamsRes] = await Promise.all([
     supabaseAdmin
       .from("rounds")
       .select(`
@@ -15,6 +15,11 @@ export async function getSetupSnapshot(roundId: string) {
       .eq("id", roundId)
       .single(),
     supabaseAdmin.rpc("get_round_setup_participants", { _round_id: roundId }),
+    supabaseAdmin
+      .from("round_teams")
+      .select("id, name, team_number")
+      .eq("round_id", roundId)
+      .order("team_number", { ascending: true }),
   ]);
 
   if (roundRes.error) throw roundRes.error;
@@ -24,6 +29,7 @@ export async function getSetupSnapshot(roundId: string) {
 
   const round = roundRes.data as any;
   const rows = (participantsRes.data ?? []) as any[];
+  const teams = (teamsRes.data ?? []) as any[];
 
   const profileIds = rows
     .filter((r: any) => !r.is_guest && r.profile_id)
@@ -77,6 +83,7 @@ export async function getSetupSnapshot(roundId: string) {
   return {
     round,
     participants: rows,
+    teams,
     handicap_indexes: handicapIndexes,
     course_handicaps: courseHandicaps,
   };

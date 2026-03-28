@@ -107,6 +107,7 @@ export type FeedPayloadByType = {
       // Desired display fields
       gross_total?: number | null;
       net_total?: number | null;
+      gross_to_par?: number | null;
       net_to_par?: number | null;
       par_total?: number | null;
       holes_completed?: number | null;

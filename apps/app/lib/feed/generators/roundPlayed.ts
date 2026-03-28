@@ -61,12 +61,14 @@ export async function emitRoundPlayedFeedItem(params: {
 
   const { data: teeSnaps, error: tsErr } = await supabaseAdmin
     .from("round_tee_snapshots")
-    .select("name, created_at")
+    .select("name, par_total, created_at")
     .eq("round_course_snapshot_id", courseSnap?.id ?? "00000000-0000-0000-0000-000000000000")
     .order("created_at", { ascending: false })
     .limit(1);
   if (tsErr) throw tsErr;
   const teeSnap = (teeSnaps ?? [])[0] as any | undefined;
+  const parTotal: number | null =
+    typeof teeSnap?.par_total === "number" ? teeSnap.par_total : null;
 
   const occurred_at =
     (round as any).finished_at ??
@@ -167,6 +169,9 @@ export async function emitRoundPlayedFeedItem(params: {
     const ch = courseHandicapByParticipantId.get(pid) ?? null;
     const net_total = typeof gross_total === "number" && typeof ch === "number" ? gross_total - ch : null;
 
+    const gross_to_par = typeof gross_total === "number" && typeof parTotal === "number" ? gross_total - parTotal : null;
+    const net_to_par = typeof net_total === "number" && typeof parTotal === "number" ? net_total - parTotal : null;
+
     const format_score = formatSummary?.player_scores.get(pid) ?? null;
 
     return {
@@ -175,6 +180,9 @@ export async function emitRoundPlayedFeedItem(params: {
       avatar_url,
       gross_total,
       net_total,
+      gross_to_par,
+      net_to_par,
+      par_total: parTotal,
       format_score,
     };
   });

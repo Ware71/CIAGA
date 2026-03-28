@@ -105,8 +105,9 @@ function isRoundPlayedPlayers(
   avatar_url?: string | null;
   gross_total?: number | null;
   net_total?: number | null;
-  par_total?: number | null;
+  gross_to_par?: number | null;
   net_to_par?: number | null;
+  par_total?: number | null;
   holes_completed?: number | null;
   format_score?: string | number | null;
 }> {
@@ -121,8 +122,9 @@ function isRoundPlayedPlayers(
         (x.avatar_url === undefined || isStringOrNull(x.avatar_url)) &&
         (x.gross_total === undefined || isNumberOrNull(x.gross_total)) &&
         (x.net_total === undefined || isNumberOrNull(x.net_total)) &&
-        (x.par_total === undefined || isNumberOrNull(x.par_total)) &&
+        (x.gross_to_par === undefined || isNumberOrNull(x.gross_to_par)) &&
         (x.net_to_par === undefined || isNumberOrNull(x.net_to_par)) &&
+        (x.par_total === undefined || isNumberOrNull(x.par_total)) &&
         (x.holes_completed === undefined || isNumberOrNull(x.holes_completed)) &&
         (x.format_score === undefined || isStringOrNumberOrNull(x.format_score))
     )

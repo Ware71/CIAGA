@@ -236,6 +236,10 @@ function RoundPlayedBody({ payload }: { payload: any }) {
   const formatLabel = typeof payload?.format_label === "string" ? payload.format_label : null;
   const formatWinner = typeof payload?.format_winner === "string" ? payload.format_winner : null;
   const sideGameResults = Array.isArray(payload?.side_game_results) ? payload.side_game_results : [];
+  const formatType = typeof payload?.format_type === "string" ? payload.format_type : null;
+
+  // Show +/- to par as primary for strokeplay-like formats (null format_type is also strokeplay)
+  const isStrokeplay = !formatType || formatType === "strokeplay" || formatType === "team_strokeplay";
 
   return (
     <div className="space-y-2">
@@ -244,6 +248,7 @@ function RoundPlayedBody({ payload }: { payload: any }) {
           {players.slice(0, 6).map((p: any, idx: number) => {
             const gross = safeNum(p?.gross_total);
             const net = safeNum(p?.net_total);
+            const grossToPar = safeNum(p?.gross_to_par);
             const netToPar = safeNum(p?.net_to_par);
             const parTotal = safeNum(p?.par_total);
             const holesCompleted = safeNum(p?.holes_completed);
@@ -280,21 +285,35 @@ function RoundPlayedBody({ payload }: { payload: any }) {
                   <div className="flex items-center gap-2">
                     <div className="text-right">
                       <div className="text-[10px] font-extrabold text-emerald-100/50">GROSS</div>
-                      <div className="text-sm font-extrabold text-[#f5e6b0]">{gross ?? "—"}</div>
+                      {isStrokeplay && grossToPar !== null ? (
+                        <>
+                          <div className="text-sm font-extrabold text-[#f5e6b0]">{formatToPar(grossToPar)}</div>
+                          <div className="text-[10px] font-semibold text-emerald-100/50">{gross}</div>
+                        </>
+                      ) : (
+                        <div className="text-sm font-extrabold text-[#f5e6b0]">{gross ?? "—"}</div>
+                      )}
                     </div>
 
                     <div className="w-px h-8 bg-emerald-900/40" />
 
                     <div className="text-right">
                       <div className="text-[10px] font-extrabold text-emerald-100/50">NET</div>
-                      <div className="text-sm font-extrabold text-emerald-50">
-                        {net ?? "—"}
-                        {typeof netToPar === "number" ? (
-                          <span className="ml-2 text-[11px] font-extrabold text-emerald-100/65">
-                            ({formatToPar(netToPar)})
-                          </span>
-                        ) : null}
-                      </div>
+                      {isStrokeplay && netToPar !== null ? (
+                        <>
+                          <div className="text-sm font-extrabold text-emerald-50">{formatToPar(netToPar)}</div>
+                          <div className="text-[10px] font-semibold text-emerald-100/50">{net}</div>
+                        </>
+                      ) : (
+                        <div className="text-sm font-extrabold text-emerald-50">
+                          {net ?? "—"}
+                          {!isStrokeplay && typeof netToPar === "number" ? (
+                            <span className="ml-2 text-[11px] font-extrabold text-emerald-100/65">
+                              ({formatToPar(netToPar)})
+                            </span>
+                          ) : null}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -449,6 +468,7 @@ export default function FeedCard({ item }: { item: FeedItemVM }) {
         avatar_url: x?.avatar_url ?? null,
         gross_total: safeNum(x?.gross_total),
         net_total: safeNum(x?.net_total),
+        gross_to_par: safeNum(x?.gross_to_par),
         net_to_par: safeNum(x?.net_to_par),
         par_total: safeNum(x?.par_total),
       }))

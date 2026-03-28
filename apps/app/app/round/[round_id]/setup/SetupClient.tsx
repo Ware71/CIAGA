@@ -17,6 +17,9 @@ import {
 } from "@/lib/rounds/setupHelpers";
 import type { Round, Participant, ProfileLite } from "@/lib/rounds/setupHelpers";
 import { formatHI } from "@/lib/rounds/handicapUtils";
+import { TeamBuilderSheet } from "@/components/rounds/TeamBuilderSheet";
+import type { TeamBuilderTeam, TeamBuilderParticipant } from "@/components/rounds/TeamBuilderSheet";
+import { isTeamFormat } from "@/components/rounds/FormatSelector";
 
 
 function Avatar({
@@ -98,6 +101,7 @@ type SetupParticipantRow = {
   profile_name: string | null;
   profile_email: string | null;
   profile_avatar_url: string | null;
+  team_id?: string | null;
   // Handicap fields
   handicap_index?: number | null;
   assigned_playing_handicap?: number | null;
@@ -253,6 +257,8 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId 
 
   const [round, setRound] = useState<Round | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const [teams, setTeams] = useState<TeamBuilderTeam[]>([]);
+  const [teamSheet, setTeamSheet] = useState(false);
   const [nameEdit, setNameEdit] = useState<string>("");
   const [nameSaving, setNameSaving] = useState(false);
   const [scheduledEdit, setScheduledEdit] = useState<string>("");
@@ -431,6 +437,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId 
           is_guest: !!row.is_guest,
           display_name: row.display_name,
           role,
+          team_id: row.team_id ?? null,
           profiles: row.profile_id
             ? {
                 id: row.profile_id ?? undefined,
@@ -450,6 +457,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId 
       hasInitialDataRef.current = true;
       setRound(snap.round);
       setParticipants(mapped);
+      setTeams((snap.teams ?? []) as TeamBuilderTeam[]);
       setHiByProfileId(snap.handicap_indexes ?? {});
       setChByProfileId(snap.course_handicaps ?? {});
     } catch (e: any) {
@@ -499,6 +507,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId 
           is_guest: !!row.is_guest,
           display_name: row.display_name,
           role,
+          team_id: row.team_id ?? null,
           profiles: row.profile_id
             ? {
                 id: row.profile_id ?? undefined,
@@ -518,6 +527,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId 
       hasInitialDataRef.current = true;
       setRound(snap.round);
       setParticipants(mapped);
+      setTeams((snap.teams ?? []) as TeamBuilderTeam[]);
       setHiByProfileId(snap.handicap_indexes ?? {});
       setChByProfileId(snap.course_handicaps ?? {});
       if (viewerProfileId) setMeId(viewerProfileId);
@@ -906,6 +916,64 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId 
               id: p.id,
               displayName: displayParticipant(p).name,
             }))}
+          />
+        ) : null}
+
+        {/* Team Setup (team formats only) */}
+        {!loading && round && round.status !== "live" && isTeamFormat(round.format_type as any) ? (
+          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <div className="text-sm font-semibold text-emerald-50">Teams</div>
+                <div className="text-[11px] text-emerald-100/60">
+                  {teams.length === 0 ? "No teams set up yet" : `${teams.length} team${teams.length !== 1 ? "s" : ""} · ${participants.filter((p) => (p as any).team_id).length}/${participants.length} assigned`}
+                </div>
+              </div>
+              {isOwner && (round.status === "draft" || round.status === "scheduled") ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-xl border border-emerald-900/70 text-emerald-100 hover:bg-emerald-900/20"
+                  onClick={() => setTeamSheet(true)}
+                >
+                  Set Up Teams
+                </Button>
+              ) : null}
+            </div>
+            {teams.length > 0 && (
+              <div className="space-y-1">
+                {teams.map((t) => {
+                  const members = participants.filter((p) => (p as any).team_id === t.id);
+                  return (
+                    <div key={t.id} className="text-[11px] text-emerald-100/80">
+                      <span className="font-semibold text-[#f5e6b0]">{t.name}:</span>{" "}
+                      {members.length === 0 ? "No players" : members.map((p) => displayParticipant(p).name).join(", ")}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ) : null}
+
+        {/* Team Builder Sheet */}
+        {teamSheet && round ? (
+          <TeamBuilderSheet
+            roundId={roundId}
+            format={round.format_type as any}
+            teams={teams}
+            participants={participants.map((p) => ({
+              id: p.id,
+              name: displayParticipant(p).name,
+              avatarUrl: displayParticipant(p).avatar_url,
+              team_id: (p as any).team_id ?? null,
+            }))}
+            onClose={() => setTeamSheet(false)}
+            onMutated={() => { fetchAll(); }}
+            getToken={async () => {
+              const { data } = await supabase.auth.getSession();
+              return data.session?.access_token ?? null;
+            }}
           />
         ) : null}
 

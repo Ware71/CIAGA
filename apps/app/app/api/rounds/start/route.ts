@@ -214,6 +214,60 @@ export async function POST(req: Request) {
 
     if (handicapErr) return NextResponse.json({ error: handicapErr.message }, { status: 500 });
 
+    // Compute and store team handicaps for single-ball formats
+    const SINGLE_BALL_FORMATS = ["scramble", "greensomes", "foursomes"];
+    const { data: roundForFormat } = await supabaseAdmin
+      .from("rounds")
+      .select("format_type")
+      .eq("id", round.id)
+      .single();
+
+    if (roundForFormat && SINGLE_BALL_FORMATS.includes((roundForFormat as any).format_type)) {
+      const formatType = (roundForFormat as any).format_type as string;
+
+      // Fetch participants with team assignment and resolved course handicap
+      const { data: teamsData } = await supabaseAdmin
+        .from("round_teams")
+        .select("id")
+        .eq("round_id", round.id);
+
+      const { data: partsData } = await supabaseAdmin
+        .from("round_participants")
+        .select("id, team_id, course_handicap_used")
+        .eq("round_id", round.id)
+        .not("team_id", "is", null);
+
+      if (teamsData && partsData) {
+        for (const team of teamsData as any[]) {
+          const members = (partsData as any[]).filter((p) => p.team_id === team.id);
+          const handicaps = members
+            .map((p) => typeof p.course_handicap_used === "number" ? p.course_handicap_used : null)
+            .filter((h): h is number => h !== null);
+
+          if (handicaps.length === 0) continue;
+
+          const sorted = [...handicaps].sort((a, b) => a - b);
+          let teamHcp = 0;
+
+          if (formatType === "scramble") {
+            if (sorted.length === 1) teamHcp = Math.round(sorted[0] * 0.35);
+            else if (sorted.length === 2) teamHcp = Math.round(sorted[0] * 0.35 + sorted[1] * 0.15);
+            else if (sorted.length === 3) teamHcp = Math.round(sorted[0] * 0.25 + sorted[1] * 0.15 + sorted[2] * 0.10);
+            else teamHcp = Math.round(sorted[0] * 0.25 + sorted[1] * 0.15 + sorted[2] * 0.10 + sorted[3] * 0.05);
+          } else if (formatType === "greensomes") {
+            teamHcp = Math.round(sorted[0] * 0.6 + (sorted[1] ?? sorted[0]) * 0.4);
+          } else if (formatType === "foursomes") {
+            teamHcp = Math.round((sorted[0] + (sorted[1] ?? sorted[0])) * 0.5);
+          }
+
+          await supabaseAdmin
+            .from("round_teams")
+            .update({ playing_handicap_used: teamHcp })
+            .eq("id", team.id);
+        }
+      }
+    }
+
     // Finalize: mark live (idempotent)
     const { error: updErr } = await supabaseAdmin
       .from("rounds")

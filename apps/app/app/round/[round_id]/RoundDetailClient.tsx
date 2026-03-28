@@ -418,6 +418,11 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     }
   }, [scoreView, formatDisplays]);
 
+  // Single-ball formats (scramble, greensomes, foursomes) play one team ball —
+  // individual gross/net tabs are meaningless; always show the format tab.
+  const SINGLE_BALL_FORMATS: RoundFormatType[] = ["scramble", "greensomes", "foursomes"];
+  const isSingleBall = SINGLE_BALL_FORMATS.includes(formatType);
+
   // For stableford-based formats, default to the format (points) tab once it's available
   useEffect(() => {
     const stablefordFormats: RoundFormatType[] = ["stableford", "pairs_stableford", "team_stableford", "team_bestball"];
@@ -426,6 +431,14 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formatType, formatDisplays.length]);
+
+  // For single-ball formats, force format:0 (never show gross/net)
+  useEffect(() => {
+    if (isSingleBall && formatDisplays.length > 0 && !isFormatView(scoreView)) {
+      setScoreView("format:0" as FormatScoreView);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSingleBall, formatDisplays.length]);
 
   // Displayed score:
   // - not_started (non-acceptable) => null (render blank)
@@ -559,6 +572,14 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     return map;
   }, [participants, totals, metaSums.parTot]);
 
+  const holesCompletedByParticipantId = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const p of participants) {
+      map[p.id] = holesList.filter((h) => isHoleCompleteForPlayer(p.id, h.hole_number)).length;
+    }
+    return map;
+  }, [participants, holesList, isHoleCompleteForPlayer]);
+
   // Always-available gross totals for leaderboard (independent of scoreView)
   const grossTotals = useMemo(() => {
     const byPid: Record<string, { out: number; in: number; total: number }> = {};
@@ -631,6 +652,9 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     const rows = buildFinalRows(participants, totals, toParTotalByParticipant, getParticipantLabel, getParticipantAvatar);
     const primaryFormat = formatDisplays[0] ?? null;
     const hasStringTotals = rows.some((r) => typeof r.total === "string");
+    // Only apply higherIsBetter when we are actually on a format view (e.g. Stableford points).
+    // On gross/net views, always sort lower = better regardless of format type.
+    const useHigherIsBetter = isFormatView(scoreView) && (primaryFormat?.higherIsBetter ?? false);
     if (hasStringTotals) {
       // Matchplay: winners (W ...) sort before losers (L ...), then AS
       rows.sort((a, b) => {
@@ -640,13 +664,13 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
         const bWin = bStr.startsWith("W") ? 0 : bStr.startsWith("L") ? 2 : 1;
         return aWin - bWin || a.name.localeCompare(b.name);
       });
-    } else if (primaryFormat?.higherIsBetter) {
+    } else if (useHigherIsBetter) {
       rows.sort((a, b) => (b.total as number) - (a.total as number) || a.name.localeCompare(b.name));
     } else {
       rows.sort((a, b) => (a.total as number) - (b.total as number) || a.name.localeCompare(b.name));
     }
     return rows;
-  }, [participants, totals, toParTotalByParticipant, getParticipantLabel, getParticipantAvatar, formatDisplays]);
+  }, [participants, totals, toParTotalByParticipant, getParticipantLabel, getParticipantAvatar, formatDisplays, scoreView]);
 
   const winner = useMemo(() => {
     if (!finalRows.length) return null;
@@ -1137,25 +1161,29 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
                 </div>
                 <div className="mt-1 flex justify-center">
                   <div className="rounded-xl border border-emerald-900/70 bg-[#0b3b21]/50 p-1 flex items-center overflow-hidden max-w-full">
-                    <button
-                      className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 ${
-                        scoreView === "gross" ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
-                      }`}
-                      onClick={() => setScoreView("gross")}
-                    >
-                      Gross
-                    </button>
-                    <button
-                      className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 ${
-                        scoreView === "net" ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
-                      }`}
-                      onClick={() => setScoreView("net")}
-                    >
-                      Net
-                    </button>
+                    {!isSingleBall && (
+                      <>
+                        <button
+                          className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 ${
+                            scoreView === "gross" ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
+                          }`}
+                          onClick={() => setScoreView("gross")}
+                        >
+                          Gross
+                        </button>
+                        <button
+                          className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 ${
+                            scoreView === "net" ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
+                          }`}
+                          onClick={() => setScoreView("net")}
+                        >
+                          Net
+                        </button>
+                      </>
+                    )}
                     {formatDisplays.length > 0 && (
                       <>
-                        <div className="w-px h-5 bg-emerald-900/50 mx-0.5 shrink-0" />
+                        {!isSingleBall && <div className="w-px h-5 bg-emerald-900/50 mx-0.5 shrink-0" />}
                         <div className="flex overflow-x-auto min-w-0" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
                           {formatDisplays.map((fd, i) => (
                             <button
@@ -1201,25 +1229,29 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
                   <Menu className="h-5 w-5" />
                 </Button>
                 <div className="rounded-xl border border-emerald-900/70 bg-[#0b3b21]/50 p-1 flex items-center overflow-hidden max-w-full">
-                  <button
-                    className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 ${
-                      scoreView === "gross" ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
-                    }`}
-                    onClick={() => setScoreView("gross")}
-                  >
-                    Gross
-                  </button>
-                  <button
-                    className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 ${
-                      scoreView === "net" ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
-                    }`}
-                    onClick={() => setScoreView("net")}
-                  >
-                    Net
-                  </button>
+                  {!isSingleBall && (
+                    <>
+                      <button
+                        className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 ${
+                          scoreView === "gross" ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
+                        }`}
+                        onClick={() => setScoreView("gross")}
+                      >
+                        Gross
+                      </button>
+                      <button
+                        className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 ${
+                          scoreView === "net" ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
+                        }`}
+                        onClick={() => setScoreView("net")}
+                      >
+                        Net
+                      </button>
+                    </>
+                  )}
                   {formatDisplays.length > 0 && (
                     <>
-                      <div className="w-px h-5 bg-emerald-900/50 mx-0.5 shrink-0" />
+                      {!isSingleBall && <div className="w-px h-5 bg-emerald-900/50 mx-0.5 shrink-0" />}
                       <div className="flex overflow-x-auto min-w-0" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
                         {formatDisplays.map((fd, i) => (
                           <button
@@ -1332,6 +1364,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
             getParticipantAvatar={scrambleGetAvatar}
             courseLabel={courseLabel}
             formatType={formatType}
+            holesCompletedByParticipantId={holesCompletedByParticipantId}
           />
         )}
 

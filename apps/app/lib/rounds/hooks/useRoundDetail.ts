@@ -12,7 +12,7 @@ export type RoundFormatType =
   | "scramble" | "greensomes" | "foursomes"
   | "skins" | "wolf";
 
-export type Team = { id: string; round_id: string; name: string; team_number: number };
+export type Team = { id: string; round_id: string; name: string; team_number: number; playing_handicap_used?: number | null };
 
 export type Participant = {
   id: string;

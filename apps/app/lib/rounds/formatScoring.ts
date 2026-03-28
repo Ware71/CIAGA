@@ -23,6 +23,8 @@ export type FormatHoleResult = {
   displayValue: string | number | null;
   /** Optional CSS hint for cell coloring */
   cssHint?: "positive" | "negative" | "neutral" | "won" | "lost" | "halved";
+  /** Strokes received on this hole (for dot indicators on format views) */
+  recv?: number;
 };
 
 export type FormatSummary = {
@@ -664,20 +666,46 @@ function computeTeamSingleScore(
   if (!teams.length) return null;
   const teamMap = buildTeamMap(participants, teams);
   const holeResults: Record<string, FormatHoleResult> = {};
+  const holeCount = holes.length;
+
+  // Build playing handicaps map keyed by teamId for dot indicators
+  const playingHandicaps: Record<string, number> = {};
 
   for (const [teamId, members] of teamMap) {
+    const team = teams.find((t) => t.id === teamId);
+    const teamHcp = typeof team?.playing_handicap_used === "number" ? team.playing_handicap_used : null;
+    if (teamHcp !== null) playingHandicaps[teamId] = teamHcp;
+
     for (const h of holes) {
-      let teamScore: number | null = null;
+      let teamGross: number | null = null;
       for (const p of members) {
         const gross = grossFor(p.id, h.hole_number, scoresByKey, holeStatesByKey);
-        if (gross !== null) { teamScore = gross; break; }
+        if (gross !== null) { teamGross = gross; break; }
       }
-      holeResults[`${teamId}:${h.hole_number}`] = teamScore !== null
-        ? { displayValue: teamScore }
-        : { displayValue: null };
+
+      if (teamGross === null) {
+        holeResults[`${teamId}:${h.hole_number}`] = { displayValue: null };
+        continue;
+      }
+
+      if (teamHcp !== null) {
+        // Show net score using team handicap
+        const recv = strokesReceivedOnHole(teamHcp, h.stroke_index ?? null, holeCount);
+        const net = netFromGross(teamGross, recv);
+        const diff = h.par ? net - h.par : null;
+        const cssHint: FormatHoleResult["cssHint"] =
+          diff === null ? undefined :
+          diff <= -1 ? "positive" :
+          diff === 1 ? "neutral" :
+          diff >= 2 ? "negative" : undefined;
+        holeResults[`${teamId}:${h.hole_number}`] = { displayValue: net, recv, cssHint };
+      } else {
+        holeResults[`${teamId}:${h.hole_number}`] = { displayValue: teamGross };
+      }
     }
   }
 
+  // Summaries use net totals (or gross if no handicap)
   const summaries: FormatSummary[] = teams.map((t) => ({
     participantId: t.id,
     teamId: t.id,
@@ -686,7 +714,14 @@ function computeTeamSingleScore(
     total: sumRange(holeResults, t.id, holes, 1, 18),
   }));
 
-  return { tabLabel, holeResults, summaries, higherIsBetter: false, isTeamView: true };
+  return {
+    tabLabel,
+    holeResults,
+    summaries,
+    higherIsBetter: false,
+    isTeamView: true,
+    playingHandicaps: Object.keys(playingHandicaps).length > 0 ? playingHandicaps : undefined,
+  };
 }
 
 // ── Strokeplay format tab (conditional) ───────────────────────────────

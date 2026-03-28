@@ -23,8 +23,9 @@ function formatToPar(toPar: number | null) {
 
 type BadgeType = "eagle" | "birdie" | "bogey" | "double" | null;
 
-function scoreBadgeType(s: string | number | null, par: number | null, scoreView: FormatScoreView): BadgeType {
-  if (isFormatView(scoreView) || typeof s !== "number" || typeof par !== "number") return null;
+function scoreBadgeType(s: string | number | null, par: number | null, scoreView: FormatScoreView, formatIsBadgeable = false): BadgeType {
+  if (isFormatView(scoreView) && !formatIsBadgeable) return null;
+  if (typeof s !== "number" || typeof par !== "number") return null;
   const diff = s - par;
   if (diff <= -2) return "eagle";
   if (diff === -1) return "birdie";
@@ -144,6 +145,9 @@ export default function ScorecardPortrait(props: {
     formatDisplay.higherIsBetter || formatDisplay.summaries.some(s => typeof s.total === "string")
   );
 
+  // Format views that are stroke-based — show birdie/bogey badges and stroke dots
+  const formatIsBadgeable = isFormatView(scoreView) && formatDisplay != null && !formatDisplay.higherIsBetter && !formatDisplay.summaries.some(s => typeof s.total === "string");
+
   return (
     <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 overflow-hidden">
       <div className="w-full">
@@ -248,6 +252,8 @@ export default function ScorecardPortrait(props: {
               const recv =
                 scoreView === "net" && !puLabel
                   ? strokesReceivedOnHole(p.course_handicap ?? null, h.stroke_index ?? null, holesList.length)
+                  : isFormatView(scoreView) && formatDisplay && !puLabel
+                  ? (formatDisplay.holeResults[key]?.recv ?? 0)
                   : 0;
 
               const fmtHint =

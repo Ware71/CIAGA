@@ -43,6 +43,7 @@ type LeaderboardRow = {
   avatarUrl: string | null;
   score: number | string;
   toPar: number | null;
+  thru: number | null;
 };
 
 export default function RoundMenuSheet(props: {
@@ -59,6 +60,7 @@ export default function RoundMenuSheet(props: {
   getParticipantAvatar: (p: Participant) => string | null;
   courseLabel: string;
   formatType: RoundFormatType;
+  holesCompletedByParticipantId: Record<string, number>;
 }) {
   const {
     onClose,
@@ -74,6 +76,7 @@ export default function RoundMenuSheet(props: {
     getParticipantAvatar,
     courseLabel,
     formatType,
+    holesCompletedByParticipantId,
   } = props;
 
   const [activeTab, setActiveTab] = useState<LeaderboardTab>("gross");
@@ -84,12 +87,14 @@ export default function RoundMenuSheet(props: {
       return participants.map((p) => {
         const t = grossTotals[p.id];
         const total = t?.total ?? 0;
+        const thru = holesCompletedByParticipantId[p.id] ?? null;
         return {
           participantId: p.id,
           name: getParticipantLabel(p),
           avatarUrl: getParticipantAvatar(p),
           score: total,
           toPar: typeof parTotal === "number" && total > 0 ? total - parTotal : null,
+          thru: thru > 0 ? thru : null,
         };
       });
     }
@@ -98,12 +103,14 @@ export default function RoundMenuSheet(props: {
       return participants.map((p) => {
         const t = netTotals[p.id];
         const total = t?.total ?? 0;
+        const thru = holesCompletedByParticipantId[p.id] ?? null;
         return {
           participantId: p.id,
           name: getParticipantLabel(p),
           avatarUrl: getParticipantAvatar(p),
           score: total,
           toPar: typeof parTotal === "number" && total > 0 ? total - parTotal : null,
+          thru: thru > 0 ? thru : null,
         };
       });
     }
@@ -117,12 +124,14 @@ export default function RoundMenuSheet(props: {
       .filter((p) => !fd.filteredParticipantIds || fd.filteredParticipantIds.includes(p.id))
       .map((p) => {
         const summary = fd.summaries.find((s) => s.participantId === p.id);
+        const thru = holesCompletedByParticipantId[p.id] ?? null;
         return {
           participantId: p.id,
           name: getParticipantLabel(p),
           avatarUrl: getParticipantAvatar(p),
           score: summary?.total ?? "–",
           toPar: null,
+          thru: thru > 0 ? thru : null,
         };
       });
   }
@@ -237,7 +246,12 @@ export default function RoundMenuSheet(props: {
                           {r.avatarUrl ? <AvatarImage src={r.avatarUrl} /> : null}
                           <AvatarFallback className="text-[9px]">{initialsFrom(r.name)}</AvatarFallback>
                         </Avatar>
-                        <div className="text-[12px] font-semibold text-emerald-50 truncate">{r.name}</div>
+                        <div className="min-w-0">
+                          <div className="text-[12px] font-semibold text-emerald-50 truncate">{r.name}</div>
+                          {r.thru != null && (
+                            <div className="text-[10px] text-emerald-100/55 leading-none mt-0.5">Thru {r.thru}</div>
+                          )}
+                        </div>
                       </div>
                       <div className="shrink-0 text-right">
                         <div className="text-[15px] font-extrabold tabular-nums text-[#f5e6b0]">
