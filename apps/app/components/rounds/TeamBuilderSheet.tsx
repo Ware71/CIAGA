@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
+import { Pencil } from "lucide-react";
 import type { RoundFormatType } from "./FormatSelector";
 
 export type TeamBuilderParticipant = {
@@ -60,6 +61,10 @@ async function apiCall(url: string, body: object, token: string) {
 export function TeamBuilderSheet({ roundId, format, teams, participants, onClose, onMutated, getToken }: Props) {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  // ── Rename state ──────────────────────────────────────────────────────────
+  const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
 
   // ── Drag state ────────────────────────────────────────────────────────────
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -184,6 +189,31 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onClose
     }
   }
 
+  async function renameTeam(teamId: string, name: string) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setSaving(true);
+    setErr(null);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Not authenticated");
+      await apiCall("/api/rounds/manage-teams", { round_id: roundId, action: "rename_team", team_id: teamId, name: trimmed }, token);
+      onMutated();
+    } catch (e: any) {
+      setErr(e?.message || "Failed to rename team");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function commitRename(teamId: string) {
+    const trimmed = editingName.trim();
+    setEditingTeamId(null);
+    if (trimmed) {
+      renameTeam(teamId, trimmed);
+    }
+  }
+
   async function assignPlayer(participantId: string, teamId: string | null) {
     setSaving(true);
     setErr(null);
@@ -234,6 +264,7 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onClose
             {teams.map((team) => {
               const members = participants.filter((p) => p.team_id === team.id);
               const isDropTarget = dropTargetTeamId === team.id;
+              const isEditing = editingTeamId === team.id;
               return (
                 <div
                   key={team.id}
@@ -245,11 +276,38 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onClose
                   }`}
                 >
                   <div className="px-3 py-2.5 flex items-center justify-between border-b border-emerald-900/50">
-                    <div className="text-[13px] font-bold text-[#f5e6b0]">{team.name}</div>
+                    {isEditing ? (
+                      <input
+                        autoFocus
+                        value={editingName}
+                        onChange={(e) => setEditingName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") commitRename(team.id);
+                          if (e.key === "Escape") setEditingTeamId(null);
+                        }}
+                        onBlur={() => commitRename(team.id)}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        className="flex-1 bg-transparent border-b border-emerald-200/40 text-[13px] font-bold text-[#f5e6b0] outline-none min-w-0 mr-2"
+                      />
+                    ) : (
+                      <div className="flex items-center gap-1 min-w-0 flex-1">
+                        <div className="text-[13px] font-bold text-[#f5e6b0] truncate">{team.name}</div>
+                        <button
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={() => { setEditingTeamId(team.id); setEditingName(team.name); }}
+                          disabled={saving}
+                          className="shrink-0 text-emerald-100/40 hover:text-emerald-100/80 disabled:opacity-40"
+                          aria-label="Rename team"
+                        >
+                          <Pencil size={12} />
+                        </button>
+                      </div>
+                    )}
                     <button
                       onClick={() => deleteTeam(team.id)}
                       disabled={saving}
-                      className="text-[11px] text-red-400/70 hover:text-red-400 disabled:opacity-40"
+                      onPointerDown={(e) => e.stopPropagation()}
+                      className="text-[11px] text-red-400/70 hover:text-red-400 disabled:opacity-40 shrink-0"
                     >
                       Delete
                     </button>
@@ -258,7 +316,7 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onClose
                   <div className="divide-y divide-emerald-900/40">
                     {members.length === 0 && (
                       <div className="px-3 py-2 text-[11px] text-emerald-100/40">
-                        {isDropTarget ? "Drop here to assign" : "No players assigned — drag or use buttons below"}
+                        {isDropTarget ? "Drop here to assign" : "No players assigned — drag a player here"}
                       </div>
                     )}
                     {members.map((p) => (
@@ -283,25 +341,6 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onClose
                       </div>
                     ))}
                   </div>
-
-                  {/* Quick-assign buttons from unassigned */}
-                  {unassigned.length > 0 && (
-                    <div className="px-3 py-1.5 border-t border-emerald-900/40">
-                      <div className="text-[10px] text-emerald-100/40 mb-1">Add to this team:</div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {unassigned.map((p) => (
-                          <button
-                            key={p.id}
-                            onClick={() => assignPlayer(p.id, team.id)}
-                            disabled={saving}
-                            className="rounded-lg border border-emerald-900/60 bg-[#0b3b21]/50 px-2 py-1 text-[11px] text-emerald-100/80 hover:bg-emerald-900/40 disabled:opacity-40"
-                          >
-                            + {p.name}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
               );
             })}
@@ -333,20 +372,6 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onClose
                         {p.avatarUrl ? <img src={p.avatarUrl} alt="" className="w-full h-full object-cover" /> : initialsFrom(p.name)}
                       </div>
                       <div className="text-[12px] font-semibold text-emerald-50 flex-1 truncate">{p.name}</div>
-                      {teams.length > 0 && (
-                        <div className="flex gap-1" onPointerDown={(e) => e.stopPropagation()}>
-                          {teams.map((t) => (
-                            <button
-                              key={t.id}
-                              onClick={() => assignPlayer(p.id, t.id)}
-                              disabled={saving}
-                              className="rounded-lg border border-emerald-900/60 bg-[#0b3b21]/50 px-2 py-1 text-[10px] text-emerald-100/70 hover:bg-emerald-900/40 disabled:opacity-40"
-                            >
-                              {t.name}
-                            </button>
-                          ))}
-                        </div>
-                      )}
                     </div>
                   ))}
                 </div>

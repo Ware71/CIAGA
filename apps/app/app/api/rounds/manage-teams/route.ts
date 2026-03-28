@@ -6,7 +6,8 @@ import { getOwnedProfileIdOrThrow } from "@/lib/serverOwnedProfile";
 type Body =
   | { round_id: string; action: "create_team"; name: string }
   | { round_id: string; action: "delete_team"; team_id: string }
-  | { round_id: string; action: "assign_player"; participant_id: string; team_id: string | null };
+  | { round_id: string; action: "assign_player"; participant_id: string; team_id: string | null }
+  | { round_id: string; action: "rename_team"; team_id: string; name: string };
 
 export async function POST(req: Request) {
   try {
@@ -102,6 +103,21 @@ export async function POST(req: Request) {
         .from("round_participants")
         .update({ team_id: body.team_id ?? null })
         .eq("id", body.participant_id)
+        .eq("round_id", body.round_id);
+
+      if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "rename_team") {
+      if (!body.team_id) return NextResponse.json({ error: "Missing team_id" }, { status: 400 });
+      const trimmed = body.name?.trim();
+      if (!trimmed) return NextResponse.json({ error: "Team name required" }, { status: 400 });
+
+      const { error: updateErr } = await supabaseAdmin
+        .from("round_teams")
+        .update({ name: trimmed })
+        .eq("id", body.team_id)
         .eq("round_id", body.round_id);
 
       if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 });

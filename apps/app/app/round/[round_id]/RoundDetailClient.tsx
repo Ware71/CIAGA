@@ -1093,6 +1093,25 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     [isScramble, getParticipantAvatar]
   );
 
+  // Build a map from first-member participant ID → all team member avatars for the scorecard header stack
+  const teamAvatarMap = useMemo<Record<string, Array<{ name: string; url: string | null }>>>(() => {
+    if (!isScramble) return {};
+    const map: Record<string, Array<{ name: string; url: string | null }>> = {};
+    for (const t of teams) {
+      const members = participants.filter((p) => p.team_id === t.id);
+      const first = members[0];
+      if (first) {
+        map[first.id] = members.map((m) => ({ name: getParticipantLabel(m), url: getParticipantAvatar(m) }));
+      }
+    }
+    return map;
+  }, [isScramble, teams, participants, getParticipantLabel, getParticipantAvatar]);
+
+  const getParticipantAvatarList = useCallback(
+    (p: Participant) => (isScramble ? teamAvatarMap[p.id] ?? null : null),
+    [isScramble, teamAvatarMap]
+  );
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#042713] text-slate-100 px-1.5 sm:px-2 pt-4 pb-[env(safe-area-inset-bottom)]">
@@ -1322,6 +1341,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
               onOpenEntry={openEntry}
               getParticipantLabel={scrambleGetLabel}
               getParticipantAvatar={scrambleGetAvatar}
+              getParticipantAvatarList={getParticipantAvatarList}
             />
           ) : (
             <ScorecardLandscape
@@ -1365,6 +1385,9 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
             courseLabel={courseLabel}
             formatType={formatType}
             holesCompletedByParticipantId={holesCompletedByParticipantId}
+            teams={isScramble ? teams : undefined}
+            allParticipants={isScramble ? participants : undefined}
+            isTeamFormat={isScramble}
           />
         )}
 

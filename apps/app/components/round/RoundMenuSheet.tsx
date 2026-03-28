@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import type { Participant } from "@/lib/rounds/hooks/useRoundDetail";
@@ -61,6 +61,9 @@ export default function RoundMenuSheet(props: {
   courseLabel: string;
   formatType: RoundFormatType;
   holesCompletedByParticipantId: Record<string, number>;
+  teams?: Array<{ id: string; name: string }>;
+  allParticipants?: Participant[];
+  isTeamFormat?: boolean;
 }) {
   const {
     onClose,
@@ -77,9 +80,24 @@ export default function RoundMenuSheet(props: {
     courseLabel,
     formatType,
     holesCompletedByParticipantId,
+    teams,
+    allParticipants,
+    isTeamFormat,
   } = props;
 
   const [activeTab, setActiveTab] = useState<LeaderboardTab>("gross");
+
+  // Map from first-member participant ID → all team members (for showing players under each team row)
+  const teamMembersByFirstId = useMemo<Record<string, Participant[]>>(() => {
+    if (!isTeamFormat || !teams?.length || !allParticipants?.length) return {};
+    const map: Record<string, Participant[]> = {};
+    for (const t of teams) {
+      const members = allParticipants.filter((p) => (p as any).team_id === t.id);
+      const first = members[0];
+      if (first) map[first.id] = members;
+    }
+    return map;
+  }, [isTeamFormat, teams, allParticipants]);
 
   // Build leaderboard rows for the active tab
   function buildRows(): LeaderboardRow[] {
@@ -235,34 +253,54 @@ export default function RoundMenuSheet(props: {
                   const prev = rows[idx - 1];
                   const sameScore = prev && prev.score === r.score;
                   const rank = idx === 0 ? 1 : sameScore ? null : idx + 1;
+                  const teamMembers = teamMembersByFirstId[r.participantId];
 
                   return (
-                    <div key={r.participantId} className="px-3 py-2.5 flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-6 text-center text-[11px] font-bold text-emerald-100/90">
-                          {rank ?? "•"}
+                    <div key={r.participantId}>
+                      <div className="px-3 py-2.5 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-6 text-center text-[11px] font-bold text-emerald-100/90">
+                            {rank ?? "•"}
+                          </div>
+                          <Avatar className="h-7 w-7 border border-emerald-200/70 shrink-0">
+                            {r.avatarUrl ? <AvatarImage src={r.avatarUrl} /> : null}
+                            <AvatarFallback className="text-[9px]">{initialsFrom(r.name)}</AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0">
+                            <div className="text-[12px] font-semibold text-emerald-50 truncate">{r.name}</div>
+                            {r.thru != null && (
+                              <div className="text-[10px] text-emerald-100/55 leading-none mt-0.5">Thru {r.thru}</div>
+                            )}
+                          </div>
                         </div>
-                        <Avatar className="h-7 w-7 border border-emerald-200/70 shrink-0">
-                          {r.avatarUrl ? <AvatarImage src={r.avatarUrl} /> : null}
-                          <AvatarFallback className="text-[9px]">{initialsFrom(r.name)}</AvatarFallback>
-                        </Avatar>
-                        <div className="min-w-0">
-                          <div className="text-[12px] font-semibold text-emerald-50 truncate">{r.name}</div>
-                          {r.thru != null && (
-                            <div className="text-[10px] text-emerald-100/55 leading-none mt-0.5">Thru {r.thru}</div>
-                          )}
+                        <div className="shrink-0 text-right">
+                          <div className="text-[15px] font-extrabold tabular-nums text-[#f5e6b0]">
+                            {r.score}
+                            {r.toPar != null && (
+                              <span className="text-[10px] font-bold text-emerald-100/80 ml-1">
+                                ({formatToPar(r.toPar)})
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                      <div className="shrink-0 text-right">
-                        <div className="text-[15px] font-extrabold tabular-nums text-[#f5e6b0]">
-                          {r.score}
-                          {r.toPar != null && (
-                            <span className="text-[10px] font-bold text-emerald-100/80 ml-1">
-                              ({formatToPar(r.toPar)})
-                            </span>
-                          )}
+                      {isTeamFormat && teamMembers && teamMembers.length > 0 && (
+                        <div className="pl-11 pr-3 pb-2 flex flex-wrap gap-1.5">
+                          {teamMembers.map((m) => {
+                            const mName = getParticipantLabel(m);
+                            const mUrl = getParticipantAvatar(m);
+                            return (
+                              <div key={m.id} className="flex items-center gap-1 text-[10px] text-emerald-100/60">
+                                <Avatar className="h-4 w-4 border border-emerald-200/50 shrink-0">
+                                  {mUrl ? <AvatarImage src={mUrl} /> : null}
+                                  <AvatarFallback className="text-[7px]">{initialsFrom(mName)}</AvatarFallback>
+                                </Avatar>
+                                <span>{mName}</span>
+                              </div>
+                            );
+                          })}
                         </div>
-                      </div>
+                      )}
                     </div>
                   );
                 })}

@@ -149,8 +149,8 @@ export function CourseAndTeeSection({
       if (!res.ok) return;
       const data = await res.json();
 
-      // Nearby API returns a plain array sorted nearest-first
-      const nearest = Array.isArray(data) ? data[0] : null;
+      // Nearby API returns { items: [...] } sorted nearest-first
+      const nearest = Array.isArray(data?.items) ? data.items[0] : null;
       if (!nearest) return;
 
       // Resolve OSM ID → database course_id (name/lat/lng are required by the API)
