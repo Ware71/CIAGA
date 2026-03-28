@@ -138,35 +138,40 @@ export function CourseAndTeeSection({
     try {
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
-          timeout: 5000,
-          maximumAge: 60000,
+          timeout: 8000,
+          maximumAge: 300_000,
         });
       });
 
       const res = await fetch(
-        `/api/courses/nearby?lat=${position.coords.latitude}&lng=${position.coords.longitude}&radius=15000`
+        `/api/courses/nearby?lat=${position.coords.latitude}&lng=${position.coords.longitude}&radius=5000`
       );
+      if (!res.ok) return;
       const data = await res.json();
 
-      if (data.items?.[0]) {
-        const nearest = data.items[0];
+      // Nearby API returns a plain array sorted nearest-first
+      const nearest = Array.isArray(data) ? data[0] : null;
+      if (!nearest) return;
 
-        // Resolve OSM ID to database course_id
-        const resolveRes = await fetch("/api/courses/resolve", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ osm_id: nearest.id }),
-        });
-        const resolved = await resolveRes.json();
+      // Resolve OSM ID → database course_id (name/lat/lng are required by the API)
+      const resolveRes = await fetch("/api/courses/resolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          osm_id: nearest.id,
+          name: nearest.name,
+          lat: nearest.lat,
+          lng: nearest.lng,
+        }),
+      });
+      const resolved = await resolveRes.json();
 
-        if (resolved.course_id) {
-          await updateCourse(resolved.course_id, null);
-          onUpdate();
-        }
+      if (resolved.course_id) {
+        await updateCourse(resolved.course_id, null);
+        onUpdate();
       }
-    } catch (e) {
-      // Silently fail - user can manually select
-      console.warn("Auto-detect nearest course failed:", e);
+    } catch {
+      // Silently fail — user can manually select
     } finally {
       setDetecting(false);
     }

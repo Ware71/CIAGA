@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import type { RoundFormatType } from "./FormatSelector";
 
@@ -27,12 +27,12 @@ type Props = {
   getToken: () => Promise<string | null>;
 };
 
-/** WHS team handicap formulas, returns a human-readable description */
+/** WHS team handicap formulas — corrected per WHS published allowances table */
 export function getTeamHandicapDescription(format: RoundFormatType, teamSize: number): string {
   if (format === "scramble") {
     if (teamSize <= 2) return "35% lowest + 15% highest";
-    if (teamSize === 3) return "25% lowest + 15% second + 10% highest";
-    return "25% lowest + 15% second + 10% third + 5% highest";
+    if (teamSize === 3) return "30% lowest + 20% second + 10% highest";
+    return "25% lowest + 20% second + 15% third + 10% highest";
   }
   if (format === "greensomes") return "60% lowest + 40% highest";
   if (format === "foursomes") return "50% combined";
@@ -60,6 +60,89 @@ async function apiCall(url: string, body: object, token: string) {
 export function TeamBuilderSheet({ roundId, format, teams, participants, onClose, onMutated, getToken }: Props) {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  // ── Drag state ────────────────────────────────────────────────────────────
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
+  const [dropTargetTeamId, setDropTargetTeamId] = useState<string | null>(null);
+  const [dropTargetUnassigned, setDropTargetUnassigned] = useState(false);
+
+  // Refs to each team card so we can hit-test during pointermove
+  const teamCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const unassignedZoneRef = useRef<HTMLDivElement | null>(null);
+
+  const draggingParticipant = participants.find((p) => p.id === draggingId) ?? null;
+
+  function resetDrag() {
+    setDraggingId(null);
+    setDragPos(null);
+    setDropTargetTeamId(null);
+    setDropTargetUnassigned(false);
+  }
+
+  function hitTest(x: number, y: number) {
+    // Check unassigned zone
+    const uz = unassignedZoneRef.current;
+    if (uz) {
+      const r = uz.getBoundingClientRect();
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+        setDropTargetTeamId(null);
+        setDropTargetUnassigned(true);
+        return;
+      }
+    }
+    // Check team cards
+    for (const [teamId, el] of Object.entries(teamCardRefs.current)) {
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+        setDropTargetTeamId(teamId);
+        setDropTargetUnassigned(false);
+        return;
+      }
+    }
+    setDropTargetTeamId(null);
+    setDropTargetUnassigned(false);
+  }
+
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent, participantId: string) => {
+      e.preventDefault();
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      setDraggingId(participantId);
+      setDragPos({ x: e.clientX, y: e.clientY });
+    },
+    []
+  );
+
+  const handlePointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!draggingId) return;
+      setDragPos({ x: e.clientX, y: e.clientY });
+      hitTest(e.clientX, e.clientY);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [draggingId]
+  );
+
+  const handlePointerUp = useCallback(
+    async (e: React.PointerEvent) => {
+      if (!draggingId) return;
+      const targetTeam = dropTargetTeamId;
+      const targetUnassigned = dropTargetUnassigned;
+      resetDrag();
+
+      if (targetTeam) {
+        await assignPlayer(draggingId, targetTeam);
+      } else if (targetUnassigned) {
+        await assignPlayer(draggingId, null);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [draggingId, dropTargetTeamId, dropTargetUnassigned]
+  );
+
+  // ── API actions ───────────────────────────────────────────────────────────
 
   // Compute max team size across all teams (for handicap description)
   const maxTeamSize = teams.reduce((max, t) => {
@@ -118,11 +201,18 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onClose
 
   const unassigned = participants.filter((p) => !p.team_id);
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="fixed inset-0 z-50">
       <button className="absolute inset-0 bg-black/60" onClick={onClose} aria-label="Close" />
       <div className="absolute left-0 right-0 bottom-0 px-3 pb-[env(safe-area-inset-bottom)]">
-        <div className="mx-auto w-full max-w-[520px] rounded-t-3xl border border-emerald-900/70 bg-[#061f12] shadow-2xl overflow-hidden max-h-[85vh] flex flex-col">
+        <div
+          className="mx-auto w-full max-w-[520px] rounded-t-3xl border border-emerald-900/70 bg-[#061f12] shadow-2xl overflow-hidden max-h-[85vh] flex flex-col"
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={resetDrag}
+          style={{ touchAction: draggingId ? "none" : undefined }}
+        >
           {/* Header */}
           <div className="p-4 border-b border-emerald-900/60 flex items-center justify-between shrink-0">
             <div className="text-sm font-semibold text-emerald-50">Set Up Teams</div>
@@ -134,11 +224,26 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onClose
               <div className="rounded-xl border border-red-900/50 bg-red-950/30 p-3 text-sm text-red-100">{err}</div>
             )}
 
+            {draggingId && (
+              <div className="text-[11px] text-center text-emerald-100/50 -mb-1">
+                Drag to a team or the Unassigned section
+              </div>
+            )}
+
             {/* Teams */}
             {teams.map((team) => {
               const members = participants.filter((p) => p.team_id === team.id);
+              const isDropTarget = dropTargetTeamId === team.id;
               return (
-                <div key={team.id} className="rounded-2xl border border-emerald-900/70 bg-[#042713]/60 overflow-hidden">
+                <div
+                  key={team.id}
+                  ref={(el) => { teamCardRefs.current[team.id] = el; }}
+                  className={`rounded-2xl border overflow-hidden transition-all ${
+                    isDropTarget
+                      ? "border-[#f5e6b0]/60 ring-2 ring-[#f5e6b0]/40 bg-[#042713]/80"
+                      : "border-emerald-900/70 bg-[#042713]/60"
+                  }`}
+                >
                   <div className="px-3 py-2.5 flex items-center justify-between border-b border-emerald-900/50">
                     <div className="text-[13px] font-bold text-[#f5e6b0]">{team.name}</div>
                     <button
@@ -152,18 +257,26 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onClose
 
                   <div className="divide-y divide-emerald-900/40">
                     {members.length === 0 && (
-                      <div className="px-3 py-2 text-[11px] text-emerald-100/40">No players assigned</div>
+                      <div className="px-3 py-2 text-[11px] text-emerald-100/40">
+                        {isDropTarget ? "Drop here to assign" : "No players assigned — drag or use buttons below"}
+                      </div>
                     )}
                     {members.map((p) => (
-                      <div key={p.id} className="px-3 py-2 flex items-center gap-2.5">
+                      <div
+                        key={p.id}
+                        className={`px-3 py-2 flex items-center gap-2.5 ${draggingId ? "cursor-grabbing" : "cursor-grab"}`}
+                        onPointerDown={(e) => handlePointerDown(e, p.id)}
+                        style={{ userSelect: "none", WebkitUserSelect: "none" }}
+                      >
                         <div className="h-7 w-7 rounded-full border border-emerald-200/60 bg-[#0b3b21]/60 flex items-center justify-center text-[9px] font-semibold text-emerald-50 shrink-0 overflow-hidden">
                           {p.avatarUrl ? <img src={p.avatarUrl} alt="" className="w-full h-full object-cover" /> : initialsFrom(p.name)}
                         </div>
                         <div className="text-[12px] font-semibold text-emerald-50 flex-1 truncate">{p.name}</div>
                         <button
-                          onClick={() => assignPlayer(p.id, null)}
+                          onClick={(e) => { e.stopPropagation(); assignPlayer(p.id, null); }}
                           disabled={saving}
-                          className="text-[11px] text-emerald-100/50 hover:text-emerald-100 disabled:opacity-40"
+                          className="text-[11px] text-emerald-100/50 hover:text-emerald-100 disabled:opacity-40 shrink-0"
+                          onPointerDown={(e) => e.stopPropagation()}
                         >
                           Remove
                         </button>
@@ -171,7 +284,7 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onClose
                     ))}
                   </div>
 
-                  {/* Drop targets — quick assign from unassigned */}
+                  {/* Quick-assign buttons from unassigned */}
                   {unassigned.length > 0 && (
                     <div className="px-3 py-1.5 border-t border-emerald-900/40">
                       <div className="text-[10px] text-emerald-100/40 mb-1">Add to this team:</div>
@@ -195,19 +308,33 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onClose
 
             {/* Unassigned players */}
             {unassigned.length > 0 && (
-              <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/40 overflow-hidden">
+              <div
+                ref={unassignedZoneRef}
+                className={`rounded-2xl border overflow-hidden transition-all ${
+                  dropTargetUnassigned
+                    ? "border-emerald-400/60 ring-2 ring-emerald-400/30 bg-[#042713]/60"
+                    : "border-emerald-900/70 bg-[#042713]/40"
+                }`}
+              >
                 <div className="px-3 py-2.5 border-b border-emerald-900/50">
-                  <div className="text-[13px] font-bold text-emerald-100/70">Unassigned</div>
+                  <div className="text-[13px] font-bold text-emerald-100/70">
+                    {dropTargetUnassigned ? "Drop to unassign" : "Unassigned"}
+                  </div>
                 </div>
                 <div className="divide-y divide-emerald-900/40">
                   {unassigned.map((p) => (
-                    <div key={p.id} className="px-3 py-2 flex items-center gap-2.5">
+                    <div
+                      key={p.id}
+                      className={`px-3 py-2 flex items-center gap-2.5 ${draggingId ? "cursor-grabbing" : "cursor-grab"}`}
+                      onPointerDown={(e) => handlePointerDown(e, p.id)}
+                      style={{ userSelect: "none", WebkitUserSelect: "none" }}
+                    >
                       <div className="h-7 w-7 rounded-full border border-emerald-200/60 bg-[#0b3b21]/60 flex items-center justify-center text-[9px] font-semibold text-emerald-50 shrink-0 overflow-hidden">
                         {p.avatarUrl ? <img src={p.avatarUrl} alt="" className="w-full h-full object-cover" /> : initialsFrom(p.name)}
                       </div>
                       <div className="text-[12px] font-semibold text-emerald-50 flex-1 truncate">{p.name}</div>
                       {teams.length > 0 && (
-                        <div className="flex gap-1">
+                        <div className="flex gap-1" onPointerDown={(e) => e.stopPropagation()}>
                           {teams.map((t) => (
                             <button
                               key={t.id}
@@ -247,6 +374,21 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onClose
           </div>
         </div>
       </div>
+
+      {/* Drag ghost — follows pointer */}
+      {draggingId && dragPos && draggingParticipant && (
+        <div
+          className="fixed pointer-events-none z-[200] flex items-center gap-2 rounded-xl border border-[#f5e6b0]/60 bg-[#061f12]/95 px-2.5 py-1.5 shadow-xl"
+          style={{ left: dragPos.x - 16, top: dragPos.y - 18, transform: "rotate(2deg)" }}
+        >
+          <div className="h-6 w-6 rounded-full border border-emerald-200/60 bg-[#0b3b21]/60 flex items-center justify-center text-[9px] font-semibold text-emerald-50 shrink-0 overflow-hidden">
+            {draggingParticipant.avatarUrl
+              ? <img src={draggingParticipant.avatarUrl} alt="" className="w-full h-full object-cover" />
+              : initialsFrom(draggingParticipant.name)}
+          </div>
+          <span className="text-[12px] font-semibold text-[#f5e6b0] whitespace-nowrap">{draggingParticipant.name}</span>
+        </div>
+      )}
     </div>
   );
 }

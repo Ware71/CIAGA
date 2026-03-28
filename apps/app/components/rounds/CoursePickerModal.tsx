@@ -416,7 +416,7 @@ export function CoursePickerModal({ open, onClose, onSelect }: Props) {
               ? "No golf courses found near this location. Try a different spot."
               : nearbyFilter.trim()
               ? "No matches found."
-              : "No courses found within 30 km."}
+              : "No courses found within 5 km — try searching by name."}
           </div>
         )}
 

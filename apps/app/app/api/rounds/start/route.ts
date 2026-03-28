@@ -252,8 +252,8 @@ export async function POST(req: Request) {
           if (formatType === "scramble") {
             if (sorted.length === 1) teamHcp = Math.round(sorted[0] * 0.35);
             else if (sorted.length === 2) teamHcp = Math.round(sorted[0] * 0.35 + sorted[1] * 0.15);
-            else if (sorted.length === 3) teamHcp = Math.round(sorted[0] * 0.25 + sorted[1] * 0.15 + sorted[2] * 0.10);
-            else teamHcp = Math.round(sorted[0] * 0.25 + sorted[1] * 0.15 + sorted[2] * 0.10 + sorted[3] * 0.05);
+            else if (sorted.length === 3) teamHcp = Math.round(sorted[0] * 0.30 + sorted[1] * 0.20 + sorted[2] * 0.10);
+            else teamHcp = Math.round(sorted[0] * 0.25 + sorted[1] * 0.20 + sorted[2] * 0.15 + sorted[3] * 0.10);
           } else if (formatType === "greensomes") {
             teamHcp = Math.round(sorted[0] * 0.6 + (sorted[1] ?? sorted[0]) * 0.4);
           } else if (formatType === "foursomes") {
