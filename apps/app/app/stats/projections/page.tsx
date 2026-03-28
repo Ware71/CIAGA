@@ -40,7 +40,7 @@ type EtaStatus = "insufficient" | "reached" | "unreachable" | "unknown" | "estim
 // Config (Time-only)
 // -----------------------------
 const TIME_FUTURE_DAYS = 60;
-const RECENCY_DECAY = 0.012; // half-weight ≈ 58 days back
+const RECENCY_DECAY = 0.006; // half-weight ≈ 116 days back (chart trend only)
 
 const EPS_VIS = 1.0;
 const INTERCEPT_MAX_DAYS_AHEAD = 3650; // 10y
@@ -268,24 +268,34 @@ export default function StatsPage() {
 
     const tOf = (p: HiPoint, _idx: number, fd: Date) => daysBetween(fd, new Date(p.date));
 
-    const aSorted = filterByLookback([...(compareAId ? aPoints : [])].sort((x, y) => x.date.localeCompare(y.date)));
-    const bSorted = filterByLookback([...(compareBId ? bPoints : [])].sort((x, y) => x.date.localeCompare(y.date)));
+    // Full history (all data) — used for goal/projection/floor/intercept
+    const aAllSorted = [...(compareAId ? aPoints : [])].sort((x, y) => x.date.localeCompare(y.date));
+    const bAllSorted = [...(compareBId ? bPoints : [])].sort((x, y) => x.date.localeCompare(y.date));
+
+    // Lookback-filtered — used for chart trend fit + trend metrics only
+    const aSorted = filterByLookback(aAllSorted);
+    const bSorted = filterByLookback(bAllSorted);
 
     const aN = aSorted.length;
     const bN = bSorted.length;
+    const aAllN = aAllSorted.length;
+    const bAllN = bAllSorted.length;
 
-    // Use the full (unfiltered) points for last HI display
-    const aAllSorted = [...(compareAId ? aPoints : [])].sort((x, y) => x.date.localeCompare(y.date));
-    const bAllSorted = [...(compareBId ? bPoints : [])].sort((x, y) => x.date.localeCompare(y.date));
-    const aLast = aAllSorted.length ? aAllSorted[aAllSorted.length - 1] : null;
-    const bLast = bAllSorted.length ? bAllSorted[bAllSorted.length - 1] : null;
+    const aLast = aAllN ? aAllSorted[aAllN - 1] : null;
+    const bLast = bAllN ? bAllSorted[bAllN - 1] : null;
 
-    const aFit = aN ? fitExpBestFloor(aSorted, tOf, { weightDecayPerDay: RECENCY_DECAY }) : null;
-    const bFit = bN ? fitExpBestFloor(bSorted, tOf, { weightDecayPerDay: RECENCY_DECAY }) : null;
+    // Chart trend fit: lookback-filtered + mild recency weight (shows recent form)
+    const aFit = aN >= 4 ? fitExpBestFloor(aSorted, tOf, { weightDecayPerDay: RECENCY_DECAY }) : null;
+    const bFit = bN >= 4 ? fitExpBestFloor(bSorted, tOf, { weightDecayPerDay: RECENCY_DECAY }) : null;
 
+    // Full fit: all data, no weighting (stable long-term prediction)
+    const aFitFull = aAllN >= 4 ? fitExpBestFloor(aAllSorted, tOf) : null;
+    const bFitFull = bAllN >= 4 ? fitExpBestFloor(bAllSorted, tOf) : null;
+
+    // Chart window anchored to full history (always show all actual dots)
     const allDates = [
-      ...(aSorted.length ? [new Date(aSorted[0].date)] : []),
-      ...(bSorted.length ? [new Date(bSorted[0].date)] : []),
+      ...(aAllSorted.length ? [new Date(aAllSorted[0].date)] : []),
+      ...(bAllSorted.length ? [new Date(bAllSorted[0].date)] : []),
     ];
     const earliestDate = allDates.length
       ? allDates.reduce((a, b) => (a < b ? a : b))
@@ -298,14 +308,16 @@ export default function StatsPage() {
     const absEnd = daysBetween(anchor, windowEnd);
     const todayAbs = clamp(daysBetween(anchor, today), absStart, absEnd);
 
-    const aActual = aSorted
+    // Chart dots use full history
+    const aActual = aAllSorted
       .map((p) => ({ t: daysBetween(anchor, new Date(p.date)), v: p.hi }))
       .filter((p) => p.t >= absStart && p.t <= absEnd);
 
-    const bActual = bSorted
+    const bActual = bAllSorted
       .map((p) => ({ t: daysBetween(anchor, new Date(p.date)), v: p.hi }))
       .filter((p) => p.t >= absStart && p.t <= absEnd);
 
+    // Trend line uses recent fit (lookback window)
     const aPredictAbs = (tAbs: number) => {
       if (!aFit) return NaN;
       const date = addDays(anchor, tAbs);
@@ -319,13 +331,27 @@ export default function StatsPage() {
       return bFit.predict(mt);
     };
 
+    // Full-fit predict functions for goal/projection/intercept
+    const aPredictAbsFull = (tAbs: number) => {
+      if (!aFitFull) return NaN;
+      const date = addDays(anchor, tAbs);
+      const mt = daysBetween(aFitFull.firstDate, date);
+      return aFitFull.predict(mt);
+    };
+    const bPredictAbsFull = (tAbs: number) => {
+      if (!bFitFull) return NaN;
+      const date = addDays(anchor, tAbs);
+      const mt = daysBetween(bFitFull.firstDate, date);
+      return bFitFull.predict(mt);
+    };
+
     const aTrend = aFit && aN >= 2 ? sampleCurve((tAbs) => aPredictAbs(tAbs), absStart, absEnd, 260) : undefined;
     const aProj = aFit && aN >= 2 ? sampleCurve((tAbs) => aPredictAbs(tAbs), todayAbs, absEnd, 140) : undefined;
 
     const bTrend = bFit && bN >= 2 ? sampleCurve((tAbs) => bPredictAbs(tAbs), absStart, absEnd, 260) : undefined;
     const bProj = bFit && bN >= 2 ? sampleCurve((tAbs) => bPredictAbs(tAbs), todayAbs, absEnd, 140) : undefined;
 
-    // Confidence bands (±1σ) on projection
+    // Confidence bands (±1σ) on projection — from chart trend fit
     const aSigma = aFit ? residualSigma(aSorted, aFit.predict, tOf) : null;
     const bSigma = bFit ? residualSigma(bSorted, bFit.predict, tOf) : null;
 
@@ -344,15 +370,13 @@ export default function StatsPage() {
           }
         : undefined;
 
-    // Model quality
+    // Trend metrics — from chart fit (recent form)
     const aR2 = aFit ? rSquared(aSorted, aFit.predict, tOf) : null;
     const bR2 = bFit ? rSquared(bSorted, bFit.predict, tOf) : null;
 
-    // Trend velocity (HI/month via model derivative)
     const aVelocityPerMonth = aFit ? trendVelocity(aFit, daysBetween(aFit.firstDate, today)) * 30 : null;
     const bVelocityPerMonth = bFit ? trendVelocity(bFit, daysBetween(bFit.firstDate, today)) * 30 : null;
 
-    // Trend direction via recent 60-day data slope
     const directionLabel = (slopePerMonth: number | null): "Improving" | "Plateauing" | "Worsening" | null => {
       if (slopePerMonth === null) return null;
       if (slopePerMonth < -0.05) return "Improving";
@@ -364,7 +388,7 @@ export default function StatsPage() {
     const aDirection = directionLabel(aSlopePerMonth !== null ? aSlopePerMonth * 30 : null);
     const bDirection = directionLabel(bSlopePerMonth !== null ? bSlopePerMonth * 30 : null);
 
-    // Potential floor (visual threshold)
+    // Potential floor — from full fit (stable long-term)
     const potentialFloor = (fit: ReturnType<typeof fitExpBestFloor> | null) => {
       if (!fit) return { value: null as number | null, etaISO: null as string | null, note: "Not enough data" };
       const pf = round1(fit.c + EPS_VIS);
@@ -373,29 +397,30 @@ export default function StatsPage() {
       return { value: pf, etaISO, note: "" };
     };
 
-    const aPF = potentialFloor(aFit);
-    const bPF = potentialFloor(bFit);
+    const aPF = potentialFloor(aFitFull);
+    const bPF = potentialFloor(bFitFull);
 
-    const aTargetEta = etaForTarget(aFit, today, target);
-    const bTargetEta = etaForTarget(bFit, today, target);
+    // Goal ETA + projected HI — from full fit
+    const aTargetEta = etaForTarget(aFitFull, today, target);
+    const bTargetEta = etaForTarget(bFitFull, today, target);
 
-    const projA = projectedOnDate(aFit, projDateISO);
-    const projB = compareBId ? projectedOnDate(bFit, projDateISO) : null;
+    const projA = projectedOnDate(aFitFull, projDateISO);
+    const projB = compareBId ? projectedOnDate(bFitFull, projDateISO) : null;
 
-    // Intercept (optional)
+    // Intercept — from full fit
     let nextInterceptLabel: string | null = null;
     let interceptMarker: { t: number; aV: number; bV: number } | undefined = undefined;
 
-    if (compareAId && compareBId && aFit && bFit) {
+    if (compareAId && compareBId && aFitFull && bFitFull) {
       const searchStart = todayAbs;
       const searchEnd = todayAbs + INTERCEPT_MAX_DAYS_AHEAD;
-      const tHit = findNextInterceptT(aPredictAbs, bPredictAbs, searchStart, searchEnd, 1600);
+      const tHit = findNextInterceptT(aPredictAbsFull, bPredictAbsFull, searchStart, searchEnd, 1600);
 
       if (tHit !== null) {
         const date = addDays(anchor, tHit);
         const daysFromToday = Math.round(daysBetween(today, date));
-        const aVAt = aPredictAbs(tHit);
-        const bVAt = bPredictAbs(tHit);
+        const aVAt = aPredictAbsFull(tHit);
+        const bVAt = bPredictAbsFull(tHit);
         const atHi = Number.isFinite(aVAt) && Number.isFinite(bVAt) ? `HI ${formatHI(aVAt)}` : "";
         nextInterceptLabel = `${iso(date)} (${daysFromToday >= 0 ? "in " : ""}${daysFromToday}d) ${atHi}`;
 
@@ -410,7 +435,7 @@ export default function StatsPage() {
     return {
       windowLabel: `${iso(windowStart)} → ${iso(windowEnd)}`,
       names: { a: compareAId ? nameOf(compareAId) : "—", b: compareBId ? nameOf(compareBId) : "—" },
-      counts: { aN, bN },
+      counts: { aN, bN, aAllN, bAllN },
       last: { aLast, bLast },
       series: { aActual, aTrend, aProj, bActual, bTrend, bProj },
       bands: { aProjBand, bProjBand },
@@ -447,7 +472,7 @@ export default function StatsPage() {
           const sorted = [...pts].sort((a, b) => a.date.localeCompare(b.date));
           const n = sorted.length;
           const last = n ? sorted[n - 1].hi : null;
-          const fit = n ? fitExpBestFloor(sorted, (pt, _i, fd) => daysBetween(fd, new Date(pt.date)), { weightDecayPerDay: RECENCY_DECAY }) : null;
+          const fit = n ? fitExpBestFloor(sorted, (pt, _i, fd) => daysBetween(fd, new Date(pt.date))) : null;
           const eta = etaForTarget(fit, today, target);
           return {
             id: p.id,
@@ -494,7 +519,7 @@ export default function StatsPage() {
           const sorted = [...pts].sort((a, b) => a.date.localeCompare(b.date));
           const n = sorted.length;
           const last = n ? sorted[n - 1].hi : null;
-          const fit = n ? fitExpBestFloor(sorted, (pt, _i, fd) => daysBetween(fd, new Date(pt.date)), { weightDecayPerDay: RECENCY_DECAY }) : null;
+          const fit = n ? fitExpBestFloor(sorted, (pt, _i, fd) => daysBetween(fd, new Date(pt.date))) : null;
           const proj = projectedOnDate(fit, projDateISO);
           return {
             id: p.id,
@@ -680,7 +705,7 @@ export default function StatsPage() {
               <div className="h-[340px] flex items-center justify-center text-sm font-semibold text-red-300 rounded-2xl border border-emerald-900/70 bg-[#042713]/55">
                 {err}
               </div>
-            ) : computed.counts.aN < 2 ? (
+            ) : computed.counts.aAllN < 2 ? (
               <div className="h-[340px] flex items-center justify-center text-sm font-semibold text-emerald-100/70 rounded-2xl border border-emerald-900/70 bg-[#042713]/55">
                 Play a couple more rounds to unlock projections.
               </div>
