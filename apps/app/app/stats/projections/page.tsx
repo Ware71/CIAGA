@@ -42,7 +42,7 @@ type EtaStatus = "insufficient" | "reached" | "unreachable" | "unknown" | "estim
 const TIME_FUTURE_DAYS = 60;
 const RECENCY_DECAY = 0.006; // half-weight ≈ 116 days back (chart trend only)
 
-const FLOOR_VELOCITY_THRESHOLD = 0.2; // HI/month — below this is negligible improvement
+const FLOOR_VELOCITY_THRESHOLD = 0.5 / 12; // ≈ 0.042/mo (0.5 HI/year) — below this is negligible improvement
 const INTERCEPT_MAX_DAYS_AHEAD = 3650; // 10y
 const ME = "__me__";
 
@@ -932,7 +932,7 @@ export default function StatsPage() {
           {/* Potential floor */}
           <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/45 p-4">
             <div className="text-sm font-extrabold text-emerald-50">Potential floor</div>
-            <div className="mt-1 text-[11px] text-emerald-100/55 font-semibold">Est. HI when improvement &lt; {FLOOR_VELOCITY_THRESHOLD}/mo</div>
+            <div className="mt-1 text-[11px] text-emerald-100/55 font-semibold">Est. HI when improvement &lt; 0.5/yr</div>
 
             {compareActive ? (
               <div className="mt-3 grid grid-cols-2 gap-3">
