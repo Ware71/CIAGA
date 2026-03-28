@@ -47,6 +47,8 @@ export function ZoomPanChart({
   bActual,
   bTrend,
   bProj,
+  aProjBand,
+  bProjBand,
   intercept,
   height = 960,
   formatXLabel,
@@ -57,6 +59,8 @@ export function ZoomPanChart({
   bActual?: SeriesT[];
   bTrend?: SeriesT[];
   bProj?: SeriesT[];
+  aProjBand?: { upper: SeriesT[]; lower: SeriesT[] };
+  bProjBand?: { upper: SeriesT[]; lower: SeriesT[] };
   intercept?: { t: number; aV: number; bV: number };
   height?: number;
   formatXLabel?: (t: number) => string;
@@ -94,6 +98,10 @@ export function ZoomPanChart({
     ...(bActual ?? []),
     ...(bTrend ?? []),
     ...(bProj ?? []),
+    ...(aProjBand?.upper ?? []),
+    ...(aProjBand?.lower ?? []),
+    ...(bProjBand?.upper ?? []),
+    ...(bProjBand?.lower ?? []),
     ...(intercept ? [{ t: intercept.t, v: intercept.aV }, { t: intercept.t, v: intercept.bV }] : []),
   ].filter((p) => Number.isFinite(p.v) && Number.isFinite(p.t));
 
@@ -292,6 +300,17 @@ export function ZoomPanChart({
   const bTrendPath = bTrendPts ? catmullRomPath(bTrendPts, 0.85) : "";
   const bProjPath = bProjPts ? catmullRomPath(bProjPts, 0.85) : "";
 
+  // Confidence band: closed polygon (upper forward, lower reversed)
+  function bandPolygonPoints(upper: SeriesT[], lower: SeriesT[]): string {
+    const up = mkXY(upper);
+    const lo = mkXY(lower);
+    const pts = [...up, ...[...lo].reverse()];
+    return pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+  }
+
+  const aBandPolygon = aProjBand ? bandPolygonPoints(aProjBand.upper, aProjBand.lower) : null;
+  const bBandPolygon = bProjBand ? bandPolygonPoints(bProjBand.upper, bProjBand.lower) : null;
+
   // ---------- X-ticks (based on visible window) ----------
 
   const xStep = niceStep(viewSpan, 6);
@@ -411,6 +430,14 @@ export function ZoomPanChart({
 
           {/* Data elements — clipped to chart area */}
           <g clipPath="url(#chart-area)">
+            {/* Confidence bands (rendered first, behind lines) */}
+            {aBandPolygon ? (
+              <polygon points={aBandPolygon} fill="rgba(16,185,129,0.10)" />
+            ) : null}
+            {bBandPolygon ? (
+              <polygon points={bBandPolygon} fill="rgba(251,191,36,0.10)" />
+            ) : null}
+
             {/* Intercept marker */}
             {intercept && ix !== null ? (
               <g>

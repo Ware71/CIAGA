@@ -20,6 +20,10 @@ import {
   sampleCurve,
   solveExpTimeToTarget,
   findNextInterceptT,
+  rSquared,
+  residualSigma,
+  trendVelocity,
+  recentSlope,
 } from "@/lib/stats/timeModel";
 
 import type { FollowProfile } from "@/lib/stats/data";
@@ -35,12 +39,16 @@ type EtaStatus = "insufficient" | "reached" | "unreachable" | "unknown" | "estim
 // -----------------------------
 // Config (Time-only)
 // -----------------------------
-const TIME_LOOKBACK_DAYS = 180;
 const TIME_FUTURE_DAYS = 60;
+const RECENCY_DECAY = 0.012; // half-weight ≈ 58 days back
 
 const EPS_VIS = 1.0;
 const INTERCEPT_MAX_DAYS_AHEAD = 3650; // 10y
 const ME = "__me__";
+
+type Lookback = "90d" | "180d" | "1y" | "all";
+const LOOKBACK_DAYS: Record<Lookback, number> = { "90d": 90, "180d": 180, "1y": 365, all: Infinity };
+const LOOKBACK_LABELS: Record<Lookback, string> = { "90d": "90d", "180d": "180d", "1y": "1yr", all: "All" };
 
 // -----------------------------
 // Page
@@ -71,6 +79,8 @@ export default function StatsPage() {
   }, []);
   const [target, setTarget] = useState<number>(18.0);
   const [goalWheelOpen, setGoalWheelOpen] = useState(false);
+
+  const [lookback, setLookback] = useState<Lookback>("180d");
 
   // Projection date + compare-all modal
   const [projDateISO, setProjDateISO] = useState<string>(() => iso(addDays(new Date(), 30)));
@@ -250,18 +260,28 @@ export default function StatsPage() {
 
   const computed = useMemo(() => {
     const today = new Date();
+    const lookbackDays = LOOKBACK_DAYS[lookback];
+    const lookbackCutoff = Number.isFinite(lookbackDays) ? addDays(today, -lookbackDays) : null;
 
-    const aSorted = [...(compareAId ? aPoints : [])].sort((x, y) => x.date.localeCompare(y.date));
-    const bSorted = [...(compareBId ? bPoints : [])].sort((x, y) => x.date.localeCompare(y.date));
+    const filterByLookback = (pts: HiPoint[]) =>
+      lookbackCutoff ? pts.filter((p) => new Date(p.date) >= lookbackCutoff!) : pts;
+
+    const tOf = (p: HiPoint, _idx: number, fd: Date) => daysBetween(fd, new Date(p.date));
+
+    const aSorted = filterByLookback([...(compareAId ? aPoints : [])].sort((x, y) => x.date.localeCompare(y.date)));
+    const bSorted = filterByLookback([...(compareBId ? bPoints : [])].sort((x, y) => x.date.localeCompare(y.date)));
 
     const aN = aSorted.length;
     const bN = bSorted.length;
 
-    const aLast = aN ? aSorted[aN - 1] : null;
-    const bLast = bN ? bSorted[bN - 1] : null;
+    // Use the full (unfiltered) points for last HI display
+    const aAllSorted = [...(compareAId ? aPoints : [])].sort((x, y) => x.date.localeCompare(y.date));
+    const bAllSorted = [...(compareBId ? bPoints : [])].sort((x, y) => x.date.localeCompare(y.date));
+    const aLast = aAllSorted.length ? aAllSorted[aAllSorted.length - 1] : null;
+    const bLast = bAllSorted.length ? bAllSorted[bAllSorted.length - 1] : null;
 
-    const aFit = aN ? fitExpBestFloor(aSorted, (p, _idx, fd) => daysBetween(fd, new Date(p.date))) : null;
-    const bFit = bN ? fitExpBestFloor(bSorted, (p, _idx, fd) => daysBetween(fd, new Date(p.date))) : null;
+    const aFit = aN ? fitExpBestFloor(aSorted, tOf, { weightDecayPerDay: RECENCY_DECAY }) : null;
+    const bFit = bN ? fitExpBestFloor(bSorted, tOf, { weightDecayPerDay: RECENCY_DECAY }) : null;
 
     const allDates = [
       ...(aSorted.length ? [new Date(aSorted[0].date)] : []),
@@ -269,7 +289,7 @@ export default function StatsPage() {
     ];
     const earliestDate = allDates.length
       ? allDates.reduce((a, b) => (a < b ? a : b))
-      : addDays(today, -TIME_LOOKBACK_DAYS);
+      : addDays(today, -180);
     const windowStart = earliestDate;
     const windowEnd = addDays(today, TIME_FUTURE_DAYS);
     const anchor = windowStart;
@@ -304,6 +324,45 @@ export default function StatsPage() {
 
     const bTrend = bFit && bN >= 2 ? sampleCurve((tAbs) => bPredictAbs(tAbs), absStart, absEnd, 260) : undefined;
     const bProj = bFit && bN >= 2 ? sampleCurve((tAbs) => bPredictAbs(tAbs), todayAbs, absEnd, 140) : undefined;
+
+    // Confidence bands (±1σ) on projection
+    const aSigma = aFit ? residualSigma(aSorted, aFit.predict, tOf) : null;
+    const bSigma = bFit ? residualSigma(bSorted, bFit.predict, tOf) : null;
+
+    const aProjBand =
+      aFit && aN >= 2 && aSigma !== null
+        ? {
+            upper: sampleCurve((tAbs) => aPredictAbs(tAbs) - aSigma, todayAbs, absEnd, 80),
+            lower: sampleCurve((tAbs) => aPredictAbs(tAbs) + aSigma, todayAbs, absEnd, 80),
+          }
+        : undefined;
+    const bProjBand =
+      bFit && bN >= 2 && bSigma !== null
+        ? {
+            upper: sampleCurve((tAbs) => bPredictAbs(tAbs) - bSigma, todayAbs, absEnd, 80),
+            lower: sampleCurve((tAbs) => bPredictAbs(tAbs) + bSigma, todayAbs, absEnd, 80),
+          }
+        : undefined;
+
+    // Model quality
+    const aR2 = aFit ? rSquared(aSorted, aFit.predict, tOf) : null;
+    const bR2 = bFit ? rSquared(bSorted, bFit.predict, tOf) : null;
+
+    // Trend velocity (HI/month via model derivative)
+    const aVelocityPerMonth = aFit ? trendVelocity(aFit, daysBetween(aFit.firstDate, today)) * 30 : null;
+    const bVelocityPerMonth = bFit ? trendVelocity(bFit, daysBetween(bFit.firstDate, today)) * 30 : null;
+
+    // Trend direction via recent 60-day data slope
+    const directionLabel = (slopePerMonth: number | null): "Improving" | "Plateauing" | "Worsening" | null => {
+      if (slopePerMonth === null) return null;
+      if (slopePerMonth < -0.05) return "Improving";
+      if (slopePerMonth > 0.05) return "Worsening";
+      return "Plateauing";
+    };
+    const aSlopePerMonth = recentSlope(aSorted, 60);
+    const bSlopePerMonth = recentSlope(bSorted, 60);
+    const aDirection = directionLabel(aSlopePerMonth !== null ? aSlopePerMonth * 30 : null);
+    const bDirection = directionLabel(bSlopePerMonth !== null ? bSlopePerMonth * 30 : null);
 
     // Potential floor (visual threshold)
     const potentialFloor = (fit: ReturnType<typeof fitExpBestFloor> | null) => {
@@ -354,14 +413,20 @@ export default function StatsPage() {
       counts: { aN, bN },
       last: { aLast, bLast },
       series: { aActual, aTrend, aProj, bActual, bTrend, bProj },
+      bands: { aProjBand, bProjBand },
       interceptMarker,
       nextInterceptLabel,
       potentialFloor: { a: aPF, b: bPF },
       goalEta: { a: aTargetEta, b: bTargetEta },
       projByDate: { a: projA, b: projB },
       fits: { aFit, bFit },
+      metrics: {
+        aR2, bR2,
+        aVelocityPerMonth, bVelocityPerMonth,
+        aDirection, bDirection,
+      },
     };
-  }, [aPoints, bPoints, compareAId, compareBId, projDateISO, target, followList, myPoints]);
+  }, [aPoints, bPoints, compareAId, compareBId, projDateISO, target, followList, myPoints, lookback]);
 
   // Compare-all datasets
   const [allCompareLoading, setAllCompareLoading] = useState(false);
@@ -374,36 +439,27 @@ export default function StatsPage() {
     setAllCompareLoading(true);
     try {
       const today = new Date();
-
-      const rows: {
-        id: string;
-        name: string;
-        hiNow: number | null;
-        etaISO: string | null;
-        days: number | null;
-        status: string;
-        note: string;
-      }[] = [];
-
       const pool = [{ id: ME, name: "You" }, ...followList.map((p) => ({ id: p.id, name: p.name ?? p.id.slice(0, 8) }))];
 
-      for (const p of pool) {
-        const pts = p.id === ME ? myPoints : await fetchPoints(p.id);
-        const sorted = [...pts].sort((a, b) => a.date.localeCompare(b.date));
-        const n = sorted.length;
-        const last = n ? sorted[n - 1].hi : null;
-        const fit = n ? fitExpBestFloor(sorted, (pt, _i, fd) => daysBetween(fd, new Date(pt.date))) : null;
-        const eta = etaForTarget(fit, today, target);
-        rows.push({
-          id: p.id,
-          name: p.name,
-          hiNow: last !== null ? round1(last) : null,
-          etaISO: eta.dateISO,
-          days: eta.days,
-          status: eta.status,
-          note: eta.note,
-        });
-      }
+      const rows = await Promise.all(
+        pool.map(async (p) => {
+          const pts = p.id === ME ? myPoints : await fetchPoints(p.id);
+          const sorted = [...pts].sort((a, b) => a.date.localeCompare(b.date));
+          const n = sorted.length;
+          const last = n ? sorted[n - 1].hi : null;
+          const fit = n ? fitExpBestFloor(sorted, (pt, _i, fd) => daysBetween(fd, new Date(pt.date)), { weightDecayPerDay: RECENCY_DECAY }) : null;
+          const eta = etaForTarget(fit, today, target);
+          return {
+            id: p.id,
+            name: p.name,
+            hiNow: last !== null ? round1(last) : null,
+            etaISO: eta.dateISO,
+            days: eta.days,
+            status: eta.status,
+            note: eta.note,
+          };
+        })
+      );
 
       const rank = (r: typeof rows[number]) => {
         if (r.status === "reached") return 0;
@@ -431,23 +487,24 @@ export default function StatsPage() {
     setAllCompareLoading(true);
     try {
       const pool = [{ id: ME, name: "You" }, ...followList.map((p) => ({ id: p.id, name: p.name ?? p.id.slice(0, 8) }))];
-      const rows: { id: string; name: string; hiNow: number | null; proj: number | null; note: string }[] = [];
 
-      for (const p of pool) {
-        const pts = p.id === ME ? myPoints : await fetchPoints(p.id);
-        const sorted = [...pts].sort((a, b) => a.date.localeCompare(b.date));
-        const n = sorted.length;
-        const last = n ? sorted[n - 1].hi : null;
-        const fit = n ? fitExpBestFloor(sorted, (pt, _i, fd) => daysBetween(fd, new Date(pt.date))) : null;
-        const proj = projectedOnDate(fit, projDateISO);
-        rows.push({
-          id: p.id,
-          name: p.name,
-          hiNow: last !== null ? round1(last) : null,
-          proj,
-          note: fit ? "" : "Not enough data",
-        });
-      }
+      const rows = await Promise.all(
+        pool.map(async (p) => {
+          const pts = p.id === ME ? myPoints : await fetchPoints(p.id);
+          const sorted = [...pts].sort((a, b) => a.date.localeCompare(b.date));
+          const n = sorted.length;
+          const last = n ? sorted[n - 1].hi : null;
+          const fit = n ? fitExpBestFloor(sorted, (pt, _i, fd) => daysBetween(fd, new Date(pt.date)), { weightDecayPerDay: RECENCY_DECAY }) : null;
+          const proj = projectedOnDate(fit, projDateISO);
+          return {
+            id: p.id,
+            name: p.name,
+            hiNow: last !== null ? round1(last) : null,
+            proj,
+            note: fit ? "" : "Not enough data",
+          };
+        })
+      );
 
       rows.sort((a, b) => {
         const va = a.proj ?? 1e9;
@@ -463,7 +520,8 @@ export default function StatsPage() {
   };
 
   const timeXLabel = (tAbsDays: number) => {
-    const anchor = addDays(new Date(), -TIME_LOOKBACK_DAYS);
+    const lookbackDays = LOOKBACK_DAYS[lookback];
+    const anchor = addDays(new Date(), -(Number.isFinite(lookbackDays) ? lookbackDays : 365));
     const d = addDays(anchor, tAbsDays);
     return fmtDM(d);
   };
@@ -596,6 +654,24 @@ export default function StatsPage() {
               ) : null}
             </div>
 
+            {/* Lookback selector */}
+            <div className="flex items-center gap-1.5">
+              {(["90d", "180d", "1y", "all"] as Lookback[]).map((lb) => (
+                <button
+                  key={lb}
+                  type="button"
+                  onClick={() => setLookback(lb)}
+                  className={`h-7 px-3 rounded-full text-[11px] font-bold transition-colors ${
+                    lookback === lb
+                      ? "bg-emerald-700/80 text-emerald-50"
+                      : "bg-[#042713] border border-emerald-900/70 text-emerald-100/60 hover:text-emerald-50"
+                  }`}
+                >
+                  {LOOKBACK_LABELS[lb]}
+                </button>
+              ))}
+            </div>
+
             {loading ? (
               <div className="h-[340px] flex items-center justify-center text-sm font-semibold text-emerald-100/70 rounded-2xl border border-emerald-900/70 bg-[#042713]/55">
                 Loading…
@@ -630,10 +706,66 @@ export default function StatsPage() {
                   bActual={compareActive ? computed.series.bActual : undefined}
                   bTrend={compareActive ? computed.series.bTrend : undefined}
                   bProj={compareActive ? computed.series.bProj : undefined}
+                  aProjBand={computed.bands.aProjBand}
+                  bProjBand={compareActive ? computed.bands.bProjBand : undefined}
                   intercept={compareActive ? (computed.interceptMarker as any) : undefined}
                   height={960}
                   formatXLabel={timeXLabel}
                 />
+
+                {/* Trend metrics */}
+                {(() => {
+                  const { aVelocityPerMonth, bVelocityPerMonth, aDirection, bDirection, aR2, bR2 } = computed.metrics;
+
+                  const dirColor = (d: string | null) =>
+                    d === "Improving" ? "text-emerald-300" : d === "Worsening" ? "text-red-300" : "text-emerald-100/60";
+                  const velColor = (v: number | null) =>
+                    v === null ? "" : v < 0 ? "text-emerald-300" : "text-red-300";
+                  const fmtVel = (v: number | null) => {
+                    if (v === null) return null;
+                    const abs = Math.abs(v);
+                    const sign = v < 0 ? "−" : "+";
+                    return `${sign}${abs.toFixed(2)} HI/mo`;
+                  };
+
+                  if (compareActive) {
+                    return (
+                      <div className="grid grid-cols-2 gap-2 pt-1">
+                        {[
+                          { label: computed.names.a, vel: aVelocityPerMonth, dir: aDirection, r2: aR2 },
+                          { label: computed.names.b, vel: bVelocityPerMonth, dir: bDirection, r2: bR2 },
+                        ].map((m) => (
+                          <div key={m.label} className="rounded-xl border border-emerald-900/50 bg-[#042713]/35 p-2.5 space-y-1.5">
+                            <div className="text-[10px] text-emerald-100/55 font-bold">{m.label}</div>
+                            {m.dir ? (
+                              <div className={`text-[11px] font-extrabold ${dirColor(m.dir)}`}>{m.dir}</div>
+                            ) : null}
+                            {fmtVel(m.vel) ? (
+                              <div className={`text-[11px] font-bold tabular-nums ${velColor(m.vel)}`}>{fmtVel(m.vel)}</div>
+                            ) : null}
+                            {m.r2 !== null ? (
+                              <div className="text-[10px] text-emerald-100/45 font-semibold">R²={m.r2.toFixed(2)}</div>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="flex items-center gap-4 pt-1 px-1">
+                      {aDirection ? (
+                        <span className={`text-[11px] font-extrabold ${dirColor(aDirection)}`}>{aDirection}</span>
+                      ) : null}
+                      {fmtVel(aVelocityPerMonth) ? (
+                        <span className={`text-[11px] font-bold tabular-nums ${velColor(aVelocityPerMonth)}`}>{fmtVel(aVelocityPerMonth)}</span>
+                      ) : null}
+                      {aR2 !== null ? (
+                        <span className="text-[10px] text-emerald-100/45 font-semibold ml-auto">R²={aR2.toFixed(2)}</span>
+                      ) : null}
+                    </div>
+                  );
+                })()}
               </>
             )}
           </div>

@@ -65,7 +65,7 @@ export function linearRegression(xs: number[], ys: number[]) {
 export function fitExpBestFloor(
   points: HiPoint[],
   tOf: (p: HiPoint, idx: number, firstDate: Date) => number,
-  opts?: { cMin?: number; steps?: number }
+  opts?: { cMin?: number; steps?: number; weightDecayPerDay?: number }
 ) {
   if (points.length < 4) return null;
 
@@ -78,6 +78,11 @@ export function fitExpBestFloor(
 
   const tsAll: number[] = [];
   for (let i = 0; i < sorted.length; i++) tsAll.push(tOf(sorted[i], i, firstDate));
+
+  // Recency weights: w_i = exp(-decay * (t_max - t_i)), max weight = 1
+  const decay = opts?.weightDecayPerDay ?? 0;
+  const tMax = tsAll[tsAll.length - 1];
+  const weights = decay > 0 ? tsAll.map((t) => Math.exp(-decay * (tMax - t))) : tsAll.map(() => 1);
 
   const cMin = opts?.cMin ?? -5;
   const upperByMin = minHi - 0.1;
@@ -96,6 +101,7 @@ export function fitExpBestFloor(
     const ts: number[] = [];
     const lns: number[] = [];
     const ys: number[] = [];
+    const ws: number[] = [];
 
     for (let i = 0; i < sorted.length; i++) {
       const yPrime = sorted[i].hi - c;
@@ -106,6 +112,7 @@ export function fitExpBestFloor(
       ts.push(tsAll[i]);
       lns.push(Math.log(yPrime));
       ys.push(sorted[i].hi);
+      ws.push(weights[i]);
     }
 
     if (ts.length < 4) continue;
@@ -120,7 +127,7 @@ export function fitExpBestFloor(
     for (let i = 0; i < ts.length; i++) {
       const pred = a * Math.exp(-b * ts[i]) + c;
       const err = ys[i] - pred;
-      sse += err * err;
+      sse += ws[i] * err * err;
     }
 
     if (!best || sse < best.sse - 1e-9 || (Math.abs(sse - best.sse) < 1e-9 && c < best.c)) {
@@ -231,4 +238,79 @@ export function niceStep(span: number, targetTicks = 6) {
   const n = raw / pow;
   const nice = n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10;
   return nice * pow;
+}
+
+// -----------------------------
+// R² (coefficient of determination)
+// -----------------------------
+export function rSquared(
+  points: HiPoint[],
+  predict: (t: number) => number,
+  tOf: (p: HiPoint, idx: number, firstDate: Date) => number
+): number | null {
+  if (points.length < 2) return null;
+  const sorted = [...points].sort((a, b) => a.date.localeCompare(b.date));
+  const firstDate = new Date(sorted[0].date);
+  const his = sorted.map((p) => p.hi);
+  const meanHi = his.reduce((a, b) => a + b, 0) / his.length;
+  const ssTot = his.reduce((a, h) => a + (h - meanHi) ** 2, 0);
+  if (ssTot < 1e-12) return null;
+  let ssRes = 0;
+  for (let i = 0; i < sorted.length; i++) {
+    const t = tOf(sorted[i], i, firstDate);
+    const err = sorted[i].hi - predict(t);
+    ssRes += err * err;
+  }
+  return Math.max(0, 1 - ssRes / ssTot);
+}
+
+// -----------------------------
+// Residual sigma (±1σ confidence band width)
+// -----------------------------
+export function residualSigma(
+  points: HiPoint[],
+  predict: (t: number) => number,
+  tOf: (p: HiPoint, idx: number, firstDate: Date) => number
+): number | null {
+  if (points.length < 2) return null;
+  const sorted = [...points].sort((a, b) => a.date.localeCompare(b.date));
+  const firstDate = new Date(sorted[0].date);
+  let ssRes = 0;
+  for (let i = 0; i < sorted.length; i++) {
+    const t = tOf(sorted[i], i, firstDate);
+    const err = sorted[i].hi - predict(t);
+    ssRes += err * err;
+  }
+  return Math.sqrt(ssRes / sorted.length);
+}
+
+// -----------------------------
+// Trend velocity: HI change per day at time t
+// (derivative of a·exp(-b·t)+c = -a·b·exp(-b·t))
+// Negative = improving, positive = worsening
+// -----------------------------
+export function trendVelocity(
+  fit: { a: number; b: number; c: number },
+  tToday: number
+): number {
+  return -fit.a * fit.b * Math.exp(-fit.b * tToday);
+}
+
+// -----------------------------
+// Recent slope: linear regression over last windowDays
+// Returns HI/day slope (negative = improving)
+// -----------------------------
+export function recentSlope(points: HiPoint[], windowDays: number): number | null {
+  if (points.length < 2) return null;
+  const sorted = [...points].sort((a, b) => a.date.localeCompare(b.date));
+  const lastDate = new Date(sorted[sorted.length - 1].date);
+  const cutoff = new Date(lastDate);
+  cutoff.setDate(cutoff.getDate() - windowDays);
+  const recent = sorted.filter((p) => new Date(p.date) >= cutoff);
+  if (recent.length < 2) return null;
+  const firstDate = new Date(recent[0].date);
+  const xs = recent.map((p) => daysBetween(firstDate, new Date(p.date)));
+  const ys = recent.map((p) => p.hi);
+  const lr = linearRegression(xs, ys);
+  return lr ? lr.m : null;
 }
