@@ -137,6 +137,58 @@ export function fitExpBestFloor(
 
   if (!best) return null;
 
+  // Golden section refinement: narrow in on the precise best c within ±step of the grid winner
+  {
+    const PHI = (1 + Math.sqrt(5)) / 2;
+    const RESPHI = 2 - PHI;
+
+    const sseForC = (c: number): { a: number; b: number; sse: number } | null => {
+      const ts2: number[] = [], lns2: number[] = [], ys2: number[] = [], ws2: number[] = [];
+      for (let i = 0; i < sorted.length; i++) {
+        const yp = sorted[i].hi - c;
+        if (yp <= 0) return null;
+        ts2.push(tsAll[i]); lns2.push(Math.log(yp)); ys2.push(sorted[i].hi); ws2.push(weights[i]);
+      }
+      if (ts2.length < 4) return null;
+      const lr2 = linearRegression(ts2, lns2);
+      if (!lr2) return null;
+      const b2 = -lr2.m; const a2 = Math.exp(lr2.k);
+      if (b2 <= 0) return null;
+      let sse2 = 0;
+      for (let i = 0; i < ts2.length; i++) {
+        const err = ys2[i] - (a2 * Math.exp(-b2 * ts2[i]) + c);
+        sse2 += ws2[i] * err * err;
+      }
+      return { a: a2, b: b2, sse: sse2 };
+    };
+
+    let lo = Math.max(cMin, best.c - step);
+    let hi = Math.min(cMax, best.c + step);
+    let x1 = lo + RESPHI * (hi - lo);
+    let x2 = hi - RESPHI * (hi - lo);
+    let f1 = sseForC(x1);
+    let f2 = sseForC(x2);
+
+    for (let iter = 0; iter < 60; iter++) {
+      const v1 = f1?.sse ?? Infinity;
+      const v2 = f2?.sse ?? Infinity;
+      if (v1 < v2) {
+        hi = x2; x2 = x1; f2 = f1;
+        x1 = lo + RESPHI * (hi - lo); f1 = sseForC(x1);
+      } else {
+        lo = x1; x1 = x2; f1 = f2;
+        x2 = hi - RESPHI * (hi - lo); f2 = sseForC(x2);
+      }
+      if (hi - lo < 1e-9) break;
+    }
+
+    const cMid = (lo + hi) / 2;
+    const refined = sseForC(cMid);
+    if (refined && refined.sse < best.sse) {
+      best = { a: refined.a, b: refined.b, c: cMid, sse: refined.sse };
+    }
+  }
+
   const predict = (t: number) => best!.a * Math.exp(-best!.b * t) + best!.c;
 
   const practicalFloorT = (eps: number) => {
