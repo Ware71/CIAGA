@@ -71,6 +71,12 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onMutat
   const [dropTargetTeamId, setDropTargetTeamId] = useState<string | null>(null);
   const [dropTargetUnassigned, setDropTargetUnassigned] = useState(false);
 
+  // Mirror drag state in refs so handlers always read the current value
+  // (avoids stale closure bugs with useCallback deps)
+  const draggingIdRef = useRef<string | null>(null);
+  const dropTargetTeamIdRef = useRef<string | null>(null);
+  const dropTargetUnassignedRef = useRef(false);
+
   // Refs to each team card so we can hit-test during pointermove
   const teamCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const unassignedZoneRef = useRef<HTMLDivElement | null>(null);
@@ -94,6 +100,9 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onMutat
   const draggingParticipant = effectiveParticipants.find((p) => p.id === draggingId) ?? null;
 
   function resetDrag() {
+    draggingIdRef.current = null;
+    dropTargetTeamIdRef.current = null;
+    dropTargetUnassignedRef.current = false;
     setDraggingId(null);
     setDragPos(null);
     setDropTargetTeamId(null);
@@ -106,6 +115,8 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onMutat
     if (uz) {
       const r = uz.getBoundingClientRect();
       if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+        dropTargetTeamIdRef.current = null;
+        dropTargetUnassignedRef.current = true;
         setDropTargetTeamId(null);
         setDropTargetUnassigned(true);
         return;
@@ -116,11 +127,15 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onMutat
       if (!el) continue;
       const r = el.getBoundingClientRect();
       if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+        dropTargetTeamIdRef.current = teamId;
+        dropTargetUnassignedRef.current = false;
         setDropTargetTeamId(teamId);
         setDropTargetUnassigned(false);
         return;
       }
     }
+    dropTargetTeamIdRef.current = null;
+    dropTargetUnassignedRef.current = false;
     setDropTargetTeamId(null);
     setDropTargetUnassigned(false);
   }
@@ -129,41 +144,37 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onMutat
     (e: React.PointerEvent, participantId: string) => {
       e.preventDefault();
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      draggingIdRef.current = participantId;
       setDraggingId(participantId);
       setDragPos({ x: e.clientX, y: e.clientY });
     },
     []
   );
 
-  const handlePointerMove = useCallback(
-    (e: React.PointerEvent) => {
-      if (!draggingId) return;
-      setDragPos({ x: e.clientX, y: e.clientY });
-      hitTest(e.clientX, e.clientY);
-    },
+  // Stable refs — no stale closure risk since they read from refs
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    if (!draggingIdRef.current) return;
+    setDragPos({ x: e.clientX, y: e.clientY });
+    hitTest(e.clientX, e.clientY);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [draggingId]
-  );
+  }, []);
 
-  const handlePointerUp = useCallback(
-    async (e: React.PointerEvent) => {
-      if (!draggingId) return;
-      const participantId = draggingId;
-      const targetTeam = dropTargetTeamId;
-      const targetUnassigned = dropTargetUnassigned;
-      resetDrag();
+  const handlePointerUp = useCallback(async (e: React.PointerEvent) => {
+    if (!draggingIdRef.current) return;
+    const participantId = draggingIdRef.current;
+    const targetTeam = dropTargetTeamIdRef.current;
+    const targetUnassigned = dropTargetUnassignedRef.current;
+    resetDrag();
 
-      if (targetTeam) {
-        setOptimisticTeams((prev) => ({ ...prev, [participantId]: targetTeam }));
-        await assignPlayer(participantId, targetTeam);
-      } else if (targetUnassigned) {
-        setOptimisticTeams((prev) => ({ ...prev, [participantId]: null }));
-        await assignPlayer(participantId, null);
-      }
-    },
+    if (targetTeam) {
+      setOptimisticTeams((prev) => ({ ...prev, [participantId]: targetTeam }));
+      await assignPlayer(participantId, targetTeam);
+    } else if (targetUnassigned) {
+      setOptimisticTeams((prev) => ({ ...prev, [participantId]: null }));
+      await assignPlayer(participantId, null);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [draggingId, dropTargetTeamId, dropTargetUnassigned]
-  );
+  }, []);
 
   // ── API actions ───────────────────────────────────────────────────────────
 
@@ -259,6 +270,7 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onMutat
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={resetDrag}
+      style={{ touchAction: "none" }}
     >
       <div className="space-y-3">
             {err && (
