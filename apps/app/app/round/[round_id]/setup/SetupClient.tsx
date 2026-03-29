@@ -272,6 +272,7 @@ type SetupClientProps = {
   roundId: string;
   initialSnapshot?: any;
   viewerProfileId?: string;
+  isNew?: boolean;
 };
 
 type NearbyCourseLite = {
@@ -284,7 +285,7 @@ type NearbyCourseLite = {
   phone: string | null;
 };
 
-export default function SetupClient({ roundId, initialSnapshot, viewerProfileId }: SetupClientProps) {
+export default function SetupClient({ roundId, initialSnapshot, viewerProfileId, isNew }: SetupClientProps) {
   const router = useRouter();
 
   const [loading, setLoading] = useState(!initialSnapshot);
@@ -364,14 +365,14 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId 
     );
   }, []);
 
-  // Auto-detect nearest course once nearby data + round are available
+  // Auto-detect nearest course once nearby data + round are available (new rounds only)
   useEffect(() => {
+    if (!isNew) return;
     if (nearbyAutoDetectDoneRef.current) return;
     if (!nearbyForPicker || nearbyForPicker.length === 0) return;
     if (!round) return;
     if (round.course_id) return;
     if (!isOwner) return;
-    if (round.status !== "draft" && round.status !== "scheduled") return;
 
     nearbyAutoDetectDoneRef.current = true;
     const nearest = nearbyForPicker[0];

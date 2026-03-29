@@ -331,13 +331,23 @@ export function CourseAndTeeSection({
             <>
               <div className="mt-2 text-xs text-emerald-100/60">No tee selected</div>
               {canEdit && (
-                <Button
-                  size="sm"
-                  className="mt-2 rounded-xl bg-emerald-700/80 hover:bg-emerald-700"
-                  onClick={() => setShowTeeSelector(true)}
-                >
-                  Select Tee
-                </Button>
+                <div className="mt-2 flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1 rounded-xl border-emerald-900/70 bg-[#042713]/60 hover:bg-emerald-900/20"
+                    onClick={() => setPickerOpen(true)}
+                  >
+                    Change Course
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="flex-1 rounded-xl bg-emerald-700/80 hover:bg-emerald-700"
+                    onClick={() => setShowTeeSelector(true)}
+                  >
+                    Select Tee
+                  </Button>
+                </div>
               )}
             </>
           )}

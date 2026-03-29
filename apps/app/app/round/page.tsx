@@ -288,8 +288,8 @@ export default function RoundHomePage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || "Failed to create round");
 
-      // Navigate directly to setup
-      router.push(`/round/${json.round_id}/setup`);
+      // Navigate directly to setup, flagging this as a brand-new round
+      router.push(`/round/${json.round_id}/setup?new=1`);
     } catch (e: any) {
       setErr(e?.message || "Failed to create round");
       setCreatingRound(false);

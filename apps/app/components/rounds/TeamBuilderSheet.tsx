@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Pencil } from "lucide-react";
 import type { RoundFormatType } from "./FormatSelector";
@@ -75,7 +75,23 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onMutat
   const teamCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const unassignedZoneRef = useRef<HTMLDivElement | null>(null);
 
-  const draggingParticipant = participants.find((p) => p.id === draggingId) ?? null;
+  // ── Optimistic assignments ─────────────────────────────────────────────────
+  // key = participant id, value = optimistic team_id (null = unassigned, undefined = not overridden)
+  const [optimisticTeams, setOptimisticTeams] = useState<Record<string, string | null>>({});
+
+  const effectiveParticipants = participants.map((p) =>
+    p.id in optimisticTeams ? { ...p, team_id: optimisticTeams[p.id] } : p
+  );
+
+  // ── Body scroll lock during drag ───────────────────────────────────────────
+  useEffect(() => {
+    if (!draggingId) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [draggingId]);
+
+  const draggingParticipant = effectiveParticipants.find((p) => p.id === draggingId) ?? null;
 
   function resetDrag() {
     setDraggingId(null);
@@ -132,14 +148,17 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onMutat
   const handlePointerUp = useCallback(
     async (e: React.PointerEvent) => {
       if (!draggingId) return;
+      const participantId = draggingId;
       const targetTeam = dropTargetTeamId;
       const targetUnassigned = dropTargetUnassigned;
       resetDrag();
 
       if (targetTeam) {
-        await assignPlayer(draggingId, targetTeam);
+        setOptimisticTeams((prev) => ({ ...prev, [participantId]: targetTeam }));
+        await assignPlayer(participantId, targetTeam);
       } else if (targetUnassigned) {
-        await assignPlayer(draggingId, null);
+        setOptimisticTeams((prev) => ({ ...prev, [participantId]: null }));
+        await assignPlayer(participantId, null);
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -150,7 +169,7 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onMutat
 
   // Compute max team size across all teams (for handicap description)
   const maxTeamSize = teams.reduce((max, t) => {
-    const count = participants.filter((p) => p.team_id === t.id).length;
+    const count = effectiveParticipants.filter((p) => p.team_id === t.id).length;
     return Math.max(max, count);
   }, 2);
 
@@ -220,15 +239,19 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onMutat
       const token = await getToken();
       if (!token) throw new Error("Not authenticated");
       await apiCall("/api/rounds/manage-teams", { round_id: roundId, action: "assign_player", participant_id: participantId, team_id: teamId }, token);
+      // Clear optimistic override — parent fetchAll will supply real state
+      setOptimisticTeams((prev) => { const next = { ...prev }; delete next[participantId]; return next; });
       onMutated();
     } catch (e: any) {
+      // Revert optimistic assignment
+      setOptimisticTeams((prev) => { const next = { ...prev }; delete next[participantId]; return next; });
       setErr(e?.message || "Failed to assign player");
     } finally {
       setSaving(false);
     }
   }
 
-  const unassigned = participants.filter((p) => !p.team_id);
+  const unassigned = effectiveParticipants.filter((p) => !p.team_id);
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -236,7 +259,6 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onMutat
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={resetDrag}
-      style={{ touchAction: draggingId ? "none" : undefined }}
     >
       <div className="space-y-3">
             {err && (
@@ -251,7 +273,7 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onMutat
 
             {/* Teams */}
             {teams.map((team) => {
-              const members = participants.filter((p) => p.team_id === team.id);
+              const members = effectiveParticipants.filter((p) => p.team_id === team.id);
               const isDropTarget = dropTargetTeamId === team.id;
               const isEditing = editingTeamId === team.id;
               return (
@@ -313,14 +335,18 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onMutat
                         key={p.id}
                         className={`px-3 py-2 flex items-center gap-2.5 ${draggingId ? "cursor-grabbing" : "cursor-grab"}`}
                         onPointerDown={(e) => handlePointerDown(e, p.id)}
-                        style={{ userSelect: "none", WebkitUserSelect: "none" }}
+                        style={{ userSelect: "none", WebkitUserSelect: "none", touchAction: "none" }}
                       >
                         <div className="h-7 w-7 rounded-full border border-emerald-200/60 bg-[#0b3b21]/60 flex items-center justify-center text-[9px] font-semibold text-emerald-50 shrink-0 overflow-hidden">
                           {p.avatarUrl ? <img src={p.avatarUrl} alt="" className="w-full h-full object-cover" /> : initialsFrom(p.name)}
                         </div>
                         <div className="text-[12px] font-semibold text-emerald-50 flex-1 truncate">{p.name}</div>
                         <button
-                          onClick={(e) => { e.stopPropagation(); assignPlayer(p.id, null); }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOptimisticTeams((prev) => ({ ...prev, [p.id]: null }));
+                            assignPlayer(p.id, null);
+                          }}
                           disabled={saving}
                           className="text-[11px] text-emerald-100/50 hover:text-emerald-100 disabled:opacity-40 shrink-0"
                           onPointerDown={(e) => e.stopPropagation()}
@@ -355,7 +381,7 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onMutat
                       key={p.id}
                       className={`px-3 py-2 flex items-center gap-2.5 ${draggingId ? "cursor-grabbing" : "cursor-grab"}`}
                       onPointerDown={(e) => handlePointerDown(e, p.id)}
-                      style={{ userSelect: "none", WebkitUserSelect: "none" }}
+                      style={{ userSelect: "none", WebkitUserSelect: "none", touchAction: "none" }}
                     >
                       <div className="h-7 w-7 rounded-full border border-emerald-200/60 bg-[#0b3b21]/60 flex items-center justify-center text-[9px] font-semibold text-emerald-50 shrink-0 overflow-hidden">
                         {p.avatarUrl ? <img src={p.avatarUrl} alt="" className="w-full h-full object-cover" /> : initialsFrom(p.name)}

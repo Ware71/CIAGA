@@ -3,11 +3,19 @@ import { getServerViewer } from "@/lib/supabaseServer";
 import { getSetupSnapshot } from "@/lib/rounds/getSetupSnapshot";
 import SetupClient from "./SetupClient";
 
-export default async function SetupPage({ params }: { params: Promise<{ round_id: string }> }) {
-  const [viewerResult, { round_id: roundId }] = await Promise.all([
+export default async function SetupPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ round_id: string }>;
+  searchParams: Promise<{ new?: string }>;
+}) {
+  const [viewerResult, { round_id: roundId }, sp] = await Promise.all([
     getServerViewer(),
     params,
+    searchParams,
   ]);
+  const isNew = sp.new === "1";
   if (viewerResult.status === "signed_out") redirect("/auth");
   if (viewerResult.status === "needs_onboarding") redirect("/onboarding/set-password");
   const viewer = viewerResult.viewer;
@@ -31,6 +39,7 @@ export default async function SetupPage({ params }: { params: Promise<{ round_id
       roundId={roundId}
       initialSnapshot={initialSnapshot}
       viewerProfileId={viewer.profileId}
+      isNew={isNew}
     />
   );
 }
