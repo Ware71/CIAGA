@@ -1,9 +1,12 @@
 "use client";
 
-import { useRef, useState, useCallback, useLayoutEffect } from "react";
+import { useRef, useState, useCallback, useLayoutEffect, useEffect } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { AuthUser } from "@/components/ui/auth-user";
+import { getViewerSession } from "@/lib/auth/viewerSession";
+import type { MajorHubSummary } from "@/lib/majors/types";
 
 type MenuItem = { id: string; label: string };
 
@@ -20,6 +23,136 @@ type MajorsViewProps = {
   renderRadialMenu: (items: MenuItem[], onSelect: (id: string) => void) => React.ReactNode;
   vh: number;
 };
+
+function MajorsHubPreview({ open }: { open: boolean }) {
+  const router = useRouter();
+  const [hub, setHub] = useState<MajorHubSummary | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const session = await getViewerSession();
+        if (!session || cancelled) return;
+        const res = await fetch("/api/majors/hub", {
+          headers: { Authorization: `Bearer ${session.accessToken}` },
+        });
+        if (res.ok && !cancelled) {
+          const data = await res.json();
+          setHub(data);
+        }
+      } catch {
+        // silently ignore — this is a preview
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  return (
+    <motion.div
+      className="w-full mt-24 space-y-3"
+      initial={false}
+      animate={{
+        opacity: open ? 0.25 : 1,
+        scale: open ? 0.995 : 1,
+      }}
+      transition={{ duration: 0.18 }}
+      style={{
+        filter: open ? "blur(2px)" : "blur(0px)",
+        pointerEvents: open ? "none" : "auto",
+      }}
+    >
+      {/* Season snapshot */}
+      {hub && (
+        <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/65 mb-2">Season</div>
+          <div className="flex items-center justify-between">
+            <div className="text-center">
+              <div className="text-base font-extrabold text-[#f5e6b0]">{hub.season_points}</div>
+              <div className="text-[10px] text-emerald-200/60">pts</div>
+            </div>
+            <div className="text-center">
+              <div className="text-base font-extrabold text-[#f5e6b0]">{hub.season_rank ?? "—"}</div>
+              <div className="text-[10px] text-emerald-200/60">rank</div>
+            </div>
+            <div className="text-center">
+              <div className="text-base font-extrabold text-[#f5e6b0]">{hub.events_entered}</div>
+              <div className="text-[10px] text-emerald-200/60">events</div>
+            </div>
+            <div className="text-center">
+              <div className="text-base font-extrabold text-[#f5e6b0]">{hub.wins}</div>
+              <div className="text-[10px] text-emerald-200/60">wins</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Active competitions */}
+      {hub && hub.active_competitions.length > 0 && (
+        hub.active_competitions.slice(0, 2).map((comp) => (
+          <button
+            key={comp.id}
+            type="button"
+            onClick={() => router.push(`/majors/competitions/${comp.id}`)}
+            className="w-full text-left rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4 space-y-2"
+          >
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-semibold text-emerald-50 truncate">{comp.name}</span>
+              <span className="shrink-0 text-emerald-200/70 capitalize ml-2">{comp.majors_status}</span>
+            </div>
+            <div className="flex items-center justify-between text-[11px] text-emerald-100/70">
+              <span>{comp.course?.name ?? "Course TBD"}</span>
+              {comp.competition_date && (
+                <span>{new Date(comp.competition_date).toLocaleDateString()}</span>
+              )}
+            </div>
+          </button>
+        ))
+      )}
+
+      {/* Upcoming competitions */}
+      {hub && hub.active_competitions.length === 0 && hub.upcoming_competitions.length > 0 && (
+        hub.upcoming_competitions.slice(0, 2).map((comp) => (
+          <button
+            key={comp.id}
+            type="button"
+            onClick={() => router.push(`/majors/competitions/${comp.id}`)}
+            className="w-full text-left rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4 space-y-2"
+          >
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-semibold text-emerald-50 truncate">{comp.name}</span>
+              <span className="shrink-0 text-emerald-200/70 ml-2">Upcoming</span>
+            </div>
+            {comp.competition_date && (
+              <div className="text-[11px] text-emerald-100/70">
+                {new Date(comp.competition_date).toLocaleDateString()}
+              </div>
+            )}
+          </button>
+        ))
+      )}
+
+      {/* Empty state */}
+      {(!hub || (hub.active_competitions.length === 0 && hub.upcoming_competitions.length === 0)) && (
+        <>
+          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4">
+            <h2 className="text-sm font-semibold text-emerald-50 mb-1">CIAGA Majors</h2>
+            <p className="text-[11px] text-emerald-100/75">
+              Create groups, run competitions, and track season standings. Tap Hub to get started.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => router.push("/majors/groups/create")}
+            className="w-full rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4 text-sm font-semibold text-emerald-200 text-left hover:border-emerald-700/70"
+          >
+            + Create your first group →
+          </button>
+        </>
+      )}
+    </motion.div>
+  );
+}
 
 export function MajorsView({
   open,
@@ -158,48 +291,7 @@ export function MajorsView({
           <div className="mt-2 text-xs tracking-[0.18em] uppercase text-emerald-200/80">Majors</div>
         </motion.div>
 
-        <motion.div
-          className="w-full mt-24 space-y-3"
-          initial={false}
-          animate={{
-            opacity: open ? 0.25 : 1,
-            scale: open ? 0.995 : 1,
-          }}
-          transition={{ duration: 0.18 }}
-          style={{
-            filter: open ? "blur(2px)" : "blur(0px)",
-            pointerEvents: open ? "none" : "auto",
-          }}
-        >
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4">
-            <h2 className="text-sm font-semibold text-emerald-50 mb-1">Season Majors</h2>
-            <p className="text-[11px] text-emerald-100/80">
-              Four flagship events with FedEx-style points. Swipe down to return home. Later we'll wire in live standings and odds.
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4 space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-semibold text-emerald-50">Major 1 · Spring</span>
-              <span className="text-emerald-200/80">Coming soon</span>
-            </div>
-            <div className="flex items-center justify-between text-[11px] text-emerald-100/80">
-              <span>Course: TBD</span>
-              <span>Points: —</span>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4 space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-semibold text-emerald-50">Major 2 · Summer</span>
-              <span className="text-emerald-200/80">Coming soon</span>
-            </div>
-            <div className="flex items-center justify-between text-[11px] text-emerald-100/80">
-              <span>Course: TBD</span>
-              <span>Points: —</span>
-            </div>
-          </div>
-        </motion.div>
+        <MajorsHubPreview open={open} />
       </div>
     </motion.div>
   );
