@@ -1029,7 +1029,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
           <SectionCard title="Teams">
             <div className="space-y-3">
               <div className="text-[11px] text-emerald-100/60">
-                {teams.length === 0 ? "No teams set up yet" : `${teams.length} team${teams.length !== 1 ? "s" : ""} · ${participants.filter((p) => (p as any).team_id).length}/${participants.length} assigned`}
+                {teams.length === 0 ? "No teams set up yet" : `${teams.length} team${teams.length !== 1 ? "s" : ""} · ${participants.filter((p) => p.team_id).length}/${participants.length} assigned`}
               </div>
               {isOwner && (round.status === "draft" || round.status === "scheduled") ? (
                 <TeamBuilderSheet
@@ -1040,9 +1040,9 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
                     id: p.id,
                     name: displayParticipant(p).name,
                     avatarUrl: displayParticipant(p).avatar_url,
-                    team_id: (p as any).team_id ?? null,
+                    team_id: p.team_id ?? null,
                   }))}
-                  onMutated={() => { fetchAll(); }}
+                  onMutated={async () => { await fetchAll(); }}
                   getToken={async () => {
                     const { data } = await supabase.auth.getSession();
                     return data.session?.access_token ?? null;
@@ -1051,7 +1051,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
               ) : teams.length > 0 ? (
                 <div className="space-y-1">
                   {teams.map((t) => {
-                    const members = participants.filter((p) => (p as any).team_id === t.id);
+                    const members = participants.filter((p) => p.team_id === t.id);
                     return (
                       <div key={t.id} className="text-[11px] text-emerald-100/80">
                         <span className="font-semibold text-[#f5e6b0]">{t.name}:</span>{" "}

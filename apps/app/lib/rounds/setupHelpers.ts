@@ -34,6 +34,7 @@ export type Participant = {
   is_guest: boolean;
   display_name: string | null;
   role: "owner" | "scorer" | "player";
+  team_id?: string | null;
   profiles?: ProfileJoin | ProfileJoin[] | null;
   handicap_index?: number | null;
   assigned_playing_handicap?: number | null;

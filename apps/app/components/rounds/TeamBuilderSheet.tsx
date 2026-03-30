@@ -23,7 +23,7 @@ type Props = {
   format: RoundFormatType;
   teams: TeamBuilderTeam[];
   participants: TeamBuilderParticipant[];
-  onMutated: () => void;
+  onMutated: () => Promise<void>;
   getToken: () => Promise<string | null>;
 };
 
@@ -250,9 +250,10 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onMutat
       const token = await getToken();
       if (!token) throw new Error("Not authenticated");
       await apiCall("/api/rounds/manage-teams", { round_id: roundId, action: "assign_player", participant_id: participantId, team_id: teamId }, token);
-      // Clear optimistic override — parent fetchAll will supply real state
+      // Await fresh data before clearing optimistic — prevents the flash where
+      // participant appears unassigned while fetchAll is still in-flight
+      await onMutated();
       setOptimisticTeams((prev) => { const next = { ...prev }; delete next[participantId]; return next; });
-      onMutated();
     } catch (e: any) {
       // Revert optimistic assignment
       setOptimisticTeams((prev) => { const next = { ...prev }; delete next[participantId]; return next; });
