@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { getMajorHubSummary } from "@/lib/majors/queries";
-import { getAuthedProfile } from "@/lib/auth/getAuthedProfile";
 import { cookies } from "next/headers";
 import MajorsHubClient from "./MajorsHubClient";
 import type { MajorHubSummary } from "@/lib/majors/types";
