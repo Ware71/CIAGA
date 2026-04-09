@@ -160,8 +160,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   const handleImageUpload = async (file: File) => {
     setUploadingImage(true);
     try {
-      const { createClient } = await import("@/lib/supabase/client");
-      const supabase = createClient();
+      const { supabase } = await import("@/lib/supabaseClient");
       const ext = file.name.split(".").pop() ?? "jpg";
       const path = `groups/${groupId}/${Date.now()}.${ext}`;
       const { error: uploadError } = await supabase.storage
