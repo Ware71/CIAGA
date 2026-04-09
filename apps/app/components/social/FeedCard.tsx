@@ -594,7 +594,11 @@ export default function FeedCard({ item }: { item: FeedItemVM }) {
               </div>
             </div>
           ) : primaryPerson ? (
-            <div className="mb-2 flex items-center gap-2">
+            <button
+              type="button"
+              className="mb-2 flex items-center gap-2 cursor-pointer"
+              onClick={(e) => { e.stopPropagation(); router.push(`/player/${primaryPerson.profile_id}`); }}
+            >
               {primaryPerson.avatar_url ? (
                 <img
                   src={primaryPerson.avatar_url}
@@ -607,13 +611,13 @@ export default function FeedCard({ item }: { item: FeedItemVM }) {
                   {avatarInitial(primaryPerson.display_name ?? "P")}
                 </div>
               )}
-              <div className="min-w-0">
+              <div className="min-w-0 text-left">
                 <div className="text-sm font-extrabold truncate text-emerald-50">
                   {primaryPerson.display_name ?? "Player"}
                 </div>
                 <div className="text-[11px] font-semibold text-emerald-100/60">{timeLabel}</div>
               </div>
-            </div>
+            </button>
           ) : (
             <div className="mb-2 text-[11px] font-semibold text-emerald-100/60">{timeLabel}</div>
           )}

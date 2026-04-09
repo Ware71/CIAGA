@@ -99,16 +99,22 @@ export default function LeaderboardClient() {
             <span className="w-6 text-center text-xs font-extrabold text-[#f5e6b0]">
               {row.position ?? idx + 1}
             </span>
-            {row.profile?.avatar_url ? (
-              <img src={row.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover" />
-            ) : (
-              <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200">
-                {row.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
-              </div>
-            )}
-            <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">
-              {row.profile?.name ?? "Unknown"}
-            </span>
+            <button
+              type="button"
+              className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
+              onClick={() => router.push(`/player/${row.profile_id}`)}
+            >
+              {row.profile?.avatar_url ? (
+                <img src={row.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
+              ) : (
+                <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
+                  {row.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
+                </div>
+              )}
+              <span className="flex-1 text-sm font-semibold text-emerald-50 truncate text-left">
+                {row.profile?.name ?? "Unknown"}
+              </span>
+            </button>
             <div className="text-right shrink-0">
               {tab === "competition" ? (
                 <>

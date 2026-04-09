@@ -51,6 +51,8 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   const [myProfileId, setMyProfileId] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
   const [joinedStatus, setJoinedStatus] = useState<string | null>(null);
+  const [allGroups, setAllGroups] = useState<Array<{ id: string; name: string; image_url: string | null }>>([]);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,11 +64,12 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         setMyProfileId(session.profileId);
         const headers = { Authorization: `Bearer ${session.accessToken}` };
 
-        const [groupRes, compsRes, standingsRes, membersRes] = await Promise.all([
+        const [groupRes, compsRes, standingsRes, membersRes, allGroupsRes] = await Promise.all([
           fetch(`/api/majors/groups/${groupId}`, { headers }),
           fetch(`/api/majors/competitions?group_id=${groupId}`, { headers }),
           fetch(`/api/majors/leaderboard?group_id=${groupId}`, { headers }),
           fetch(`/api/majors/groups/${groupId}/members`, { headers }),
+          fetch(`/api/majors/groups`, { headers }),
         ]);
 
         if (cancelled) return;
@@ -89,6 +92,10 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           const own = mems.find((m) => m.profile_id === session.profileId);
           setMyRole(own?.role ?? null);
           setJoinedStatus(own?.status ?? null);
+        }
+        if (allGroupsRes.ok) {
+          const j = await allGroupsRes.json();
+          setAllGroups((j.groups ?? []).map((g: any) => ({ id: g.id, name: g.name, image_url: g.image_url ?? null })));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -148,6 +155,36 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       headers: { Authorization: `Bearer ${session.accessToken}` },
     });
     await refreshMembers();
+  };
+
+  const handleImageUpload = async (file: File) => {
+    setUploadingImage(true);
+    try {
+      const { createClient } = await import("@/lib/supabase/client");
+      const supabase = createClient();
+      const ext = file.name.split(".").pop() ?? "jpg";
+      const path = `groups/${groupId}/${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("group-images")
+        .upload(path, file, { cacheControl: "3600", upsert: true });
+      if (uploadError) throw uploadError;
+      const { data: urlData } = supabase.storage.from("group-images").getPublicUrl(path);
+      const session = await getViewerSession();
+      if (!session) throw new Error("Not authenticated");
+      const res = await fetch(`/api/majors/groups/${groupId}`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ image_url: urlData.publicUrl }),
+      });
+      if (!res.ok) throw new Error("Failed to update group");
+      const j = await res.json();
+      setGroup((prev) => prev ? { ...prev, image_url: j.group.image_url } : prev);
+      setAllGroups((prev) => prev.map((g) => g.id === groupId ? { ...g, image_url: j.group.image_url } : g));
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setUploadingImage(false);
+    }
   };
 
   const isAdminOrOwner = myRole === "owner" || myRole === "admin";
@@ -409,14 +446,20 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             </div>
             {pendingMembers.map((m) => (
               <div key={m.id} className="flex items-center gap-3">
-                {m.profile?.avatar_url ? (
-                  <img src={m.profile.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover" />
-                ) : (
-                  <div className="h-8 w-8 rounded-full bg-amber-900/60 grid place-items-center text-[10px] font-bold text-amber-200 shrink-0">
-                    {m.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
-                  </div>
-                )}
-                <span className="flex-1 text-sm text-emerald-50 truncate">{m.profile?.name ?? m.profile_id}</span>
+                <button
+                  type="button"
+                  className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
+                  onClick={() => router.push(`/player/${m.profile_id}`)}
+                >
+                  {m.profile?.avatar_url ? (
+                    <img src={m.profile.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
+                  ) : (
+                    <div className="h-8 w-8 rounded-full bg-amber-900/60 grid place-items-center text-[10px] font-bold text-amber-200 shrink-0">
+                      {m.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
+                    </div>
+                  )}
+                  <span className="flex-1 text-sm text-emerald-50 truncate text-left">{m.profile?.name ?? m.profile_id}</span>
+                </button>
                 <div className="flex gap-1.5 shrink-0">
                   <button
                     type="button"
@@ -442,14 +485,20 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         <div className="space-y-1.5">
           {activeMembers.map((m) => (
             <div key={m.id} className="flex items-center gap-3 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5">
-              {m.profile?.avatar_url ? (
-                <img src={m.profile.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
-              ) : (
-                <div className="h-8 w-8 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
-                  {m.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
-                </div>
-              )}
-              <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{m.profile?.name ?? m.profile_id}</span>
+              <button
+                type="button"
+                className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
+                onClick={() => router.push(`/player/${m.profile_id}`)}
+              >
+                {m.profile?.avatar_url ? (
+                  <img src={m.profile.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
+                ) : (
+                  <div className="h-8 w-8 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
+                    {m.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
+                  </div>
+                )}
+                <span className="flex-1 text-sm font-semibold text-emerald-50 truncate text-left">{m.profile?.name ?? m.profile_id}</span>
+              </button>
               <div className="flex items-center gap-2 shrink-0">
                 <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border capitalize ${roleBadge(m.role)}`}>
                   {m.role}
@@ -484,9 +533,35 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
     settings: isAdminOrOwner ? (
       <div className="space-y-4">
-        <div className="text-sm text-emerald-100/60">
-          Group settings are managed via the admin panel. Direct editing coming soon.
+        {/* Group Image */}
+        <div className="space-y-2">
+          <div className="text-[10px] uppercase tracking-wider text-emerald-200/50">Group Image</div>
+          <div className="flex items-center gap-3">
+            {group.image_url ? (
+              <img src={group.image_url} alt={group.name} className="h-16 w-16 rounded-2xl object-cover border border-emerald-700/40 shrink-0" />
+            ) : (
+              <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-emerald-800 to-emerald-950 flex items-center justify-center text-xl font-bold text-emerald-200 shrink-0">
+                {group.name.slice(0, 2).toUpperCase()}
+              </div>
+            )}
+            <label className="cursor-pointer flex-1">
+              <div className={`w-full py-2.5 rounded-full border border-emerald-700/60 text-sm font-semibold text-emerald-200 text-center hover:bg-emerald-900/30 transition-colors ${uploadingImage ? "opacity-50" : ""}`}>
+                {uploadingImage ? "Uploading…" : group.image_url ? "Change Image" : "Add Image"}
+              </div>
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                disabled={uploadingImage}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleImageUpload(file);
+                }}
+              />
+            </label>
+          </div>
         </div>
+        {/* Admin panel link */}
         <button
           type="button"
           onClick={() => router.push(`/admin/majors`)}
@@ -513,6 +588,35 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         </button>
         <div className="w-14" />
       </div>
+
+      {/* Group selector strip */}
+      {allGroups.length > 1 && (
+        <div className="overflow-x-auto px-4 mb-3">
+          <div className="flex gap-2 w-max">
+            {allGroups.map((g) => (
+              <button
+                key={g.id}
+                type="button"
+                onClick={() => router.replace(`/majors/groups/${g.id}`)}
+                className={`flex items-center gap-1.5 shrink-0 px-2.5 py-1.5 rounded-full border text-xs font-semibold transition-colors ${
+                  g.id === groupId
+                    ? "bg-emerald-700 text-white border-emerald-600"
+                    : "border-emerald-900/60 text-emerald-200/70 hover:text-emerald-50 bg-[#0b3b21]/60"
+                }`}
+              >
+                {g.image_url ? (
+                  <img src={g.image_url} alt="" className="h-4 w-4 rounded-full object-cover shrink-0" />
+                ) : (
+                  <span className="h-4 w-4 rounded-full bg-emerald-800 text-[8px] font-bold text-emerald-200 flex items-center justify-center shrink-0">
+                    {g.name.slice(0, 1)}
+                  </span>
+                )}
+                <span className="truncate max-w-[80px]">{g.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Group hero */}
       <div className="px-4 mb-4 flex items-start gap-3">

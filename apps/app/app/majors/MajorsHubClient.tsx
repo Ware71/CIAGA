@@ -226,58 +226,6 @@ export default function MajorsHubClient({ initialData }: Props) {
             </section>
           )}
 
-          {/* Quick Actions */}
-          <section className="space-y-2">
-            <h2 className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/55">Actions</h2>
-            <div className="grid grid-cols-2 gap-2">
-              {data.my_groups.length === 0 && (
-                <button
-                  type="button"
-                  onClick={() => router.push("/majors/groups/create")}
-                  className="col-span-2 rounded-2xl border border-emerald-700/50 bg-emerald-900/30 p-4 text-sm font-semibold text-emerald-200 hover:bg-emerald-900/50 transition-colors"
-                >
-                  + Create Your First Group
-                </button>
-              )}
-              {data.my_groups.length > 0 && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => router.push("/majors/competitions/create")}
-                    className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-3.5 text-sm font-semibold text-emerald-50 hover:border-emerald-700/70 transition-colors text-left"
-                  >
-                    <div className="text-base mb-0.5">🏆</div>
-                    New Competition
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => router.push("/majors/profile")}
-                    className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-3.5 text-sm font-semibold text-emerald-50 hover:border-emerald-700/70 transition-colors text-left"
-                  >
-                    <div className="text-base mb-0.5">📊</div>
-                    My Profile
-                  </button>
-                </>
-              )}
-              <button
-                type="button"
-                onClick={() => router.push("/majors/schedule")}
-                className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-3.5 text-sm font-semibold text-emerald-50 hover:border-emerald-700/70 transition-colors text-left"
-              >
-                <div className="text-base mb-0.5">📅</div>
-                Schedule
-              </button>
-              <button
-                type="button"
-                onClick={() => router.push("/majors/leaderboard")}
-                className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-3.5 text-sm font-semibold text-emerald-50 hover:border-emerald-700/70 transition-colors text-left"
-              >
-                <div className="text-base mb-0.5">🥇</div>
-                Leaderboard
-              </button>
-            </div>
-          </section>
-
           {/* Discover */}
           {data.discover_groups.length > 0 && (
             <section className="space-y-2 pb-8">
