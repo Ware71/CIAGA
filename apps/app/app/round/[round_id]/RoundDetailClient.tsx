@@ -852,11 +852,14 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     }));
     if (typeof strokes === "number") {
       setHoleStatesByKey((prev) => ({ ...prev, [key]: "completed" }));
+    } else {
+      // Clear score: revert hole to not_started
+      setHoleStatesByKey((prev) => { const next = { ...prev }; delete next[key]; return next; });
     }
 
     // 2. If offline, queue the op and return success
     if (typeof navigator !== "undefined" && !navigator.onLine) {
-      upsertQueueOp({ key, roundId, participantId, holeNumber, strokes, enteredBy: meId, holeStatus: typeof strokes === "number" ? "completed" : null, timestamp: Date.now() });
+      upsertQueueOp({ key, roundId, participantId, holeNumber, strokes, enteredBy: meId, holeStatus: typeof strokes === "number" ? "completed" : "not_started", timestamp: Date.now() });
       setPendingKeys((prev) => { const next = new Set(prev); next.add(key); return next; });
       return true;
     }
@@ -872,15 +875,13 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
       });
       if (error) throw error;
 
-      // If user entered a number, also persist the hole state
-      if (typeof strokes === "number") {
-        await supabase
-          .from("round_hole_states")
-          .upsert(
-            { round_id: roundId, participant_id: participantId, hole_number: holeNumber, status: "completed" },
-            { onConflict: "participant_id,hole_number" }
-          );
-      }
+      // Always persist the hole state (completed or not_started)
+      await supabase
+        .from("round_hole_states")
+        .upsert(
+          { round_id: roundId, participant_id: participantId, hole_number: holeNumber, status: typeof strokes === "number" ? "completed" : "not_started" },
+          { onConflict: "participant_id,hole_number" }
+        );
 
       // Clear from pending queue if it was there
       removeQueueOp(key);
@@ -890,7 +891,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     } catch (e: any) {
       if (isNetworkError(e)) {
         // Queue for later sync; optimistic state already applied
-        upsertQueueOp({ key, roundId, participantId, holeNumber, strokes, enteredBy: meId, holeStatus: typeof strokes === "number" ? "completed" : null, timestamp: Date.now() });
+        upsertQueueOp({ key, roundId, participantId, holeNumber, strokes, enteredBy: meId, holeStatus: typeof strokes === "number" ? "completed" : "not_started", timestamp: Date.now() });
         setPendingKeys((prev) => { const next = new Set(prev); next.add(key); return next; });
         return true;
       }
@@ -1047,11 +1048,10 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     advanceAfterCompletion(pid, hole);
   }
 
-  // Scramble mode: show one column per team instead of one per player.
-  // Each team's scores map to the first team member's participant ID.
-  const isScramble = formatType === "scramble";
-  const scrambleTeamParticipants = useMemo<Participant[]>(() => {
-    if (!isScramble || !teams.length) return participants;
+  // Single-ball mode: show one column per team instead of one per player.
+  // Covers scramble, greensomes, and foursomes — all use one team score.
+  const singleBallTeamParticipants = useMemo<Participant[]>(() => {
+    if (!isSingleBall || !teams.length) return participants;
     // Build a virtual participant per team, using first member's ID
     return teams
       .map((t) => {
@@ -1064,9 +1064,9 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
         } as Participant;
       })
       .filter(Boolean) as Participant[];
-  }, [isScramble, teams, participants]);
+  }, [isSingleBall, teams, participants]);
 
-  const scorecardParticipants = isScramble ? scrambleTeamParticipants : participants;
+  const scorecardParticipants = isSingleBall ? singleBallTeamParticipants : participants;
 
   // When on a format tab with filtered participants, show only those
   const visibleParticipants = useMemo(() => {
@@ -1077,25 +1077,25 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     return scorecardParticipants;
   }, [scorecardParticipants, activeFormatDisplay]);
 
-  const scrambleGetLabel = useCallback(
+  const singleBallGetLabel = useCallback(
     (p: Participant) => {
-      if (isScramble) return p.display_name || "Team";
+      if (isSingleBall) return p.display_name || "Team";
       return getParticipantLabel(p);
     },
-    [isScramble, getParticipantLabel]
+    [isSingleBall, getParticipantLabel]
   );
 
-  const scrambleGetAvatar = useCallback(
+  const singleBallGetAvatar = useCallback(
     (p: Participant) => {
-      if (isScramble) return null; // No avatar for teams
+      if (isSingleBall) return null; // No avatar for teams
       return getParticipantAvatar(p);
     },
-    [isScramble, getParticipantAvatar]
+    [isSingleBall, getParticipantAvatar]
   );
 
   // Build a map from first-member participant ID → all team member avatars for the scorecard header stack
   const teamAvatarMap = useMemo<Record<string, Array<{ name: string; url: string | null }>>>(() => {
-    if (!isScramble) return {};
+    if (!isSingleBall) return {};
     const map: Record<string, Array<{ name: string; url: string | null }>> = {};
     for (const t of teams) {
       const members = participants.filter((p) => p.team_id === t.id);
@@ -1105,11 +1105,11 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
       }
     }
     return map;
-  }, [isScramble, teams, participants, getParticipantLabel, getParticipantAvatar]);
+  }, [isSingleBall, teams, participants, getParticipantLabel, getParticipantAvatar]);
 
   const getParticipantAvatarList = useCallback(
-    (p: Participant) => (isScramble ? teamAvatarMap[p.id] ?? null : null),
-    [isScramble, teamAvatarMap]
+    (p: Participant) => (isSingleBall ? teamAvatarMap[p.id] ?? null : null),
+    [isSingleBall, teamAvatarMap]
   );
 
   if (loading) {
@@ -1339,8 +1339,8 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
               displayedScoreFor={displayedScoreFor}
               holeStateFor={holeStateFor}
               onOpenEntry={openEntry}
-              getParticipantLabel={scrambleGetLabel}
-              getParticipantAvatar={scrambleGetAvatar}
+              getParticipantLabel={singleBallGetLabel}
+              getParticipantAvatar={singleBallGetAvatar}
               getParticipantAvatarList={getParticipantAvatarList}
             />
           ) : (
@@ -1360,8 +1360,8 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
               displayedScoreFor={displayedScoreFor}
               holeStateFor={holeStateFor}
               onOpenEntry={openEntry}
-              getParticipantLabel={scrambleGetLabel}
-              getParticipantAvatar={scrambleGetAvatar}
+              getParticipantLabel={singleBallGetLabel}
+              getParticipantAvatar={singleBallGetAvatar}
             />
           )
         ) : null}
@@ -1380,14 +1380,14 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
             grossTotals={grossTotals}
             netTotals={netTotals}
             parTotal={metaSums.parTot}
-            getParticipantLabel={scrambleGetLabel}
-            getParticipantAvatar={scrambleGetAvatar}
+            getParticipantLabel={singleBallGetLabel}
+            getParticipantAvatar={singleBallGetAvatar}
             courseLabel={courseLabel}
             formatType={formatType}
             holesCompletedByParticipantId={holesCompletedByParticipantId}
-            teams={isScramble ? teams : undefined}
-            allParticipants={isScramble ? participants : undefined}
-            isTeamFormat={isScramble}
+            teams={isSingleBall ? teams : undefined}
+            allParticipants={isSingleBall ? participants : undefined}
+            isTeamFormat={isSingleBall}
           />
         )}
 

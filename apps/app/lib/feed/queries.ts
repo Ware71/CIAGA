@@ -496,8 +496,50 @@ export async function getLiveRoundsAsFeedItems(params: { viewerProfileId: string
       // best-effort
     }
 
+    const SINGLE_BALL_FORMATS = ["scramble", "greensomes", "foursomes"];
+    const isSingleBall = typeof rd.format_type === "string" && SINGLE_BALL_FORMATS.includes(rd.format_type);
+
+    // For single-ball team formats, build team rows instead of individual player rows
+    const buildTeamPlayers = () => {
+      return teams.map((t) => {
+        const members = participants.filter((p) => p.team_id === t.id);
+        const firstMember = members[0];
+        const scoreMap = firstMember ? scoresByParticipant.get(firstMember.id) : undefined;
+
+        let grossTotal = 0;
+        let holesCompleted = 0;
+        let parPlayed = 0;
+
+        if (scoreMap) {
+          for (const [holeNum, strokes] of scoreMap) {
+            grossTotal += strokes;
+            holesCompleted++;
+            const hole = holeMap.get(holeNum);
+            if (hole?.par != null) parPlayed += hole.par;
+          }
+        }
+
+        const hasScores = holesCompleted > 0;
+        const gross_total = hasScores ? grossTotal : null;
+        const gross_to_par = gross_total != null && parPlayed > 0 ? grossTotal - parPlayed : null;
+
+        return {
+          profile_id: null,
+          name: t.name,
+          avatar_url: null,
+          gross_total,
+          net_total: null,
+          gross_to_par,
+          net_to_par: null,
+          par_total: hasScores && parPlayed > 0 ? parPlayed : null,
+          holes_completed: hasScores ? holesCompleted : null,
+          format_score: formatSummary?.player_scores.get(t.id) ?? null,
+        };
+      });
+    };
+
     // Build player data
-    const players = participants.map((rp) => {
+    const players = isSingleBall && teams.length > 0 ? buildTeamPlayers() : participants.map((rp) => {
       const prof = rp.profile_id ? profMap.get(rp.profile_id) : null;
       const scoreMap = scoresByParticipant.get(rp.id);
 
@@ -527,6 +569,7 @@ export async function getLiveRoundsAsFeedItems(params: { viewerProfileId: string
       const hasScores = holesCompleted > 0;
       const gross_total = hasScores ? grossTotal : null;
       const net_total = hasScores && courseHcp != null ? grossTotal - netAdjustment : null;
+      const gross_to_par = gross_total != null && parPlayed > 0 ? grossTotal - parPlayed : null;
       const net_to_par = net_total != null && parPlayed > 0 ? net_total - parPlayed : null;
       const par_total = hasScores && parPlayed > 0 ? parPlayed : null;
 
@@ -541,6 +584,7 @@ export async function getLiveRoundsAsFeedItems(params: { viewerProfileId: string
         avatar_url: prof?.avatar_url ?? null,
         gross_total,
         net_total,
+        gross_to_par,
         net_to_par,
         par_total,
         holes_completed: hasScores ? holesCompleted : null,
@@ -574,6 +618,7 @@ export async function getLiveRoundsAsFeedItems(params: { viewerProfileId: string
           avatar_url: p.avatar_url,
           gross_total: p.gross_total,
           net_total: p.net_total,
+          gross_to_par: p.gross_to_par,
           net_to_par: p.net_to_par,
           par_total: p.par_total,
           holes_completed: p.holes_completed,

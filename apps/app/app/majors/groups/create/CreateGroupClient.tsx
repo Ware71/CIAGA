@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { getViewerSession } from "@/lib/auth/viewerSession";
-import type { MajorGroupType, MajorGroupPrivacy, MajorGroupJoinMethod, MajorGroupCiagaTag } from "@/lib/majors/types";
+import type { MajorGroupType, MajorGroupPrivacy, MajorGroupJoinMethod } from "@/lib/majors/types";
 
 const GROUP_TYPES: { value: MajorGroupType; label: string; desc: string }[] = [
   { value: "league", label: "League", desc: "Season-long standings competition" },
@@ -37,7 +37,6 @@ type FormState = {
   max_members: string;
   season_start: string;
   season_end: string;
-  ciaga_tag: MajorGroupCiagaTag;
 };
 
 const INITIAL: FormState = {
@@ -49,7 +48,6 @@ const INITIAL: FormState = {
   max_members: "",
   season_start: "",
   season_end: "",
-  ciaga_tag: "none",
 };
 
 export default function CreateGroupClient() {
@@ -62,7 +60,7 @@ export default function CreateGroupClient() {
   const update = (field: keyof FormState, value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
-  const totalSteps = 4;
+  const totalSteps = 3;
 
   const canNext = (): boolean => {
     if (step === 0) return form.name.trim().length > 0;
@@ -192,7 +190,7 @@ export default function CreateGroupClient() {
       </div>
     </div>,
 
-    /* Step 2: Season dates, CIAGA tag */
+    /* Step 2: Season dates */
     <div key="step2" className="space-y-5">
       <div className="space-y-2">
         <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Season Start (optional)</label>
@@ -212,28 +210,9 @@ export default function CreateGroupClient() {
           className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-3 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
         />
       </div>
-      <div className="space-y-2">
-        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">CIAGA Tag</label>
-        <div className="grid grid-cols-2 gap-2">
-          {(["none", "affiliated", "invitational", "official"] as MajorGroupCiagaTag[]).map((tag) => (
-            <button
-              key={tag}
-              type="button"
-              onClick={() => update("ciaga_tag", tag)}
-              className={`rounded-xl border px-3 py-2 text-sm capitalize transition-colors ${
-                form.ciaga_tag === tag
-                  ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                  : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
-              }`}
-            >
-              {tag}
-            </button>
-          ))}
-        </div>
-      </div>
     </div>,
 
-    /* Step 3: Confirm */
+    /* Step 2 (final): Confirm */
     <div key="step3" className="space-y-4">
       <div className="text-sm font-semibold text-emerald-50">Confirm Group Details</div>
       <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4 space-y-2">
@@ -244,7 +223,7 @@ export default function CreateGroupClient() {
           { label: "Join", value: form.join_method },
           form.max_members ? { label: "Max members", value: form.max_members } : null,
           form.season_start ? { label: "Season start", value: form.season_start } : null,
-          form.ciaga_tag !== "none" ? { label: "Tag", value: form.ciaga_tag } : null,
+          form.season_end ? { label: "Season end", value: form.season_end } : null,
         ]
           .filter(Boolean)
           .map((item) => (

@@ -105,12 +105,15 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
           rating: toNumOrNull(snap.tee_snapshot.rating),
           slope: toNumOrNull(snap.tee_snapshot.slope),
           par_total: toNumOrNull(snap.tee_snapshot.par_total),
+          holes_count: (snap.tee_snapshot.holes_count as number | null) ?? 18,
         }
       : null;
 
     const computeCH = (hi: number | null): number | null => {
       if (hi === null || !teeMeta || teeMeta.rating === null || teeMeta.slope === null || teeMeta.par_total === null) return null;
-      return Math.round(hi * (teeMeta.slope! / 113) + (teeMeta.rating! - teeMeta.par_total!));
+      // For 9-hole rounds: halve the handicap index before applying the WHS formula
+      const effectiveHi = teeMeta.holes_count === 9 ? hi / 2 : hi;
+      return Math.round(effectiveHi * (teeMeta.slope! / 113) + (teeMeta.rating! - teeMeta.par_total!));
     };
 
     const mappedParticipants = ((snap.participants ?? []) as any[]).map((row: any) => {

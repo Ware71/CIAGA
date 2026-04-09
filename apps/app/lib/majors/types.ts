@@ -168,6 +168,36 @@ export type GroupStandingWithProfile = MajorGroupStanding & {
   };
 };
 
+// ─── Tee Times ───────────────────────────────────────────────────────────────
+
+export type TeeTimeParticipant = {
+  profile_id: string | null;
+  is_guest: boolean;
+  display_name: string | null;
+  role: string;
+  profile?: {
+    id: string;
+    name: string | null;
+    avatar_url: string | null;
+  };
+};
+
+export type CompetitionTeeTime = {
+  id: string;
+  competition_id: string;
+  round_id: string | null;
+  tee_time: string;
+  group_number: number | null;
+  notes: string | null;
+  created_by: string;
+  created_at: string;
+  round?: {
+    id: string;
+    status: string;
+    participants: TeeTimeParticipant[];
+  };
+};
+
 // ─── API response shapes ──────────────────────────────────────────────────────
 
 export type MajorHubSummary = {

@@ -1,0 +1,194 @@
+import { NextResponse } from "next/server";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
+import { getCompetitionById } from "@/lib/majors/queries";
+
+export const runtime = "nodejs";
+
+// GET /api/majors/competitions/[id]/tee-times
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    await getAuthedProfileOrThrow(req);
+    const { id } = await params;
+
+    const { data: teeTimes, error } = await supabaseAdmin
+      .from("competition_tee_times")
+      .select("*")
+      .eq("competition_id", id)
+      .order("tee_time", { ascending: true });
+
+    if (error) throw error;
+
+    if (!teeTimes || teeTimes.length === 0) {
+      return NextResponse.json({ tee_times: [] }, { headers: { "Cache-Control": "no-store" } });
+    }
+
+    // Fetch linked rounds with participants + profiles
+    const roundIds = teeTimes.map((t) => t.round_id).filter(Boolean) as string[];
+
+    let roundMap: Record<string, { id: string; status: string; participants: any[] }> = {};
+
+    if (roundIds.length > 0) {
+      const { data: participants } = await supabaseAdmin
+        .from("round_participants")
+        .select(`
+          round_id,
+          profile_id,
+          is_guest,
+          display_name,
+          role,
+          profiles:profile_id (id, name, avatar_url)
+        `)
+        .in("round_id", roundIds);
+
+      const { data: rounds } = await supabaseAdmin
+        .from("rounds")
+        .select("id, status")
+        .in("id", roundIds);
+
+      for (const round of rounds ?? []) {
+        roundMap[round.id] = {
+          id: round.id,
+          status: round.status,
+          participants: [],
+        };
+      }
+
+      for (const p of participants ?? []) {
+        if (roundMap[p.round_id]) {
+          roundMap[p.round_id].participants.push({
+            profile_id: p.profile_id,
+            is_guest: p.is_guest,
+            display_name: p.display_name,
+            role: p.role,
+            profile: p.profiles ?? null,
+          });
+        }
+      }
+    }
+
+    const result = teeTimes.map((t) => ({
+      ...t,
+      round: t.round_id ? (roundMap[t.round_id] ?? null) : null,
+    }));
+
+    return NextResponse.json({ tee_times: result }, { headers: { "Cache-Control": "no-store" } });
+  } catch (e: any) {
+    const msg = e?.message ?? "Unknown error";
+    const status = String(msg).toLowerCase().includes("auth") ? 401 : 500;
+    return NextResponse.json({ error: msg }, { status });
+  }
+}
+
+// POST /api/majors/competitions/[id]/tee-times
+// Body: { tee_time: string, group_number?: number, notes?: string, players: Array<{profile_id?: string, is_guest?: boolean, display_name?: string}> }
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const { profileId } = await getAuthedProfileOrThrow(req);
+    const { id } = await params;
+
+    const competition = await getCompetitionById(id);
+    if (!competition) return NextResponse.json({ error: "Competition not found" }, { status: 404 });
+
+    // Must be group owner or admin
+    if (!competition.group_id) {
+      return NextResponse.json({ error: "Competition is not linked to a group" }, { status: 400 });
+    }
+
+    const { data: membership } = await supabaseAdmin
+      .from("major_group_memberships")
+      .select("role")
+      .eq("group_id", competition.group_id)
+      .eq("profile_id", profileId)
+      .eq("status", "active")
+      .maybeSingle();
+
+    if (!membership || !["owner", "admin"].includes((membership as any).role)) {
+      return NextResponse.json({ error: "Only group owner or admin can manage tee times" }, { status: 403 });
+    }
+
+    const body = await req.json();
+    const { tee_time, group_number, notes, players } = body as {
+      tee_time: string;
+      group_number?: number;
+      notes?: string;
+      players?: Array<{ profile_id?: string; is_guest?: boolean; display_name?: string }>;
+    };
+
+    if (!tee_time) return NextResponse.json({ error: "tee_time is required" }, { status: 400 });
+
+    const playerList = players ?? [];
+    if (playerList.length > 4) {
+      return NextResponse.json({ error: "Maximum 4 players per tee time" }, { status: 400 });
+    }
+
+    // Create the scheduled round
+    const { data: round, error: roundErr } = await supabaseAdmin
+      .from("rounds")
+      .insert({
+        created_by: profileId,
+        status: "scheduled",
+        scheduled_at: tee_time,
+        course_id: competition.course_id ?? null,
+        name: competition.name,
+        visibility: "private",
+        format_type: "strokeplay",
+        default_playing_handicap_mode: "allowance_pct",
+        default_playing_handicap_value: 100,
+      })
+      .select("id")
+      .single();
+
+    if (roundErr) throw roundErr;
+
+    // Add creator as owner participant
+    const participantInserts: any[] = [
+      {
+        round_id: round.id,
+        profile_id: profileId,
+        role: "owner",
+        is_guest: false,
+      },
+    ];
+
+    for (const player of playerList) {
+      // Don't duplicate if the creator is also in the players list
+      if (player.profile_id === profileId) continue;
+      participantInserts.push({
+        round_id: round.id,
+        profile_id: player.profile_id ?? null,
+        is_guest: player.is_guest ?? false,
+        display_name: player.display_name ?? null,
+        role: "player",
+      });
+    }
+
+    const { error: participantErr } = await supabaseAdmin
+      .from("round_participants")
+      .insert(participantInserts);
+
+    if (participantErr) throw participantErr;
+
+    // Create the tee time record
+    const { data: teeTimeRow, error: ttErr } = await supabaseAdmin
+      .from("competition_tee_times")
+      .insert({
+        competition_id: id,
+        round_id: round.id,
+        tee_time,
+        group_number: group_number ?? null,
+        notes: notes ?? null,
+        created_by: profileId,
+      })
+      .select("*")
+      .single();
+
+    if (ttErr) throw ttErr;
+
+    return NextResponse.json({ tee_time: teeTimeRow }, { status: 201 });
+  } catch (e: any) {
+    const msg = e?.message ?? "Unknown error";
+    const status = String(msg).toLowerCase().includes("auth") ? 401 : 500;
+    return NextResponse.json({ error: msg }, { status });
+  }
+}

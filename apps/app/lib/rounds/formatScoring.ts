@@ -758,7 +758,7 @@ function computeStrokeplayFormatTab(
       }
       const recv = strokesReceivedOnHole(hcp, h.stroke_index, holeCount);
       const net = netFromGross(gross, recv);
-      holeResults[key] = { displayValue: net };
+      holeResults[key] = { displayValue: net, recv };
     }
   }
 

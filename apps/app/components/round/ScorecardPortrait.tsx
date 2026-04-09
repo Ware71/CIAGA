@@ -305,7 +305,7 @@ export default function ScorecardPortrait(props: {
                 fmtHint === "halved" ? "text-emerald-100/70" :
                 "";
 
-              const badge = savingKey !== key ? scoreBadgeType(s, h.par, scoreView) : null;
+              const badge = savingKey !== key ? scoreBadgeType(s, h.par, scoreView, formatIsBadgeable) : null;
 
             nodes.push(
                 <button

@@ -32,7 +32,7 @@ export async function POST(req: Request) {
     const { profileId } = await getAuthedProfileOrThrow(req);
     const body = await req.json();
 
-    const { name, description, type, privacy, join_method, max_members, season_start, season_end, ciaga_tag, image_url } = body;
+    const { name, description, type, privacy, join_method, max_members, season_start, season_end, image_url } = body;
 
     if (!name?.trim()) {
       return NextResponse.json({ error: "Group name is required" }, { status: 400 });
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
         max_members: max_members ?? null,
         season_start: season_start ?? null,
         season_end: season_end ?? null,
-        ciaga_tag: ciaga_tag ?? "none",
+        ciaga_tag: "none",
         join_code,
       })
       .select("*")

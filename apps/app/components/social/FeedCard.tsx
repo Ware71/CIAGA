@@ -75,8 +75,8 @@ function holeEventBadgeText(payload: any): string {
   return "HOLE EVENT";
 }
 
-function cardHeaderTitle(item: FeedItemVM): string {
-  if (item.type === "round_played") return "Round Complete";
+function cardHeaderTitle(item: FeedItemVM, isLive: boolean): string {
+  if (item.type === "round_played") return isLive ? "Round Live" : "Round Complete";
   if (item.type === "course_record") return "Course Record";
   if (item.type === "pb") return "Personal Best";
   if (item.type === "hole_event") return holeEventBadgeText(item.payload);
@@ -231,10 +231,13 @@ function UserPostBody({ payload }: { payload: any }) {
   );
 }
 
-function RoundPlayedBody({ payload }: { payload: any }) {
+function RoundPlayedBody({ payload, isLive }: { payload: any; isLive: boolean }) {
   const players = Array.isArray(payload?.players) ? payload.players : [];
   const formatLabel = typeof payload?.format_label === "string" ? payload.format_label : null;
-  const formatWinner = typeof payload?.format_winner === "string" ? payload.format_winner : null;
+  const rawFormatWinner = typeof payload?.format_winner === "string" ? payload.format_winner : null;
+  const formatWinner = isLive && rawFormatWinner
+    ? rawFormatWinner.replace(" won ", " winning ")
+    : rawFormatWinner;
   const sideGameResults = Array.isArray(payload?.side_game_results) ? payload.side_game_results : [];
   const formatType = typeof payload?.format_type === "string" ? payload.format_type : null;
 
@@ -284,12 +287,12 @@ function RoundPlayedBody({ payload }: { payload: any }) {
 
                   <div className="flex items-center gap-2">
                     <div className="text-right">
+                      {isStrokeplay && gross !== null ? (
+                        <div className="text-[10px] font-semibold text-emerald-100/50">{gross}</div>
+                      ) : null}
                       <div className="text-[10px] font-extrabold text-emerald-100/50">GROSS</div>
                       {isStrokeplay && grossToPar !== null ? (
-                        <>
-                          <div className="text-sm font-extrabold text-[#f5e6b0]">{formatToPar(grossToPar)}</div>
-                          <div className="text-[10px] font-semibold text-emerald-100/50">{gross}</div>
-                        </>
+                        <div className="text-sm font-extrabold text-[#f5e6b0]">{formatToPar(grossToPar)}</div>
                       ) : (
                         <div className="text-sm font-extrabold text-[#f5e6b0]">{gross ?? "—"}</div>
                       )}
@@ -298,12 +301,12 @@ function RoundPlayedBody({ payload }: { payload: any }) {
                     <div className="w-px h-8 bg-emerald-900/40" />
 
                     <div className="text-right">
+                      {isStrokeplay && net !== null ? (
+                        <div className="text-[10px] font-semibold text-emerald-100/50">{net}</div>
+                      ) : null}
                       <div className="text-[10px] font-extrabold text-emerald-100/50">NET</div>
                       {isStrokeplay && netToPar !== null ? (
-                        <>
-                          <div className="text-sm font-extrabold text-emerald-50">{formatToPar(netToPar)}</div>
-                          <div className="text-[10px] font-semibold text-emerald-100/50">{net}</div>
-                        </>
+                        <div className="text-sm font-extrabold text-emerald-50">{formatToPar(netToPar)}</div>
                       ) : (
                         <div className="text-sm font-extrabold text-emerald-50">
                           {net ?? "—"}
@@ -456,7 +459,7 @@ export default function FeedCard({ item }: { item: FeedItemVM }) {
 
   const isLive = item.id.startsWith("live:");
   const actionsEnabled = !isLive;
-  const headerTitle = cardHeaderTitle(item);
+  const headerTitle = cardHeaderTitle(item, isLive);
 
   const players = useMemo(() => {
     const p: any = item.payload ?? {};
@@ -698,7 +701,7 @@ export default function FeedCard({ item }: { item: FeedItemVM }) {
         {item.type === "user_post" ? (
           <UserPostBody payload={item.payload as any} />
         ) : item.type === "round_played" ? (
-          <RoundPlayedBody payload={item.payload as any} />
+          <RoundPlayedBody payload={item.payload as any} isLive={isLive} />
         ) : item.type === "pb" || item.type === "course_record" ? (
           <PbOrRecordBody item={item} />
         ) : item.type === "hole_event" ? (
