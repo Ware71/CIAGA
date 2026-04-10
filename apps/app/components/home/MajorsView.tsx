@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { AuthUser } from "@/components/ui/auth-user";
 import { getViewerSession } from "@/lib/auth/viewerSession";
-import type { MajorHubSummary } from "@/lib/majors/types";
+import type { MajorHubSummary, MajorGroup, CompetitionWithGroup } from "@/lib/majors/types";
 
 type MenuItem = { id: string; label: string };
 
@@ -23,6 +23,96 @@ type MajorsViewProps = {
   renderRadialMenu: (items: MenuItem[], onSelect: (id: string) => void) => React.ReactNode;
   vh: number;
 };
+
+function CompetitionCard({ comp }: { comp: CompetitionWithGroup }) {
+  const router = useRouter();
+  const isLive = comp.majors_status === "live";
+  const isCompleted = comp.majors_status === "completed";
+
+  return (
+    <button
+      type="button"
+      onClick={() => router.push(`/majors/competitions/${comp.id}`)}
+      className="w-full text-left rounded-2xl border bg-[#0b3b21]/80 p-3.5 space-y-1.5 overflow-hidden relative"
+      style={{
+        borderColor: isLive ? "rgba(217,119,6,0.35)" : isCompleted ? "rgba(52,211,153,0.25)" : "rgba(6,78,59,0.7)",
+      }}
+    >
+      <div
+        className="absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl"
+        style={{
+          background: isLive
+            ? "linear-gradient(to bottom, #d97706, #92400e)"
+            : isCompleted
+            ? "#065f46"
+            : "transparent",
+        }}
+      />
+      <div className="pl-2">
+        {comp.group && (
+          <div className="text-[10px] uppercase tracking-[0.16em] text-emerald-200/55 mb-0.5">
+            {comp.group.name}
+          </div>
+        )}
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-semibold text-emerald-50 leading-snug truncate">{comp.name}</span>
+          <span
+            className={`shrink-0 text-[9px] font-semibold px-2 py-0.5 rounded-full capitalize border ${
+              isLive
+                ? "bg-amber-900/50 text-amber-300 border-amber-800/50"
+                : isCompleted
+                ? "bg-emerald-900/60 text-emerald-300 border-emerald-800/50"
+                : "bg-emerald-900/40 text-emerald-200/70 border-emerald-900/60"
+            }`}
+          >
+            {comp.majors_status}
+          </span>
+        </div>
+        <div className="text-[10px] text-emerald-100/60 flex items-center gap-2">
+          {comp.competition_date && (
+            <span>{new Date(comp.competition_date).toLocaleDateString([], { month: "short", day: "numeric" })}</span>
+          )}
+          {comp.course && (
+            <>
+              <span className="text-emerald-800">·</span>
+              <span className="truncate">{comp.course.name}</span>
+            </>
+          )}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function GroupCard({ group, onClick }: { group: MajorGroup & { member_count: number }; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full text-left rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-3 space-y-2 hover:border-emerald-700/70 transition-colors"
+    >
+      <div className="flex items-center gap-2.5">
+        {group.image_url ? (
+          <img src={group.image_url} alt={group.name} className="h-9 w-9 rounded-full object-cover border border-emerald-700/40 shrink-0" />
+        ) : (
+          <div className="h-9 w-9 rounded-full bg-gradient-to-br from-emerald-800 to-emerald-950 flex items-center justify-center text-[11px] font-bold text-emerald-200 shrink-0">
+            {group.name.slice(0, 2).toUpperCase()}
+          </div>
+        )}
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-emerald-50 truncate leading-tight">{group.name}</div>
+          <div className="text-[10px] text-emerald-100/50 capitalize">{group.type.replace(/_/g, " ")}</div>
+        </div>
+      </div>
+      <div className="flex items-center justify-between text-[10px]">
+        <span className="text-emerald-200/55">{group.member_count} member{group.member_count !== 1 ? "s" : ""}</span>
+        {group.ciaga_tag !== "none" && (
+          <span className="text-amber-300/70 capitalize border border-amber-800/30 rounded-full px-1.5 py-0.5">{group.ciaga_tag}</span>
+        )}
+      </div>
+    </button>
+  );
+}
 
 function MajorsHubPreview({ open }: { open: boolean }) {
   const router = useRouter();
@@ -65,75 +155,89 @@ function MajorsHubPreview({ open }: { open: boolean }) {
       {/* Season snapshot */}
       {hub && (
         <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4">
-          <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/65 mb-2">Season</div>
-          <div className="flex items-center justify-between">
-            <div className="text-center">
-              <div className="text-base font-extrabold text-[#f5e6b0]">{hub.season_points}</div>
-              <div className="text-[10px] text-emerald-200/60">pts</div>
-            </div>
-            <div className="text-center">
-              <div className="text-base font-extrabold text-[#f5e6b0]">{hub.season_rank ?? "—"}</div>
-              <div className="text-[10px] text-emerald-200/60">rank</div>
-            </div>
-            <div className="text-center">
-              <div className="text-base font-extrabold text-[#f5e6b0]">{hub.events_entered}</div>
-              <div className="text-[10px] text-emerald-200/60">events</div>
-            </div>
-            <div className="text-center">
-              <div className="text-base font-extrabold text-[#f5e6b0]">{hub.wins}</div>
-              <div className="text-[10px] text-emerald-200/60">wins</div>
-            </div>
+          <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/65 mb-3">Season</div>
+          <div className="grid grid-cols-4 gap-2 text-center">
+            {[
+              { label: "Points", value: hub.season_points },
+              { label: "Rank", value: hub.season_rank ?? "—" },
+              { label: "Events", value: hub.events_entered },
+              { label: "Wins", value: hub.wins },
+            ].map((stat) => (
+              <div key={stat.label}>
+                <div className="text-xl font-extrabold text-[#f5e6b0] leading-none">{stat.value}</div>
+                <div className="text-[10px] text-emerald-200/55 mt-1">{stat.label}</div>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      {/* Active competitions */}
+      {/* Live competitions */}
       {hub && hub.active_competitions.length > 0 && (
-        hub.active_competitions.slice(0, 2).map((comp) => (
-          <button
-            key={comp.id}
-            type="button"
-            onClick={() => router.push(`/majors/competitions/${comp.id}`)}
-            className="w-full text-left rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4 space-y-2"
-          >
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-semibold text-emerald-50 truncate">{comp.name}</span>
-              <span className="shrink-0 text-emerald-200/70 capitalize ml-2">{comp.majors_status}</span>
-            </div>
-            <div className="flex items-center justify-between text-[11px] text-emerald-100/70">
-              <span>{comp.course?.name ?? "Course TBD"}</span>
-              {comp.competition_date && (
-                <span>{new Date(comp.competition_date).toLocaleDateString()}</span>
-              )}
-            </div>
-          </button>
-        ))
+        <div className="space-y-1.5">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/55 flex items-center gap-2">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400" />
+            Live Now
+          </div>
+          {hub.active_competitions.slice(0, 2).map((comp) => (
+            <CompetitionCard key={comp.id} comp={comp} />
+          ))}
+        </div>
       )}
 
       {/* Upcoming competitions */}
       {hub && hub.active_competitions.length === 0 && hub.upcoming_competitions.length > 0 && (
-        hub.upcoming_competitions.slice(0, 2).map((comp) => (
-          <button
-            key={comp.id}
-            type="button"
-            onClick={() => router.push(`/majors/competitions/${comp.id}`)}
-            className="w-full text-left rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4 space-y-2"
-          >
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-semibold text-emerald-50 truncate">{comp.name}</span>
-              <span className="shrink-0 text-emerald-200/70 ml-2">Upcoming</span>
-            </div>
-            {comp.competition_date && (
-              <div className="text-[11px] text-emerald-100/70">
-                {new Date(comp.competition_date).toLocaleDateString()}
-              </div>
-            )}
-          </button>
-        ))
+        <div className="space-y-1.5">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/55">Upcoming</div>
+          {hub.upcoming_competitions.slice(0, 2).map((comp) => (
+            <CompetitionCard key={comp.id} comp={comp} />
+          ))}
+        </div>
+      )}
+
+      {/* My Groups */}
+      {hub && hub.my_groups.length > 0 && (
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/55">My Groups</div>
+            <button
+              type="button"
+              onClick={() => router.push("/majors/groups/create")}
+              className="text-[10px] text-emerald-400 hover:text-emerald-300"
+            >
+              + New
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {hub.my_groups.map((g) => (
+              <GroupCard
+                key={g.id}
+                group={g}
+                onClick={() => router.push(`/majors/groups/${g.id}`)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Discover Groups */}
+      {hub && hub.discover_groups.length > 0 && (
+        <div className="space-y-1.5 pb-4">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/55">Discover Groups</div>
+          <div className="grid grid-cols-2 gap-2">
+            {hub.discover_groups.map((g) => (
+              <GroupCard
+                key={g.id}
+                group={g}
+                onClick={() => router.push(`/majors/groups/${g.id}`)}
+              />
+            ))}
+          </div>
+        </div>
       )}
 
       {/* Empty state */}
-      {(!hub || (hub.active_competitions.length === 0 && hub.upcoming_competitions.length === 0)) && (
+      {(!hub || (hub.my_groups.length === 0 && hub.active_competitions.length === 0 && hub.upcoming_competitions.length === 0)) && (
         <>
           <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4">
             <h2 className="text-sm font-semibold text-emerald-50 mb-1">CIAGA Majors</h2>

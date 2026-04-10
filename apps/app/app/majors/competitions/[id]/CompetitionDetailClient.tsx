@@ -753,6 +753,18 @@ export default function CompetitionDetailClient({ competitionId }: { competition
               <span className="text-emerald-50 capitalize">{competition.scoring_model}</span>
             </div>
           )}
+          {competition.scoring_model !== "gross" && (competition.handicap_rules as any)?.allowance_pct != null && (
+            <div className="flex justify-between text-[12px]">
+              <span className="text-emerald-200/55">Handicap allowance</span>
+              <span className="text-emerald-50">{(competition.handicap_rules as any).allowance_pct}%</span>
+            </div>
+          )}
+          {(competition.handicap_rules as any)?.max_handicap != null && (
+            <div className="flex justify-between text-[12px]">
+              <span className="text-emerald-200/55">Max handicap</span>
+              <span className="text-emerald-50">{(competition.handicap_rules as any).max_handicap}</span>
+            </div>
+          )}
           {competition.num_rounds > 1 && (
             <div className="flex justify-between text-[12px]">
               <span className="text-emerald-200/55">Rounds required</span>

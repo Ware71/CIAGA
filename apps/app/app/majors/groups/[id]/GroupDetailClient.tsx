@@ -8,15 +8,17 @@ import type {
   MajorGroupMembershipWithProfile,
   GroupStandingWithProfile,
   CompetitionWithGroup,
+  CompetitionSeries,
 } from "@/lib/majors/types";
 
-type Tab = "overview" | "competitions" | "standings" | "schedule" | "history" | "members" | "settings";
+type Tab = "overview" | "competitions" | "standings" | "schedule" | "history" | "members" | "series" | "settings";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "competitions", label: "Competitions" },
   { id: "standings", label: "Standings" },
   { id: "members", label: "Members" },
+  { id: "series", label: "Series" },
   { id: "settings", label: "Settings" },
 ];
 
@@ -51,8 +53,15 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   const [myProfileId, setMyProfileId] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
   const [joinedStatus, setJoinedStatus] = useState<string | null>(null);
-  const [allGroups, setAllGroups] = useState<Array<{ id: string; name: string; image_url: string | null }>>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [series, setSeries] = useState<CompetitionSeries[]>([]);
+  const [showCreateSeriesModal, setShowCreateSeriesModal] = useState(false);
+  const [newSeriesName, setNewSeriesName] = useState("");
+  const [newSeriesDesc, setNewSeriesDesc] = useState("");
+  const [newSeriesMonth, setNewSeriesMonth] = useState("");
+  const [newSeriesHandicapPct, setNewSeriesHandicapPct] = useState("100");
+  const [newSeriesHandicapMax, setNewSeriesHandicapMax] = useState("");
+  const [creatingSeries, setCreatingSeries] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -64,12 +73,12 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         setMyProfileId(session.profileId);
         const headers = { Authorization: `Bearer ${session.accessToken}` };
 
-        const [groupRes, compsRes, standingsRes, membersRes, allGroupsRes] = await Promise.all([
+        const [groupRes, compsRes, standingsRes, membersRes, seriesRes] = await Promise.all([
           fetch(`/api/majors/groups/${groupId}`, { headers }),
           fetch(`/api/majors/competitions?group_id=${groupId}`, { headers }),
           fetch(`/api/majors/leaderboard?group_id=${groupId}`, { headers }),
           fetch(`/api/majors/groups/${groupId}/members`, { headers }),
-          fetch(`/api/majors/groups`, { headers }),
+          fetch(`/api/majors/series?group_id=${groupId}`, { headers }),
         ]);
 
         if (cancelled) return;
@@ -93,10 +102,11 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           setMyRole(own?.role ?? null);
           setJoinedStatus(own?.status ?? null);
         }
-        if (allGroupsRes.ok) {
-          const j = await allGroupsRes.json();
-          setAllGroups((j.groups ?? []).map((g: any) => ({ id: g.id, name: g.name, image_url: g.image_url ?? null })));
+        if (seriesRes.ok) {
+          const j = await seriesRes.json();
+          setSeries(j.series ?? []);
         }
+
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -178,11 +188,46 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       if (!res.ok) throw new Error("Failed to update group");
       const j = await res.json();
       setGroup((prev) => prev ? { ...prev, image_url: j.group.image_url } : prev);
-      setAllGroups((prev) => prev.map((g) => g.id === groupId ? { ...g, image_url: j.group.image_url } : g));
     } catch (err) {
       console.error(err);
     } finally {
       setUploadingImage(false);
+    }
+  };
+
+  const handleCreateSeries = async () => {
+    if (!newSeriesName.trim()) return;
+    setCreatingSeries(true);
+    try {
+      const session = await getViewerSession();
+      if (!session) return;
+      const res = await fetch("/api/majors/series", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          group_id: groupId,
+          name: newSeriesName.trim(),
+          description: newSeriesDesc.trim() || null,
+          recur_annually: true,
+          typical_month: newSeriesMonth ? parseInt(newSeriesMonth, 10) : null,
+          template_settings: {
+            handicap_allowance_pct: parseInt(newSeriesHandicapPct, 10) || 100,
+            max_handicap: newSeriesHandicapMax ? parseInt(newSeriesHandicapMax, 10) : null,
+          },
+        }),
+      });
+      if (res.ok) {
+        const j = await res.json();
+        setSeries((prev) => [...prev, j.series]);
+        setShowCreateSeriesModal(false);
+        setNewSeriesName("");
+        setNewSeriesDesc("");
+        setNewSeriesMonth("");
+        setNewSeriesHandicapPct("100");
+        setNewSeriesHandicapMax("");
+      }
+    } finally {
+      setCreatingSeries(false);
     }
   };
 
@@ -530,6 +575,87 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       </div>
     ),
 
+    series: (
+      <div className="space-y-3">
+        {isAdminOrOwner && (
+          <button
+            type="button"
+            onClick={() => setShowCreateSeriesModal(true)}
+            className="w-full py-2.5 rounded-full border border-emerald-700/60 text-sm font-semibold text-emerald-200 hover:bg-emerald-900/30"
+          >
+            + Create Series Template
+          </button>
+        )}
+        {series.length === 0 ? (
+          <div className="text-sm text-emerald-100/60 text-center py-8">
+            {isAdminOrOwner
+              ? "No series yet. Create a series template to generate competitions each year."
+              : "No series templates for this group."}
+          </div>
+        ) : (
+          series.map((s) => {
+            const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+            const settings = (s.template_settings ?? {}) as Record<string, unknown>;
+            const handicapPct = settings.handicap_allowance_pct as number | undefined;
+            const maxHandicap = settings.max_handicap as number | null | undefined;
+            return (
+              <div key={s.id} className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-emerald-50">{s.name}</div>
+                    {s.description && (
+                      <div className="text-[11px] text-emerald-100/55 mt-0.5">{s.description}</div>
+                    )}
+                  </div>
+                  {s.recur_annually && (
+                    <span className="shrink-0 text-[9px] font-semibold px-2 py-0.5 rounded-full border border-emerald-700/50 bg-emerald-900/30 text-emerald-300">
+                      Annual
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <span className="text-[10px] text-emerald-200/55 border border-emerald-900/50 rounded-full px-2 py-0.5 capitalize">
+                    {s.template_competition_type}
+                  </span>
+                  <span className="text-[10px] text-emerald-200/55 border border-emerald-900/50 rounded-full px-2 py-0.5 capitalize">
+                    {s.template_scoring_model}
+                  </span>
+                  {s.typical_month != null && (
+                    <span className="text-[10px] text-emerald-200/55 border border-emerald-900/50 rounded-full px-2 py-0.5">
+                      Usually {monthNames[(s.typical_month ?? 1) - 1]}
+                    </span>
+                  )}
+                  {handicapPct != null && handicapPct !== 100 && (
+                    <span className="text-[10px] text-emerald-200/55 border border-emerald-900/50 rounded-full px-2 py-0.5">
+                      {handicapPct}% HCP
+                    </span>
+                  )}
+                  {maxHandicap != null && (
+                    <span className="text-[10px] text-emerald-200/55 border border-emerald-900/50 rounded-full px-2 py-0.5">
+                      Max HCP {maxHandicap}
+                    </span>
+                  )}
+                </div>
+                {isAdminOrOwner && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      router.push(
+                        `/majors/competitions/create?group_id=${groupId}&series_id=${s.id}&year=${new Date().getFullYear()}`
+                      )
+                    }
+                    className="w-full py-2 rounded-full bg-emerald-700/80 text-[11px] font-semibold text-white hover:bg-emerald-600"
+                  >
+                    + New {new Date().getFullYear()} Instance
+                  </button>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+    ),
+
     settings: isAdminOrOwner ? (
       <div className="space-y-4">
         {/* Group Image */}
@@ -560,14 +686,28 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             </label>
           </div>
         </div>
-        {/* Admin panel link */}
-        <button
-          type="button"
-          onClick={() => router.push(`/admin/majors`)}
-          className="w-full py-2.5 rounded-full border border-emerald-700/60 text-sm font-semibold text-emerald-200 hover:bg-emerald-900/30"
-        >
-          Open Admin Tools
-        </button>
+        {/* Danger zone — owner only */}
+        {myRole === "owner" && (
+          <div className="rounded-2xl border border-red-900/40 bg-red-900/10 p-4 space-y-2">
+            <div className="text-[10px] uppercase tracking-wider text-red-400/70 font-semibold">Danger Zone</div>
+            <button
+              type="button"
+              onClick={async () => {
+                if (!confirm("Delete this group? This cannot be undone.")) return;
+                const session = await getViewerSession();
+                if (!session) return;
+                await fetch(`/api/majors/groups/${groupId}`, {
+                  method: "DELETE",
+                  headers: { Authorization: `Bearer ${session.accessToken}` },
+                });
+                router.push("/majors");
+              }}
+              className="w-full py-2 rounded-full border border-red-800/60 text-sm text-red-400 hover:bg-red-900/30"
+            >
+              Delete Group
+            </button>
+          </div>
+        )}
       </div>
     ) : (
       <div className="text-sm text-emerald-100/60 text-center py-8">
@@ -576,7 +716,9 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     ),
   };
 
-  const visibleTabs = isAdminOrOwner ? TABS : TABS.filter((t) => t.id !== "settings");
+  const visibleTabs = isAdminOrOwner
+    ? TABS
+    : TABS.filter((t) => t.id !== "settings" && t.id !== "series");
 
   return (
     <div className="min-h-[100dvh] pb-[env(safe-area-inset-bottom)] max-w-sm mx-auto">
@@ -587,35 +729,6 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         </button>
         <div className="w-14" />
       </div>
-
-      {/* Group selector strip */}
-      {allGroups.length > 1 && (
-        <div className="overflow-x-auto px-4 mb-3">
-          <div className="flex gap-2 w-max">
-            {allGroups.map((g) => (
-              <button
-                key={g.id}
-                type="button"
-                onClick={() => router.replace(`/majors/groups/${g.id}`)}
-                className={`flex items-center gap-1.5 shrink-0 px-2.5 py-1.5 rounded-full border text-xs font-semibold transition-colors ${
-                  g.id === groupId
-                    ? "bg-emerald-700 text-white border-emerald-600"
-                    : "border-emerald-900/60 text-emerald-200/70 hover:text-emerald-50 bg-[#0b3b21]/60"
-                }`}
-              >
-                {g.image_url ? (
-                  <img src={g.image_url} alt="" className="h-4 w-4 rounded-full object-cover shrink-0" />
-                ) : (
-                  <span className="h-4 w-4 rounded-full bg-emerald-800 text-[8px] font-bold text-emerald-200 flex items-center justify-center shrink-0">
-                    {g.name.slice(0, 1)}
-                  </span>
-                )}
-                <span className="truncate max-w-[80px]">{g.name}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Group hero */}
       <div className="px-4 mb-4 flex items-start gap-3">
@@ -667,6 +780,90 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       </div>
 
       <div className="px-4 pb-8">{tabContent[tab]}</div>
+
+      {/* Create Series Modal */}
+      {showCreateSeriesModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-end justify-center z-50 pb-[env(safe-area-inset-bottom)]">
+          <div className="w-full max-w-sm bg-[#0c2e18] rounded-t-2xl p-6 space-y-4 max-h-[85dvh] overflow-y-auto">
+            <div className="text-sm font-semibold text-emerald-50">New Series Template</div>
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Series Name *</label>
+                <input
+                  type="text"
+                  value={newSeriesName}
+                  onChange={(e) => setNewSeriesName(e.target.value)}
+                  placeholder="e.g. The Club Masters"
+                  className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
+                  autoFocus
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Description (optional)</label>
+                <textarea
+                  value={newSeriesDesc}
+                  onChange={(e) => setNewSeriesDesc(e.target.value)}
+                  rows={2}
+                  placeholder="Brief description of this recurring competition"
+                  className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600 resize-none"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Typical Month (optional)</label>
+                <select
+                  value={newSeriesMonth}
+                  onChange={(e) => setNewSeriesMonth(e.target.value)}
+                  className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
+                >
+                  <option value="">— Select month —</option>
+                  {["January","February","March","April","May","June","July","August","September","October","November","December"].map((m, i) => (
+                    <option key={i+1} value={String(i+1)}>{m}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Default Handicap Allowance %</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={newSeriesHandicapPct}
+                  onChange={(e) => setNewSeriesHandicapPct(e.target.value)}
+                  className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Max Handicap (optional)</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={newSeriesHandicapMax}
+                  onChange={(e) => setNewSeriesHandicapMax(e.target.value)}
+                  placeholder="Leave blank for no limit"
+                  className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => { setShowCreateSeriesModal(false); setNewSeriesName(""); setNewSeriesDesc(""); setNewSeriesMonth(""); setNewSeriesHandicapPct("100"); setNewSeriesHandicapMax(""); }}
+                className="flex-1 py-2.5 rounded-full border border-emerald-800 text-sm text-emerald-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateSeries}
+                disabled={!newSeriesName.trim() || creatingSeries}
+                className="flex-1 py-2.5 rounded-full bg-emerald-700 text-sm font-semibold text-white disabled:opacity-40"
+              >
+                {creatingSeries ? "Creating…" : "Create"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
