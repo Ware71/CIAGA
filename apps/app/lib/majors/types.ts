@@ -8,6 +8,7 @@ export type MajorGroupType =
   | "season"
   | "oneoff"
   | "matchplay_series"
+  | "major_series"
   | "custom";
 
 export type MajorGroupPrivacy = "public" | "request" | "invite_only";
@@ -41,7 +42,27 @@ export type CompetitionMajorsStatus = "upcoming" | "live" | "completed" | "cance
 
 export type StandingsContribution = "event_only" | "season" | "both";
 
+export type CompetitionCategory = "round_based" | "aggregate" | "standalone";
+
 // ─── Core entities ───────────────────────────────────────────────────────────
+
+export type CompetitionSeries = {
+  id: string;
+  group_id: string | null;
+  name: string;
+  description: string | null;
+  recur_annually: boolean;
+  typical_month: number | null;
+  template_competition_type: CompetitionTypeV2;
+  template_competition_category: CompetitionCategory;
+  template_scoring_model: CompetitionScoringModel;
+  template_points_model: CompetitionPointsModel;
+  template_rules_text: string | null;
+  template_settings: Record<string, unknown>;
+  created_by_profile_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
 
 export type MajorGroup = {
   id: string;
@@ -109,11 +130,20 @@ export type CompetitionFull = {
   standings_contribution: StandingsContribution;
   majors_status: CompetitionMajorsStatus;
   created_by_profile_id: string | null;
+  // Series & category fields
+  series_id: string | null;
+  competition_year: number | null;
+  competition_category: CompetitionCategory;
+  aggregate_config: Record<string, unknown>;
 };
 
 export type CompetitionWithGroup = CompetitionFull & {
   group: Pick<MajorGroup, "id" | "name" | "ciaga_tag"> | null;
   course: { id: string; name: string } | null;
+};
+
+export type CompetitionWithSeries = CompetitionWithGroup & {
+  series: Pick<CompetitionSeries, "id" | "name"> | null;
 };
 
 export type CompetitionRoundSubmission = {

@@ -25,6 +25,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: "Competition is cancelled" }, { status: 400 });
     }
 
+    if ((competition as any).competition_category === "aggregate") {
+      return NextResponse.json(
+        { error: "Aggregate competitions do not accept round submissions" },
+        { status: 400 }
+      );
+    }
+
     // Check entry window has not closed
     const now = new Date();
     if (competition.entry_window_end && new Date(competition.entry_window_end) < now) {

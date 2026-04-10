@@ -43,7 +43,8 @@ export async function POST(req: Request) {
     const { name, group_id, description, competition_type, format, course_id,
       competition_date, entry_window_start, entry_window_end, rules_text,
       scoring_model, points_model, points_table, eligibility_rules, handicap_rules,
-      num_rounds, round_rules, time_rules, membership_rules, standings_contribution } = body;
+      num_rounds, round_rules, time_rules, membership_rules, standings_contribution,
+      series_id, competition_year, competition_category, aggregate_config } = body;
 
     if (!name?.trim()) {
       return NextResponse.json({ error: "Competition name is required" }, { status: 400 });
@@ -89,6 +90,10 @@ export async function POST(req: Request) {
         standings_contribution: standings_contribution ?? "event_only",
         majors_status: "upcoming",
         created_by_profile_id: profileId,
+        series_id: series_id ?? null,
+        competition_year: competition_year ?? null,
+        competition_category: competition_category ?? "round_based",
+        aggregate_config: aggregate_config ?? {},
       })
       .select("*")
       .single();

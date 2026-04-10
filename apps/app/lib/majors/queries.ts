@@ -376,3 +376,25 @@ export async function getMajorHubSummary(profileId: string): Promise<MajorHubSum
     discover_groups: filteredDiscover,
   };
 }
+
+// ─── Competition Series queries ──────────────────────────────────────────────
+
+export async function getSeriesByGroup(groupId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("competition_series")
+    .select("*")
+    .eq("group_id", groupId)
+    .order("name", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function getSeriesById(seriesId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("competition_series")
+    .select("*")
+    .eq("id", seriesId)
+    .maybeSingle();
+  if (error) throw error;
+  return data ?? null;
+}

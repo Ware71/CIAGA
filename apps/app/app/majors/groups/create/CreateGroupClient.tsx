@@ -10,6 +10,7 @@ const GROUP_TYPES: { value: MajorGroupType; label: string; desc: string }[] = [
   { value: "league", label: "League", desc: "Season-long standings competition" },
   { value: "tour", label: "Tour", desc: "Multi-event tour series" },
   { value: "season", label: "Season", desc: "Time-bounded competition season" },
+  { value: "major_series", label: "Major Series", desc: "Annual competition that recurs each year" },
   { value: "oneoff", label: "One-off", desc: "Single event container" },
   { value: "matchplay_series", label: "Match Play", desc: "Match play bracket or series" },
   { value: "custom", label: "Custom", desc: "Your own format" },
