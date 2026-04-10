@@ -10,6 +10,9 @@ import type {
   MajorScheduleItem,
   MajorHistoryItem,
   MajorProfileData,
+  CompetitionSeriesWithEvents,
+  SeriesYearGroup,
+  EventTemplateHistory,
 } from "./types";
 
 // ─── Groups ──────────────────────────────────────────────────────────────────
@@ -397,4 +400,173 @@ export async function getSeriesById(seriesId: string) {
     .maybeSingle();
   if (error) throw error;
   return data ?? null;
+}
+
+export async function getSeriesWithEvents(seriesId: string): Promise<CompetitionSeriesWithEvents | null> {
+  const { data, error } = await supabaseAdmin
+    .from("competition_series")
+    .select("*, event_templates:series_event_templates(*)")
+    .eq("id", seriesId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const row = data as any;
+  const eventTemplates = (row.event_templates ?? []).sort(
+    (a: any, b: any) => a.sort_order - b.sort_order
+  );
+  return { ...row, event_templates: eventTemplates } as CompetitionSeriesWithEvents;
+}
+
+export async function getSeriesHistory(seriesId: string): Promise<SeriesYearGroup[]> {
+  // Fetch all competitions in this series with their group/course
+  const { data: comps, error: compsErr } = await supabaseAdmin
+    .from("competitions")
+    .select("*, group:major_groups(id, name, ciaga_tag), course:courses(id, name), event_template:series_event_templates(id, name, sort_order)")
+    .eq("series_id", seriesId)
+    .order("competition_date", { ascending: true });
+  if (compsErr) throw compsErr;
+
+  const competitions = (comps ?? []) as any[];
+  if (competitions.length === 0) return [];
+
+  // Fetch P1 leaderboard entries for all these competitions
+  const compIds = competitions.map((c) => c.id as string);
+  const { data: leaderboard, error: lbErr } = await supabaseAdmin
+    .from("competition_leaderboard_entries")
+    .select("competition_id, profile_id, position, net_score, profile:profiles(id, name, avatar_url)")
+    .in("competition_id", compIds)
+    .eq("position", 1);
+  if (lbErr) throw lbErr;
+
+  const winnerMap = new Map<string, any>();
+  for (const entry of (leaderboard ?? []) as any[]) {
+    winnerMap.set(entry.competition_id, {
+      profile_id: entry.profile_id,
+      name: entry.profile?.name ?? null,
+      avatar_url: entry.profile?.avatar_url ?? null,
+      net_score: entry.net_score,
+    });
+  }
+
+  // Group by year
+  const yearMap = new Map<number, SeriesYearGroup["competitions"]>();
+  for (const comp of competitions) {
+    const year = (comp.competition_year ?? new Date(comp.competition_date ?? "").getFullYear()) as number;
+    if (!yearMap.has(year)) yearMap.set(year, []);
+    yearMap.get(year)!.push({
+      competition: comp as CompetitionWithGroup,
+      event_template: comp.event_template ?? null,
+      winner: winnerMap.get(comp.id) ?? null,
+    });
+  }
+
+  return Array.from(yearMap.entries())
+    .sort(([a], [b]) => b - a) // newest first
+    .map(([year, comps]) => ({
+      year,
+      competitions: comps.sort((a, b) => {
+        const aOrder = a.event_template?.sort_order ?? 999;
+        const bOrder = b.event_template?.sort_order ?? 999;
+        return aOrder - bOrder;
+      }),
+    }));
+}
+
+export async function getPlayerSeriesHistory(profileId: string, seriesId: string) {
+  // All competitions in the series
+  const { data: comps, error: compsErr } = await supabaseAdmin
+    .from("competitions")
+    .select("id, name, competition_date, competition_year, majors_status, series_event_template_id, event_template:series_event_templates(id, name, sort_order)")
+    .eq("series_id", seriesId)
+    .order("competition_date", { ascending: false });
+  if (compsErr) throw compsErr;
+
+  const competitions = (comps ?? []) as any[];
+  if (competitions.length === 0) return [];
+
+  const compIds = competitions.map((c) => c.id as string);
+
+  const { data: entries, error: entriesErr } = await supabaseAdmin
+    .from("competition_leaderboard_entries")
+    .select("competition_id, position, net_score, gross_score, points_earned")
+    .eq("profile_id", profileId)
+    .in("competition_id", compIds);
+  if (entriesErr) throw entriesErr;
+
+  const entryMap = new Map<string, any>();
+  for (const e of (entries ?? []) as any[]) {
+    entryMap.set(e.competition_id, e);
+  }
+
+  return competitions.map((c) => ({
+    competition: c,
+    entry: entryMap.get(c.id) ?? null,
+  }));
+}
+
+export async function getEventTemplateHistory(
+  eventTemplateId: string,
+  viewerProfileId?: string
+): Promise<EventTemplateHistory | null> {
+  // Fetch the event template
+  const { data: templateData, error: tmplErr } = await supabaseAdmin
+    .from("series_event_templates")
+    .select("*")
+    .eq("id", eventTemplateId)
+    .maybeSingle();
+  if (tmplErr) throw tmplErr;
+  if (!templateData) return null;
+
+  // Fetch all competitions linked to this event template
+  const { data: comps, error: compsErr } = await supabaseAdmin
+    .from("competitions")
+    .select("id, name, competition_date, competition_year, majors_status")
+    .eq("series_event_template_id", eventTemplateId)
+    .order("competition_date", { ascending: false });
+  if (compsErr) throw compsErr;
+
+  const competitions = (comps ?? []) as any[];
+  if (competitions.length === 0) {
+    return { event_template: templateData as any, results: [] };
+  }
+
+  const compIds = competitions.map((c) => c.id as string);
+
+  // Winners (position 1)
+  const { data: winners } = await supabaseAdmin
+    .from("competition_leaderboard_entries")
+    .select("competition_id, profile_id, net_score, profile:profiles(id, name)")
+    .in("competition_id", compIds)
+    .eq("position", 1);
+
+  const winnerMap = new Map<string, any>();
+  for (const w of (winners ?? []) as any[]) {
+    winnerMap.set(w.competition_id, {
+      profile_id: w.profile_id,
+      name: w.profile?.name ?? null,
+      net_score: w.net_score,
+    });
+  }
+
+  // Viewer's own entries
+  let viewerEntryMap = new Map<string, any>();
+  if (viewerProfileId) {
+    const { data: viewerEntries } = await supabaseAdmin
+      .from("competition_leaderboard_entries")
+      .select("competition_id, position, net_score, gross_score")
+      .eq("profile_id", viewerProfileId)
+      .in("competition_id", compIds);
+    for (const e of (viewerEntries ?? []) as any[]) {
+      viewerEntryMap.set(e.competition_id, e);
+    }
+  }
+
+  const results = competitions.map((c) => ({
+    year: (c.competition_year ?? new Date(c.competition_date ?? "").getFullYear()) as number,
+    competition: c,
+    winner: winnerMap.get(c.id) ?? null,
+    entry: viewerEntryMap.get(c.id) ?? null,
+  }));
+
+  return { event_template: templateData as any, results };
 }

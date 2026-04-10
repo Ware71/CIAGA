@@ -9,7 +9,12 @@ import type {
   GroupStandingWithProfile,
   CompetitionWithGroup,
   CompetitionSeries,
+  SeriesEventTemplate,
 } from "@/lib/majors/types";
+
+type CompetitionSeriesWithEventCount = CompetitionSeries & {
+  event_templates: Pick<SeriesEventTemplate, "id">[];
+};
 
 type Tab = "overview" | "competitions" | "standings" | "schedule" | "history" | "members" | "series" | "settings";
 
@@ -54,7 +59,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   const [joining, setJoining] = useState(false);
   const [joinedStatus, setJoinedStatus] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
-  const [series, setSeries] = useState<CompetitionSeries[]>([]);
+  const [series, setSeries] = useState<CompetitionSeriesWithEventCount[]>([]);
   const [showCreateSeriesModal, setShowCreateSeriesModal] = useState(false);
   const [newSeriesName, setNewSeriesName] = useState("");
   const [newSeriesDesc, setNewSeriesDesc] = useState("");
@@ -607,11 +612,20 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                       <div className="text-[11px] text-emerald-100/55 mt-0.5">{s.description}</div>
                     )}
                   </div>
-                  {s.recur_annually && (
-                    <span className="shrink-0 text-[9px] font-semibold px-2 py-0.5 rounded-full border border-emerald-700/50 bg-emerald-900/30 text-emerald-300">
-                      Annual
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {s.recur_annually && (
+                      <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full border border-emerald-700/50 bg-emerald-900/30 text-emerald-300">
+                        Annual
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/majors/series/${s.id}`)}
+                      className="text-[11px] text-emerald-300/70 hover:text-emerald-200"
+                    >
+                      Manage →
+                    </button>
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <span className="text-[10px] text-emerald-200/55 border border-emerald-900/50 rounded-full px-2 py-0.5 capitalize">
@@ -635,18 +649,31 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                       Max HCP {maxHandicap}
                     </span>
                   )}
+                  {(s.event_templates?.length ?? 0) > 0 && (
+                    <span className="text-[10px] text-emerald-200/55 border border-emerald-900/50 rounded-full px-2 py-0.5">
+                      {s.event_templates.length} event{s.event_templates.length !== 1 ? "s" : ""}
+                    </span>
+                  )}
                 </div>
                 {isAdminOrOwner && (
                   <button
                     type="button"
-                    onClick={() =>
-                      router.push(
-                        `/majors/competitions/create?group_id=${groupId}&series_id=${s.id}&year=${new Date().getFullYear()}`
-                      )
-                    }
+                    onClick={() => {
+                      if ((s.event_templates?.length ?? 0) > 0) {
+                        // Series has named events — go to series detail to create season
+                        router.push(`/majors/series/${s.id}`);
+                      } else {
+                        // Legacy single-event series — create competition directly
+                        router.push(
+                          `/majors/competitions/create?group_id=${groupId}&series_id=${s.id}&year=${new Date().getFullYear()}`
+                        );
+                      }
+                    }}
                     className="w-full py-2 rounded-full bg-emerald-700/80 text-[11px] font-semibold text-white hover:bg-emerald-600"
                   >
-                    + New {new Date().getFullYear()} Instance
+                    {(s.event_templates?.length ?? 0) > 0
+                      ? `+ Create ${new Date().getFullYear()} Season`
+                      : `+ New ${new Date().getFullYear()} Instance`}
                   </button>
                 )}
               </div>

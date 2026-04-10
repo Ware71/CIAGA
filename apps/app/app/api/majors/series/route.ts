@@ -17,7 +17,7 @@ export async function GET(req: Request) {
 
     const { data, error } = await supabaseAdmin
       .from("competition_series")
-      .select("*")
+      .select("*, event_templates:series_event_templates(id)")
       .eq("group_id", groupId)
       .order("name", { ascending: true });
 

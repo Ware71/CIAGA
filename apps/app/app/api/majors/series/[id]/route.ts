@@ -12,7 +12,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     const { data, error } = await supabaseAdmin
       .from("competition_series")
-      .select("*, competitions(id, name, competition_year, majors_status, competition_date)")
+      .select("*, event_templates:series_event_templates(*), competitions(id, name, competition_year, majors_status, competition_date, series_event_template_id)")
       .eq("id", id)
       .maybeSingle();
 

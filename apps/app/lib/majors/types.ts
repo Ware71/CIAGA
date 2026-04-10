@@ -46,6 +46,23 @@ export type CompetitionCategory = "round_based" | "aggregate" | "standalone";
 
 // ─── Core entities ───────────────────────────────────────────────────────────
 
+export type SeriesEventTemplate = {
+  id: string;
+  series_id: string;
+  name: string;
+  description: string | null;
+  sort_order: number;
+  typical_month: number | null;
+  /** null = inherit from parent CompetitionSeries */
+  template_competition_type: CompetitionTypeV2 | null;
+  template_scoring_model: CompetitionScoringModel | null;
+  template_points_model: CompetitionPointsModel | null;
+  template_rules_text: string | null;
+  template_settings: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
 export type CompetitionSeries = {
   id: string;
   group_id: string | null;
@@ -59,9 +76,41 @@ export type CompetitionSeries = {
   template_points_model: CompetitionPointsModel;
   template_rules_text: string | null;
   template_settings: Record<string, unknown>;
+  template_num_rounds: number;
   created_by_profile_id: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type CompetitionSeriesWithEvents = CompetitionSeries & {
+  event_templates: SeriesEventTemplate[];
+};
+
+/** A year's-worth of competition instances within a series, with winner info */
+export type SeriesYearGroup = {
+  year: number;
+  competitions: Array<{
+    competition: CompetitionWithGroup;
+    event_template: Pick<SeriesEventTemplate, "id" | "name" | "sort_order"> | null;
+    winner: {
+      profile_id: string;
+      name: string | null;
+      avatar_url: string | null;
+      net_score: number | null;
+    } | null;
+  }>;
+};
+
+/** History for one named event (event template) across all years */
+export type EventTemplateHistory = {
+  event_template: SeriesEventTemplate;
+  results: Array<{
+    year: number;
+    competition: Pick<CompetitionFull, "id" | "name" | "competition_date" | "majors_status">;
+    winner: { profile_id: string; name: string | null; net_score: number | null } | null;
+    /** The viewing player's own result in that year, if any */
+    entry: { position: number | null; net_score: number | null; gross_score: number | null } | null;
+  }>;
 };
 
 export type MajorGroup = {
@@ -132,6 +181,7 @@ export type CompetitionFull = {
   created_by_profile_id: string | null;
   // Series & category fields
   series_id: string | null;
+  series_event_template_id: string | null;
   competition_year: number | null;
   competition_category: CompetitionCategory;
   aggregate_config: Record<string, unknown>;

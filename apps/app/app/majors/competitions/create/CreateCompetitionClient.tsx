@@ -10,6 +10,7 @@ import type {
   CompetitionPointsModel,
   CompetitionCategory,
   CompetitionSeries,
+  SeriesEventTemplate,
   MajorGroup,
 } from "@/lib/majors/types";
 
@@ -70,6 +71,7 @@ type FormState = {
   standings_contribution: string;
   // Series fields
   series_id: string;
+  series_event_template_id: string;
   competition_year: string;
   // Aggregate config
   aggregate_source: AggregateSource;
@@ -97,6 +99,7 @@ const INITIAL: FormState = {
   num_rounds: "1",
   standings_contribution: "event_only",
   series_id: "",
+  series_event_template_id: "",
   competition_year: String(new Date().getFullYear()),
   aggregate_source: "group_standings",
   aggregate_top_n: "",
@@ -111,6 +114,7 @@ export default function CreateCompetitionClient() {
   const preselectedGroupId = searchParams.get("group_id") ?? "";
 
   const preselectedSeriesId = searchParams.get("series_id") ?? "";
+  const preselectedEventTemplateId = searchParams.get("series_event_template_id") ?? "";
   const preselectedYear = searchParams.get("year") ?? String(new Date().getFullYear());
 
   const [step, setStep] = useState(0);
@@ -118,9 +122,11 @@ export default function CreateCompetitionClient() {
     ...INITIAL,
     group_id: preselectedGroupId,
     series_id: preselectedSeriesId,
+    series_event_template_id: preselectedEventTemplateId,
     competition_year: preselectedYear,
   });
   const [templateSeries, setTemplateSeries] = useState<CompetitionSeries | null>(null);
+  const [seriesEventTemplates, setSeriesEventTemplates] = useState<SeriesEventTemplate[]>([]);
   const [myGroups, setMyGroups] = useState<MajorGroup[]>([]);
   const [groupSeries, setGroupSeries] = useState<CompetitionSeries[]>([]);
   const [showNewSeriesModal, setShowNewSeriesModal] = useState(false);
@@ -148,6 +154,30 @@ export default function CreateCompetitionClient() {
     })();
   }, []);
 
+  // Helper: apply series + optional event template settings to form
+  const applySeriesSettings = (
+    s: CompetitionSeries,
+    et: SeriesEventTemplate | null,
+    prevForm: FormState
+  ): Partial<FormState> => {
+    const baseSettings = (s.template_settings ?? {}) as Record<string, unknown>;
+    const etSettings = (et?.template_settings ?? {}) as Record<string, unknown>;
+    const mergedSettings = { ...baseSettings, ...etSettings };
+    return {
+      competition_category: s.template_competition_category ?? prevForm.competition_category,
+      competition_type: (et?.template_competition_type ?? s.template_competition_type) ?? prevForm.competition_type,
+      scoring_model: (et?.template_scoring_model ?? s.template_scoring_model) ?? prevForm.scoring_model,
+      points_model: (et?.template_points_model ?? s.template_points_model) ?? prevForm.points_model,
+      rules_text: (et?.template_rules_text ?? s.template_rules_text) ?? prevForm.rules_text,
+      handicap_allowance_pct: mergedSettings.handicap_allowance_pct != null
+        ? String(mergedSettings.handicap_allowance_pct)
+        : prevForm.handicap_allowance_pct,
+      handicap_max: mergedSettings.max_handicap != null
+        ? String(mergedSettings.max_handicap)
+        : prevForm.handicap_max,
+    };
+  };
+
   // If launched from a series template, fetch and pre-populate
   useEffect(() => {
     if (!preselectedSeriesId) return;
@@ -159,26 +189,54 @@ export default function CreateCompetitionClient() {
       });
       if (!res.ok) return;
       const j = await res.json();
-      const s: CompetitionSeries = j.series;
+      const s = j.series as CompetitionSeries & { event_templates?: SeriesEventTemplate[] };
       if (!s) return;
       setTemplateSeries(s);
-      const settings = (s.template_settings ?? {}) as Record<string, unknown>;
+      const templates = (s.event_templates ?? []).sort((a, b) => a.sort_order - b.sort_order);
+      setSeriesEventTemplates(templates);
+
+      // Find event template if pre-selected
+      const et = templates.find((t) => t.id === preselectedEventTemplateId) ?? null;
       setForm((prev) => ({
         ...prev,
-        competition_category: s.template_competition_category ?? prev.competition_category,
-        competition_type: s.template_competition_type ?? prev.competition_type,
-        scoring_model: s.template_scoring_model ?? prev.scoring_model,
-        points_model: s.template_points_model ?? prev.points_model,
-        rules_text: s.template_rules_text ?? prev.rules_text,
-        handicap_allowance_pct: settings.handicap_allowance_pct != null
-          ? String(settings.handicap_allowance_pct)
-          : prev.handicap_allowance_pct,
-        handicap_max: settings.max_handicap != null
-          ? String(settings.max_handicap)
-          : prev.handicap_max,
+        series_event_template_id: et?.id ?? prev.series_event_template_id,
+        ...applySeriesSettings(s, et, prev),
       }));
     })();
   }, [preselectedSeriesId]);
+
+  // When user manually selects a different series from the dropdown
+  const handleSeriesSelect = async (seriesId: string) => {
+    update("series_id", seriesId);
+    update("series_event_template_id", "");
+    setSeriesEventTemplates([]);
+    if (!seriesId) return;
+    const session = await getViewerSession();
+    if (!session) return;
+    const res = await fetch(`/api/majors/series/${seriesId}`, {
+      headers: { Authorization: `Bearer ${session.accessToken}` },
+    });
+    if (!res.ok) return;
+    const j = await res.json();
+    const s = j.series as CompetitionSeries & { event_templates?: SeriesEventTemplate[] };
+    if (!s) return;
+    setTemplateSeries(s);
+    const templates = (s.event_templates ?? []).sort((a, b) => a.sort_order - b.sort_order);
+    setSeriesEventTemplates(templates);
+    setForm((prev) => ({ ...prev, ...applySeriesSettings(s, null, prev) }));
+  };
+
+  // When user selects an event template from the dropdown
+  const handleEventTemplateSelect = (etId: string) => {
+    update("series_event_template_id", etId);
+    if (!templateSeries) return;
+    const et = seriesEventTemplates.find((t) => t.id === etId) ?? null;
+    setForm((prev) => ({
+      ...prev,
+      series_event_template_id: etId,
+      ...applySeriesSettings(templateSeries, et, prev),
+    }));
+  };
 
   // Load series whenever group selection changes
   useEffect(() => {
@@ -268,6 +326,7 @@ export default function CreateCompetitionClient() {
           num_rounds: isAggregate ? 0 : (parseInt(form.num_rounds, 10) || 1),
           standings_contribution: form.standings_contribution,
           series_id: form.series_id || null,
+          series_event_template_id: form.series_event_template_id || null,
           competition_year: form.series_id && form.competition_year
             ? parseInt(form.competition_year, 10)
             : null,
@@ -406,7 +465,7 @@ export default function CreateCompetitionClient() {
           <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Competition Series (optional)</label>
           <button
             type="button"
-            onClick={() => update("series_id", "")}
+            onClick={() => { update("series_id", ""); update("series_event_template_id", ""); setSeriesEventTemplates([]); setTemplateSeries(null); }}
             className={`w-full text-left rounded-xl border px-4 py-2 text-sm transition-colors ${
               form.series_id === ""
                 ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
@@ -419,7 +478,7 @@ export default function CreateCompetitionClient() {
             <button
               key={s.id}
               type="button"
-              onClick={() => update("series_id", s.id)}
+              onClick={() => handleSeriesSelect(s.id)}
               className={`w-full text-left rounded-xl border px-4 py-2 text-sm transition-colors ${
                 form.series_id === s.id
                   ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
@@ -436,6 +495,43 @@ export default function CreateCompetitionClient() {
           >
             + Create new series
           </button>
+        </div>
+      )}
+
+      {/* Event template — shown when the selected series has named events */}
+      {form.series_id && seriesEventTemplates.length > 0 && (
+        <div className="space-y-2">
+          <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Event (optional)</label>
+          <button
+            type="button"
+            onClick={() => handleEventTemplateSelect("")}
+            className={`w-full text-left rounded-xl border px-4 py-2 text-sm transition-colors ${
+              form.series_event_template_id === ""
+                ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
+                : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
+            }`}
+          >
+            Not linked to a specific event
+          </button>
+          {seriesEventTemplates.map((et) => (
+            <button
+              key={et.id}
+              type="button"
+              onClick={() => handleEventTemplateSelect(et.id)}
+              className={`w-full text-left rounded-xl border px-4 py-2 text-sm transition-colors ${
+                form.series_event_template_id === et.id
+                  ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
+                  : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
+              }`}
+            >
+              <div>{et.name}</div>
+              {et.typical_month != null && (
+                <div className="text-[10px] text-emerald-200/45 mt-0.5">
+                  Usually {["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][et.typical_month - 1]}
+                </div>
+              )}
+            </button>
+          ))}
         </div>
       )}
 
