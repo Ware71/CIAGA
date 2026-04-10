@@ -5,20 +5,55 @@ import { useRouter } from "next/navigation";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 import type {
   CompetitionWithGroup,
+  CompetitionTypeV2,
   LeaderboardEntryWithProfile,
   CompetitionTeeTime,
   TeeTimeParticipant,
+  MatchplayStage,
+  MatchplayFixture,
+  MatchplayLeagueTableEntryWithProfile,
 } from "@/lib/majors/types";
 
-type Tab = "overview" | "leaderboard" | "tee-times" | "rules" | "results";
+type Tab = "overview" | "leaderboard" | "tee-times" | "rules" | "results" | "fixtures" | "bracket" | "league-table";
 
-const TABS: { id: Tab; label: string }[] = [
+const STROKE_TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "leaderboard", label: "Leaderboard" },
   { id: "tee-times", label: "Tee Times" },
   { id: "rules", label: "Rules" },
   { id: "results", label: "Results" },
 ];
+
+const MATCHPLAY_LEAGUE_TABS: { id: Tab; label: string }[] = [
+  { id: "overview", label: "Overview" },
+  { id: "fixtures", label: "Fixtures" },
+  { id: "league-table", label: "Table" },
+  { id: "rules", label: "Rules" },
+  { id: "results", label: "Results" },
+];
+
+const MATCHPLAY_KNOCKOUT_TABS: { id: Tab; label: string }[] = [
+  { id: "overview", label: "Overview" },
+  { id: "fixtures", label: "Fixtures" },
+  { id: "bracket", label: "Bracket" },
+  { id: "rules", label: "Rules" },
+  { id: "results", label: "Results" },
+];
+
+function isMatchplayLeague(type: CompetitionTypeV2 | undefined | null) {
+  return type === "matchplay" || type === "matchplay_fixture";
+}
+
+function isMatchplayKnockout(type: CompetitionTypeV2 | undefined | null) {
+  return type === "matchplay_knockout_match";
+}
+
+function getTabsForCompetition(comp: CompetitionWithGroup | null) {
+  if (!comp) return STROKE_TABS;
+  if (isMatchplayKnockout(comp.competition_type)) return MATCHPLAY_KNOCKOUT_TABS;
+  if (isMatchplayLeague(comp.competition_type)) return MATCHPLAY_LEAGUE_TABS;
+  return STROKE_TABS;
+}
 
 type FinishedRound = { id: string; name: string | null; finished_at: string | null };
 
@@ -401,6 +436,60 @@ function TeeTimeCard({
   );
 }
 
+// ─── Fixture card ────────────────────────────────────────────────────────────
+
+function FixtureCard({ fixture }: { fixture: MatchplayFixture & { home_entry?: any; away_entry?: any } }) {
+  const resultLabel = fixture.result_type
+    ? fixture.result_type === "halved"
+      ? "½"
+      : fixture.margin_holes != null && fixture.holes_remaining != null
+      ? `${fixture.margin_holes}&${fixture.holes_remaining}`
+      : fixture.result_type.replace("_", " ")
+    : null;
+
+  const homeWon = fixture.result_type === "home_win" || fixture.result_type === "walkover_home";
+  const awayWon = fixture.result_type === "away_win" || fixture.result_type === "walkover_away";
+
+  return (
+    <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5">
+      <div className="flex items-center gap-2">
+        {/* Home */}
+        <div className={`flex-1 flex items-center gap-2 min-w-0 ${homeWon ? "opacity-100" : awayWon ? "opacity-50" : "opacity-100"}`}>
+          <div className="h-6 w-6 rounded-full bg-emerald-900/60 grid place-items-center text-[9px] font-bold text-emerald-200 shrink-0">
+            {(fixture.home_entry?.profile?.name ?? "?").slice(0, 2).toUpperCase()}
+          </div>
+          <span className={`text-xs truncate ${homeWon ? "font-bold text-emerald-50" : "text-emerald-100/70"}`}>
+            {fixture.home_entry?.profile?.name ?? "TBD"}
+          </span>
+        </div>
+
+        {/* Result */}
+        <div className="shrink-0 text-center w-14">
+          {fixture.status === "completed" && resultLabel ? (
+            <span className="text-xs font-bold text-[#f5e6b0]">{resultLabel}</span>
+          ) : fixture.scheduled_at ? (
+            <span className="text-[10px] text-emerald-200/50">
+              {new Date(fixture.scheduled_at).toLocaleDateString([], { month: "short", day: "numeric" })}
+            </span>
+          ) : (
+            <span className="text-[10px] text-emerald-200/30">vs</span>
+          )}
+        </div>
+
+        {/* Away */}
+        <div className={`flex-1 flex items-center gap-2 justify-end min-w-0 ${awayWon ? "opacity-100" : homeWon ? "opacity-50" : "opacity-100"}`}>
+          <span className={`text-xs truncate text-right ${awayWon ? "font-bold text-emerald-50" : "text-emerald-100/70"}`}>
+            {fixture.away_entry?.profile?.name ?? "TBD"}
+          </span>
+          <div className="h-6 w-6 rounded-full bg-emerald-900/60 grid place-items-center text-[9px] font-bold text-emerald-200 shrink-0">
+            {(fixture.away_entry?.profile?.name ?? "?").slice(0, 2).toUpperCase()}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Position badge ───────────────────────────────────────────────────────────
 
 function PositionBadge({ position }: { position: number | null }) {
@@ -437,6 +526,9 @@ export default function CompetitionDetailClient({ competitionId }: { competition
   const [myProfileId, setMyProfileId] = useState<string | null>(null);
   const [myRole, setMyRole] = useState<string | null>(null);
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
+  const [matchplayStages, setMatchplayStages] = useState<MatchplayStage[]>([]);
+  const [matchplayFixtures, setMatchplayFixtures] = useState<MatchplayFixture[]>([]);
+  const [leagueTable, setLeagueTable] = useState<MatchplayLeagueTableEntryWithProfile[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -459,7 +551,23 @@ export default function CompetitionDetailClient({ competitionId }: { competition
 
         if (compRes.ok) {
           const j = await compRes.json();
-          setCompetition(j.competition);
+          const comp = j.competition;
+          setCompetition(comp);
+
+          // Load matchplay fixtures if applicable
+          if (isMatchplayLeague(comp?.competition_type) || isMatchplayKnockout(comp?.competition_type)) {
+            const fixRes = await fetch(`/api/majors/competitions/${competitionId}/fixtures`, { headers });
+            if (!cancelled && fixRes.ok) {
+              const fj = await fixRes.json();
+              setMatchplayStages(fj.stages ?? []);
+              setMatchplayFixtures(fj.fixtures ?? []);
+            }
+            const ltRes = await fetch(`/api/majors/competitions/${competitionId}/league-table`, { headers }).catch(() => null);
+            if (!cancelled && ltRes?.ok) {
+              const lj = await ltRes.json();
+              setLeagueTable(lj.entries ?? []);
+            }
+          }
 
           // Load group members and my role if competition has a group
           if (j.competition?.group_id) {
@@ -570,7 +678,8 @@ export default function CompetitionDetailClient({ competitionId }: { competition
   const isAdminOrOwner = myRole === "owner" || myRole === "admin";
 
   const visibleTabs = (() => {
-    let tabs = competition?.majors_status === "completed" ? TABS : TABS.filter((t) => t.id !== "results");
+    const BASE = getTabsForCompetition(competition);
+    let tabs = competition?.majors_status === "completed" ? BASE : BASE.filter((t) => t.id !== "results");
     if (competition?.majors_status === "cancelled") tabs = tabs.filter((t) => t.id !== "tee-times");
     return tabs;
   })();
@@ -780,6 +889,72 @@ export default function CompetitionDetailClient({ competitionId }: { competition
         </div>
       </div>
     ) : null,
+
+    fixtures: (
+      <div className="space-y-4">
+        {matchplayStages.length === 0 && matchplayFixtures.length === 0 ? (
+          <div className="text-sm text-emerald-100/60 text-center py-8">
+            {isAdminOrOwner ? "No fixtures generated yet." : "Fixtures not yet scheduled."}
+          </div>
+        ) : (
+          matchplayStages.length > 0
+            ? matchplayStages.map((stage) => (
+                <div key={stage.id} className="space-y-2">
+                  <div className="text-[10px] uppercase tracking-wider text-emerald-200/60 font-semibold px-1">{stage.name}</div>
+                  {matchplayFixtures.filter((f) => f.stage_id === stage.id).map((f) => (
+                    <FixtureCard key={f.id} fixture={f as any} />
+                  ))}
+                </div>
+              ))
+            : matchplayFixtures.map((f) => <FixtureCard key={f.id} fixture={f as any} />)
+        )}
+      </div>
+    ),
+
+    bracket: (
+      <div className="space-y-3 text-sm text-emerald-100/70 text-center py-8">
+        Bracket view coming soon.
+      </div>
+    ),
+
+    "league-table": (
+      <div className="space-y-2">
+        {leagueTable.length === 0 ? (
+          <div className="text-sm text-emerald-100/60 text-center py-8">
+            League table will appear after fixtures are played.
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-6 text-[10px] uppercase tracking-wider text-emerald-200/50 px-3 pb-1">
+              <span className="col-span-2">Player</span>
+              <span className="text-center">P</span>
+              <span className="text-center">W</span>
+              <span className="text-center">H</span>
+              <span className="text-center">Pts</span>
+            </div>
+            {leagueTable.map((row) => (
+              <div key={row.id} className="grid grid-cols-6 items-center rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5">
+                <div className="col-span-2 flex items-center gap-2 min-w-0">
+                  <span className="text-[11px] text-emerald-200/50 w-4 shrink-0">{row.position ?? "—"}</span>
+                  {row.profile?.avatar_url ? (
+                    <img src={row.profile.avatar_url} alt="" className="h-6 w-6 rounded-full object-cover shrink-0" />
+                  ) : (
+                    <div className="h-6 w-6 rounded-full bg-emerald-900/60 grid place-items-center text-[9px] font-bold text-emerald-200 shrink-0">
+                      {row.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
+                    </div>
+                  )}
+                  <span className="text-xs font-semibold text-emerald-50 truncate">{row.profile?.name ?? "—"}</span>
+                </div>
+                <span className="text-center text-xs text-emerald-100/70">{row.played}</span>
+                <span className="text-center text-xs text-emerald-100/70">{row.won}</span>
+                <span className="text-center text-xs text-emerald-100/70">{row.halved}</span>
+                <span className="text-center text-xs font-bold text-[#f5e6b0]">{row.league_points}</span>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+    ),
 
     results: (
       <div className="space-y-2">

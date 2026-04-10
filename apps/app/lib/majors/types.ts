@@ -1,5 +1,34 @@
 // CIAGA Majors — TypeScript types mirroring the database schema
 
+// ─── Spec-aligned enum types (Phase 1) ──────────────────────────────────────
+
+export type SeriesType =
+  | "tour"
+  | "major_series"
+  | "matchplay_league"
+  | "matchplay_knockout"
+  | "championship_series"
+  | "season";
+
+export type CompetitionStructure =
+  | "standalone"
+  | "multi_round"
+  | "season_event"
+  | "league_fixture"
+  | "knockout_match";
+
+export type ScoringBasis =
+  | "gross"
+  | "net"
+  | "stableford_points"
+  | "match_result";
+
+export type StandingsModel =
+  | "none"
+  | "season_points"
+  | "league_table"
+  | "knockout_progression";
+
 // ─── Enums ──────────────────────────────────────────────────────────────────
 
 export type MajorGroupType =
@@ -9,7 +38,12 @@ export type MajorGroupType =
   | "oneoff"
   | "matchplay_series"
   | "major_series"
-  | "custom";
+  | "custom"
+  // Spec-aligned additions
+  | "society"
+  | "friend_group"
+  | "major_series_host"
+  | "public_organizer";
 
 export type MajorGroupPrivacy = "public" | "request" | "invite_only";
 
@@ -28,7 +62,14 @@ export type CompetitionTypeV2 =
   | "skins"
   | "scramble"
   | "bestball"
-  | "custom";
+  | "custom"
+  // Spec-aligned additions
+  | "stroke_play"
+  | "matchplay_fixture"
+  | "matchplay_knockout_match"
+  | "aggregate_stroke_play"
+  | "team_best_ball"
+  | "team_scramble";
 
 export type CompetitionScoringModel = "gross" | "net" | "stableford_points" | "match_result";
 
@@ -38,7 +79,19 @@ export type CompetitionPointsModel =
   | "custom_table"
   | "position_based";
 
-export type CompetitionMajorsStatus = "upcoming" | "live" | "completed" | "cancelled";
+export type CompetitionMajorsStatus =
+  | "upcoming"
+  | "live"
+  | "completed"
+  | "cancelled"
+  // Spec-aligned additions
+  | "draft"
+  | "published"
+  | "entry_open"
+  | "entry_closed"
+  | "unofficial"
+  | "official"
+  | "archived";
 
 export type StandingsContribution = "event_only" | "season" | "both";
 
@@ -80,6 +133,52 @@ export type CompetitionSeries = {
   created_by_profile_id: string | null;
   created_at: string;
   updated_at: string;
+  // Spec-aligned additions
+  series_type: SeriesType;
+  is_active: boolean;
+  default_start_month: number | null;
+  default_end_month: number | null;
+};
+
+// ── SeriesSeason ─────────────────────────────────────────────
+export type SeasonStatus = "draft" | "published" | "live" | "completed" | "archived";
+
+export type SeriesSeason = {
+  id: string;
+  series_id: string;
+  season_year: number;
+  name: string;
+  status: SeasonStatus;
+  start_date: string | null;
+  end_date: string | null;
+  standings_model: StandingsModel;
+  standings_rules_version_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SeriesSeasonWithSeries = SeriesSeason & {
+  series: Pick<CompetitionSeries, "id" | "name" | "series_type" | "group_id">;
+};
+
+// ── CompetitionRulesVersion ───────────────────────────────────
+export type CompetitionRulesVersion = {
+  id: string;
+  competition_id: string | null;
+  source_template_id: string | null;
+  rules_version: number;
+  competition_format: CompetitionTypeV2;
+  competition_structure: CompetitionStructure;
+  scoring_basis: ScoringBasis;
+  handicap_config: Record<string, unknown>;
+  points_config: Record<string, unknown>;
+  tie_break_config: Record<string, unknown>;
+  eligibility_config: Record<string, unknown>;
+  cut_config: Record<string, unknown> | null;
+  matchplay_config: Record<string, unknown> | null;
+  notes: string | null;
+  created_at: string;
+  created_by_profile_id: string | null;
 };
 
 export type CompetitionSeriesWithEvents = CompetitionSeries & {
@@ -185,6 +284,11 @@ export type CompetitionFull = {
   competition_year: number | null;
   competition_category: CompetitionCategory;
   aggregate_config: Record<string, unknown>;
+  // Spec-aligned additions
+  season_id: string | null;
+  competition_structure: CompetitionStructure;
+  scoring_basis: ScoringBasis | null;
+  published_rules_version_id: string | null;
 };
 
 export type CompetitionWithGroup = CompetitionFull & {
@@ -196,6 +300,8 @@ export type CompetitionWithSeries = CompetitionWithGroup & {
   series: Pick<CompetitionSeries, "id" | "name"> | null;
 };
 
+export type SubmissionStatus = "pending" | "accepted" | "rejected" | "superseded" | "withdrawn" | "dq";
+
 export type CompetitionRoundSubmission = {
   id: string;
   competition_id: string;
@@ -205,6 +311,16 @@ export type CompetitionRoundSubmission = {
   score_used: number | null;
   accepted: boolean;
   rejected_reason: string | null;
+  // Spec-aligned additions
+  competition_round_id: string | null;
+  submission_status: SubmissionStatus;
+  gross_score: number | null;
+  net_score_snapshot: number | null;
+  format_points: number | null;
+  course_handicap_used: number | null;
+  decided_at: string | null;
+  decided_by_profile_id: string | null;
+  decision_reason: string | null;
 };
 
 export type CompetitionLeaderboardEntry = {
@@ -248,6 +364,62 @@ export type GroupStandingWithProfile = MajorGroupStanding & {
   };
 };
 
+// ─── Season standings ────────────────────────────────────────────────────────
+
+export type SeasonStandingsEntry = {
+  season_id: string;
+  profile_id: string;
+  position: number | null;
+  season_points: number;
+  events_played: number;
+  wins: number;
+  top_3s: number;
+  best_finish: number | null;
+  last_computed_at: string;
+};
+
+export type SeasonStandingsEntryWithProfile = SeasonStandingsEntry & {
+  profile: { id: string; name: string | null; avatar_url: string | null };
+};
+
+// ─── Competition rounds ───────────────────────────────────────────────────────
+
+export type CompetitionRoundStatus = "scheduled" | "live" | "completed" | "cancelled";
+
+export type CompetitionRound = {
+  id: string;
+  competition_id: string;
+  round_number: number;
+  name: string;
+  scheduled_date: string | null;
+  course_id: string | null;
+  status: CompetitionRoundStatus;
+  created_at: string;
+};
+
+// ─── Audit log ───────────────────────────────────────────────────────────────
+
+export type CompetitionAuditActionType =
+  | "created"
+  | "published"
+  | "entry_opened"
+  | "entry_closed"
+  | "rules_changed"
+  | "submission_accepted"
+  | "submission_rejected"
+  | "leaderboard_recomputed"
+  | "status_changed"
+  | "fixture_result_updated";
+
+export type CompetitionAuditLog = {
+  id: string;
+  competition_id: string;
+  actor_profile_id: string | null;
+  action_type: CompetitionAuditActionType | string;
+  payload: Record<string, unknown>;
+  created_at: string;
+};
+
 // ─── Tee Times ───────────────────────────────────────────────────────────────
 
 export type TeeTimeParticipant = {
@@ -276,6 +448,81 @@ export type CompetitionTeeTime = {
     status: string;
     participants: TeeTimeParticipant[];
   };
+};
+
+// ─── Matchplay types ─────────────────────────────────────────────────────────
+
+export type MatchplayStageType =
+  | "league_phase" | "group_phase"
+  | "round_of_16" | "quarter_final" | "semi_final" | "final"
+  | "placement" | "custom";
+
+export type MatchplayStage = {
+  id: string;
+  competition_id: string;
+  stage_type: MatchplayStageType;
+  name: string;
+  sort_order: number;
+  group_label: string | null;
+  created_at: string;
+};
+
+export type MatchplayFixtureStatus = "scheduled" | "live" | "completed" | "walkover" | "cancelled";
+
+export type MatchplayResultType =
+  | "home_win" | "away_win" | "halved"
+  | "walkover_home" | "walkover_away" | "double_withdrawal";
+
+export type MatchplayFixture = {
+  id: string;
+  competition_id: string;
+  stage_id: string | null;
+  round_number: number | null;
+  home_entry_id: string | null;
+  away_entry_id: string | null;
+  scheduled_at: string | null;
+  status: MatchplayFixtureStatus;
+  result_type: MatchplayResultType | null;
+  winning_entry_id: string | null;
+  margin_holes: number | null;
+  holes_remaining: number | null;
+  extra_holes_played: number | null;
+  approved_at: string | null;
+  approved_by_profile_id: string | null;
+  notes: string | null;
+};
+
+export type MatchplayBracketSlotSourceType = "entry" | "winner_of_fixture" | "loser_of_fixture" | "bye";
+
+export type MatchplayBracketSlot = {
+  id: string;
+  competition_id: string;
+  stage_id: string;
+  fixture_id: string;
+  slot_number: 1 | 2;
+  source_type: MatchplayBracketSlotSourceType;
+  source_entry_id: string | null;
+  source_fixture_id: string | null;
+};
+
+export type MatchplayLeagueTableEntry = {
+  id: string;
+  competition_id: string;
+  stage_id: string | null;
+  profile_id: string;
+  played: number;
+  won: number;
+  halved: number;
+  lost: number;
+  league_points: number;
+  matches_for: number | null;
+  matches_against: number | null;
+  position: number | null;
+  last_computed_at: string;
+};
+
+export type MatchplayLeagueTableEntryWithProfile = MatchplayLeagueTableEntry & {
+  profile: { id: string; name: string | null; avatar_url: string | null };
 };
 
 // ─── API response shapes ──────────────────────────────────────────────────────

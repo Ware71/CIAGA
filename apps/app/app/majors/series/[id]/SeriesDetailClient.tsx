@@ -7,6 +7,7 @@ import type {
   CompetitionSeriesWithEvents,
   SeriesEventTemplate,
   SeriesYearGroup,
+  SeriesSeason,
 } from "@/lib/majors/types";
 
 const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -220,6 +221,7 @@ export default function SeriesDetailClient({ seriesId }: { seriesId: string }) {
   const router = useRouter();
   const [series, setSeries] = useState<CompetitionSeriesWithEvents | null>(null);
   const [history, setHistory] = useState<SeriesYearGroup[]>([]);
+  const [seasons, setSeasons] = useState<SeriesSeason[]>([]);
   const [loading, setLoading] = useState(true);
   const [myRole, setMyRole] = useState<string | null>(null);
   const [showAddEvent, setShowAddEvent] = useState(false);
@@ -236,9 +238,10 @@ export default function SeriesDetailClient({ seriesId }: { seriesId: string }) {
       if (!session) { router.push("/login"); return; }
       const headers = { Authorization: `Bearer ${session.accessToken}` };
 
-      const [seriesRes, historyRes] = await Promise.all([
+      const [seriesRes, historyRes, seasonsRes] = await Promise.all([
         fetch(`/api/majors/series/${seriesId}`, { headers }),
         fetch(`/api/majors/series/${seriesId}/history`, { headers }),
+        fetch(`/api/majors/seasons?series_id=${seriesId}`, { headers }).catch(() => null),
       ]);
 
       if (seriesRes.ok) {
@@ -263,6 +266,11 @@ export default function SeriesDetailClient({ seriesId }: { seriesId: string }) {
       if (historyRes.ok) {
         const hj = await historyRes.json();
         setHistory(hj.history ?? []);
+
+      if (seasonsRes?.ok) {
+        const sj = await seasonsRes.json();
+        setSeasons(sj.seasons ?? []);
+      }
       }
     } finally {
       setLoading(false);
@@ -501,9 +509,22 @@ export default function SeriesDetailClient({ seriesId }: { seriesId: string }) {
               No seasons yet.
             </div>
           ) : (
-            history.map((yearGroup) => (
+            history.map((yearGroup) => {
+              const matchedSeason = seasons.find((s) => s.season_year === yearGroup.year);
+              return (
               <div key={yearGroup.year} className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/60 p-4 space-y-3">
-                <div className="text-sm font-bold text-emerald-200">{yearGroup.year}</div>
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-bold text-emerald-200">{yearGroup.year}</div>
+                  {matchedSeason && (
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/majors/seasons/${matchedSeason.id}`)}
+                      className="text-[10px] text-emerald-200/55 hover:text-emerald-200 border border-emerald-900/50 rounded-full px-2 py-0.5 transition-colors"
+                    >
+                      Season →
+                    </button>
+                  )}
+                </div>
                 <div className="space-y-2">
                   {yearGroup.competitions.map(({ competition, event_template, winner }) => (
                     <button
@@ -541,7 +562,7 @@ export default function SeriesDetailClient({ seriesId }: { seriesId: string }) {
                   ))}
                 </div>
               </div>
-            ))
+            );})
           )}
         </section>
       </div>

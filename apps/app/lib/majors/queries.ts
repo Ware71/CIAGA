@@ -13,6 +13,9 @@ import type {
   CompetitionSeriesWithEvents,
   SeriesYearGroup,
   EventTemplateHistory,
+  SeriesSeason,
+  SeriesSeasonWithSeries,
+  SeasonStandingsEntryWithProfile,
 } from "./types";
 
 // ─── Groups ──────────────────────────────────────────────────────────────────
@@ -502,6 +505,91 @@ export async function getPlayerSeriesHistory(profileId: string, seriesId: string
     competition: c,
     entry: entryMap.get(c.id) ?? null,
   }));
+}
+
+// ─── Seasons ─────────────────────────────────────────────────────────────────
+
+export async function getSeasonsBySeriesId(seriesId: string): Promise<SeriesSeason[]> {
+  const { data, error } = await supabaseAdmin
+    .from("series_seasons")
+    .select("*")
+    .eq("series_id", seriesId)
+    .order("season_year", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as SeriesSeason[];
+}
+
+export async function getSeasonById(
+  seasonId: string
+): Promise<(SeriesSeasonWithSeries & { competitions: CompetitionWithGroup[] }) | null> {
+  const { data: seasonData, error: seasonErr } = await supabaseAdmin
+    .from("series_seasons")
+    .select("*, series:competition_series(id, name, group_id, series_type)")
+    .eq("id", seasonId)
+    .maybeSingle();
+  if (seasonErr) throw seasonErr;
+  if (!seasonData) return null;
+
+  const { data: comps, error: compsErr } = await supabaseAdmin
+    .from("competitions")
+    .select("*, group:major_groups(id, name, ciaga_tag), course:courses(id, name)")
+    .eq("season_id", seasonId)
+    .order("competition_date", { ascending: true });
+  if (compsErr) throw compsErr;
+
+  return {
+    ...(seasonData as unknown as SeriesSeasonWithSeries),
+    competitions: (comps ?? []) as CompetitionWithGroup[],
+  };
+}
+
+export async function getSeasonStandings(
+  seasonId: string
+): Promise<SeasonStandingsEntryWithProfile[]> {
+  const { data, error } = await supabaseAdmin
+    .from("season_standings_entries")
+    .select("*, profile:profiles(id, name, avatar_url)")
+    .eq("season_id", seasonId)
+    .order("position", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as unknown as SeasonStandingsEntryWithProfile[];
+}
+
+// ─── Event history summaries ──────────────────────────────────────────────────
+
+export async function getEventHistorySummaries(eventTemplateId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("event_history_summaries")
+    .select(`
+      *,
+      winner:profiles!winner_profile_id(id, name, avatar_url),
+      runner_up:profiles!runner_up_profile_id(id, name, avatar_url),
+      competition:competitions(id, name, competition_date, majors_status)
+    `)
+    .eq("series_event_template_id", eventTemplateId)
+    .order("season_year", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+// ─── Profile competition stats ────────────────────────────────────────────────
+
+export async function getProfileCompetitionStats(profileId: string, groupId?: string, seriesId?: string) {
+  let query = supabaseAdmin
+    .from("profile_competition_stats")
+    .select("*")
+    .eq("profile_id", profileId);
+
+  if (groupId) {
+    query = query.eq("group_id", groupId);
+  } else if (seriesId) {
+    query = query.eq("series_id", seriesId);
+  } else {
+    query = query.is("group_id", null).is("series_id", null);
+  }
+
+  const { data } = await query.maybeSingle();
+  return data ?? null;
 }
 
 export async function getEventTemplateHistory(

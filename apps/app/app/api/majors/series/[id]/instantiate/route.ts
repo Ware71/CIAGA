@@ -5,8 +5,8 @@ import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 export const runtime = "nodejs";
 
 // POST /api/majors/series/[id]/instantiate
-// Creates one competition per event template for the given year.
-// Body: { year: number }
+// Creates a series_seasons row and one competition per event template for the given year.
+// Body: { year: number, season_name?: string, standings_model?: string }
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { profileId } = await getAuthedProfileOrThrow(req);
@@ -45,17 +45,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
     }
 
-    // Check if any competitions already exist for this series+year
-    const { data: existing } = await supabaseAdmin
-      .from("competitions")
+    // Check if a season already exists for this series+year
+    const { data: existingSeason } = await supabaseAdmin
+      .from("series_seasons")
       .select("id")
       .eq("series_id", seriesId)
-      .eq("competition_year", year)
-      .limit(1);
+      .eq("season_year", year)
+      .maybeSingle();
 
-    if (existing && existing.length > 0) {
+    if (existingSeason) {
       return NextResponse.json(
-        { error: `Competitions for ${year} already exist in this series` },
+        { error: `A season for ${year} already exists in this series` },
         { status: 409 }
       );
     }
@@ -71,7 +71,25 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       );
     }
 
-    // Build competition rows — event template settings override series defaults
+    // ── 1. Create the series_seasons row ────────────────────────
+    const seasonName = body.season_name ?? `${s.name} ${year}`;
+    const standingsModel = body.standings_model ?? "season_points";
+
+    const { data: season, error: seasonErr } = await supabaseAdmin
+      .from("series_seasons")
+      .insert({
+        series_id: seriesId,
+        season_year: year,
+        name: seasonName,
+        status: "draft",
+        standings_model: standingsModel,
+      })
+      .select("*")
+      .single();
+
+    if (seasonErr) throw seasonErr;
+
+    // ── 2. Build and insert competition rows ─────────────────────
     const inserts = eventTemplates.map((et: any) => {
       const competitionType = et.template_competition_type ?? s.template_competition_type ?? "stroke";
       const scoringModel = et.template_scoring_model ?? s.template_scoring_model ?? "net";
@@ -80,7 +98,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const settings = { ...(s.template_settings ?? {}), ...(et.template_settings ?? {}) };
       const numRounds = s.template_num_rounds ?? 1;
 
-      // Build handicap_rules from merged settings
       const handicapRules: Record<string, unknown> = {};
       if (settings.handicap_allowance_pct != null) {
         handicapRules.allowance_pct = settings.handicap_allowance_pct;
@@ -104,24 +121,76 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         time_rules: {},
         membership_rules: {},
         standings_contribution: "event_only",
-        majors_status: "upcoming",
+        majors_status: "draft",
         competition_category: s.template_competition_category ?? "round_based",
         aggregate_config: {},
         series_id: seriesId,
         series_event_template_id: et.id,
         competition_year: year,
+        season_id: (season as any).id,
+        competition_structure: "season_event",
+        created_by_profile_id: profileId,
+        // _et_id used below to build rules versions — not a real column
+        _et_id: et.id,
+        _scoring_model: scoringModel,
+        _handicap_rules: handicapRules,
+      };
+    });
+
+    // Strip underscore-prefixed helper fields before inserting
+    const dbInserts = inserts.map(({ _et_id, _scoring_model, _handicap_rules, ...row }) => row);
+
+    const { data: created, error: insertErr } = await supabaseAdmin
+      .from("competitions")
+      .insert(dbInserts)
+      .select("*");
+
+    if (insertErr) throw insertErr;
+    if (!created || created.length === 0) throw new Error("No competitions created");
+
+    // ── 3. Create frozen rules_version per competition ───────────
+    const rulesInserts = created.map((comp: any, i: number) => {
+      const src = inserts[i];
+      return {
+        competition_id: comp.id,
+        source_template_id: src._et_id,
+        rules_version: 1,
+        competition_format: comp.competition_type,
+        competition_structure: "season_event",
+        scoring_basis: src._scoring_model === "gross" ? "gross"
+          : src._scoring_model === "stableford_points" ? "stableford_points"
+          : src._scoring_model === "match_result" ? "match_result"
+          : "net",
+        handicap_config: src._handicap_rules ?? {},
+        points_config: {},
+        tie_break_config: {},
+        eligibility_config: {},
         created_by_profile_id: profileId,
       };
     });
 
-    const { data: created, error: insertErr } = await supabaseAdmin
-      .from("competitions")
-      .insert(inserts)
-      .select("*");
+    const { data: rulesVersions, error: rulesErr } = await supabaseAdmin
+      .from("competition_rules_versions")
+      .insert(rulesInserts)
+      .select("id, competition_id");
 
-    if (insertErr) throw insertErr;
+    if (rulesErr) throw rulesErr;
 
-    return NextResponse.json({ competitions: created ?? [] }, { status: 201 });
+    // ── 4. Back-link each competition to its rules version ───────
+    if (rulesVersions && rulesVersions.length > 0) {
+      const updatePromises = (rulesVersions as any[]).map((rv: any) =>
+        supabaseAdmin
+          .from("competitions")
+          .update({ published_rules_version_id: rv.id })
+          .eq("id", rv.competition_id)
+      );
+      await Promise.all(updatePromises);
+    }
+
+    return NextResponse.json(
+      { season, competitions: created, rules_versions: rulesVersions ?? [] },
+      { status: 201 }
+    );
   } catch (e: any) {
     const msg = e?.message ?? "Unknown error";
     const status = String(msg).toLowerCase().includes("auth") ? 401 : 500;
