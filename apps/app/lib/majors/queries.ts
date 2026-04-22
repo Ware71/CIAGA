@@ -85,7 +85,7 @@ export async function getGroupMembers(groupId: string): Promise<MajorGroupMember
 export async function getCompetitionById(competitionId: string): Promise<CompetitionWithGroup | null> {
   const { data, error } = await supabaseAdmin
     .from("competitions")
-    .select("*, group:major_groups(id, name, ciaga_tag), course:courses(id, name)")
+    .select("*, group:major_groups(id, name, type, ciaga_tag), course:courses(id, name)")
     .eq("id", competitionId)
     .maybeSingle();
   if (error) throw error;
@@ -97,11 +97,38 @@ export async function getCompetitionsByGroup(
 ): Promise<CompetitionWithGroup[]> {
   const { data, error } = await supabaseAdmin
     .from("competitions")
-    .select("*, group:major_groups(id, name, ciaga_tag), course:courses(id, name)")
+    .select("*, group:major_groups(id, name, type, ciaga_tag), course:courses(id, name)")
     .eq("group_id", groupId)
     .order("competition_date", { ascending: true });
   if (error) throw error;
   return (data ?? []) as CompetitionWithGroup[];
+}
+
+// ─── Participants & submissions ───────────────────────────────────────────────
+
+export async function getCompetitionParticipants(competitionId: string): Promise<
+  Array<{ profile_id: string; profile: { id: string; name: string | null; avatar_url: string | null } | null }>
+> {
+  const { data, error } = await supabaseAdmin
+    .from("competition_entries")
+    .select("profile_id, profile:profiles(id, name, avatar_url)")
+    .eq("competition_id", competitionId);
+  if (error) throw error;
+  return (data ?? []) as any;
+}
+
+export async function getCompetitionSubmissionMap(competitionId: string): Promise<Record<string, string>> {
+  const { data, error } = await supabaseAdmin
+    .from("competition_round_submissions")
+    .select("profile_id, round_id")
+    .eq("competition_id", competitionId)
+    .eq("accepted", true);
+  if (error) throw error;
+  const map: Record<string, string> = {};
+  for (const row of data ?? []) {
+    if ((row as any).round_id) map[(row as any).profile_id] = (row as any).round_id;
+  }
+  return map;
 }
 
 // ─── Leaderboard ─────────────────────────────────────────────────────────────
@@ -145,7 +172,7 @@ export async function getMajorSchedule(
 
   let query = supabaseAdmin
     .from("competitions")
-    .select("*, group:major_groups(id, name, ciaga_tag), course:courses(id, name)")
+    .select("*, group:major_groups(id, name, type, ciaga_tag), course:courses(id, name)")
     .order("competition_date", { ascending: true })
     .limit(limit);
 
@@ -210,7 +237,7 @@ export async function getMajorHistory(
 
   const { data: comps, error: compsErr } = await supabaseAdmin
     .from("competitions")
-    .select("*, group:major_groups(id, name, ciaga_tag), course:courses(id, name)")
+    .select("*, group:major_groups(id, name, type, ciaga_tag), course:courses(id, name)")
     .in("id", compIds)
     .eq("majors_status", "completed");
   if (compsErr) throw compsErr;
@@ -334,7 +361,7 @@ export async function getMajorHubSummary(profileId: string): Promise<MajorHubSum
   if (myGroupIds.length > 0) {
     const { data: compData } = await supabaseAdmin
       .from("competitions")
-      .select("*, group:major_groups(id, name, ciaga_tag), course:courses(id, name)")
+      .select("*, group:major_groups(id, name, type, ciaga_tag), course:courses(id, name)")
       .in("group_id", myGroupIds)
       .in("majors_status", ["live", "upcoming"])
       .order("competition_date", { ascending: true })
@@ -532,7 +559,7 @@ export async function getSeasonById(
 
   const { data: comps, error: compsErr } = await supabaseAdmin
     .from("competitions")
-    .select("*, group:major_groups(id, name, ciaga_tag), course:courses(id, name)")
+    .select("*, group:major_groups(id, name, type, ciaga_tag), course:courses(id, name)")
     .eq("season_id", seasonId)
     .order("competition_date", { ascending: true });
   if (compsErr) throw compsErr;

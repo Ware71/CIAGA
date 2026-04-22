@@ -292,7 +292,7 @@ export type CompetitionFull = {
 };
 
 export type CompetitionWithGroup = CompetitionFull & {
-  group: Pick<MajorGroup, "id" | "name" | "ciaga_tag"> | null;
+  group: Pick<MajorGroup, "id" | "name" | "type" | "ciaga_tag"> | null;
   course: { id: string; name: string } | null;
 };
 

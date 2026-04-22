@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
-import { getCompetitionLeaderboard } from "@/lib/majors/queries";
+import { getCompetitionLeaderboard, getCompetitionSubmissionMap } from "@/lib/majors/queries";
 
 export const runtime = "nodejs";
 
@@ -11,8 +11,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     await getAuthedProfileOrThrow(req);
     const { id } = await params;
 
-    const rows = await getCompetitionLeaderboard(id);
-    return NextResponse.json({ rows }, { headers: { "Cache-Control": "no-store" } });
+    const [rows, submissionMap] = await Promise.all([
+      getCompetitionLeaderboard(id),
+      getCompetitionSubmissionMap(id),
+    ]);
+    const rowsWithRoundId = rows.map((r) => ({
+      ...r,
+      round_id: submissionMap[r.profile_id] ?? null,
+    }));
+    return NextResponse.json({ rows: rowsWithRoundId }, { headers: { "Cache-Control": "no-store" } });
   } catch (e: any) {
     const msg = e?.message ?? "Unknown error";
     const status = String(msg).toLowerCase().includes("auth") ? 401 : 500;

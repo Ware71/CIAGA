@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { AuthUser } from "@/components/ui/auth-user";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 import type { MajorHubSummary, MajorGroup, CompetitionWithGroup } from "@/lib/majors/types";
+import { competitionStatusLabel } from "@/lib/majors/labels";
 
 type MenuItem = { id: string; label: string };
 
@@ -65,7 +66,7 @@ function CompetitionCard({ comp }: { comp: CompetitionWithGroup }) {
                 : "bg-emerald-900/40 text-emerald-200/70 border-emerald-900/60"
             }`}
           >
-            {comp.majors_status}
+            {competitionStatusLabel(comp)}
           </span>
         </div>
         <div className="text-[10px] text-emerald-100/60 flex items-center gap-2">

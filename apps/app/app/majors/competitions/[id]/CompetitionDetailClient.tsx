@@ -56,6 +56,8 @@ function getTabsForCompetition(comp: CompetitionWithGroup | null) {
 }
 
 type FinishedRound = { id: string; name: string | null; finished_at: string | null };
+type LeaderboardRowWithRoundId = LeaderboardEntryWithProfile & { round_id: string | null };
+type Participant = { profile_id: string; profile: { id: string; name: string | null; avatar_url: string | null } | null };
 
 // ─── Submit Round sheet ───────────────────────────────────────────────────────
 
@@ -361,10 +363,12 @@ function TeeTimeCard({
   tt,
   isAdmin,
   onDelete,
+  onViewScorecard,
 }: {
   tt: CompetitionTeeTime;
   isAdmin: boolean;
   onDelete: () => void;
+  onViewScorecard?: () => void;
 }) {
   const slots: (TeeTimeParticipant | null)[] = [...(tt.round?.participants ?? [])];
   while (slots.length < 4) slots.push(null);
@@ -409,6 +413,15 @@ function TeeTimeCard({
         </div>
       </div>
       {tt.notes && <p className="text-[11px] text-emerald-100/55 italic">{tt.notes}</p>}
+      {tt.round?.status === "finished" && onViewScorecard && (
+        <button
+          type="button"
+          onClick={onViewScorecard}
+          className="text-[11px] text-emerald-400 hover:text-emerald-300 text-left"
+        >
+          View Scorecard →
+        </button>
+      )}
       <div className="grid grid-cols-4 gap-2">
         {slots.map((p, i) =>
           p ? (
@@ -515,7 +528,8 @@ export default function CompetitionDetailClient({ competitionId }: { competition
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("overview");
   const [competition, setCompetition] = useState<CompetitionWithGroup | null>(null);
-  const [leaderboard, setLeaderboard] = useState<LeaderboardEntryWithProfile[]>([]);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardRowWithRoundId[]>([]);
+  const [participants, setParticipants] = useState<Participant[]>([]);
   const [teeTimes, setTeeTimes] = useState<CompetitionTeeTime[]>([]);
   const [loading, setLoading] = useState(true);
   const [isEntered, setIsEntered] = useState(false);
@@ -540,11 +554,12 @@ export default function CompetitionDetailClient({ competitionId }: { competition
         setMyProfileId(session.profileId);
         const headers = { Authorization: `Bearer ${session.accessToken}` };
 
-        const [compRes, lbRes, roundsRes, teeTimesRes] = await Promise.all([
+        const [compRes, lbRes, roundsRes, teeTimesRes, participantsRes] = await Promise.all([
           fetch(`/api/majors/competitions/${competitionId}`, { headers }),
           fetch(`/api/majors/competitions/${competitionId}/leaderboard`, { headers }),
           fetch(`/api/rounds?status=finished&limit=20`, { headers }),
           fetch(`/api/majors/competitions/${competitionId}/tee-times`, { headers }),
+          fetch(`/api/majors/competitions/${competitionId}/participants`, { headers }),
         ]);
 
         if (cancelled) return;
@@ -603,18 +618,19 @@ export default function CompetitionDetailClient({ competitionId }: { competition
           const j = await teeTimesRes.json();
           setTeeTimes(j.tee_times ?? []);
         }
+
+        if (participantsRes.ok) {
+          const j = await participantsRes.json();
+          const fetched: Participant[] = j.participants ?? [];
+          setParticipants(fetched);
+          setIsEntered(fetched.some((p) => p.profile_id === session.profileId));
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
   }, [competitionId]);
-
-  useEffect(() => {
-    if (myProfileId && leaderboard.length > 0) {
-      setIsEntered(leaderboard.some((e) => e.profile_id === myProfileId));
-    }
-  }, [leaderboard, myProfileId]);
 
   const refreshTeeTimes = async () => {
     const session = await getViewerSession();
@@ -638,7 +654,17 @@ export default function CompetitionDetailClient({ competitionId }: { competition
         headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
         body: JSON.stringify({}),
       });
-      if (res.ok) setIsEntered(true);
+      if (res.ok) {
+        setIsEntered(true);
+        // Refresh participants so the leaderboard shows the new entrant
+        const pRes = await fetch(`/api/majors/competitions/${competitionId}/participants`, {
+          headers: { Authorization: `Bearer ${session.accessToken}` },
+        });
+        if (pRes.ok) {
+          const pj = await pRes.json();
+          setParticipants(pj.participants ?? []);
+        }
+      }
     } finally {
       setEntering(false);
     }
@@ -782,17 +808,38 @@ export default function CompetitionDetailClient({ competitionId }: { competition
       </div>
     ) : null,
 
-    leaderboard: (
-      <div className="space-y-2">
-        {leaderboard.length === 0 && (
-          <div className="text-sm text-emerald-100/60 text-center py-8">
-            No results yet. Submit a round to appear here.
-          </div>
-        )}
-        {leaderboard.map((row) => (
-          <div
-            key={row.id}
-            className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 ${
+    leaderboard: (() => {
+      const rankedIds = new Set(leaderboard.map((r) => r.profile_id));
+      const unranked = participants.filter((p) => !rankedIds.has(p.profile_id));
+      return (
+        <div className="space-y-2">
+          {leaderboard.length === 0 && unranked.length === 0 && (
+            <div className="text-sm text-emerald-100/60 text-center py-8">
+              No participants yet. Enter to appear here.
+            </div>
+          )}
+          {leaderboard.map((row) => {
+            const inner = (
+              <>
+                <PositionBadge position={row.position ?? null} />
+                {row.profile?.avatar_url ? (
+                  <img src={row.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
+                ) : (
+                  <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
+                    {row.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
+                  </div>
+                )}
+                <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{row.profile?.name ?? "Unknown"}</span>
+                <div className="text-right shrink-0">
+                  <div className="text-xs font-extrabold text-[#f5e6b0]">{row.net_score ?? row.gross_score ?? "—"}</div>
+                  <div className="text-[10px] text-emerald-100/50">{row.rounds_submitted} rnd</div>
+                </div>
+                {row.round_id && (
+                  <span className="text-[10px] text-emerald-400/70 shrink-0">→</span>
+                )}
+              </>
+            );
+            const rowClass = `flex items-center gap-3 rounded-xl border px-3 py-2.5 w-full text-left ${
               row.position === 1
                 ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5"
                 : row.position === 2
@@ -800,25 +847,56 @@ export default function CompetitionDetailClient({ competitionId }: { competition
                 : row.position === 3
                 ? "border-[#cd7f32]/20 bg-[#cd7f32]/5"
                 : "border-emerald-900/50 bg-[#0b3b21]/60"
-            }`}
-          >
-            <PositionBadge position={row.position ?? null} />
-            {row.profile?.avatar_url ? (
-              <img src={row.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
+            }`;
+            return row.round_id ? (
+              <button
+                key={row.id}
+                type="button"
+                className={`${rowClass} hover:brightness-110 active:scale-[0.99] transition-all`}
+                onClick={() => router.push(`/round/${row.round_id}`)}
+              >
+                {inner}
+              </button>
             ) : (
-              <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
-                {row.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
+              <div key={row.id} className={rowClass}>
+                {inner}
               </div>
-            )}
-            <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{row.profile?.name ?? "Unknown"}</span>
-            <div className="text-right shrink-0">
-              <div className="text-xs font-extrabold text-[#f5e6b0]">{row.net_score ?? row.gross_score ?? "—"}</div>
-              <div className="text-[10px] text-emerald-100/50">{row.rounds_submitted} rnd</div>
-            </div>
-          </div>
-        ))}
-      </div>
-    ),
+            );
+          })}
+          {unranked.length > 0 && (
+            <>
+              {leaderboard.length > 0 && (
+                <div className="flex items-center gap-2 py-1">
+                  <div className="flex-1 h-px bg-emerald-900/50" />
+                  <span className="text-[10px] text-emerald-200/40 uppercase tracking-wider">Entered</span>
+                  <div className="flex-1 h-px bg-emerald-900/50" />
+                </div>
+              )}
+              {unranked.map((p) => (
+                <div
+                  key={p.profile_id}
+                  className="flex items-center gap-3 rounded-xl border border-emerald-900/40 bg-[#0b3b21]/40 px-3 py-2.5"
+                >
+                  <span className="w-7 text-center text-xs text-emerald-200/30">—</span>
+                  {p.profile?.avatar_url ? (
+                    <img src={p.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0 opacity-60" />
+                  ) : (
+                    <div className="h-7 w-7 rounded-full bg-emerald-900/40 grid place-items-center text-[10px] font-bold text-emerald-200/50 shrink-0">
+                      {p.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
+                    </div>
+                  )}
+                  <span className="flex-1 text-sm font-semibold text-emerald-50/50 truncate">{p.profile?.name ?? "Unknown"}</span>
+                  <div className="text-right shrink-0">
+                    <div className="text-xs text-emerald-200/30">—</div>
+                    <div className="text-[10px] text-emerald-100/30">0 rnd</div>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      );
+    })(),
 
     "tee-times": (
       <div className="space-y-3">
@@ -832,8 +910,17 @@ export default function CompetitionDetailClient({ competitionId }: { competition
           </button>
         )}
         {teeTimes.length === 0 ? (
-          <div className="text-sm text-emerald-100/60 text-center py-8">
-            {isAdminOrOwner ? "No tee times set up yet." : "No tee times have been scheduled."}
+          <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 p-5 text-center space-y-1">
+            <div className="text-sm text-emerald-100/60">
+              {isAdminOrOwner
+                ? "No tee times set up yet."
+                : isEntered
+                ? "Your tee time hasn't been set yet."
+                : "No tee times have been scheduled yet."}
+            </div>
+            {!isAdminOrOwner && isEntered && (
+              <div className="text-[11px] text-emerald-100/40">Check back soon.</div>
+            )}
           </div>
         ) : (
           teeTimes.map((tt) => (
@@ -842,6 +929,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
               tt={tt}
               isAdmin={isAdminOrOwner}
               onDelete={() => handleDeleteTeeTime(tt.id)}
+              onViewScorecard={tt.round?.id ? () => router.push(`/round/${tt.round!.id}`) : undefined}
             />
           ))
         )}

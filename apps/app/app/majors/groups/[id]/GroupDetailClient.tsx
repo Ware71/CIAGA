@@ -11,6 +11,7 @@ import type {
   CompetitionSeries,
   SeriesEventTemplate,
 } from "@/lib/majors/types";
+import { competitionStatusLabel } from "@/lib/majors/labels";
 
 type CompetitionSeriesWithEventCount = CompetitionSeries & {
   event_templates: Pick<SeriesEventTemplate, "id">[];
@@ -381,7 +382,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm font-semibold text-emerald-50 truncate">{c.name}</span>
               <span className={`shrink-0 text-[9px] font-semibold px-2 py-0.5 rounded-full border capitalize ${compStatusBadge(c.majors_status)}`}>
-                {c.majors_status}
+                {competitionStatusLabel(c)}
               </span>
             </div>
             <div className="text-[11px] text-emerald-100/60 flex items-center gap-2">
