@@ -108,14 +108,30 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
 
     const body = await req.json();
-    const { tee_time, group_number, notes, players } = body as {
+    const { tee_time, group_number, notes, players, competition_round_id: bodyCompetitionRoundId } = body as {
       tee_time: string;
       group_number?: number;
       notes?: string;
+      competition_round_id?: string;
       players?: Array<{ profile_id?: string; is_guest?: boolean; display_name?: string; charge_to?: string | null }>;
     };
 
     if (!tee_time) return NextResponse.json({ error: "tee_time is required" }, { status: 400 });
+
+    // Resolve which competition round this tee time belongs to.
+    // Explicit competition_round_id takes priority (multi-round competitions).
+    // For single-round competitions, auto-link to the sole competition_round.
+    let competitionRoundId: string | null = bodyCompetitionRoundId ?? null;
+    if (!competitionRoundId) {
+      const { data: rounds } = await supabaseAdmin
+        .from("competition_rounds")
+        .select("id")
+        .eq("competition_id", id)
+        .order("round_number", { ascending: true });
+      if (rounds && rounds.length === 1) {
+        competitionRoundId = (rounds[0] as any).id;
+      }
+    }
 
     const playerList = players ?? [];
     if (playerList.length > 4) {
@@ -169,7 +185,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     if (participantErr) throw participantErr;
 
-    // Create the tee time record
+    // Create the tee time record, linking it to the competition round it belongs to
     const { data: teeTimeRow, error: ttErr } = await supabaseAdmin
       .from("competition_tee_times")
       .insert({
@@ -179,6 +195,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         group_number: group_number ?? null,
         notes: notes ?? null,
         created_by: profileId,
+        competition_round_id: competitionRoundId,
       })
       .select("*")
       .single();

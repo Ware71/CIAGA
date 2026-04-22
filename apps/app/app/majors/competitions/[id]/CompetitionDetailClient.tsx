@@ -64,6 +64,8 @@ type LeaderboardRowWithRoundId = LeaderboardEntryWithProfile & { round_id: strin
 type Participant = { profile_id: string; profile: { id: string; name: string | null; avatar_url: string | null } | null };
 
 // ─── Submit Round sheet ───────────────────────────────────────────────────────
+// Only shown for competitions without admin-managed tee times (e.g. open competitions
+// where a player records their own round and manually submits it).
 
 function SubmitRoundSheet({
   competitionId,
@@ -78,10 +80,12 @@ function SubmitRoundSheet({
 }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
     if (!selected) return;
     setSubmitting(true);
+    setError(null);
     try {
       const session = await getViewerSession();
       if (!session) return;
@@ -90,7 +94,13 @@ function SubmitRoundSheet({
         headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
         body: JSON.stringify({ round_id: selected }),
       });
-      if (res.ok) { onSubmit(); onClose(); }
+      if (res.ok) {
+        onSubmit();
+        onClose();
+      } else {
+        const j = await res.json().catch(() => ({}));
+        setError(j.error ?? "Submission failed");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -131,6 +141,7 @@ function SubmitRoundSheet({
             ))}
           </div>
         )}
+        {error && <div className="text-sm text-red-400">{error}</div>}
         <div className="flex gap-3">
           <button type="button" onClick={onClose} className="flex-1 py-3 rounded-full border border-emerald-900/60 text-sm text-emerald-200/70">
             Cancel
@@ -996,13 +1007,24 @@ export default function CompetitionDetailClient({ competitionId }: { competition
           )
         )}
 
-        {isEntered && (
+        {isEntered && (() => {
+          // Is this player's round managed by the competition (via a tee time)?
+          // If so, their score is submitted automatically when the round finishes —
+          // no manual submit step needed.
+          const myTeeTime = myProfileId
+            ? teeTimes.find((tt) =>
+                tt.round?.participants?.some((p) => p.profile_id === myProfileId)
+              )
+            : null;
+          const competitionOwnsRound = !!myTeeTime;
+
+          return (
           <div className="space-y-2">
             <div className="flex gap-3">
               <div className="flex-1 py-3 rounded-full border border-emerald-700/50 text-sm font-semibold text-emerald-400 text-center">
                 ✓ Entered
               </div>
-              {entryOpen && (
+              {entryOpen && !competitionOwnsRound && (
                 <button
                   type="button"
                   onClick={() => setShowSubmitSheet(true)}
@@ -1012,6 +1034,15 @@ export default function CompetitionDetailClient({ competitionId }: { competition
                 </button>
               )}
             </div>
+            {entryOpen && competitionOwnsRound && myTeeTime && (
+              <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 text-[11px] text-emerald-200/60">
+                {myTeeTime.round?.status === "finished"
+                  ? "Your score has been submitted automatically."
+                  : myTeeTime.round?.status === "live"
+                  ? "Round in progress — your score will be submitted when the round is finished."
+                  : `Tee time at ${new Date(myTeeTime.tee_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} — your score will be submitted automatically.`}
+              </div>
+            )}
             {/* Withdraw */}
             {competition.majors_status !== "live" && competition.majors_status !== "completed" && (
               (competition as any).allow_self_withdrawal !== false ? (
@@ -1026,7 +1057,8 @@ export default function CompetitionDetailClient({ competitionId }: { competition
               )
             )}
           </div>
-        )}
+          );
+        })()}
       </div>
     ) : null,
 
