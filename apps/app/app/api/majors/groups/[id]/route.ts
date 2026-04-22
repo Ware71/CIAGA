@@ -50,7 +50,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     const body = await req.json();
     const allowedFields = ["name", "description", "privacy", "join_method", "max_members",
-      "season_start", "season_end", "image_url", "ciaga_tag"];
+      "season_start", "season_end", "image_url", "ciaga_tag",
+      // Upgrade additions
+      "allow_credit"];
     const updates: Record<string, unknown> = {};
     for (const field of allowedFields) {
       if (field in body) updates[field] = body[field];

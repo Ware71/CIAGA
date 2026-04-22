@@ -10,6 +10,8 @@ import type {
   CompetitionWithGroup,
   CompetitionSeries,
   SeriesEventTemplate,
+  MemberBalanceSummary,
+  GroupBalanceTransactionWithDetails,
 } from "@/lib/majors/types";
 import { competitionStatusLabel } from "@/lib/majors/labels";
 
@@ -17,7 +19,7 @@ type CompetitionSeriesWithEventCount = CompetitionSeries & {
   event_templates: Pick<SeriesEventTemplate, "id">[];
 };
 
-type Tab = "overview" | "competitions" | "standings" | "schedule" | "history" | "members" | "series" | "settings";
+type Tab = "overview" | "competitions" | "standings" | "schedule" | "history" | "members" | "series" | "settings" | "finances";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
@@ -25,6 +27,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "standings", label: "Standings" },
   { id: "members", label: "Members" },
   { id: "series", label: "Series" },
+  { id: "finances", label: "Finances" },
   { id: "settings", label: "Settings" },
 ];
 
@@ -61,6 +64,9 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   const [joinedStatus, setJoinedStatus] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [series, setSeries] = useState<CompetitionSeriesWithEventCount[]>([]);
+  const [balanceMembers, setBalanceMembers] = useState<MemberBalanceSummary[]>([]);
+  const [myBalance, setMyBalance] = useState<{ balance: number; total_charged: number; total_paid: number; transactions: GroupBalanceTransactionWithDetails[] } | null>(null);
+  const [expandedMember, setExpandedMember] = useState<string | null>(null);
   const [showCreateSeriesModal, setShowCreateSeriesModal] = useState(false);
   const [newSeriesName, setNewSeriesName] = useState("");
   const [newSeriesDesc, setNewSeriesDesc] = useState("");
@@ -119,6 +125,33 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     })();
     return () => { cancelled = true; };
   }, [groupId]);
+
+  // Lazy-load finances when the tab is first opened
+  useEffect(() => {
+    if (tab !== "finances") return;
+    let cancelled = false;
+    (async () => {
+      const session = await getViewerSession();
+      if (!session || cancelled) return;
+      const headers = { Authorization: `Bearer ${session.accessToken}` };
+      const isAdmin = myRole === "owner" || myRole === "admin";
+
+      if (isAdmin) {
+        const res = await fetch(`/api/majors/groups/${groupId}/balances`, { headers });
+        if (!cancelled && res.ok) {
+          const j = await res.json();
+          setBalanceMembers(j.members ?? []);
+        }
+      } else {
+        const res = await fetch(`/api/majors/groups/${groupId}/balance`, { headers });
+        if (!cancelled && res.ok) {
+          const j = await res.json();
+          setMyBalance(j);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [tab, groupId, myRole]);
 
   const refreshMembers = async () => {
     const session = await getViewerSession();
@@ -684,6 +717,185 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       </div>
     ),
 
+    finances: (() => {
+      const isAdmin = myRole === "owner" || myRole === "admin";
+      const currencySymbol = "£"; // extend if needed
+
+      if (isAdmin) {
+        return (
+          <div className="space-y-4">
+            {/* Export CSV */}
+            <a
+              href={`/api/majors/groups/${groupId}/balances/export`}
+              className="block w-full py-2.5 rounded-full border border-emerald-700/60 text-sm font-semibold text-emerald-200 text-center hover:bg-emerald-900/30"
+            >
+              Export CSV
+            </a>
+
+            {/* All member balances */}
+            {balanceMembers.length === 0 ? (
+              <div className="text-sm text-emerald-100/60 text-center py-8">No financial activity yet.</div>
+            ) : (
+              <div className="space-y-2">
+                {balanceMembers.map((m) => {
+                  const isExpanded = expandedMember === m.profile_id;
+                  const balanceColor = m.balance > 0 ? "text-red-400" : m.balance < 0 ? "text-emerald-400" : "text-emerald-200/60";
+
+                  return (
+                    <div key={m.profile_id} className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/70 overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedMember(isExpanded ? null : m.profile_id)}
+                        className="w-full flex items-center gap-3 px-3 py-3 text-left"
+                      >
+                        {m.profile?.avatar_url ? (
+                          <img src={m.profile.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
+                        ) : (
+                          <div className="h-8 w-8 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
+                            {m.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
+                          </div>
+                        )}
+                        <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{m.profile?.name ?? "Unknown"}</span>
+                        <div className="text-right shrink-0">
+                          <div className={`text-sm font-bold ${balanceColor}`}>
+                            {m.balance > 0 ? `Owes ${currencySymbol}${m.balance.toFixed(2)}` :
+                             m.balance < 0 ? `Credit ${currencySymbol}${Math.abs(m.balance).toFixed(2)}` : "Settled"}
+                          </div>
+                          <div className="text-[10px] text-emerald-200/40">
+                            {currencySymbol}{m.total_charged.toFixed(2)} charged · {currencySymbol}{m.total_paid.toFixed(2)} paid
+                          </div>
+                        </div>
+                      </button>
+
+                      {isExpanded && (
+                        <div className="border-t border-emerald-900/50 px-3 py-3 space-y-2">
+                          {m.transactions.length === 0 ? (
+                            <div className="text-[11px] text-emerald-200/40">No transactions.</div>
+                          ) : (
+                            m.transactions.map((tx: any) => (
+                              <div key={tx.id} className="flex items-start justify-between gap-2 text-[11px]">
+                                <div>
+                                  <div className="text-emerald-100/80 capitalize">{tx.type.replace(/_/g, " ")}</div>
+                                  {tx.competition?.name && <div className="text-emerald-200/40">{tx.competition.name}</div>}
+                                  {tx.note && <div className="text-emerald-200/40 italic">{tx.note}</div>}
+                                  <div className="text-emerald-200/30">{new Date(tx.created_at).toLocaleDateString()}</div>
+                                </div>
+                                <span className={`font-semibold shrink-0 ${tx.amount > 0 ? "text-red-400" : "text-emerald-400"}`}>
+                                  {tx.amount > 0 ? "+" : ""}{currencySymbol}{Math.abs(tx.amount).toFixed(2)}
+                                </span>
+                              </div>
+                            ))
+                          )}
+                          {/* Record payment button */}
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const amtStr = prompt(`Record payment from ${m.profile?.name ?? "player"} (enter amount in £):`);
+                              if (!amtStr) return;
+                              const amt = parseFloat(amtStr);
+                              if (isNaN(amt) || amt <= 0) return;
+                              const session = await getViewerSession();
+                              if (!session) return;
+                              await fetch(`/api/majors/groups/${groupId}/transactions`, {
+                                method: "POST",
+                                headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+                                body: JSON.stringify({ profile_id: m.profile_id, type: "payment", amount: -amt }),
+                              });
+                              // Refresh
+                              const res = await fetch(`/api/majors/groups/${groupId}/balances`, { headers: { Authorization: `Bearer ${session.accessToken}` } });
+                              if (res.ok) { const j = await res.json(); setBalanceMembers(j.members ?? []); }
+                            }}
+                            className="w-full py-1.5 rounded-full border border-emerald-700/50 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-900/30"
+                          >
+                            + Record Payment
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Financial settings */}
+            <div className="rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-3 space-y-3">
+              <div className="text-[10px] uppercase tracking-wider text-emerald-200/50 font-semibold">Financial Settings</div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm text-emerald-50">Allow Credit Balances</div>
+                  <div className="text-[10px] text-emerald-200/50">Players can owe money before settling</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!group) return;
+                    const session = await getViewerSession();
+                    if (!session) return;
+                    const newVal = !((group as any).allow_credit ?? true);
+                    await fetch(`/api/majors/groups/${groupId}`, {
+                      method: "PATCH",
+                      headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+                      body: JSON.stringify({ allow_credit: newVal }),
+                    });
+                    setGroup((prev) => prev ? { ...prev, allow_credit: newVal } as any : prev);
+                  }}
+                  className={`relative w-10 h-6 rounded-full transition-colors ${
+                    ((group as any)?.allow_credit ?? true) ? "bg-emerald-600" : "bg-emerald-900/50 border border-emerald-900/70"
+                  }`}
+                >
+                  <span className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                    ((group as any)?.allow_credit ?? true) ? "translate-x-5" : "translate-x-1"
+                  }`} />
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // Player view — own balance only
+      return (
+        <div className="space-y-4">
+          {myBalance == null ? (
+            <div className="text-sm text-emerald-100/60 text-center py-8">Loading…</div>
+          ) : (
+            <>
+              <div className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/70 px-4 py-4 text-center space-y-1">
+                <div className="text-[10px] uppercase tracking-wider text-emerald-200/50">Your Balance</div>
+                <div className={`text-2xl font-extrabold ${myBalance.balance > 0 ? "text-red-400" : myBalance.balance < 0 ? "text-emerald-400" : "text-emerald-200/60"}`}>
+                  {myBalance.balance > 0 ? `Owes ${currencySymbol}${myBalance.balance.toFixed(2)}` :
+                   myBalance.balance < 0 ? `Credit ${currencySymbol}${Math.abs(myBalance.balance).toFixed(2)}` : "Settled"}
+                </div>
+                <div className="text-[11px] text-emerald-200/40">
+                  {currencySymbol}{myBalance.total_charged.toFixed(2)} charged · {currencySymbol}{myBalance.total_paid.toFixed(2)} paid
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                {myBalance.transactions.length === 0 ? (
+                  <div className="text-sm text-emerald-100/60 text-center py-4">No transactions yet.</div>
+                ) : (
+                  myBalance.transactions.map((tx: any) => (
+                    <div key={tx.id} className="flex items-start justify-between gap-2 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5">
+                      <div>
+                        <div className="text-sm text-emerald-100/80 capitalize">{tx.type.replace(/_/g, " ")}</div>
+                        {tx.competition?.name && <div className="text-[11px] text-emerald-200/50">{tx.competition.name}</div>}
+                        {tx.note && <div className="text-[10px] text-emerald-200/40 italic">{tx.note}</div>}
+                        <div className="text-[10px] text-emerald-200/30">{new Date(tx.created_at).toLocaleDateString()}</div>
+                      </div>
+                      <span className={`text-sm font-bold shrink-0 ${tx.amount > 0 ? "text-red-400" : "text-emerald-400"}`}>
+                        {tx.amount > 0 ? "+" : ""}{currencySymbol}{Math.abs(tx.amount).toFixed(2)}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      );
+    })(),
+
     settings: isAdminOrOwner ? (
       <div className="space-y-4">
         {/* Group Image */}
@@ -744,9 +956,13 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     ),
   };
 
-  const visibleTabs = isAdminOrOwner
-    ? TABS
-    : TABS.filter((t) => t.id !== "settings" && t.id !== "series");
+  const isMember = !!myRole;
+
+  const visibleTabs = TABS.filter((t) => {
+    if (t.id === "settings" || t.id === "series") return isAdminOrOwner;
+    if (t.id === "finances") return isMember; // all active members can see their own balance
+    return true;
+  });
 
   return (
     <div className="min-h-[100dvh] pb-[env(safe-area-inset-bottom)] max-w-sm mx-auto">

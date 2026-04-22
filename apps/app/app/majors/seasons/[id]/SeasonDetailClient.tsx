@@ -7,9 +7,10 @@ import type {
   SeriesSeasonWithSeries,
   CompetitionWithGroup,
   SeasonStandingsEntryWithProfile,
+  SeasonFinancialSummary,
 } from "@/lib/majors/types";
 
-type Tab = "schedule" | "standings";
+type Tab = "schedule" | "standings" | "finances";
 
 export default function SeasonDetailClient({ seasonId }: { seasonId: string }) {
   const router = useRouter();
@@ -17,6 +18,8 @@ export default function SeasonDetailClient({ seasonId }: { seasonId: string }) {
   const [season, setSeason] = useState<SeriesSeasonWithSeries | null>(null);
   const [competitions, setCompetitions] = useState<CompetitionWithGroup[]>([]);
   const [standings, setStandings] = useState<SeasonStandingsEntryWithProfile[]>([]);
+  const [financials, setFinancials] = useState<SeasonFinancialSummary | null>(null);
+  const [financialsError, setFinancialsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -51,6 +54,28 @@ export default function SeasonDetailClient({ seasonId }: { seasonId: string }) {
     })();
     return () => { cancelled = true; };
   }, [seasonId]);
+
+  useEffect(() => {
+    if (tab !== "finances") return;
+    let cancelled = false;
+    (async () => {
+      setFinancialsError(null);
+      const session = await getViewerSession();
+      if (!session || cancelled) return;
+      const res = await fetch(`/api/majors/seasons/${seasonId}/financials`, {
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+      });
+      if (cancelled) return;
+      if (res.ok) {
+        const j = await res.json();
+        setFinancials(j);
+      } else {
+        const j = await res.json().catch(() => ({}));
+        setFinancialsError(j.error ?? "Failed to load financials");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [tab, seasonId]);
 
   const statusColour = (status: string) =>
     status === "live"
@@ -118,7 +143,7 @@ export default function SeasonDetailClient({ seasonId }: { seasonId: string }) {
       {/* Tabs */}
       <div className="overflow-x-auto px-4 mb-5">
         <div className="flex gap-2">
-          {(["schedule", "standings"] as Tab[]).map((t) => (
+          {(["schedule", "standings", "finances"] as Tab[]).map((t) => (
             <button
               key={t}
               type="button"
@@ -202,6 +227,64 @@ export default function SeasonDetailClient({ seasonId }: { seasonId: string }) {
                   </div>
                 </div>
               ))
+            )}
+          </div>
+        )}
+
+        {tab === "finances" && (
+          <div className="space-y-4">
+            {financialsError ? (
+              <div className="rounded-xl border border-red-900/40 bg-red-950/30 p-4 text-sm text-red-300">{financialsError}</div>
+            ) : financials == null ? (
+              <div className="text-sm text-emerald-100/60 text-center py-8">Loading…</div>
+            ) : (
+              <>
+                {/* Summary cards */}
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { label: "Entry Fees", value: financials.total_entry_fees },
+                    { label: "Extras", value: financials.total_extras },
+                    { label: "Winnings Paid", value: financials.total_winnings_paid },
+                    { label: "Pot Balance", value: financials.pot_balance },
+                  ].map((item) => (
+                    <div key={item.label} className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5">
+                      <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider mb-0.5">{item.label}</div>
+                      <div className={`text-sm font-bold ${item.label === "Pot Balance" && item.value < 0 ? "text-red-400" : "text-[#f5e6b0]"}`}>
+                        £{item.value.toFixed(2)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Per-player breakdown */}
+                <div className="space-y-2">
+                  <div className="text-[10px] uppercase tracking-wider text-emerald-200/50 font-semibold px-1">Per Player</div>
+                  {financials.per_player.length === 0 ? (
+                    <div className="text-sm text-emerald-100/60 text-center py-4">No financial activity yet.</div>
+                  ) : (
+                    financials.per_player.map((p) => (
+                      <div key={p.profile_id} className="flex items-center gap-3 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5">
+                        {p.profile?.avatar_url ? (
+                          <img src={p.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
+                        ) : (
+                          <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
+                            {p.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-semibold text-emerald-50 truncate">{p.profile?.name ?? "—"}</div>
+                          <div className="text-[10px] text-emerald-200/40">
+                            £{p.charged.toFixed(2)} charged · £{p.winnings.toFixed(2)} won
+                          </div>
+                        </div>
+                        <div className={`text-sm font-bold shrink-0 ${p.net_balance > 0 ? "text-red-400" : p.net_balance < 0 ? "text-emerald-400" : "text-emerald-200/60"}`}>
+                          {p.net_balance > 0 ? `+£${p.net_balance.toFixed(2)}` : p.net_balance < 0 ? `-£${Math.abs(p.net_balance).toFixed(2)}` : "—"}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
             )}
           </div>
         )}

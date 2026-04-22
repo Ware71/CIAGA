@@ -229,6 +229,8 @@ export type MajorGroup = {
   join_code: string | null;
   created_at: string;
   updated_at: string;
+  // Upgrade additions
+  allow_credit: boolean;
 };
 
 export type MajorGroupMembership = {
@@ -246,6 +248,11 @@ export type MajorGroupMembershipWithProfile = MajorGroupMembership & {
     name: string | null;
     avatar_url: string | null;
   };
+};
+
+export type PrizeTableEntry = {
+  position: number;
+  pct: number;
 };
 
 export type CompetitionFull = {
@@ -289,6 +296,15 @@ export type CompetitionFull = {
   competition_structure: CompetitionStructure;
   scoring_basis: ScoringBasis | null;
   published_rules_version_id: string | null;
+  // Upgrade additions
+  allow_self_withdrawal: boolean;
+  tee_time_mode: "admin_assigned" | "self_select";
+  waitlist_enabled: boolean;
+  max_entries: number | null;
+  prize_table: PrizeTableEntry[] | null;
+  entry_fee_amount: number | null;
+  entry_fee_currency: string;
+  entry_fee_notes: string | null;
 };
 
 export type CompetitionWithGroup = CompetitionFull & {
@@ -577,5 +593,132 @@ export type MajorProfileData = {
     group: Pick<MajorGroup, "id" | "name" | "type" | "ciaga_tag">;
     role: MajorMembershipRole;
     standing: { position: number | null; season_points: number } | null;
+  }>;
+};
+
+// ─── Financial types ──────────────────────────────────────────────────────────
+
+// PrizeTableEntry defined above (before CompetitionFull) to avoid forward reference
+
+export type BalanceTransactionType =
+  | "entry_fee"
+  | "extra_charge"
+  | "payment"
+  | "winnings"
+  | "adjustment";
+
+export type CompetitionExtra = {
+  id: string;
+  competition_id: string;
+  name: string;
+  amount: number;
+  description: string | null;
+  created_by: string;
+  created_at: string;
+};
+
+export type GroupBalanceTransaction = {
+  id: string;
+  group_id: string;
+  profile_id: string;
+  competition_id: string | null;
+  competition_extra_id: string | null;
+  type: BalanceTransactionType;
+  /** Positive = charged to player, negative = credit to player */
+  amount: number;
+  note: string | null;
+  recorded_by: string | null;
+  created_at: string;
+};
+
+export type GroupBalanceTransactionWithDetails = GroupBalanceTransaction & {
+  competition?: Pick<CompetitionFull, "id" | "name"> | null;
+  extra?: Pick<CompetitionExtra, "id" | "name"> | null;
+  recorded_by_profile?: { id: string; name: string | null } | null;
+};
+
+export type CompetitionWinning = {
+  id: string;
+  competition_id: string;
+  profile_id: string;
+  position: number | null;
+  amount: number;
+  note: string | null;
+  recorded_by: string;
+  created_at: string;
+};
+
+export type CompetitionWinningWithProfile = CompetitionWinning & {
+  profile: { id: string; name: string | null; avatar_url: string | null };
+};
+
+/** Per-member balance summary returned by GET /api/majors/groups/[id]/balances */
+export type MemberBalanceSummary = {
+  profile_id: string;
+  profile: { id: string; name: string | null; avatar_url: string | null };
+  total_charged: number;
+  total_paid: number;
+  /** Positive = owes money, negative = in credit */
+  balance: number;
+  transactions: GroupBalanceTransactionWithDetails[];
+};
+
+/** Proposed winnings from prize table auto-compute */
+export type ProposedWinning = {
+  profile_id: string;
+  profile: { id: string; name: string | null; avatar_url: string | null };
+  position: number;
+  amount: number;
+};
+
+// ─── Waitlist ─────────────────────────────────────────────────────────────────
+
+export type WaitlistStatus = "waiting" | "offered" | "expired" | "joined";
+
+export type CompetitionWaitlistEntry = {
+  id: string;
+  competition_id: string;
+  profile_id: string;
+  status: WaitlistStatus;
+  offered_at: string | null;
+  joined_at: string | null;
+  created_at: string;
+};
+
+export type CompetitionWaitlistEntryWithProfile = CompetitionWaitlistEntry & {
+  profile: { id: string; name: string | null; avatar_url: string | null };
+};
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+export type NotificationType =
+  | "tee_time_assigned"
+  | "tee_time_reminder"
+  | "waitlist_offered";
+
+export type UserNotification = {
+  id: string;
+  profile_id: string;
+  type: NotificationType | string;
+  payload: Record<string, unknown>;
+  read: boolean;
+  created_at: string;
+};
+
+// ─── Season financials ────────────────────────────────────────────────────────
+
+export type SeasonFinancialSummary = {
+  season_id: string;
+  total_entry_fees: number;
+  total_extras: number;
+  total_winnings_paid: number;
+  pot_balance: number; // total_entry_fees + total_extras - total_winnings_paid
+  per_player: Array<{
+    profile_id: string;
+    profile: { id: string; name: string | null; avatar_url: string | null };
+    charged: number;
+    paid: number;
+    winnings: number;
+    net_balance: number;
   }>;
 };

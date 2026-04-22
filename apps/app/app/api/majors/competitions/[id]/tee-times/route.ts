@@ -112,7 +112,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       tee_time: string;
       group_number?: number;
       notes?: string;
-      players?: Array<{ profile_id?: string; is_guest?: boolean; display_name?: string }>;
+      players?: Array<{ profile_id?: string; is_guest?: boolean; display_name?: string; charge_to?: string | null }>;
     };
 
     if (!tee_time) return NextResponse.json({ error: "tee_time is required" }, { status: 400 });
@@ -184,6 +184,48 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .single();
 
     if (ttErr) throw ttErr;
+
+    // Back-link the round to this tee time so the rounds page can identify it
+    await supabaseAdmin
+      .from("rounds")
+      .update({ competition_tee_time_id: teeTimeRow.id })
+      .eq("id", round.id);
+
+    // Charge guest entry fees to host players if requested
+    if (competition.group_id && (competition as any).entry_fee_amount > 0) {
+      for (const player of playerList) {
+        if (player.is_guest && player.charge_to) {
+          await supabaseAdmin.from("group_balance_transactions").insert({
+            group_id: competition.group_id,
+            profile_id: player.charge_to,
+            competition_id: id,
+            type: "extra_charge",
+            amount: (competition as any).entry_fee_amount,
+            note: `Guest entry fee — ${player.display_name ?? "Guest"}`,
+            recorded_by: profileId,
+          });
+        }
+      }
+    }
+
+    // Send tee_time_assigned notifications to all non-guest participants
+    const notifInserts = participantInserts
+      .filter((p) => p.profile_id && !p.is_guest)
+      .map((p) => ({
+        profile_id: p.profile_id,
+        type: "tee_time_assigned",
+        payload: {
+          competition_id: id,
+          competition_name: competition.name,
+          tee_time,
+          group_number: group_number ?? null,
+          round_id: round.id,
+        },
+      }));
+
+    if (notifInserts.length > 0) {
+      await supabaseAdmin.from("user_notifications").insert(notifInserts);
+    }
 
     return NextResponse.json({ tee_time: teeTimeRow }, { status: 201 });
   } catch (e: any) {

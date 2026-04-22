@@ -12,15 +12,19 @@ import type {
   MatchplayStage,
   MatchplayFixture,
   MatchplayLeagueTableEntryWithProfile,
+  CompetitionWinningWithProfile,
+  ProposedWinning,
+  CompetitionWaitlistEntry,
 } from "@/lib/majors/types";
 
-type Tab = "overview" | "leaderboard" | "tee-times" | "rules" | "results" | "fixtures" | "bracket" | "league-table";
+type Tab = "overview" | "leaderboard" | "tee-times" | "rules" | "results" | "fixtures" | "bracket" | "league-table" | "winnings";
 
 const STROKE_TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "leaderboard", label: "Leaderboard" },
   { id: "tee-times", label: "Tee Times" },
   { id: "rules", label: "Rules" },
+  { id: "winnings", label: "Winnings" },
   { id: "results", label: "Results" },
 ];
 
@@ -152,11 +156,15 @@ type GroupMember = { profile_id: string; profile: { name: string | null; avatar_
 function AddTeeTimeSheet({
   competitionId,
   groupMembers,
+  entryFeeAmount,
+  entryFeeCurrency,
   onClose,
   onCreated,
 }: {
   competitionId: string;
   groupMembers: GroupMember[];
+  entryFeeAmount: number | null;
+  entryFeeCurrency: string;
   onClose: () => void;
   onCreated: () => void;
 }) {
@@ -166,6 +174,7 @@ function AddTeeTimeSheet({
   const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
   const [guestName, setGuestName] = useState("");
   const [guests, setGuests] = useState<string[]>([]);
+  const [guestChargeTo, setGuestChargeTo] = useState<Record<string, string>>({}); // guestName → profile_id of host to charge
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -198,7 +207,7 @@ function AddTeeTimeSheet({
       if (!session) return;
       const players = [
         ...selectedPlayers.map((pid) => ({ profile_id: pid })),
-        ...guests.map((name) => ({ is_guest: true, display_name: name })),
+        ...guests.map((name) => ({ is_guest: true, display_name: name, charge_to: guestChargeTo[name] ?? null })),
       ];
       const res = await fetch(`/api/majors/competitions/${competitionId}/tee-times`, {
         method: "POST",
@@ -329,9 +338,30 @@ function AddTeeTimeSheet({
               </button>
             </div>
             {guests.map((g) => (
-              <div key={g} className="flex items-center justify-between rounded-xl border border-emerald-900/40 bg-emerald-900/20 px-3 py-1.5">
-                <span className="text-sm text-emerald-100">{g} <span className="text-[10px] text-emerald-200/50">guest</span></span>
-                <button type="button" onClick={() => removeGuest(g)} className="text-emerald-200/50 text-xs hover:text-red-400">✕</button>
+              <div key={g} className="space-y-1">
+                <div className="flex items-center justify-between rounded-xl border border-emerald-900/40 bg-emerald-900/20 px-3 py-1.5">
+                  <span className="text-sm text-emerald-100">{g} <span className="text-[10px] text-emerald-200/50">guest</span></span>
+                  <button type="button" onClick={() => removeGuest(g)} className="text-emerald-200/50 text-xs hover:text-red-400">✕</button>
+                </div>
+                {/* Guest fee — charge to a host player */}
+                {entryFeeAmount && entryFeeAmount > 0 && selectedPlayers.length > 0 && (
+                  <div className="flex items-center gap-2 px-1">
+                    <span className="text-[10px] text-emerald-200/50">
+                      Charge {entryFeeCurrency === "GBP" ? "£" : ""}{entryFeeAmount.toFixed(2)} guest fee to:
+                    </span>
+                    <select
+                      value={guestChargeTo[g] ?? ""}
+                      onChange={(e) => setGuestChargeTo((prev) => ({ ...prev, [g]: e.target.value }))}
+                      className="flex-1 rounded-lg border border-emerald-900/50 bg-[#0b3b21]/60 px-2 py-1 text-[10px] text-emerald-50"
+                    >
+                      <option value="">— none —</option>
+                      {selectedPlayers.map((pid) => {
+                        const m = groupMembers.find((m) => m.profile_id === pid);
+                        return <option key={pid} value={pid}>{m?.profile?.name ?? pid}</option>;
+                      })}
+                    </select>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -543,6 +573,13 @@ export default function CompetitionDetailClient({ competitionId }: { competition
   const [matchplayStages, setMatchplayStages] = useState<MatchplayStage[]>([]);
   const [matchplayFixtures, setMatchplayFixtures] = useState<MatchplayFixture[]>([]);
   const [leagueTable, setLeagueTable] = useState<MatchplayLeagueTableEntryWithProfile[]>([]);
+  const [winnings, setWinnings] = useState<CompetitionWinningWithProfile[]>([]);
+  const [waitlistEntry, setWaitlistEntry] = useState<CompetitionWaitlistEntry | null>(null);
+  const [joiningWaitlist, setJoiningWaitlist] = useState(false);
+  const [showWithdrawConfirm, setShowWithdrawConfirm] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
+  const [proposedWinnings, setProposedWinnings] = useState<ProposedWinning[] | null>(null);
+  const [proposingWinnings, setProposingWinnings] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -554,12 +591,13 @@ export default function CompetitionDetailClient({ competitionId }: { competition
         setMyProfileId(session.profileId);
         const headers = { Authorization: `Bearer ${session.accessToken}` };
 
-        const [compRes, lbRes, roundsRes, teeTimesRes, participantsRes] = await Promise.all([
+        const [compRes, lbRes, roundsRes, teeTimesRes, participantsRes, winningsRes] = await Promise.all([
           fetch(`/api/majors/competitions/${competitionId}`, { headers }),
           fetch(`/api/majors/competitions/${competitionId}/leaderboard`, { headers }),
           fetch(`/api/rounds?status=finished&limit=20`, { headers }),
           fetch(`/api/majors/competitions/${competitionId}/tee-times`, { headers }),
           fetch(`/api/majors/competitions/${competitionId}/participants`, { headers }),
+          fetch(`/api/majors/competitions/${competitionId}/winnings`, { headers }),
         ]);
 
         if (cancelled) return;
@@ -623,7 +661,23 @@ export default function CompetitionDetailClient({ competitionId }: { competition
           const j = await participantsRes.json();
           const fetched: Participant[] = j.participants ?? [];
           setParticipants(fetched);
-          setIsEntered(fetched.some((p) => p.profile_id === session.profileId));
+          const entered = fetched.some((p) => p.profile_id === session.profileId);
+          setIsEntered(entered);
+
+          // If not entered, check waitlist status
+          if (!entered) {
+            const wlRes = await fetch(`/api/majors/competitions/${competitionId}/waitlist`, { headers });
+            if (!cancelled && wlRes.ok) {
+              const wj = await wlRes.json();
+              const myEntry = (wj.waitlist ?? []).find((w: any) => w.profile_id === session.profileId);
+              setWaitlistEntry(myEntry ?? null);
+            }
+          }
+        }
+
+        if (winningsRes.ok) {
+          const j = await winningsRes.json();
+          setWinnings(j.winnings ?? []);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -681,6 +735,119 @@ export default function CompetitionDetailClient({ competitionId }: { competition
       setLeaderboard(j.rows ?? []);
       setIsEntered(true);
     }
+  };
+
+  const handleWithdraw = async () => {
+    setWithdrawing(true);
+    try {
+      const session = await getViewerSession();
+      if (!session) return;
+      const res = await fetch(`/api/majors/competitions/${competitionId}/withdraw`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+      });
+      if (res.ok) {
+        setIsEntered(false);
+        setShowWithdrawConfirm(false);
+        // Re-fetch participants and tee times
+        const [pRes, ttRes, wlRes] = await Promise.all([
+          fetch(`/api/majors/competitions/${competitionId}/participants`, { headers: { Authorization: `Bearer ${session.accessToken}` } }),
+          fetch(`/api/majors/competitions/${competitionId}/tee-times`, { headers: { Authorization: `Bearer ${session.accessToken}` } }),
+          fetch(`/api/majors/competitions/${competitionId}/waitlist`, { headers: { Authorization: `Bearer ${session.accessToken}` } }),
+        ]);
+        if (pRes.ok) { const j = await pRes.json(); setParticipants(j.participants ?? []); }
+        if (ttRes.ok) { const j = await ttRes.json(); setTeeTimes(j.tee_times ?? []); }
+        if (wlRes.ok) { const j = await wlRes.json(); setWaitlistEntry((j.waitlist ?? []).find((w: any) => w.profile_id === session.profileId) ?? null); }
+      }
+    } finally {
+      setWithdrawing(false);
+    }
+  };
+
+  const handleJoinWaitlist = async () => {
+    setJoiningWaitlist(true);
+    try {
+      const session = await getViewerSession();
+      if (!session) return;
+      const res = await fetch(`/api/majors/competitions/${competitionId}/waitlist`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+      });
+      if (res.ok) {
+        const j = await res.json();
+        setWaitlistEntry(j.entry ?? null);
+      }
+    } finally {
+      setJoiningWaitlist(false);
+    }
+  };
+
+  const handleLeaveWaitlist = async () => {
+    try {
+      const session = await getViewerSession();
+      if (!session) return;
+      await fetch(`/api/majors/competitions/${competitionId}/waitlist`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+      });
+      setWaitlistEntry(null);
+    } catch {}
+  };
+
+  const handleProposeWinnings = async () => {
+    setProposingWinnings(true);
+    try {
+      const session = await getViewerSession();
+      if (!session) return;
+      const res = await fetch(`/api/majors/competitions/${competitionId}/winnings/propose`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+      });
+      if (res.ok) {
+        const j = await res.json();
+        setProposedWinnings(j.proposed ?? []);
+      }
+    } finally {
+      setProposingWinnings(false);
+    }
+  };
+
+  const handleConfirmWinnings = async () => {
+    if (!proposedWinnings) return;
+    const session = await getViewerSession();
+    if (!session) return;
+    for (const pw of proposedWinnings) {
+      await fetch(`/api/majors/competitions/${competitionId}/winnings`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ profile_id: pw.profile_id, amount: pw.amount, position: pw.position }),
+      });
+    }
+    setProposedWinnings(null);
+    const wRes = await fetch(`/api/majors/competitions/${competitionId}/winnings`, {
+      headers: { Authorization: `Bearer ${session.accessToken}` },
+    });
+    if (wRes.ok) { const j = await wRes.json(); setWinnings(j.winnings ?? []); }
+  };
+
+  const handleJoinTeeTimeSlot = async (teeTimeId: string) => {
+    const session = await getViewerSession();
+    if (!session) return;
+    await fetch(`/api/majors/competitions/${competitionId}/tee-times/${teeTimeId}/join`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${session.accessToken}` },
+    });
+    refreshTeeTimes();
+  };
+
+  const handleLeaveTeeTimeSlot = async (teeTimeId: string) => {
+    const session = await getViewerSession();
+    if (!session) return;
+    await fetch(`/api/majors/competitions/${competitionId}/tee-times/${teeTimeId}/leave`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${session.accessToken}` },
+    });
+    refreshTeeTimes();
   };
 
   const handleDeleteTeeTime = async (teeTimeId: string) => {
@@ -778,6 +945,17 @@ export default function CompetitionDetailClient({ competitionId }: { competition
           </div>
         )}
 
+        {/* Entry fee */}
+        {(competition as any).entry_fee_amount > 0 && (
+          <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 flex items-center justify-between">
+            <span className="text-[12px] text-emerald-200/60">Entry Fee</span>
+            <span className="text-sm font-bold text-[#f5e6b0]">
+              {((competition as any).entry_fee_currency ?? "GBP") === "GBP" ? "£" : ""}
+              {((competition as any).entry_fee_amount as number).toFixed(2)}
+            </span>
+          </div>
+        )}
+
         {/* Entry / Submit CTAs */}
         {!isEntered && entryOpen && (
           <button
@@ -789,19 +967,63 @@ export default function CompetitionDetailClient({ competitionId }: { competition
             {entering ? "Entering…" : "Enter Competition"}
           </button>
         )}
-        {isEntered && (
-          <div className="flex gap-3">
-            <div className="flex-1 py-3 rounded-full border border-emerald-700/50 text-sm font-semibold text-emerald-400 text-center">
-              ✓ Entered
-            </div>
-            {entryOpen && (
-              <button
-                type="button"
-                onClick={() => setShowSubmitSheet(true)}
-                className="flex-1 py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600"
-              >
-                Submit Round
+
+        {/* Waitlist CTA */}
+        {!isEntered && !entryOpen && (competition as any).waitlist_enabled && (
+          waitlistEntry ? (
+            <div className="space-y-2">
+              <div className="rounded-xl border border-amber-800/40 bg-amber-900/20 px-3 py-2.5 text-center">
+                <div className="text-[11px] text-amber-300 font-semibold">
+                  {waitlistEntry.status === "offered" ? "A spot has been offered to you!" : "You're on the waitlist"}
+                </div>
+                {waitlistEntry.status === "offered" && (
+                  <button type="button" onClick={handleEnter} disabled={entering}
+                    className="mt-2 w-full py-2 rounded-full bg-emerald-700 text-sm font-semibold text-white disabled:opacity-50">
+                    {entering ? "Entering…" : "Accept Spot"}
+                  </button>
+                )}
+              </div>
+              <button type="button" onClick={handleLeaveWaitlist}
+                className="w-full py-2 rounded-full border border-red-900/50 text-sm text-red-400/70 hover:text-red-400">
+                Leave Waitlist
               </button>
+            </div>
+          ) : (
+            <button type="button" onClick={handleJoinWaitlist} disabled={joiningWaitlist}
+              className="w-full py-3 rounded-full border border-amber-700/60 text-sm font-semibold text-amber-200 hover:bg-amber-900/20 disabled:opacity-50">
+              {joiningWaitlist ? "Joining…" : "Join Waitlist"}
+            </button>
+          )
+        )}
+
+        {isEntered && (
+          <div className="space-y-2">
+            <div className="flex gap-3">
+              <div className="flex-1 py-3 rounded-full border border-emerald-700/50 text-sm font-semibold text-emerald-400 text-center">
+                ✓ Entered
+              </div>
+              {entryOpen && (
+                <button
+                  type="button"
+                  onClick={() => setShowSubmitSheet(true)}
+                  className="flex-1 py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600"
+                >
+                  Submit Round
+                </button>
+              )}
+            </div>
+            {/* Withdraw */}
+            {competition.majors_status !== "live" && competition.majors_status !== "completed" && (
+              (competition as any).allow_self_withdrawal !== false ? (
+                <button type="button" onClick={() => setShowWithdrawConfirm(true)}
+                  className="w-full py-2 rounded-full border border-red-900/50 text-sm text-red-400/70 hover:text-red-400 transition-colors">
+                  Withdraw from Competition
+                </button>
+              ) : (
+                <div className="text-center text-[11px] text-emerald-200/40 py-1">
+                  Contact the organiser to withdraw
+                </div>
+              )
             )}
           </div>
         )}
@@ -898,43 +1120,82 @@ export default function CompetitionDetailClient({ competitionId }: { competition
       );
     })(),
 
-    "tee-times": (
-      <div className="space-y-3">
-        {isAdminOrOwner && (
-          <button
-            type="button"
-            onClick={() => setShowAddTeeTime(true)}
-            className="w-full py-2.5 rounded-full border border-emerald-700/60 text-sm font-semibold text-emerald-200 hover:bg-emerald-900/30"
-          >
-            + Add Tee Time
-          </button>
-        )}
-        {teeTimes.length === 0 ? (
-          <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 p-5 text-center space-y-1">
-            <div className="text-sm text-emerald-100/60">
-              {isAdminOrOwner
-                ? "No tee times set up yet."
-                : isEntered
-                ? "Your tee time hasn't been set yet."
-                : "No tee times have been scheduled yet."}
+    "tee-times": (() => {
+      const isSelfSelect = (competition as any)?.tee_time_mode === "self_select";
+      // Which tee time round_id does this player belong to?
+      const myTeeTimeId = isSelfSelect && myProfileId
+        ? teeTimes.find((tt) =>
+            tt.round?.participants?.some((p) => p.profile_id === myProfileId)
+          )?.id ?? null
+        : null;
+
+      return (
+        <div className="space-y-3">
+          {isSelfSelect && (
+            <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2 text-[11px] text-emerald-200/60">
+              Players can choose their own tee time slot.
             </div>
-            {!isAdminOrOwner && isEntered && (
-              <div className="text-[11px] text-emerald-100/40">Check back soon.</div>
-            )}
-          </div>
-        ) : (
-          teeTimes.map((tt) => (
-            <TeeTimeCard
-              key={tt.id}
-              tt={tt}
-              isAdmin={isAdminOrOwner}
-              onDelete={() => handleDeleteTeeTime(tt.id)}
-              onViewScorecard={tt.round?.id ? () => router.push(`/round/${tt.round!.id}`) : undefined}
-            />
-          ))
-        )}
-      </div>
-    ),
+          )}
+          {isAdminOrOwner && (
+            <button
+              type="button"
+              onClick={() => setShowAddTeeTime(true)}
+              className="w-full py-2.5 rounded-full border border-emerald-700/60 text-sm font-semibold text-emerald-200 hover:bg-emerald-900/30"
+            >
+              + {isSelfSelect ? "Add Slot" : "Add Tee Time"}
+            </button>
+          )}
+          {teeTimes.length === 0 ? (
+            <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 p-5 text-center space-y-1">
+              <div className="text-sm text-emerald-100/60">
+                {isAdminOrOwner
+                  ? "No tee times set up yet."
+                  : isEntered
+                  ? isSelfSelect ? "No slots available yet. Check back soon." : "Your tee time hasn't been set yet."
+                  : "No tee times have been scheduled yet."}
+              </div>
+            </div>
+          ) : (
+            teeTimes.map((tt) => {
+              const participantCount = tt.round?.participants?.length ?? 0;
+              const hasSlot = tt.round?.participants?.some((p) => p.profile_id === myProfileId) ?? false;
+              const isMySlot = hasSlot;
+              const canJoin = isSelfSelect && isEntered && myProfileId && !myTeeTimeId && participantCount < 4;
+
+              return (
+                <div key={tt.id} className="space-y-2">
+                  <TeeTimeCard
+                    tt={tt}
+                    isAdmin={isAdminOrOwner}
+                    onDelete={() => handleDeleteTeeTime(tt.id)}
+                    onViewScorecard={tt.round?.id ? () => router.push(`/round/${tt.round!.id}`) : undefined}
+                  />
+                  {isSelfSelect && (
+                    isMySlot ? (
+                      <button
+                        type="button"
+                        onClick={() => handleLeaveTeeTimeSlot(tt.id)}
+                        className="w-full py-2 rounded-full border border-red-900/40 text-[11px] text-red-400/70 hover:text-red-400"
+                      >
+                        Leave this slot
+                      </button>
+                    ) : canJoin ? (
+                      <button
+                        type="button"
+                        onClick={() => handleJoinTeeTimeSlot(tt.id)}
+                        className="w-full py-2 rounded-full bg-emerald-700/80 text-[11px] font-semibold text-white hover:bg-emerald-700"
+                      >
+                        Join this slot
+                      </button>
+                    ) : null
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      );
+    })(),
 
     rules: competition ? (
       <div className="space-y-4 text-[13px] text-emerald-100/75 leading-relaxed">
@@ -1040,6 +1301,69 @@ export default function CompetitionDetailClient({ competitionId }: { competition
               </div>
             ))}
           </>
+        )}
+      </div>
+    ),
+
+    winnings: (
+      <div className="space-y-4">
+        {/* Admin: propose / confirm winnings */}
+        {isAdminOrOwner && competition?.majors_status === "completed" && (competition as any).prize_table && (
+          <div className="space-y-2">
+            {!proposedWinnings ? (
+              <button
+                type="button"
+                onClick={handleProposeWinnings}
+                disabled={proposingWinnings}
+                className="w-full py-2.5 rounded-full border border-amber-700/60 text-sm font-semibold text-amber-200 hover:bg-amber-900/20 disabled:opacity-50"
+              >
+                {proposingWinnings ? "Calculating…" : "Propose Winnings from Prize Table"}
+              </button>
+            ) : (
+              <div className="rounded-xl border border-amber-800/40 bg-amber-900/20 px-3 py-3 space-y-3">
+                <div className="text-[11px] text-amber-300 font-semibold uppercase tracking-wide">Proposed Payouts</div>
+                {proposedWinnings.map((pw) => (
+                  <div key={pw.profile_id} className="flex items-center gap-3">
+                    <PositionBadge position={pw.position} />
+                    <span className="flex-1 text-sm text-emerald-50">{pw.profile?.name ?? "?"}</span>
+                    <span className="text-sm font-bold text-[#f5e6b0]">£{pw.amount.toFixed(2)}</span>
+                  </div>
+                ))}
+                <div className="flex gap-2 pt-1">
+                  <button type="button" onClick={() => setProposedWinnings(null)}
+                    className="flex-1 py-2 rounded-full border border-emerald-900/60 text-[11px] text-emerald-200/60">
+                    Cancel
+                  </button>
+                  <button type="button" onClick={handleConfirmWinnings}
+                    className="flex-1 py-2 rounded-full bg-emerald-700 text-[11px] font-semibold text-white">
+                    Confirm & Record
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Winnings list */}
+        {winnings.length === 0 ? (
+          <div className="text-sm text-emerald-100/60 text-center py-8">No winnings recorded yet.</div>
+        ) : (
+          <div className="space-y-2">
+            {winnings.map((w) => (
+              <div key={w.id} className="flex items-center gap-3 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5">
+                <PositionBadge position={w.position ?? null} />
+                {w.profile?.avatar_url ? (
+                  <img src={w.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
+                ) : (
+                  <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
+                    {w.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
+                  </div>
+                )}
+                <span className="flex-1 text-sm font-semibold text-emerald-50">{w.profile?.name ?? "Unknown"}</span>
+                <span className="text-sm font-bold text-[#f5e6b0]">£{w.amount.toFixed(2)}</span>
+              </div>
+            ))}
+          </div>
         )}
       </div>
     ),
@@ -1171,9 +1495,44 @@ export default function CompetitionDetailClient({ competitionId }: { competition
         <AddTeeTimeSheet
           competitionId={competitionId}
           groupMembers={groupMembers}
+          entryFeeAmount={(competition as any).entry_fee_amount ?? null}
+          entryFeeCurrency={(competition as any).entry_fee_currency ?? "GBP"}
           onClose={() => setShowAddTeeTime(false)}
           onCreated={refreshTeeTimes}
         />
+      )}
+
+      {/* Withdraw confirmation sheet */}
+      {showWithdrawConfirm && (
+        <div className="fixed inset-0 z-50">
+          <button className="absolute inset-0 bg-black/60" onClick={() => setShowWithdrawConfirm(false)} aria-label="Close" />
+          <div className="absolute left-0 right-0 bottom-0 px-3 pb-[env(safe-area-inset-bottom)]">
+            <div className="mx-auto w-full max-w-[520px] rounded-t-3xl border border-red-900/60 bg-[#1a0a0a] shadow-2xl overflow-hidden">
+              <div className="p-4 border-b border-red-900/40">
+                <div className="text-sm font-semibold text-red-100">Withdraw from {competition.name}?</div>
+                <div className="text-[11px] text-red-200/60 mt-1">
+                  This will remove your entry and any assigned tee time. This action cannot be undone.
+                </div>
+              </div>
+              <div className="p-4 flex gap-2">
+                <button
+                  className="flex-1 rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/40 text-emerald-50 py-3 text-sm hover:bg-emerald-900/20"
+                  onClick={() => setShowWithdrawConfirm(false)}
+                  disabled={withdrawing}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="flex-1 rounded-2xl bg-red-600 text-white py-3 text-sm font-semibold hover:bg-red-700 disabled:opacity-60"
+                  onClick={handleWithdraw}
+                  disabled={withdrawing}
+                >
+                  {withdrawing ? "Withdrawing…" : "Withdraw"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

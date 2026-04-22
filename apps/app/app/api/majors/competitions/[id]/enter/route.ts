@@ -61,6 +61,52 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const { data: hiData } = await supabaseAdmin.rpc("ciaga_current_true_hi", { p_profile_id: profileId });
     const handicapIndex = typeof hiData === "number" ? hiData : 0;
 
+    // Check max_entries cap
+    const maxEntries = (competition as any).max_entries as number | null;
+    if (maxEntries != null) {
+      const { count } = await supabaseAdmin
+        .from("competition_entries")
+        .select("id", { count: "exact", head: true })
+        .eq("competition_id", id);
+
+      if ((count ?? 0) >= maxEntries) {
+        // Competition is full — direct to waitlist if enabled
+        if ((competition as any).waitlist_enabled) {
+          return NextResponse.json(
+            { error: "This competition is full. You can join the waitlist instead.", full: true, waitlist_available: true },
+            { status: 409 }
+          );
+        }
+        return NextResponse.json({ error: "This competition is full." }, { status: 409 });
+      }
+    }
+
+    // Check allow_credit policy: if group disallows credit, player must have zero or positive balance
+    if (competition.group_id) {
+      const { data: group } = await supabaseAdmin
+        .from("major_groups")
+        .select("allow_credit")
+        .eq("id", competition.group_id)
+        .maybeSingle();
+
+      if (group && (group as any).allow_credit === false) {
+        // Calculate current balance
+        const { data: txRows } = await supabaseAdmin
+          .from("group_balance_transactions")
+          .select("amount")
+          .eq("group_id", competition.group_id)
+          .eq("profile_id", profileId);
+
+        const balance = (txRows ?? []).reduce((s: number, r: any) => s + r.amount, 0);
+        if (balance > 0) {
+          return NextResponse.json(
+            { error: `You have an outstanding balance of £${balance.toFixed(2)}. Please settle your account before entering.` },
+            { status: 402 }
+          );
+        }
+      }
+    }
+
     const { data: entry, error } = await supabaseAdmin
       .from("competition_entries")
       .insert({
@@ -74,6 +120,30 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .single();
 
     if (error) throw error;
+
+    // Auto-charge entry fee if one is set
+    const entryFee = (competition as any).entry_fee_amount as number | null;
+    if (entryFee && entryFee > 0 && competition.group_id) {
+      await supabaseAdmin.from("group_balance_transactions").insert({
+        group_id: competition.group_id,
+        profile_id: profileId,
+        competition_id: id,
+        type: "entry_fee",
+        amount: entryFee, // positive = charged to player
+        note: `Entry fee — ${competition.name}`,
+      });
+    }
+
+    // Mark as joined if player was on the waitlist with 'offered' status
+    if ((competition as any).waitlist_enabled) {
+      await supabaseAdmin
+        .from("competition_waitlist")
+        .update({ status: "joined", joined_at: new Date().toISOString() })
+        .eq("competition_id", id)
+        .eq("profile_id", profileId)
+        .eq("status", "offered");
+    }
+
     return NextResponse.json({ entry }, { status: 201 });
   } catch (e: any) {
     const msg = e?.message ?? "Unknown error";

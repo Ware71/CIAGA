@@ -53,7 +53,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       "competition_date", "entry_window_start", "entry_window_end", "rules_text",
       "scoring_model", "points_model", "points_table", "eligibility_rules", "handicap_rules",
       "num_rounds", "round_rules", "time_rules", "membership_rules", "standings_contribution",
-      "majors_status"];
+      "majors_status",
+      // Upgrade additions
+      "allow_self_withdrawal", "tee_time_mode", "waitlist_enabled", "max_entries",
+      "prize_table", "entry_fee_amount", "entry_fee_currency", "entry_fee_notes"];
     const updates: Record<string, unknown> = {};
     for (const field of allowedFields) {
       if (field in body) updates[field] = body[field];

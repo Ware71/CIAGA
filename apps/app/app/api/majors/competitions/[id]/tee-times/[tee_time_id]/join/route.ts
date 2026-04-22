@@ -1,0 +1,112 @@
+import { NextResponse } from "next/server";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
+import { getCompetitionById } from "@/lib/majors/queries";
+
+export const runtime = "nodejs";
+
+// POST /api/majors/competitions/[id]/tee-times/[tee_time_id]/join
+// Allows an entered player to claim an available slot when tee_time_mode = 'self_select'.
+export async function POST(
+  req: Request,
+  { params }: { params: Promise<{ id: string; tee_time_id: string }> }
+) {
+  try {
+    const { profileId } = await getAuthedProfileOrThrow(req);
+    const { id, tee_time_id } = await params;
+
+    const competition = await getCompetitionById(id);
+    if (!competition) return NextResponse.json({ error: "Competition not found" }, { status: 404 });
+
+    if ((competition as any).tee_time_mode !== "self_select") {
+      return NextResponse.json(
+        { error: "Tee times for this competition are assigned by the organiser." },
+        { status: 403 }
+      );
+    }
+
+    // Confirm the player is entered
+    const { data: entry } = await supabaseAdmin
+      .from("competition_entries")
+      .select("id")
+      .eq("competition_id", id)
+      .eq("profile_id", profileId)
+      .maybeSingle();
+
+    if (!entry) {
+      return NextResponse.json({ error: "You must be entered in this competition to join a tee time." }, { status: 403 });
+    }
+
+    // Fetch the tee time
+    const { data: teeTime } = await supabaseAdmin
+      .from("competition_tee_times")
+      .select("id, round_id, competition_id")
+      .eq("id", tee_time_id)
+      .eq("competition_id", id)
+      .maybeSingle();
+
+    if (!teeTime) return NextResponse.json({ error: "Tee time not found." }, { status: 404 });
+    if (!teeTime.round_id) return NextResponse.json({ error: "Tee time has no linked round." }, { status: 400 });
+
+    // Ensure player is not already in another tee time for this competition
+    const { data: allTeeTimes } = await supabaseAdmin
+      .from("competition_tee_times")
+      .select("round_id")
+      .eq("competition_id", id);
+
+    const allRoundIds = (allTeeTimes ?? []).map((t: any) => t.round_id).filter(Boolean) as string[];
+
+    if (allRoundIds.length > 0) {
+      const { data: existing } = await supabaseAdmin
+        .from("round_participants")
+        .select("round_id")
+        .eq("profile_id", profileId)
+        .in("round_id", allRoundIds)
+        .maybeSingle();
+
+      if (existing) {
+        return NextResponse.json({ error: "You are already in a tee time for this competition." }, { status: 409 });
+      }
+    }
+
+    // Check the slot isn't full (max 4 players)
+    const { count } = await supabaseAdmin
+      .from("round_participants")
+      .select("id", { count: "exact", head: true })
+      .eq("round_id", teeTime.round_id);
+
+    if ((count ?? 0) >= 4) {
+      return NextResponse.json({ error: "This tee time is full." }, { status: 409 });
+    }
+
+    // Add player to round_participants
+    const { error: insertErr } = await supabaseAdmin
+      .from("round_participants")
+      .insert({
+        round_id: teeTime.round_id,
+        profile_id: profileId,
+        role: "player",
+        is_guest: false,
+      });
+
+    if (insertErr) throw insertErr;
+
+    // Send notification confirming the slot
+    await supabaseAdmin.from("user_notifications").insert({
+      profile_id: profileId,
+      type: "tee_time_assigned",
+      payload: {
+        competition_id: id,
+        competition_name: competition.name,
+        tee_time_id,
+        round_id: teeTime.round_id,
+      },
+    });
+
+    return NextResponse.json({ ok: true }, { status: 200 });
+  } catch (e: any) {
+    const msg = e?.message ?? "Unknown error";
+    const status = String(msg).toLowerCase().includes("auth") ? 401 : 500;
+    return NextResponse.json({ error: msg }, { status });
+  }
+}
