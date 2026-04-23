@@ -526,6 +526,17 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
         return;
       }
 
+      // Competition rounds: non-owners have no business on the setup screen —
+      // the course/format/tees are all configured by the organiser.
+      if (snap.round?.competition_tee_time_id) {
+        const viewerId = snap.viewer_profile_id;
+        const myRow = (snap.participants ?? []).find((p: any) => p.profile_id === viewerId);
+        if (!myRow || myRow.role !== "owner") {
+          router.replace(`/round/${roundId}`);
+          return;
+        }
+      }
+
       // Map participants
       const rows = (snap.participants ?? []) as SetupParticipantRow[];
       const mapped = rows.map((row) => {
@@ -595,6 +606,15 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
       if (snap.round?.status === "live") {
         router.replace(`/round/${roundId}`);
         return;
+      }
+
+      // Competition rounds: non-owners have no business on the setup screen.
+      if (snap.round?.competition_tee_time_id) {
+        const myRow = (snap.participants ?? []).find((p: any) => p.profile_id === viewerProfileId);
+        if (!myRow || myRow.role !== "owner") {
+          router.replace(`/round/${roundId}`);
+          return;
+        }
       }
 
       const rows = (snap.participants ?? []) as SetupParticipantRow[];
