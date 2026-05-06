@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Lock } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { getViewerSession } from "@/lib/auth/viewerSession";
@@ -345,6 +345,8 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
     return me?.role === "owner";
   }, [participants, meId]);
 
+  const setupLocked = !!(round as any)?.setup_locked;
+
   // GPS + nearby courses fetch at page load (for instant picker + auto-detect)
   useEffect(() => {
     if (!navigator.geolocation) return;
@@ -526,9 +528,9 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
         return;
       }
 
-      // Competition rounds: non-owners have no business on the setup screen —
-      // the course/format/tees are all configured by the organiser.
-      if (snap.round?.competition_tee_time_id) {
+      // Competition rounds: when setup is unlocked, non-owners have no business here —
+      // the organiser is still configuring. When locked, all participants see the read-only view.
+      if (snap.round?.competition_tee_time_id && !snap.round?.setup_locked) {
         const viewerId = snap.viewer_profile_id;
         const myRow = (snap.participants ?? []).find((p: any) => p.profile_id === viewerId);
         if (!myRow || myRow.role !== "owner") {
@@ -608,8 +610,8 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
         return;
       }
 
-      // Competition rounds: non-owners have no business on the setup screen.
-      if (snap.round?.competition_tee_time_id) {
+      // Competition rounds: only redirect non-owners when setup is not yet locked.
+      if (snap.round?.competition_tee_time_id && !snap.round?.setup_locked) {
         const myRow = (snap.participants ?? []).find((p: any) => p.profile_id === viewerProfileId);
         if (!myRow || myRow.role !== "owner") {
           router.replace(`/round/${roundId}`);
@@ -813,10 +815,38 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
     }
   }
 
+  async function lockSetup() {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) return;
+      await fetch("/api/rounds/update-settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ round_id: roundId, setup_locked: true }),
+      });
+      await fetchAll();
+    } catch {}
+  }
+
+  async function unlockSetup() {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) return;
+      await fetch("/api/rounds/update-settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ round_id: roundId, setup_locked: false }),
+      });
+      await fetchAll();
+    } catch {}
+  }
+
   async function startRound() {
     if (starting) return;
-    if (!isOwner) {
-      setErr("Only the round owner can start the round.");
+    if (!isOwner && !setupLocked) {
+      setErr("Only the round owner can start this round.");
       return;
     }
     if (!round?.pending_tee_box_id) {
@@ -921,8 +951,9 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
             disabled={starting}
           />
 
-          <div className="text-center flex-1">
+          <div className="text-center flex-1 flex items-center justify-center gap-1.5">
             <div className="text-lg font-semibold tracking-wide text-[#f5e6b0]">Round setup</div>
+            {setupLocked && <Lock className="h-4 w-4 text-[#f5e6b0]/70" />}
           </div>
 
           <div className="w-[60px]" />
@@ -952,8 +983,104 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
           </div>
         ) : null}
 
+        {/* ====== Locked View ====== */}
+        {!loading && round && round.status !== "live" && setupLocked ? (
+          <div className="space-y-3">
+            {/* Course & Tee (read-only) */}
+            <SectionCard title="Course & Tee">
+              <CourseAndTeeSection
+                roundId={roundId}
+                courseId={round.course_id}
+                pendingTeeBoxId={round.pending_tee_box_id}
+                isOwner={false}
+                isEditable={false}
+                onUpdate={fetchAll}
+                preloadedNearby={null}
+                nearbyGpsPos={null}
+              />
+            </SectionCard>
+
+            {/* Format (read-only) */}
+            <SectionCard title="Format & Handicap">
+              <RoundFormatSectionEnhanced
+                roundId={roundId}
+                initialFormat={(round.format_type as any) || "strokeplay"}
+                initialFormatConfig={round.format_config || {}}
+                initialSideGames={round.side_games || []}
+                initialHandicapMode={(round.default_playing_handicap_mode as any) || "allowance_pct"}
+                initialHandicapValue={round.default_playing_handicap_value || 100}
+                isOwner={false}
+                isEditable={false}
+                onUpdate={fetchAll}
+                participants={participants.map((p) => ({
+                  id: p.id,
+                  displayName: displayParticipant(p).name,
+                }))}
+              />
+            </SectionCard>
+
+            {/* Players roster (read-only) */}
+            <SectionCard title={`Players (${participants.length})`}>
+              <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
+                <div className="space-y-2">
+                  {participants.map((p) => {
+                    const d = displayParticipant(p);
+                    const hi = p.profile_id ? hiByProfileId[p.profile_id] : null;
+                    const ch = p.profile_id ? chByProfileId[p.profile_id] : null;
+                    return (
+                      <div key={p.id} className="p-3 flex items-center gap-3 rounded-2xl border border-emerald-900/70 bg-[#042713]">
+                        <Avatar name={d.name} url={d.avatar_url} size={36} />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-semibold text-emerald-50 truncate">{d.name}</div>
+                          <div className="text-[11px] text-emerald-100/60">
+                            {p.is_guest ? "Guest" : p.profile_id === meId ? "You" : "Player"}
+                            {!p.is_guest ? (
+                              <span className="ml-2 text-[10px] text-emerald-100/70 tabular-nums">
+                                HI {typeof hi === "number" ? formatHI(hi) : "—"} · CH {typeof ch === "number" ? ch : "—"}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {participants.length === 0 && (
+                    <div className="text-[11px] text-emerald-100/60">No players added yet.</div>
+                  )}
+                </div>
+              </div>
+            </SectionCard>
+
+            {/* Actions */}
+            <div className="space-y-2 pt-1">
+              {isOwner && (
+                <Button
+                  variant="ghost"
+                  className="w-full rounded-2xl border border-emerald-700/60 text-emerald-100/80 hover:bg-emerald-900/20"
+                  onClick={unlockSetup}
+                  disabled={starting}
+                >
+                  Unlock Setup
+                </Button>
+              )}
+              <Button
+                className="w-full rounded-2xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c] disabled:opacity-60"
+                onClick={startRound}
+                disabled={starting || participants.length === 0}
+              >
+                {starting ? "Starting…" : "Start Match"}
+              </Button>
+              {!round?.pending_tee_box_id && (
+                <div className="text-center text-[11px] text-amber-400/80 px-2">
+                  No tee box selected — {isOwner ? "unlock setup to configure before starting." : "waiting for the organiser to configure."}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : null}
+
         {/* Round Details */}
-        {!loading && round && round.status !== "live" ? (
+        {!loading && round && round.status !== "live" && !setupLocked ? (
           <SectionCard title="Round Details">
             {/* Round Name */}
             <div className="space-y-4">
@@ -1008,7 +1135,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
         ) : null}
 
         {/* Course & Tee Selection */}
-        {!loading && round && round.status !== "live" ? (
+        {!loading && round && round.status !== "live" && !setupLocked ? (
           <SectionCard title="Course & Tee">
             <CourseAndTeeSection
               roundId={roundId}
@@ -1024,7 +1151,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
         ) : null}
 
         {/* Round Format & Handicap Settings */}
-        {!loading && round && round.status !== "live" ? (
+        {!loading && round && round.status !== "live" && !setupLocked ? (
           <SectionCard title="Format & Handicap">
             <RoundFormatSectionEnhanced
               roundId={roundId}
@@ -1045,7 +1172,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
         ) : null}
 
         {/* Team Setup (team formats only) */}
-        {!loading && round && round.status !== "live" && isTeamFormat(round.format_type as any) ? (
+        {!loading && round && round.status !== "live" && !setupLocked && isTeamFormat(round.format_type as any) ? (
           <SectionCard title="Teams">
             <div className="space-y-3">
               <div className="text-[11px] text-emerald-100/60">
@@ -1086,7 +1213,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
         ) : null}
 
         {/* ====== Players Section ====== */}
-        {!loading && round && round.status !== "live" ? (
+        {!loading && round && round.status !== "live" && !setupLocked ? (
           <SectionCard title={`Players (${participants.length}/4)`}>
           <div className="space-y-3">
 
@@ -1300,13 +1427,27 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
           </SectionCard>
         ) : null}
 
-        <Button
-          className="w-full rounded-2xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c] disabled:opacity-60"
-          onClick={startRound}
-          disabled={!isOwner || starting || participants.length === 0}
-        >
-          {starting ? "Starting…" : "Start round"}
-        </Button>
+        {/* Edit mode bottom actions (shown only when unlocked) */}
+        {!setupLocked ? (
+          <div className="space-y-2">
+            {isOwner && !starting ? (
+              <Button
+                variant="ghost"
+                className="w-full rounded-2xl border border-emerald-700/60 text-emerald-100/80 hover:bg-emerald-900/20"
+                onClick={lockSetup}
+              >
+                Lock Setup
+              </Button>
+            ) : null}
+            <Button
+              className="w-full rounded-2xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c] disabled:opacity-60"
+              onClick={startRound}
+              disabled={!isOwner || starting || participants.length === 0}
+            >
+              {starting ? "Starting…" : "Start round"}
+            </Button>
+          </div>
+        ) : null}
       </div>
     </div>
   );

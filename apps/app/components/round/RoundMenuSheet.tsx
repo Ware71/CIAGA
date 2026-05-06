@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import type { Participant } from "@/lib/rounds/hooks/useRoundDetail";
@@ -46,6 +47,17 @@ type LeaderboardRow = {
   thru: number | null;
 };
 
+type CompetitionStandingEntry = {
+  profile_id: string;
+  name: string | null;
+  avatar_url: string | null;
+  gross_score: number | null;
+  net_score: number | null;
+  thru: number;
+  is_live: boolean;
+  is_submitted: boolean;
+};
+
 export default function RoundMenuSheet(props: {
   onClose: () => void;
   canFinish: boolean;
@@ -64,6 +76,7 @@ export default function RoundMenuSheet(props: {
   teams?: Array<{ id: string; name: string }>;
   allParticipants?: Participant[];
   isTeamFormat?: boolean;
+  competitionId?: string;
 }) {
   const {
     onClose,
@@ -83,9 +96,34 @@ export default function RoundMenuSheet(props: {
     teams,
     allParticipants,
     isTeamFormat,
+    competitionId,
   } = props;
 
   const [activeTab, setActiveTab] = useState<LeaderboardTab>("gross");
+
+  // Competition standings (lazy-loaded when section is expanded)
+  const [standingsOpen, setStandingsOpen] = useState(false);
+  const [standings, setStandings] = useState<CompetitionStandingEntry[] | null>(null);
+  const [standingsLoading, setStandingsLoading] = useState(false);
+
+  async function loadStandings() {
+    if (!competitionId || standings !== null) return;
+    setStandingsLoading(true);
+    try {
+      const res = await fetch(`/api/majors/competitions/${competitionId}/live-standings`);
+      const data = await res.json();
+      setStandings(data.standings ?? []);
+    } catch {
+      setStandings([]);
+    } finally {
+      setStandingsLoading(false);
+    }
+  }
+
+  function toggleStandings() {
+    if (!standingsOpen) loadStandings();
+    setStandingsOpen((o) => !o);
+  }
 
   // Map from first-member participant ID → all team members (for showing players under each team row)
   const teamMembersByFirstId = useMemo<Record<string, Participant[]>>(() => {
@@ -311,6 +349,65 @@ export default function RoundMenuSheet(props: {
                 )}
               </div>
             </div>
+
+            {/* Competition Standings (only shown for competition-linked rounds) */}
+            {competitionId && (
+              <div className="p-4 border-b border-emerald-900/60">
+                <button
+                  type="button"
+                  className="w-full flex items-center justify-between"
+                  onClick={toggleStandings}
+                >
+                  <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70">
+                    Competition Standings
+                  </div>
+                  <ChevronDown
+                    className={`h-4 w-4 text-emerald-100/60 transition-transform duration-200 ${standingsOpen ? "rotate-180" : ""}`}
+                  />
+                </button>
+
+                {standingsOpen && (
+                  <div className="mt-3 rounded-2xl border border-emerald-900/70 bg-[#042713]/60 overflow-hidden divide-y divide-emerald-900/60">
+                    {standingsLoading && (
+                      <div className="px-3 py-4 text-center text-[11px] text-emerald-100/50">Loading…</div>
+                    )}
+                    {!standingsLoading && (standings ?? []).map((s, idx) => {
+                      const score = s.net_score ?? s.gross_score;
+                      return (
+                        <div key={s.profile_id} className="px-3 py-2.5 flex items-center gap-2.5">
+                          <div className="w-6 text-center text-[11px] font-bold text-emerald-100/90">{idx + 1}</div>
+                          <Avatar className="h-7 w-7 border border-emerald-200/70 shrink-0">
+                            {s.avatar_url ? <AvatarImage src={s.avatar_url} /> : null}
+                            <AvatarFallback className="text-[9px]">{initialsFrom(s.name ?? "")}</AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[12px] font-semibold text-emerald-50 truncate">{s.name ?? "—"}</div>
+                            <div className="text-[10px] text-emerald-100/55 leading-none mt-0.5">
+                              {s.is_live
+                                ? `Live · Thru ${s.thru}`
+                                : s.is_submitted
+                                ? "Submitted"
+                                : "Pending"}
+                            </div>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <div className="text-[15px] font-extrabold tabular-nums text-[#f5e6b0]">
+                              {score != null ? score : "—"}
+                            </div>
+                            {s.net_score != null && s.gross_score != null && s.gross_score !== s.net_score && (
+                              <div className="text-[9px] text-emerald-100/50">G: {s.gross_score}</div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {!standingsLoading && (standings ?? []).length === 0 && (
+                      <div className="px-3 py-4 text-center text-[11px] text-emerald-100/50">No scores yet</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Round Settings */}
             <div className="p-4">

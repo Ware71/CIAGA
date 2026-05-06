@@ -19,6 +19,8 @@ export type Round = {
   scheduled_at?: string | null;
   default_playing_handicap_mode?: PlayingHandicapMode;
   default_playing_handicap_value?: number;
+  setup_locked?: boolean;
+  competition_tee_time_id?: string | null;
 };
 
 export type ProfileJoin = {

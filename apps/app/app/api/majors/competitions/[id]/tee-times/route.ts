@@ -138,7 +138,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: "Maximum 4 players per tee time" }, { status: 400 });
     }
 
-    // Create the scheduled round
+    // Derive round format and handicap settings from the competition
+    const isMatchplay =
+      competition.competition_type === "matchplay" ||
+      competition.competition_type === "matchplay_knockout_match" ||
+      competition.competition_type === "matchplay_fixture";
+    const formatType = isMatchplay ? "matchplay" : "strokeplay";
+
+    const handicapRules = (competition.handicap_rules ?? {}) as Record<string, unknown>;
+    const handicapMode = (handicapRules.mode as string) ?? "allowance_pct";
+    const handicapValue =
+      handicapMode === "allowance_pct"
+        ? (typeof handicapRules.allowance_pct === "number" ? handicapRules.allowance_pct : 100)
+        : 0;
+
+    // Create the scheduled round — locked by default so participants see read-only setup + Start Match
     const { data: round, error: roundErr } = await supabaseAdmin
       .from("rounds")
       .insert({
@@ -148,9 +162,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         course_id: competition.course_id ?? null,
         name: competition.name,
         visibility: "private",
-        format_type: "strokeplay",
-        default_playing_handicap_mode: "allowance_pct",
-        default_playing_handicap_value: 100,
+        format_type: formatType,
+        default_playing_handicap_mode: handicapMode,
+        default_playing_handicap_value: handicapValue,
+        setup_locked: true,
       })
       .select("id")
       .single();

@@ -20,25 +20,32 @@ export async function POST(req: Request) {
     const body = (await req.json()) as Body;
     if (!body?.round_id) return NextResponse.json({ error: "Missing round_id" }, { status: 400 });
 
-    // Verify caller is owner participant
-    const { data: me, error: meErr } = await supabaseAdmin
-      .from("round_participants")
-      .select("id, role")
-      .eq("round_id", body.round_id)
-      .eq("profile_id", myProfileId)
-      .maybeSingle();
+    // Load round and participant in parallel — need setup_locked before enforcing role check
+    const [roundResult, meResult] = await Promise.all([
+      supabaseAdmin
+        .from("rounds")
+        .select("id, course_id, pending_tee_box_id, status, started_at, setup_locked")
+        .eq("id", body.round_id)
+        .single(),
+      supabaseAdmin
+        .from("round_participants")
+        .select("id, role")
+        .eq("round_id", body.round_id)
+        .eq("profile_id", myProfileId)
+        .maybeSingle(),
+    ]);
 
-    if (meErr) return NextResponse.json({ error: meErr.message }, { status: 500 });
-    if (!me || me.role !== "owner") return NextResponse.json({ error: "Only round owner can start" }, { status: 403 });
+    if (roundResult.error) return NextResponse.json({ error: roundResult.error.message }, { status: 500 });
+    if (meResult.error) return NextResponse.json({ error: meResult.error.message }, { status: 500 });
 
-    // Load round
-    const { data: round, error: roundErr } = await supabaseAdmin
-      .from("rounds")
-      .select("id, course_id, pending_tee_box_id, status, started_at")
-      .eq("id", body.round_id)
-      .single();
+    const round = roundResult.data;
+    const me = meResult.data;
 
-    if (roundErr) return NextResponse.json({ error: roundErr.message }, { status: 500 });
+    if (!me) return NextResponse.json({ error: "Not a participant in this round" }, { status: 403 });
+    // When setup is locked any participant can start; otherwise only the owner can.
+    if (!round.setup_locked && me.role !== "owner") {
+      return NextResponse.json({ error: "Only the round owner can start an unlocked round" }, { status: 403 });
+    }
 
     // Already live -> idempotent OK
     if (round.status === "live") {

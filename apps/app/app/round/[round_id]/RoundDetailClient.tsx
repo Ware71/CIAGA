@@ -276,12 +276,27 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     teams,
     teeSnapshotId,
     holes,
+    competitionTeeTimeId,
     scoresByKey,
     setScoresByKey,
     holeStatesByKey,
     setHoleStatesByKey,
     canScore,
   } = useRoundDetail(roundId, initialSnapshot);
+
+  // Resolve competition ID from the tee time link so we can show live competition standings
+  const [competitionId, setCompetitionId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!competitionTeeTimeId) return;
+    supabase
+      .from("competition_tee_times")
+      .select("competition_id")
+      .eq("id", competitionTeeTimeId)
+      .single()
+      .then(({ data }) => {
+        if (data?.competition_id) setCompetitionId(data.competition_id as string);
+      });
+  }, [competitionTeeTimeId]);
 
   // Tracks hole keys with scores not yet confirmed by the server
   const [pendingKeys, setPendingKeys] = useState<Set<string>>(new Set());
@@ -1388,6 +1403,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
             teams={isSingleBall ? teams : undefined}
             allParticipants={isSingleBall ? participants : undefined}
             isTeamFormat={isSingleBall}
+            competitionId={competitionId ?? undefined}
           />
         )}
 

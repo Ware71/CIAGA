@@ -9,7 +9,7 @@ export async function getSetupSnapshot(roundId: string) {
         id, name, status, course_id, pending_tee_box_id,
         started_at, format_type, format_config, side_games,
         scheduled_at, default_playing_handicap_mode,
-        default_playing_handicap_value,
+        default_playing_handicap_value, setup_locked,
         competition_tee_time_id,
         courses(name)
       `)
