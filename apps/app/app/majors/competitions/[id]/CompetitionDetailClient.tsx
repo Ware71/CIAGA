@@ -544,6 +544,366 @@ function FixtureCard({ fixture }: { fixture: MatchplayFixture & { home_entry?: a
   );
 }
 
+// ─── Competition Setup Sheet ──────────────────────────────────────────────────
+
+type SetupCourseResult = { id: string; name: string; lat: number; lng: number; subtitle: string; city: string | null; country: string | null };
+
+function CompetitionSetupSheet({
+  competition,
+  onClose,
+  onSaved,
+}: {
+  competition: CompetitionWithGroup;
+  onClose: () => void;
+  onSaved: (updated: CompetitionWithGroup) => void;
+}) {
+  const compType = competition.competition_type;
+  const isAggregate = competition.competition_category === "aggregate";
+  const handicap = (competition.handicap_rules ?? {}) as Record<string, unknown>;
+
+  const [name, setName] = useState(competition.name ?? "");
+  const [description, setDescription] = useState(competition.description ?? "");
+  const [competitionDate, setCompetitionDate] = useState(
+    competition.competition_date ? competition.competition_date.slice(0, 10) : ""
+  );
+  const [entryStart, setEntryStart] = useState(
+    competition.entry_window_start ? competition.entry_window_start.slice(0, 16) : ""
+  );
+  const [entryEnd, setEntryEnd] = useState(
+    competition.entry_window_end ? competition.entry_window_end.slice(0, 16) : ""
+  );
+  const [courseId, setCourseId] = useState(competition.course_id ?? "");
+  const [courseName, setCourseName] = useState(competition.course?.name ?? "");
+  const [courseSearch, setCourseSearch] = useState("");
+  const [courseResults, setCourseResults] = useState<SetupCourseResult[]>([]);
+  const [courseSearchLoading, setCourseSearchLoading] = useState(false);
+  const [courseResolving, setCourseResolving] = useState(false);
+  const [selectedCompType, setSelectedCompType] = useState<string>(compType ?? "stroke");
+  const [scoringModel, setScoringModel] = useState<string>(competition.scoring_model ?? "net");
+  const [pointsModel, setPointsModel] = useState<string>(competition.points_model ?? "none");
+  const [numRounds, setNumRounds] = useState(String(competition.num_rounds ?? 1));
+  const [standingsContrib, setStandingsContrib] = useState(competition.standings_contribution ?? "event_only");
+  const [rulesText, setRulesText] = useState(competition.rules_text ?? "");
+  const [handicapMode, setHandicapMode] = useState<string>((handicap.mode as string) ?? "allowance_pct");
+  const [handicapPct, setHandicapPct] = useState(handicap.allowance_pct != null ? String(handicap.allowance_pct) : "100");
+  const [handicapMax, setHandicapMax] = useState(handicap.max_handicap != null ? String(handicap.max_handicap) : "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const COMP_TYPES = [
+    { value: "stroke", label: "Strokeplay" },
+    { value: "stableford", label: "Stableford" },
+    { value: "matchplay", label: "Match Play" },
+    { value: "skins", label: "Skins" },
+    { value: "scramble", label: "Scramble" },
+    { value: "bestball", label: "Best Ball" },
+    { value: "custom", label: "Custom" },
+  ];
+  const SCORING_MODELS = [
+    { value: "net", label: "Net" },
+    { value: "gross", label: "Gross" },
+    { value: "stableford_points", label: "Stableford Points" },
+    { value: "match_result", label: "Match Result" },
+  ];
+  const POINTS_MODELS = [
+    { value: "none", label: "None" },
+    { value: "fedex_style", label: "FedEx-style" },
+    { value: "position_based", label: "Position-based" },
+    { value: "custom_table", label: "Custom table" },
+  ];
+
+  const handleCourseSearch = async () => {
+    const q = courseSearch.trim();
+    if (!q) return;
+    setCourseSearchLoading(true);
+    setCourseResults([]);
+    try {
+      const res = await fetch(`/api/courses/search?q=${encodeURIComponent(q)}&limit=8`);
+      if (res.ok) {
+        const j = await res.json();
+        setCourseResults(j.items ?? []);
+      }
+    } finally {
+      setCourseSearchLoading(false);
+    }
+  };
+
+  const handleCourseSelect = async (course: SetupCourseResult) => {
+    setCourseResolving(true);
+    try {
+      const session = await getViewerSession();
+      if (!session) return;
+      const res = await fetch("/api/courses/resolve", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ osm_id: course.id, name: course.name, lat: course.lat, lng: course.lng, city: course.city ?? null, country: course.country ?? null }),
+      });
+      if (res.ok) {
+        const j = await res.json();
+        setCourseId(j.course_id ?? "");
+        setCourseName(course.name);
+        setCourseSearch("");
+        setCourseResults([]);
+      }
+    } finally {
+      setCourseResolving(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const session = await getViewerSession();
+      if (!session) { setError("Not signed in"); return; }
+
+      const handicap_rules = scoringModel !== "gross"
+        ? {
+            mode: handicapMode,
+            allowance_pct: handicapMode === "allowance_pct" ? (parseInt(handicapPct, 10) || 100) : null,
+            max_handicap: handicapMax ? parseInt(handicapMax, 10) : null,
+          }
+        : {};
+
+      const res = await fetch(`/api/majors/competitions/${competition.id}`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          description: description.trim() || null,
+          competition_date: competitionDate || null,
+          entry_window_start: entryStart || null,
+          entry_window_end: entryEnd || null,
+          course_id: courseId || null,
+          competition_type: isAggregate ? competition.competition_type : selectedCompType,
+          scoring_model: scoringModel,
+          handicap_rules,
+          points_model: pointsModel,
+          num_rounds: isAggregate ? competition.num_rounds : (parseInt(numRounds, 10) || 1),
+          rules_text: rulesText.trim() || null,
+          standings_contribution: standingsContrib,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) { setError(json.error ?? "Save failed"); return; }
+      onSaved({
+        ...competition,
+        ...json.competition,
+        group: competition.group,
+        course: courseId ? { id: courseId, name: courseName } : competition.course,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end bg-black/60 pb-[env(safe-area-inset-bottom)]" onClick={onClose}>
+      <div
+        className="w-full max-w-sm mx-auto rounded-t-3xl bg-[#071f13] border-t border-emerald-900/70 px-4 pt-5 space-y-4 max-h-[90dvh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="w-10 h-1 rounded-full bg-emerald-800/60 mx-auto mb-1" />
+        <div className="text-sm font-semibold text-emerald-50">Edit Competition Setup</div>
+
+        <div className="space-y-4 pb-6">
+          {/* Name */}
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Name *</label>
+            <input className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 focus:outline-none"
+              value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+
+          {/* Description */}
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Description</label>
+            <textarea className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 focus:outline-none resize-none"
+              rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
+          </div>
+
+          {/* Date */}
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Competition Date</label>
+            <input type="date" className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 focus:outline-none"
+              value={competitionDate} onChange={(e) => setCompetitionDate(e.target.value)} />
+          </div>
+
+          {/* Entry window */}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Entry Opens</label>
+              <input type="datetime-local" className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-2 py-2 text-xs text-emerald-50 focus:outline-none"
+                value={entryStart} onChange={(e) => setEntryStart(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Entry Closes</label>
+              <input type="datetime-local" className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-2 py-2 text-xs text-emerald-50 focus:outline-none"
+                value={entryEnd} onChange={(e) => setEntryEnd(e.target.value)} />
+            </div>
+          </div>
+
+          {/* Course */}
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Course</label>
+            {courseId ? (
+              <div className="flex items-center justify-between rounded-xl border border-emerald-600/60 bg-emerald-900/30 px-3 py-2">
+                <span className="text-sm text-emerald-50 truncate">{courseName}</span>
+                <button type="button" onClick={() => { setCourseId(""); setCourseName(""); }}
+                  className="ml-2 text-[11px] text-emerald-300/60 hover:text-emerald-200 shrink-0">✕</button>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <div className="flex gap-2">
+                  <input type="text" value={courseSearch}
+                    onChange={(e) => setCourseSearch(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") handleCourseSearch(); }}
+                    placeholder="Search for a course…"
+                    className="flex-1 rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none" />
+                  <button type="button" onClick={handleCourseSearch}
+                    disabled={!courseSearch.trim() || courseSearchLoading}
+                    className="rounded-xl border border-emerald-700/60 bg-emerald-900/40 px-3 py-2 text-[11px] font-semibold text-emerald-200 disabled:opacity-40">
+                    {courseSearchLoading ? "…" : "Search"}
+                  </button>
+                </div>
+                {courseResults.length > 0 && (
+                  <div className="rounded-xl border border-emerald-900/60 bg-[#071f13] divide-y divide-emerald-900/40 overflow-hidden">
+                    {courseResults.map((c) => (
+                      <button key={c.id} type="button" onClick={() => handleCourseSelect(c)}
+                        disabled={courseResolving}
+                        className="w-full text-left px-3 py-2 hover:bg-emerald-900/40 transition-colors disabled:opacity-50">
+                        <div className="text-sm text-emerald-50">{c.name}</div>
+                        {c.subtitle && <div className="text-[10px] text-emerald-200/45 mt-0.5">{c.subtitle}</div>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Format */}
+          {!isAggregate && (
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Format</label>
+              <div className="grid grid-cols-2 gap-1.5">
+                {COMP_TYPES.map((t) => (
+                  <button key={t.value} type="button" onClick={() => setSelectedCompType(t.value)}
+                    className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${selectedCompType === t.value ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Scoring model */}
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Scoring</label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {SCORING_MODELS.map((s) => (
+                <button key={s.value} type="button" onClick={() => setScoringModel(s.value)}
+                  className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${scoringModel === s.value ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Handicap rules */}
+          {scoringModel !== "gross" && (
+            <div className="rounded-xl border border-emerald-900/40 bg-emerald-950/30 p-3 space-y-2">
+              <div className="text-[10px] uppercase tracking-wider text-emerald-200/50 font-semibold">Handicap Rules</div>
+              <div className="space-y-1">
+                <label className="text-[10px] text-emerald-200/60">Mode</label>
+                <select className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 focus:outline-none"
+                  value={handicapMode} onChange={(e) => setHandicapMode(e.target.value)}>
+                  <option value="allowance_pct">Percentage Allowance</option>
+                  <option value="compare_against_lowest">Off the Lowest</option>
+                  <option value="fixed">Fixed</option>
+                  <option value="none">None (Gross)</option>
+                </select>
+              </div>
+              {handicapMode === "allowance_pct" && (
+                <div className="space-y-1">
+                  <label className="text-[10px] text-emerald-200/60">Allowance %</label>
+                  <input type="number" min={0} max={100} value={handicapPct}
+                    onChange={(e) => setHandicapPct(e.target.value)}
+                    className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 focus:outline-none" />
+                </div>
+              )}
+              {handicapMode !== "none" && (
+                <div className="space-y-1">
+                  <label className="text-[10px] text-emerald-200/60">Max Handicap (optional)</label>
+                  <input type="number" min={0} value={handicapMax}
+                    onChange={(e) => setHandicapMax(e.target.value)}
+                    placeholder="No limit"
+                    className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none" />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Points model */}
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Points</label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {POINTS_MODELS.map((p) => (
+                <button key={p.value} type="button" onClick={() => setPointsModel(p.value)}
+                  className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${pointsModel === p.value ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Num rounds */}
+          {!isAggregate && (
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Rounds</label>
+              <input type="number" min={1} max={10} value={numRounds}
+                onChange={(e) => setNumRounds(e.target.value)}
+                className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 focus:outline-none" />
+            </div>
+          )}
+
+          {/* Rules */}
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Rules</label>
+            <textarea className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none resize-none"
+              rows={3} value={rulesText} onChange={(e) => setRulesText(e.target.value)} />
+          </div>
+
+          {/* Standings contribution */}
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Season Standings</label>
+            <div className="grid grid-cols-3 gap-1.5">
+              {(["event_only", "season", "both"] as const).map((v) => (
+                <button key={v} type="button" onClick={() => setStandingsContrib(v)}
+                  className={`rounded-xl border px-2 py-1.5 text-[10px] text-center transition-colors ${standingsContrib === v ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
+                  {v === "event_only" ? "Event only" : v === "season" ? "Season" : "Both"}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {error && <div className="text-sm text-red-400 pb-2">{error}</div>}
+        <div className="flex gap-3 pb-6">
+          <button type="button" onClick={onClose}
+            className="flex-1 py-3 rounded-full border border-emerald-900/60 text-sm text-emerald-200/70">
+            Cancel
+          </button>
+          <button type="button" onClick={handleSave} disabled={!name.trim() || saving}
+            className="flex-1 py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50">
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Position badge ───────────────────────────────────────────────────────────
 
 function PositionBadge({ position }: { position: number | null }) {
@@ -591,6 +951,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
   const [withdrawing, setWithdrawing] = useState(false);
   const [proposedWinnings, setProposedWinnings] = useState<ProposedWinning[] | null>(null);
   const [proposingWinnings, setProposingWinnings] = useState(false);
+  const [showSetupSheet, setShowSetupSheet] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -879,7 +1240,10 @@ export default function CompetitionDetailClient({ competitionId }: { competition
       competition.majors_status !== "cancelled"
     : false;
 
-  const isAdminOrOwner = myRole === "owner" || myRole === "admin";
+  const isAdminOrOwner =
+    myRole === "owner" ||
+    myRole === "admin" ||
+    (!competition?.group_id && competition?.created_by_profile_id === myProfileId);
 
   const visibleTabs = (() => {
     const BASE = getTabsForCompetition(competition);
@@ -965,6 +1329,17 @@ export default function CompetitionDetailClient({ competitionId }: { competition
               {((competition as any).entry_fee_amount as number).toFixed(2)}
             </span>
           </div>
+        )}
+
+        {/* Admin edit setup */}
+        {isAdminOrOwner && (
+          <button
+            type="button"
+            onClick={() => setShowSetupSheet(true)}
+            className="w-full py-2 rounded-full border border-emerald-800/60 text-[11px] font-semibold text-emerald-300/70 hover:text-emerald-200 hover:border-emerald-700/60 transition-colors"
+          >
+            Edit Setup
+          </button>
         )}
 
         {/* Entry / Submit CTAs */}
@@ -1513,6 +1888,17 @@ export default function CompetitionDetailClient({ competitionId }: { competition
       </div>
 
       <div className="px-4 pb-8">{tabContent[tab]}</div>
+
+      {showSetupSheet && competition && (
+        <CompetitionSetupSheet
+          competition={competition}
+          onClose={() => setShowSetupSheet(false)}
+          onSaved={(updated) => {
+            setCompetition(updated);
+            setShowSetupSheet(false);
+          }}
+        />
+      )}
 
       {showSubmitSheet && (
         <SubmitRoundSheet

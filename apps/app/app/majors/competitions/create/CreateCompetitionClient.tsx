@@ -13,6 +13,7 @@ import type {
   SeriesEventTemplate,
   MajorGroup,
 } from "@/lib/majors/types";
+import type { PlayingHandicapMode } from "@/components/rounds/PlayingHandicapSettings";
 
 
 const COMP_CATEGORIES: { value: CompetitionCategory; label: string; desc: string }[] = [
@@ -53,6 +54,16 @@ const AGGREGATE_SOURCES = [
 
 type AggregateSource = "group_standings" | "competition_ids" | "custom";
 
+type CourseResult = {
+  id: string; // osm_id e.g. "way/123"
+  name: string;
+  lat: number;
+  lng: number;
+  subtitle: string;
+  city: string | null;
+  country: string | null;
+};
+
 type FormState = {
   name: string;
   group_id: string;
@@ -61,6 +72,8 @@ type FormState = {
   competition_type: CompetitionTypeV2;
   format: string;
   course_search: string;
+  course_id: string;
+  course_name: string;
   competition_date: string;
   entry_window_start: string;
   entry_window_end: string;
@@ -78,6 +91,7 @@ type FormState = {
   aggregate_top_n: string;
   aggregate_include_round: boolean;
   // Handicap rules
+  handicap_mode: PlayingHandicapMode;
   handicap_allowance_pct: string;
   handicap_max: string;
 };
@@ -90,6 +104,8 @@ const INITIAL: FormState = {
   competition_type: "stroke",
   format: "",
   course_search: "",
+  course_id: "",
+  course_name: "",
   competition_date: "",
   entry_window_start: "",
   entry_window_end: "",
@@ -104,6 +120,7 @@ const INITIAL: FormState = {
   aggregate_source: "group_standings",
   aggregate_top_n: "",
   aggregate_include_round: false,
+  handicap_mode: "allowance_pct",
   handicap_allowance_pct: "100",
   handicap_max: "",
 };
@@ -134,6 +151,9 @@ export default function CreateCompetitionClient() {
   const [creatingSeries, setCreatingSeries] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [courseResults, setCourseResults] = useState<CourseResult[]>([]);
+  const [courseSearchLoading, setCourseSearchLoading] = useState(false);
+  const [courseResolving, setCourseResolving] = useState(false);
 
   const isAggregate = form.competition_category === "aggregate";
   const totalSteps = 6;
@@ -169,6 +189,7 @@ export default function CreateCompetitionClient() {
       scoring_model: (et?.template_scoring_model ?? s.template_scoring_model) ?? prevForm.scoring_model,
       points_model: (et?.template_points_model ?? s.template_points_model) ?? prevForm.points_model,
       rules_text: (et?.template_rules_text ?? s.template_rules_text) ?? prevForm.rules_text,
+      handicap_mode: (mergedSettings.handicap_mode as PlayingHandicapMode | undefined) ?? prevForm.handicap_mode,
       handicap_allowance_pct: mergedSettings.handicap_allowance_pct != null
         ? String(mergedSettings.handicap_allowance_pct)
         : prevForm.handicap_allowance_pct,
@@ -292,6 +313,54 @@ export default function CreateCompetitionClient() {
     }
   };
 
+  const handleCourseSearch = async () => {
+    const q = form.course_search.trim();
+    if (!q) return;
+    setCourseSearchLoading(true);
+    setCourseResults([]);
+    try {
+      const res = await fetch(`/api/courses/search?q=${encodeURIComponent(q)}&limit=8`);
+      if (res.ok) {
+        const j = await res.json();
+        setCourseResults(j.items ?? []);
+      }
+    } finally {
+      setCourseSearchLoading(false);
+    }
+  };
+
+  const handleCourseSelect = async (course: CourseResult) => {
+    setCourseResolving(true);
+    try {
+      const session = await getViewerSession();
+      if (!session) return;
+      const res = await fetch("/api/courses/resolve", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          osm_id: course.id,
+          name: course.name,
+          lat: course.lat,
+          lng: course.lng,
+          city: course.city ?? null,
+          country: course.country ?? null,
+        }),
+      });
+      if (res.ok) {
+        const j = await res.json();
+        setForm((prev) => ({
+          ...prev,
+          course_id: j.course_id ?? "",
+          course_name: course.name,
+          course_search: "",
+        }));
+        setCourseResults([]);
+      }
+    } finally {
+      setCourseResolving(false);
+    }
+  };
+
   const handleSubmit = async () => {
     setSubmitting(true);
     setError(null);
@@ -317,6 +386,7 @@ export default function CreateCompetitionClient() {
           competition_category: form.competition_category,
           competition_type: isAggregate ? "custom" : form.competition_type,
           format: form.format || null,
+          course_id: form.course_id || null,
           competition_date: form.competition_date || null,
           entry_window_start: form.entry_window_start || null,
           entry_window_end: form.entry_window_end || null,
@@ -333,7 +403,10 @@ export default function CreateCompetitionClient() {
           aggregate_config,
           handicap_rules: form.scoring_model !== "gross"
             ? {
-                allowance_pct: parseInt(form.handicap_allowance_pct, 10) || 100,
+                mode: form.handicap_mode,
+                allowance_pct: form.handicap_mode === "allowance_pct"
+                  ? (parseInt(form.handicap_allowance_pct, 10) || 100)
+                  : null,
                 max_handicap: form.handicap_max ? parseInt(form.handicap_max, 10) : null,
               }
             : {},
@@ -550,6 +623,60 @@ export default function CreateCompetitionClient() {
         </div>
       )}
 
+      {/* Course picker */}
+      <div className="space-y-2">
+        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Course (optional)</label>
+        {form.course_id ? (
+          <div className="flex items-center justify-between rounded-xl border border-emerald-600/60 bg-emerald-900/30 px-4 py-2.5">
+            <span className="text-sm text-emerald-50 truncate">{form.course_name}</span>
+            <button
+              type="button"
+              onClick={() => setForm((prev) => ({ ...prev, course_id: "", course_name: "" }))}
+              className="ml-3 text-[11px] text-emerald-300/60 hover:text-emerald-200 shrink-0"
+            >
+              ✕
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={form.course_search}
+                onChange={(e) => update("course_search", e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleCourseSearch(); }}
+                placeholder="Search for a course…"
+                className="flex-1 rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
+              />
+              <button
+                type="button"
+                onClick={handleCourseSearch}
+                disabled={!form.course_search.trim() || courseSearchLoading}
+                className="rounded-xl border border-emerald-700/60 bg-emerald-900/40 px-3 py-2 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-800/50 disabled:opacity-40"
+              >
+                {courseSearchLoading ? "…" : "Search"}
+              </button>
+            </div>
+            {courseResults.length > 0 && (
+              <div className="rounded-xl border border-emerald-900/60 bg-[#0b3b21]/80 divide-y divide-emerald-900/40 overflow-hidden">
+                {courseResults.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => handleCourseSelect(c)}
+                    disabled={courseResolving}
+                    className="w-full text-left px-4 py-2.5 hover:bg-emerald-900/40 transition-colors disabled:opacity-50"
+                  >
+                    <div className="text-sm text-emerald-50">{c.name}</div>
+                    {c.subtitle && <div className="text-[10px] text-emerald-200/45 mt-0.5">{c.subtitle}</div>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       <div className="space-y-2">
         <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Competition Date</label>
         <input
@@ -668,29 +795,53 @@ export default function CreateCompetitionClient() {
         <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 p-4 space-y-3">
           <div className="text-[10px] uppercase tracking-wider text-emerald-200/55 font-semibold">Handicap Rules</div>
           <div className="space-y-1">
-            <label className="text-[11px] text-emerald-200/65">Handicap Allowance %</label>
-            <input
-              type="number"
-              min={0}
-              max={100}
-              value={form.handicap_allowance_pct}
-              onChange={(e) => update("handicap_allowance_pct", e.target.value)}
+            <label className="text-[11px] text-emerald-200/65">Handicap Mode</label>
+            <select
+              value={form.handicap_mode}
+              onChange={(e) => {
+                const m = e.target.value as PlayingHandicapMode;
+                update("handicap_mode", m);
+                if (m === "allowance_pct") update("handicap_allowance_pct", "100");
+              }}
               className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
-            />
-            <p className="text-[10px] text-emerald-100/40">e.g. 90 = players use 90% of their course handicap</p>
+            >
+              <option value="allowance_pct">Percentage Allowance</option>
+              <option value="compare_against_lowest">Off the Lowest</option>
+              <option value="fixed">Fixed Handicap</option>
+              <option value="none">No Handicap (Gross Only)</option>
+            </select>
+            {form.handicap_mode === "compare_against_lowest" && (
+              <p className="text-[10px] text-emerald-100/40">Best player plays off scratch. Others receive strokes equal to the difference from the lowest handicap.</p>
+            )}
           </div>
-          <div className="space-y-1">
-            <label className="text-[11px] text-emerald-200/65">Max Handicap (optional)</label>
-            <input
-              type="number"
-              min={0}
-              value={form.handicap_max}
-              onChange={(e) => update("handicap_max", e.target.value)}
-              placeholder="Leave blank for no limit"
-              className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
-            />
-            <p className="text-[10px] text-emerald-100/40">Cap the maximum handicap that can be applied</p>
-          </div>
+          {form.handicap_mode === "allowance_pct" && (
+            <div className="space-y-1">
+              <label className="text-[11px] text-emerald-200/65">Handicap Allowance %</label>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={form.handicap_allowance_pct}
+                onChange={(e) => update("handicap_allowance_pct", e.target.value)}
+                className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
+              />
+              <p className="text-[10px] text-emerald-100/40">e.g. 90 = players use 90% of their course handicap</p>
+            </div>
+          )}
+          {form.handicap_mode !== "none" && (
+            <div className="space-y-1">
+              <label className="text-[11px] text-emerald-200/65">Max Handicap (optional)</label>
+              <input
+                type="number"
+                min={0}
+                value={form.handicap_max}
+                onChange={(e) => update("handicap_max", e.target.value)}
+                placeholder="Leave blank for no limit"
+                className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
+              />
+              <p className="text-[10px] text-emerald-100/40">Cap the maximum handicap that can be applied</p>
+            </div>
+          )}
         </div>
       )}
 
@@ -757,7 +908,16 @@ export default function CreateCompetitionClient() {
           { label: "Category", value: form.competition_category },
           !isAggregate ? { label: "Format", value: form.competition_type } : null,
           { label: "Scoring", value: form.scoring_model },
-          form.scoring_model !== "gross" ? { label: "Handicap %", value: `${form.handicap_allowance_pct || 100}%${form.handicap_max ? ` (max ${form.handicap_max})` : ""}` } : null,
+          form.scoring_model !== "gross" ? {
+            label: "Handicap",
+            value: form.handicap_mode === "compare_against_lowest"
+              ? `Off the Lowest${form.handicap_max ? ` (max ${form.handicap_max})` : ""}`
+              : form.handicap_mode === "none"
+              ? "No Handicap"
+              : form.handicap_mode === "fixed"
+              ? `Fixed${form.handicap_max ? ` (max ${form.handicap_max})` : ""}`
+              : `${form.handicap_allowance_pct || 100}%${form.handicap_max ? ` (max ${form.handicap_max})` : ""}`,
+          } : null,
           { label: "Points", value: form.points_model },
           !isAggregate ? { label: "Rounds", value: form.num_rounds } : null,
           isAggregate ? { label: "Aggregate source", value: form.aggregate_source } : null,
@@ -765,6 +925,7 @@ export default function CreateCompetitionClient() {
           form.group_id ? { label: "Group", value: myGroups.find((g) => g.id === form.group_id)?.name ?? form.group_id } : null,
           form.series_id ? { label: "Series", value: groupSeries.find((s) => s.id === form.series_id)?.name ?? form.series_id } : null,
           form.series_id && form.competition_year ? { label: "Year", value: form.competition_year } : null,
+          form.course_name ? { label: "Course", value: form.course_name } : null,
           form.competition_date ? { label: "Date", value: form.competition_date } : null,
           form.standings_contribution !== "event_only" ? { label: "Standings", value: form.standings_contribution } : null,
         ]

@@ -8,9 +8,278 @@ import type {
   SeriesEventTemplate,
   SeriesYearGroup,
   SeriesSeason,
+  CompetitionTypeV2,
+  CompetitionScoringModel,
+  CompetitionPointsModel,
+  CompetitionCategory,
 } from "@/lib/majors/types";
 
 const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+const COMP_TYPES: { value: CompetitionTypeV2; label: string }[] = [
+  { value: "stroke", label: "Strokeplay" },
+  { value: "stableford", label: "Stableford" },
+  { value: "matchplay", label: "Match Play" },
+  { value: "skins", label: "Skins" },
+  { value: "scramble", label: "Scramble" },
+  { value: "bestball", label: "Best Ball" },
+  { value: "custom", label: "Custom" },
+];
+
+const SCORING_MODELS: { value: CompetitionScoringModel; label: string }[] = [
+  { value: "net", label: "Net" },
+  { value: "gross", label: "Gross" },
+  { value: "stableford_points", label: "Stableford Points" },
+  { value: "match_result", label: "Match Result" },
+];
+
+const POINTS_MODELS: { value: CompetitionPointsModel; label: string }[] = [
+  { value: "none", label: "None" },
+  { value: "fedex_style", label: "FedEx-style" },
+  { value: "position_based", label: "Position-based" },
+  { value: "custom_table", label: "Custom table" },
+];
+
+const CATEGORIES: { value: CompetitionCategory; label: string }[] = [
+  { value: "round_based", label: "Round-based" },
+  { value: "aggregate", label: "Aggregate" },
+  { value: "standalone", label: "Standalone" },
+];
+
+// ─── Edit Series Settings modal ───────────────────────────────────────────────
+
+function SeriesEditModal({
+  series,
+  onClose,
+  onSaved,
+}: {
+  series: CompetitionSeriesWithEvents;
+  onClose: () => void;
+  onSaved: (updated: CompetitionSeriesWithEvents) => void;
+}) {
+  const settings = (series.template_settings ?? {}) as Record<string, unknown>;
+
+  const [name, setName] = useState(series.name ?? "");
+  const [description, setDescription] = useState(series.description ?? "");
+  const [recurAnnually, setRecurAnnually] = useState(series.recur_annually ?? true);
+  const [typicalMonth, setTypicalMonth] = useState(series.typical_month?.toString() ?? "");
+  const [compCategory, setCompCategory] = useState<CompetitionCategory>(series.template_competition_category ?? "round_based");
+  const [compType, setCompType] = useState<CompetitionTypeV2>(series.template_competition_type ?? "stroke");
+  const [scoringModel, setScoringModel] = useState<CompetitionScoringModel>(series.template_scoring_model ?? "net");
+  const [pointsModel, setPointsModel] = useState<CompetitionPointsModel>(series.template_points_model ?? "none");
+  const [numRounds, setNumRounds] = useState(String(series.template_num_rounds ?? "1"));
+  const [rulesText, setRulesText] = useState(series.template_rules_text ?? "");
+  const [handicapMode, setHandicapMode] = useState<string>((settings.handicap_mode as string) ?? "allowance_pct");
+  const [handicapPct, setHandicapPct] = useState(settings.handicap_allowance_pct != null ? String(settings.handicap_allowance_pct) : "100");
+  const [handicapMax, setHandicapMax] = useState(settings.max_handicap != null ? String(settings.max_handicap) : "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const session = await getViewerSession();
+      if (!session) { setError("Not signed in"); return; }
+
+      const template_settings: Record<string, unknown> = { handicap_mode: handicapMode };
+      if (handicapMode === "allowance_pct") template_settings.handicap_allowance_pct = parseInt(handicapPct, 10) || 100;
+      if (handicapMode !== "none" && handicapMax) template_settings.max_handicap = parseInt(handicapMax, 10);
+
+      const res = await fetch(`/api/majors/series/${series.id}`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          description: description.trim() || null,
+          recur_annually: recurAnnually,
+          typical_month: typicalMonth ? parseInt(typicalMonth, 10) : null,
+          template_competition_category: compCategory,
+          template_competition_type: compType,
+          template_scoring_model: scoringModel,
+          template_points_model: pointsModel,
+          template_num_rounds: compCategory === "round_based" ? (parseInt(numRounds, 10) || 1) : null,
+          template_rules_text: rulesText.trim() || null,
+          template_settings,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) { setError(json.error ?? "Save failed"); return; }
+      onSaved({ ...series, ...json.series });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 pb-[env(safe-area-inset-bottom)]" onClick={onClose}>
+      <div
+        className="w-full max-w-sm rounded-t-2xl bg-[#0a2e18] border-t border-x border-emerald-800/60 p-5 space-y-4 max-h-[88vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="text-sm font-semibold text-emerald-50">Edit Series Settings</div>
+
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Series Name *</label>
+            <input
+              className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Description</label>
+            <textarea
+              className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none resize-none"
+              rows={2}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setRecurAnnually((v) => !v)}
+            className={`w-full flex items-center justify-between rounded-xl border px-3 py-2 text-sm transition-colors ${recurAnnually ? "border-emerald-500 bg-emerald-900/40 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}
+          >
+            <span>Recurs annually</span>
+            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${recurAnnually ? "bg-emerald-600 text-white" : "bg-emerald-900/40 text-emerald-400"}`}>{recurAnnually ? "On" : "Off"}</span>
+          </button>
+
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Typical Month</label>
+            <select
+              className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 focus:outline-none"
+              value={typicalMonth}
+              onChange={(e) => setTypicalMonth(e.target.value)}
+            >
+              <option value="">No preference</option>
+              {monthNames.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Default Category</label>
+            <div className="grid grid-cols-3 gap-1.5">
+              {CATEGORIES.map((c) => (
+                <button key={c.value} type="button" onClick={() => setCompCategory(c.value)}
+                  className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${compCategory === c.value ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Default Format</label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {COMP_TYPES.map((t) => (
+                <button key={t.value} type="button" onClick={() => setCompType(t.value)}
+                  className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${compType === t.value ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Default Scoring</label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {SCORING_MODELS.map((s) => (
+                <button key={s.value} type="button" onClick={() => setScoringModel(s.value)}
+                  className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${scoringModel === s.value ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {scoringModel !== "gross" && (
+            <div className="rounded-xl border border-emerald-900/40 bg-emerald-950/30 p-3 space-y-2">
+              <div className="text-[10px] uppercase tracking-wider text-emerald-200/50 font-semibold">Default Handicap Rules</div>
+              <div className="space-y-1">
+                <label className="text-[10px] text-emerald-200/60">Mode</label>
+                <select
+                  className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 focus:outline-none"
+                  value={handicapMode}
+                  onChange={(e) => setHandicapMode(e.target.value)}
+                >
+                  <option value="allowance_pct">Percentage Allowance</option>
+                  <option value="compare_against_lowest">Off the Lowest</option>
+                  <option value="fixed">Fixed</option>
+                  <option value="none">None (Gross)</option>
+                </select>
+              </div>
+              {handicapMode === "allowance_pct" && (
+                <div className="space-y-1">
+                  <label className="text-[10px] text-emerald-200/60">Allowance %</label>
+                  <input type="number" min={0} max={100} value={handicapPct}
+                    onChange={(e) => setHandicapPct(e.target.value)}
+                    className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 focus:outline-none" />
+                </div>
+              )}
+              {handicapMode !== "none" && (
+                <div className="space-y-1">
+                  <label className="text-[10px] text-emerald-200/60">Max Handicap (optional)</label>
+                  <input type="number" min={0} value={handicapMax}
+                    onChange={(e) => setHandicapMax(e.target.value)}
+                    placeholder="No limit"
+                    className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none" />
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Default Points Model</label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {POINTS_MODELS.map((p) => (
+                <button key={p.value} type="button" onClick={() => setPointsModel(p.value)}
+                  className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${pointsModel === p.value ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {compCategory === "round_based" && (
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Default Rounds</label>
+              <input type="number" min={1} max={10} value={numRounds}
+                onChange={(e) => setNumRounds(e.target.value)}
+                className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 focus:outline-none" />
+            </div>
+          )}
+
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Default Rules</label>
+            <textarea
+              className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none resize-none"
+              rows={3}
+              placeholder="Rules that apply to all events in this series…"
+              value={rulesText}
+              onChange={(e) => setRulesText(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {error && <div className="text-xs text-red-400">{error}</div>}
+        <div className="flex gap-2 pt-1">
+          <button type="button" onClick={onClose}
+            className="flex-1 py-2 rounded-full border border-emerald-700/50 text-sm text-emerald-200 hover:bg-emerald-900/30">
+            Cancel
+          </button>
+          <button type="button" onClick={handleSave} disabled={!name.trim() || saving}
+            className="flex-1 py-2 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-40">
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Add / Edit Event Template modal ─────────────────────────────────────────
 
@@ -28,6 +297,10 @@ function EventTemplateModal({
   const [name, setName] = useState(existing?.name ?? "");
   const [description, setDescription] = useState(existing?.description ?? "");
   const [month, setMonth] = useState(existing?.typical_month?.toString() ?? "");
+  const [compType, setCompType] = useState<CompetitionTypeV2 | "">(existing?.template_competition_type ?? "");
+  const [scoringModel, setScoringModel] = useState<CompetitionScoringModel | "">(existing?.template_scoring_model ?? "");
+  const [pointsModel, setPointsModel] = useState<CompetitionPointsModel | "">(existing?.template_points_model ?? "");
+  const [rulesText, setRulesText] = useState(existing?.template_rules_text ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,6 +316,10 @@ function EventTemplateModal({
         name: name.trim(),
         description: description.trim() || null,
         typical_month: month ? parseInt(month, 10) : null,
+        template_competition_type: compType || null,
+        template_scoring_model: scoringModel || null,
+        template_points_model: pointsModel || null,
+        template_rules_text: rulesText.trim() || null,
       };
 
       let res: Response;
@@ -103,6 +380,69 @@ function EventTemplateModal({
                 <option key={i + 1} value={i + 1}>{m}</option>
               ))}
             </select>
+          </div>
+
+          <div className="border-t border-emerald-900/40 pt-3 space-y-3">
+            <div className="text-[10px] uppercase tracking-wider text-emerald-200/40">Overrides (leave blank to inherit from series)</div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Format Override</label>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button type="button" onClick={() => setCompType("")}
+                  className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${compType === "" ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
+                  Inherit
+                </button>
+                {COMP_TYPES.map((t) => (
+                  <button key={t.value} type="button" onClick={() => setCompType(t.value)}
+                    className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${compType === t.value ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Scoring Override</label>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button type="button" onClick={() => setScoringModel("")}
+                  className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${scoringModel === "" ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
+                  Inherit
+                </button>
+                {SCORING_MODELS.map((s) => (
+                  <button key={s.value} type="button" onClick={() => setScoringModel(s.value)}
+                    className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${scoringModel === s.value ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Points Override</label>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button type="button" onClick={() => setPointsModel("")}
+                  className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${pointsModel === "" ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
+                  Inherit
+                </button>
+                {POINTS_MODELS.map((p) => (
+                  <button key={p.value} type="button" onClick={() => setPointsModel(p.value)}
+                    className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${pointsModel === p.value ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Rules Override</label>
+              <textarea
+                className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none resize-none"
+                rows={2}
+                placeholder="Leave blank to inherit series rules…"
+                value={rulesText}
+                onChange={(e) => setRulesText(e.target.value)}
+              />
+            </div>
           </div>
         </div>
         {error && <div className="text-xs text-red-400">{error}</div>}
@@ -228,6 +568,7 @@ export default function SeriesDetailClient({ seriesId }: { seriesId: string }) {
   const [editingEvent, setEditingEvent] = useState<SeriesEventTemplate | null>(null);
   const [showCreateSeason, setShowCreateSeason] = useState(false);
   const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
+  const [showEditSeries, setShowEditSeries] = useState(false);
 
   const isAdminOrOwner = myRole === "owner" || myRole === "admin";
 
@@ -382,11 +723,22 @@ export default function SeriesDetailClient({ seriesId }: { seriesId: string }) {
               <p className="text-sm text-emerald-100/55 mt-1">{series.description}</p>
             )}
           </div>
-          {series.recur_annually && (
-            <span className="shrink-0 text-[9px] font-semibold px-2 py-0.5 rounded-full border border-emerald-700/50 bg-emerald-900/30 text-emerald-300">
-              Annual
-            </span>
-          )}
+          <div className="flex items-center gap-2 shrink-0">
+            {series.recur_annually && (
+              <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full border border-emerald-700/50 bg-emerald-900/30 text-emerald-300">
+                Annual
+              </span>
+            )}
+            {isAdminOrOwner && (
+              <button
+                type="button"
+                onClick={() => setShowEditSeries(true)}
+                className="text-[11px] text-emerald-300/70 hover:text-emerald-200 border border-emerald-800/50 rounded-full px-2.5 py-1"
+              >
+                Edit Settings
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -568,6 +920,17 @@ export default function SeriesDetailClient({ seriesId }: { seriesId: string }) {
       </div>
 
       {/* ── Modals ───────────────────────────────────────────────────────────── */}
+      {showEditSeries && (
+        <SeriesEditModal
+          series={series}
+          onClose={() => setShowEditSeries(false)}
+          onSaved={(updated) => {
+            setSeries(updated);
+            setShowEditSeries(false);
+          }}
+        />
+      )}
+
       {(showAddEvent || editingEvent) && (
         <EventTemplateModal
           seriesId={seriesId}
