@@ -113,7 +113,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       group_number?: number;
       notes?: string;
       competition_round_id?: string;
-      players?: Array<{ profile_id?: string; is_guest?: boolean; display_name?: string; charge_to?: string | null }>;
+      players?: Array<{
+        profile_id?: string;
+        is_guest?: boolean;
+        display_name?: string;
+        charge_to?: string | null;
+        tee_box_id?: string | null;
+      }>;
     };
 
     if (!tee_time) return NextResponse.json({ error: "tee_time is required" }, { status: 400 });
@@ -191,6 +197,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         is_guest: player.is_guest ?? false,
         display_name: player.display_name ?? null,
         role: "player",
+        pending_tee_box_id: player.tee_box_id ?? null,
       });
     }
 

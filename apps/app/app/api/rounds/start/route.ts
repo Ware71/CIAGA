@@ -78,17 +78,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, round_id: round.id });
     }
 
-    const teeBoxId = round.pending_tee_box_id as string;
+    const defaultTeeBoxId = round.pending_tee_box_id as string;
 
-    // If snapshots already exist (e.g. previous run partially completed), reuse them
-    const { data: existingTeeSnap } = await supabaseAdmin
-      .from("round_tee_snapshots")
-      .select("id, round_course_snapshot_id")
-      .order("created_at", { ascending: false })
-      .limit(1);
-
-    // But existingTeeSnap isn't filtered by round in your schema. So we use round_course_snapshots as the anchor.
-    // We'll check if a round_course_snapshot already exists for this round.
+    // Ensure a course snapshot exists for this round
     const { data: existingCourseSnap, error: ecsErr } = await supabaseAdmin
       .from("round_course_snapshots")
       .select("id")
@@ -129,21 +121,39 @@ export async function POST(req: Request) {
       courseSnapId = rcs.id;
     }
 
-    // Check if we already have a tee snapshot for this round (by courseSnapId + source tee box)
-    const { data: existingRts, error: exRtsErr } = await supabaseAdmin
-      .from("round_tee_snapshots")
-      .select("id")
-      .eq("round_course_snapshot_id", courseSnapId)
-      .eq("source_tee_box_id", teeBoxId)
-      .maybeSingle();
+    // Fetch all participants and their per-player tee overrides
+    const { data: participants, error: partErr } = await supabaseAdmin
+      .from("round_participants")
+      .select("id, pending_tee_box_id")
+      .eq("round_id", round.id);
 
-    if (exRtsErr) return NextResponse.json({ error: exRtsErr.message }, { status: 500 });
+    if (partErr) return NextResponse.json({ error: partErr.message }, { status: 500 });
 
-    let teeSnapId: string;
+    // Collect unique tee box IDs needed (player overrides + round default)
+    const teeBoxIds = new Set<string>([defaultTeeBoxId]);
+    for (const p of participants ?? []) {
+      if (p.pending_tee_box_id) teeBoxIds.add(p.pending_tee_box_id);
+    }
 
-    if (existingRts?.id) {
-      teeSnapId = existingRts.id;
-    } else {
+    // Build a map teeBoxId -> teeSnapId, creating snapshots as needed
+    const teeSnapMap = new Map<string, string>();
+
+    for (const teeBoxId of teeBoxIds) {
+      // Reuse existing snapshot if already created (idempotent)
+      const { data: existingRts, error: exRtsErr } = await supabaseAdmin
+        .from("round_tee_snapshots")
+        .select("id")
+        .eq("round_course_snapshot_id", courseSnapId)
+        .eq("source_tee_box_id", teeBoxId)
+        .maybeSingle();
+
+      if (exRtsErr) return NextResponse.json({ error: exRtsErr.message }, { status: 500 });
+
+      if (existingRts?.id) {
+        teeSnapMap.set(teeBoxId, existingRts.id);
+        continue;
+      }
+
       const { data: tee, error: teeErr } = await supabaseAdmin
         .from("course_tee_boxes")
         .select("id, name, gender, yards, par, rating, slope, holes_count")
@@ -179,13 +189,14 @@ export async function POST(req: Request) {
         .single();
 
       if (rtsErr) return NextResponse.json({ error: rtsErr.message }, { status: 500 });
-      teeSnapId = rts.id;
+      teeSnapMap.set(teeBoxId, rts.id);
 
       // Insert hole snapshots only if none exist for this teeSnap
+      const snapId = rts.id;
       const { data: existingHoles, error: exHolesErr } = await supabaseAdmin
         .from("round_hole_snapshots")
         .select("hole_number")
-        .eq("round_tee_snapshot_id", teeSnapId)
+        .eq("round_tee_snapshot_id", snapId)
         .limit(1);
 
       if (exHolesErr) return NextResponse.json({ error: exHolesErr.message }, { status: 500 });
@@ -194,7 +205,7 @@ export async function POST(req: Request) {
         const payload = holes
           .filter((h) => typeof h.hole_number === "number")
           .map((h) => ({
-            round_tee_snapshot_id: teeSnapId,
+            round_tee_snapshot_id: snapId,
             hole_number: h.hole_number,
             par: h.par,
             yardage: h.yardage,
@@ -206,13 +217,22 @@ export async function POST(req: Request) {
       }
     }
 
-    // Assign tee snapshot to all participants (idempotent)
-    const { error: assignErr } = await supabaseAdmin
-      .from("round_participants")
-      .update({ tee_snapshot_id: teeSnapId })
-      .eq("round_id", round.id);
+    // Assign each participant their tee snapshot (per-player override, else round default)
+    const defaultSnapId = teeSnapMap.get(defaultTeeBoxId)!;
+    for (const participant of participants ?? []) {
+      const snapId = participant.pending_tee_box_id
+        ? (teeSnapMap.get(participant.pending_tee_box_id) ?? defaultSnapId)
+        : defaultSnapId;
 
-    if (assignErr) return NextResponse.json({ error: assignErr.message }, { status: 500 });
+      const { error: assignErr } = await supabaseAdmin
+        .from("round_participants")
+        .update({ tee_snapshot_id: snapId })
+        .eq("id", participant.id);
+
+      if (assignErr) return NextResponse.json({ error: assignErr.message }, { status: 500 });
+    }
+
+    const teeSnapId = defaultSnapId;
 
     // Persist resolved handicaps (snapshot at start to prevent mid-round drift)
     const { error: handicapErr } = await supabaseAdmin.rpc("ciaga_persist_playing_handicaps", {

@@ -29,7 +29,7 @@ function formatDistance(meters: number) {
 type Props = {
   open: boolean;
   onClose: () => void;
-  onSelect: (courseId: string) => void;
+  onSelect: (courseId: string, courseName?: string) => void;
   preloadedNearby?: Course[] | null;
   nearbyGpsPos?: { lat: number; lng: number } | null;
 };
@@ -215,7 +215,7 @@ export function CoursePickerModal({ open, onClose, onSelect, preloadedNearby, ne
   async function onSelectCourse(c: Course) {
     const ov = overrides[c.id];
     if (ov?.course_id) {
-      onSelect(ov.course_id);
+      onSelect(ov.course_id, c.name);
       return;
     }
 
@@ -237,7 +237,7 @@ export function CoursePickerModal({ open, onClose, onSelect, preloadedNearby, ne
       if (!res.ok)
         throw new Error(data?.error ?? data?.reason ?? "Resolve failed");
 
-      if (data?.course_id) onSelect(data.course_id);
+      if (data?.course_id) onSelect(data.course_id, c.name);
     } catch (e: any) {
       console.error("Resolve error:", e?.message ?? e);
     } finally {

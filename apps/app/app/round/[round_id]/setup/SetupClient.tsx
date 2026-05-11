@@ -21,6 +21,8 @@ import { formatHI } from "@/lib/rounds/handicapUtils";
 import { TeamBuilderSheet } from "@/components/rounds/TeamBuilderSheet";
 import type { TeamBuilderTeam, TeamBuilderParticipant } from "@/components/rounds/TeamBuilderSheet";
 import { isTeamFormat } from "@/components/rounds/FormatSelector";
+import { PlayerTeeRow } from "@/components/rounds/PlayerTeeRow";
+import type { TeeBoxOption } from "@/components/rounds/PlayerTeeRow";
 
 
 function Avatar({
@@ -335,6 +337,10 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
   const [hiByProfileId, setHiByProfileId] = useState<Record<string, number>>({});
   const [chByProfileId, setChByProfileId] = useState<Record<string, number>>({});
 
+  // Per-player tee assignments
+  const [teeBoxes, setTeeBoxes] = useState<TeeBoxOption[]>([]);
+  const [pendingTeeByParticipantId, setPendingTeeByParticipantId] = useState<Record<string, string | null>>({});
+
   const participantProfileIds = useMemo(() => {
     return new Set(participants.map((p) => p.profile_id).filter(Boolean) as string[]);
   }, [participants]);
@@ -366,6 +372,16 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
     );
   }, []);
+
+  // Fetch tee boxes when course changes
+  useEffect(() => {
+    const courseId = round?.course_id;
+    if (!courseId) { setTeeBoxes([]); return; }
+    fetch(`/api/courses/tee-boxes?course_id=${courseId}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((j) => { if (j) setTeeBoxes(j.tee_boxes ?? []); })
+      .catch(() => {});
+  }, [round?.course_id]);
 
   // Auto-detect nearest course once nearby data + round are available (new rounds only)
   useEffect(() => {
@@ -499,6 +515,20 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
     return { name, avatar_url };
   }
 
+  async function fetchParticipantTees() {
+    const { data } = await supabase
+      .from("round_participants")
+      .select("id, pending_tee_box_id")
+      .eq("round_id", roundId);
+    if (data) {
+      const map: Record<string, string | null> = {};
+      for (const row of data) {
+        map[row.id] = (row as any).pending_tee_box_id ?? null;
+      }
+      setPendingTeeByParticipantId(map);
+    }
+  }
+
   async function fetchAll() {
     setErr(null);
     // Use a ref (not `round` state) to determine if this is the initial load.
@@ -572,6 +602,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
       setTeams((snap.teams ?? []) as TeamBuilderTeam[]);
       setHiByProfileId(snap.handicap_indexes ?? {});
       setChByProfileId(snap.course_handicaps ?? {});
+      fetchParticipantTees();
     } catch (e: any) {
       setErr(e?.message || "Failed to load setup");
     } finally {
@@ -652,6 +683,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
       setHiByProfileId(snap.handicap_indexes ?? {});
       setChByProfileId(snap.course_handicaps ?? {});
       if (viewerProfileId) setMeId(viewerProfileId);
+      fetchParticipantTees();
       return;
     }
 
@@ -1416,6 +1448,38 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
                 onUpdate={fetchAll}
                 getDisplayName={displayParticipant as any}
               />
+            ) : null}
+
+            {/* Player Tees */}
+            {isOwner && teeBoxes.length > 0 && participants.filter((p) => !p.is_guest).length > 0 ? (
+              <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
+                <div className="mb-3">
+                  <div className="text-sm font-semibold text-emerald-50">Player Tees</div>
+                  <div className="text-[11px] text-emerald-100/70">
+                    {round.status === "draft" || round.status === "scheduled"
+                      ? "Override tee per player — affects WHS handicap calculation"
+                      : "Tee assignments"}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {participants
+                    .filter((p) => !p.is_guest)
+                    .map((p) => (
+                      <PlayerTeeRow
+                        key={p.id}
+                        participantId={p.id}
+                        roundId={roundId}
+                        participantName={displayParticipant(p).name}
+                        currentTeeBoxId={pendingTeeByParticipantId[p.id] ?? null}
+                        defaultTeeBoxId={round.pending_tee_box_id}
+                        teeBoxes={teeBoxes}
+                        canEdit={isOwner}
+                        disabled={round.status !== "draft" && round.status !== "scheduled"}
+                        onUpdated={fetchParticipantTees}
+                      />
+                    ))}
+                </div>
+              </div>
             ) : null}
 
             {!isOwner ? (

@@ -16,6 +16,9 @@ import type {
   ProposedWinning,
   CompetitionWaitlistEntry,
 } from "@/lib/majors/types";
+import { COMP_TYPES, SCORING_MODELS, POINTS_MODELS } from "@/lib/competitions/constants";
+import { HandicapRulesEditor } from "@/components/competitions/HandicapRulesEditor";
+import { CoursePickerModal } from "@/components/rounds/CoursePickerModal";
 
 type Tab = "overview" | "leaderboard" | "tee-times" | "rules" | "results" | "fixtures" | "bracket" | "league-table" | "winnings";
 
@@ -162,10 +165,17 @@ function SubmitRoundSheet({
 
 // ─── Add Tee Time sheet ───────────────────────────────────────────────────────
 
-type GroupMember = { profile_id: string; profile: { name: string | null; avatar_url: string | null } | null };
+type GroupMember = {
+  profile_id: string;
+  profile: { name: string | null; avatar_url: string | null } | null;
+  preferred_tee_name: string | null;
+};
+
+type TeeBoxOption = { id: string; name: string; yards: number | null; rating: number | null; slope: number | null };
 
 function AddTeeTimeSheet({
   competitionId,
+  courseId,
   groupMembers,
   entryFeeAmount,
   entryFeeCurrency,
@@ -173,6 +183,7 @@ function AddTeeTimeSheet({
   onCreated,
 }: {
   competitionId: string;
+  courseId: string | null;
   groupMembers: GroupMember[];
   entryFeeAmount: number | null;
   entryFeeCurrency: string;
@@ -183,22 +194,53 @@ function AddTeeTimeSheet({
   const [groupNumber, setGroupNumber] = useState("");
   const [notes, setNotes] = useState("");
   const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
+  const [playerTees, setPlayerTees] = useState<Record<string, string>>({}); // profile_id → tee_box_id
+  const [teeBoxes, setTeeBoxes] = useState<TeeBoxOption[]>([]);
   const [guestName, setGuestName] = useState("");
   const [guests, setGuests] = useState<string[]>([]);
   const [guestChargeTo, setGuestChargeTo] = useState<Record<string, string>>({}); // guestName → profile_id of host to charge
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Fetch tee boxes for the competition's course
+  useEffect(() => {
+    if (!courseId) return;
+    (async () => {
+      const res = await fetch(`/api/courses/tee-boxes?course_id=${courseId}`);
+      if (res.ok) {
+        const j = await res.json();
+        setTeeBoxes(j.tee_boxes ?? []);
+      }
+    })();
+  }, [courseId]);
+
   const totalPlayers = selectedPlayers.length + guests.length;
 
-  const togglePlayer = (profileId: string) => {
-    setSelectedPlayers((prev) =>
-      prev.includes(profileId)
-        ? prev.filter((id) => id !== profileId)
-        : totalPlayers < 4
-        ? [...prev, profileId]
-        : prev
+  // Resolve a member's preferred tee name to an actual tee_box_id
+  const resolvePreferredTee = (preferredTeeName: string | null): string | undefined => {
+    if (!preferredTeeName || teeBoxes.length === 0) return undefined;
+    const match = teeBoxes.find(
+      (t) => t.name.toLowerCase().trim() === preferredTeeName.toLowerCase().trim()
     );
+    return match?.id;
+  };
+
+  const togglePlayer = (profileId: string) => {
+    setSelectedPlayers((prev) => {
+      if (prev.includes(profileId)) {
+        const next = prev.filter((id) => id !== profileId);
+        setPlayerTees((tees) => { const t = { ...tees }; delete t[profileId]; return t; });
+        return next;
+      }
+      if (totalPlayers >= 4) return prev;
+      // Pre-fill tee preference for newly added player
+      const member = groupMembers.find((m) => m.profile_id === profileId);
+      if (member?.preferred_tee_name) {
+        const teeId = resolvePreferredTee(member.preferred_tee_name);
+        if (teeId) setPlayerTees((tees) => ({ ...tees, [profileId]: teeId }));
+      }
+      return [...prev, profileId];
+    });
   };
 
   const addGuest = () => {
@@ -217,7 +259,10 @@ function AddTeeTimeSheet({
       const session = await getViewerSession();
       if (!session) return;
       const players = [
-        ...selectedPlayers.map((pid) => ({ profile_id: pid })),
+        ...selectedPlayers.map((pid) => ({
+          profile_id: pid,
+          tee_box_id: playerTees[pid] ?? null,
+        })),
         ...guests.map((name) => ({ is_guest: true, display_name: name, charge_to: guestChargeTo[name] ?? null })),
       ];
       const res = await fetch(`/api/majors/competitions/${competitionId}/tee-times`, {
@@ -293,34 +338,52 @@ function AddTeeTimeSheet({
             <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Players</label>
             <span className="text-[10px] text-emerald-200/50">{totalPlayers}/4</span>
           </div>
-          <div className="space-y-1.5 max-h-40 overflow-y-auto">
+          <div className="space-y-1.5 max-h-48 overflow-y-auto">
             {groupMembers.map((m) => {
               const selected = selectedPlayers.includes(m.profile_id);
               const disabled = !selected && totalPlayers >= 4;
               return (
-                <button
-                  key={m.profile_id}
-                  type="button"
-                  onClick={() => togglePlayer(m.profile_id)}
-                  disabled={disabled}
-                  className={`w-full flex items-center gap-3 rounded-xl border px-3 py-2 text-left transition-colors ${
-                    selected
-                      ? "border-emerald-500 bg-emerald-900/50"
-                      : disabled
-                      ? "border-emerald-900/30 bg-transparent opacity-40"
-                      : "border-emerald-900/50 bg-emerald-900/20 hover:border-emerald-700/50"
-                  }`}
-                >
-                  {m.profile?.avatar_url ? (
-                    <img src={m.profile.avatar_url} alt="" className="h-6 w-6 rounded-full object-cover" />
-                  ) : (
-                    <div className="h-6 w-6 rounded-full bg-emerald-900/60 grid place-items-center text-[9px] font-bold text-emerald-200">
-                      {m.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
+                <div key={m.profile_id} className="space-y-1">
+                  <button
+                    type="button"
+                    onClick={() => togglePlayer(m.profile_id)}
+                    disabled={disabled}
+                    className={`w-full flex items-center gap-3 rounded-xl border px-3 py-2 text-left transition-colors ${
+                      selected
+                        ? "border-emerald-500 bg-emerald-900/50"
+                        : disabled
+                        ? "border-emerald-900/30 bg-transparent opacity-40"
+                        : "border-emerald-900/50 bg-emerald-900/20 hover:border-emerald-700/50"
+                    }`}
+                  >
+                    {m.profile?.avatar_url ? (
+                      <img src={m.profile.avatar_url} alt="" className="h-6 w-6 rounded-full object-cover" />
+                    ) : (
+                      <div className="h-6 w-6 rounded-full bg-emerald-900/60 grid place-items-center text-[9px] font-bold text-emerald-200">
+                        {m.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
+                      </div>
+                    )}
+                    <span className="flex-1 text-sm text-emerald-50">{m.profile?.name ?? m.profile_id}</span>
+                    {selected && <span className="text-emerald-400 text-xs">✓</span>}
+                  </button>
+                  {selected && teeBoxes.length > 0 && (
+                    <div className="flex items-center gap-2 pl-9">
+                      <span className="text-[10px] text-emerald-200/50 shrink-0">Tee:</span>
+                      <select
+                        value={playerTees[m.profile_id] ?? ""}
+                        onChange={(e) => setPlayerTees((tees) => ({ ...tees, [m.profile_id]: e.target.value }))}
+                        className="flex-1 rounded-lg bg-emerald-900/30 border border-emerald-800/40 px-2 py-1 text-xs text-emerald-50 focus:outline-none"
+                      >
+                        <option value="">— round default —</option>
+                        {teeBoxes.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.name}{t.yards ? ` (${t.yards}y)` : ""}{t.rating ? ` · ${t.rating}` : ""}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   )}
-                  <span className="flex-1 text-sm text-emerald-50">{m.profile?.name ?? m.profile_id}</span>
-                  {selected && <span className="text-emerald-400 text-xs">✓</span>}
-                </button>
+                </div>
               );
             })}
           </div>
@@ -546,8 +609,6 @@ function FixtureCard({ fixture }: { fixture: MatchplayFixture & { home_entry?: a
 
 // ─── Competition Setup Sheet ──────────────────────────────────────────────────
 
-type SetupCourseResult = { id: string; name: string; lat: number; lng: number; subtitle: string; city: string | null; country: string | null };
-
 function CompetitionSetupSheet({
   competition,
   onClose,
@@ -574,10 +635,7 @@ function CompetitionSetupSheet({
   );
   const [courseId, setCourseId] = useState(competition.course_id ?? "");
   const [courseName, setCourseName] = useState(competition.course?.name ?? "");
-  const [courseSearch, setCourseSearch] = useState("");
-  const [courseResults, setCourseResults] = useState<SetupCourseResult[]>([]);
-  const [courseSearchLoading, setCourseSearchLoading] = useState(false);
-  const [courseResolving, setCourseResolving] = useState(false);
+  const [showCoursePicker, setShowCoursePicker] = useState(false);
   const [selectedCompType, setSelectedCompType] = useState<string>(compType ?? "stroke");
   const [scoringModel, setScoringModel] = useState<string>(competition.scoring_model ?? "net");
   const [pointsModel, setPointsModel] = useState<string>(competition.points_model ?? "none");
@@ -590,65 +648,6 @@ function CompetitionSetupSheet({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const COMP_TYPES = [
-    { value: "stroke", label: "Strokeplay" },
-    { value: "stableford", label: "Stableford" },
-    { value: "matchplay", label: "Match Play" },
-    { value: "skins", label: "Skins" },
-    { value: "scramble", label: "Scramble" },
-    { value: "bestball", label: "Best Ball" },
-    { value: "custom", label: "Custom" },
-  ];
-  const SCORING_MODELS = [
-    { value: "net", label: "Net" },
-    { value: "gross", label: "Gross" },
-    { value: "stableford_points", label: "Stableford Points" },
-    { value: "match_result", label: "Match Result" },
-  ];
-  const POINTS_MODELS = [
-    { value: "none", label: "None" },
-    { value: "fedex_style", label: "FedEx-style" },
-    { value: "position_based", label: "Position-based" },
-    { value: "custom_table", label: "Custom table" },
-  ];
-
-  const handleCourseSearch = async () => {
-    const q = courseSearch.trim();
-    if (!q) return;
-    setCourseSearchLoading(true);
-    setCourseResults([]);
-    try {
-      const res = await fetch(`/api/courses/search?q=${encodeURIComponent(q)}&limit=8`);
-      if (res.ok) {
-        const j = await res.json();
-        setCourseResults(j.items ?? []);
-      }
-    } finally {
-      setCourseSearchLoading(false);
-    }
-  };
-
-  const handleCourseSelect = async (course: SetupCourseResult) => {
-    setCourseResolving(true);
-    try {
-      const session = await getViewerSession();
-      if (!session) return;
-      const res = await fetch("/api/courses/resolve", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ osm_id: course.id, name: course.name, lat: course.lat, lng: course.lng, city: course.city ?? null, country: course.country ?? null }),
-      });
-      if (res.ok) {
-        const j = await res.json();
-        setCourseId(j.course_id ?? "");
-        setCourseName(course.name);
-        setCourseSearch("");
-        setCourseResults([]);
-      }
-    } finally {
-      setCourseResolving(false);
-    }
-  };
 
   const handleSave = async () => {
     if (!name.trim()) return;
@@ -753,33 +752,16 @@ function CompetitionSetupSheet({
                   className="ml-2 text-[11px] text-emerald-300/60 hover:text-emerald-200 shrink-0">✕</button>
               </div>
             ) : (
-              <div className="space-y-1.5">
-                <div className="flex gap-2">
-                  <input type="text" value={courseSearch}
-                    onChange={(e) => setCourseSearch(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") handleCourseSearch(); }}
-                    placeholder="Search for a course…"
-                    className="flex-1 rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none" />
-                  <button type="button" onClick={handleCourseSearch}
-                    disabled={!courseSearch.trim() || courseSearchLoading}
-                    className="rounded-xl border border-emerald-700/60 bg-emerald-900/40 px-3 py-2 text-[11px] font-semibold text-emerald-200 disabled:opacity-40">
-                    {courseSearchLoading ? "…" : "Search"}
-                  </button>
-                </div>
-                {courseResults.length > 0 && (
-                  <div className="rounded-xl border border-emerald-900/60 bg-[#071f13] divide-y divide-emerald-900/40 overflow-hidden">
-                    {courseResults.map((c) => (
-                      <button key={c.id} type="button" onClick={() => handleCourseSelect(c)}
-                        disabled={courseResolving}
-                        className="w-full text-left px-3 py-2 hover:bg-emerald-900/40 transition-colors disabled:opacity-50">
-                        <div className="text-sm text-emerald-50">{c.name}</div>
-                        {c.subtitle && <div className="text-[10px] text-emerald-200/45 mt-0.5">{c.subtitle}</div>}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <button type="button" onClick={() => setShowCoursePicker(true)}
+                className="w-full rounded-xl border border-emerald-800/40 bg-emerald-900/20 px-3 py-2 text-sm text-emerald-200/60 text-left">
+                Select course…
+              </button>
             )}
+            <CoursePickerModal
+              open={showCoursePicker}
+              onClose={() => setShowCoursePicker(false)}
+              onSelect={(id, name) => { setCourseId(id); setCourseName(name ?? ""); setShowCoursePicker(false); }}
+            />
           </div>
 
           {/* Format */}
@@ -814,33 +796,11 @@ function CompetitionSetupSheet({
           {scoringModel !== "gross" && (
             <div className="rounded-xl border border-emerald-900/40 bg-emerald-950/30 p-3 space-y-2">
               <div className="text-[10px] uppercase tracking-wider text-emerald-200/50 font-semibold">Handicap Rules</div>
-              <div className="space-y-1">
-                <label className="text-[10px] text-emerald-200/60">Mode</label>
-                <select className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 focus:outline-none"
-                  value={handicapMode} onChange={(e) => setHandicapMode(e.target.value)}>
-                  <option value="allowance_pct">Percentage Allowance</option>
-                  <option value="compare_against_lowest">Off the Lowest</option>
-                  <option value="fixed">Fixed</option>
-                  <option value="none">None (Gross)</option>
-                </select>
-              </div>
-              {handicapMode === "allowance_pct" && (
-                <div className="space-y-1">
-                  <label className="text-[10px] text-emerald-200/60">Allowance %</label>
-                  <input type="number" min={0} max={100} value={handicapPct}
-                    onChange={(e) => setHandicapPct(e.target.value)}
-                    className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 focus:outline-none" />
-                </div>
-              )}
-              {handicapMode !== "none" && (
-                <div className="space-y-1">
-                  <label className="text-[10px] text-emerald-200/60">Max Handicap (optional)</label>
-                  <input type="number" min={0} value={handicapMax}
-                    onChange={(e) => setHandicapMax(e.target.value)}
-                    placeholder="No limit"
-                    className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none" />
-                </div>
-              )}
+              <HandicapRulesEditor
+                compact
+                value={{ mode: handicapMode as any, allowance_pct: handicapPct, max_handicap: handicapMax }}
+                onChange={(v) => { setHandicapMode(v.mode); setHandicapPct(v.allowance_pct); setHandicapMax(v.max_handicap); }}
+              />
             </div>
           )}
 
@@ -1003,6 +963,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
               setGroupMembers(members.filter((m: any) => m.status === "active").map((m: any) => ({
                 profile_id: m.profile_id,
                 profile: m.profile ?? null,
+                preferred_tee_name: m.preferred_tee_name ?? null,
               })));
               const own = members.find((m: any) => m.profile_id === session.profileId);
               setMyRole(own?.role ?? null);
@@ -1912,6 +1873,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
       {showAddTeeTime && (
         <AddTeeTimeSheet
           competitionId={competitionId}
+          courseId={competition.course_id ?? null}
           groupMembers={groupMembers}
           entryFeeAmount={(competition as any).entry_fee_amount ?? null}
           entryFeeCurrency={(competition as any).entry_fee_currency ?? "GBP"}

@@ -36,7 +36,20 @@ export async function getSetupSnapshot(roundId: string) {
     .filter((r: any) => !r.is_guest && r.profile_id)
     .map((r: any) => r.profile_id as string);
 
-  const [hiData, teeData] = await Promise.all([
+  // Build a map of profileId → pending_tee_box_id (per-player overrides)
+  const participantTeeMap: Record<string, string> = {};
+  for (const row of rows as any[]) {
+    if (row.pending_tee_box_id && row.profile_id) {
+      participantTeeMap[row.profile_id as string] = row.pending_tee_box_id as string;
+    }
+  }
+
+  // Collect unique tee box IDs needed for handicap computation
+  const teeBoxIdsNeeded = new Set<string>();
+  if (round.pending_tee_box_id) teeBoxIdsNeeded.add(round.pending_tee_box_id);
+  for (const teeId of Object.values(participantTeeMap)) teeBoxIdsNeeded.add(teeId);
+
+  const [hiData, teeBoxesData] = await Promise.all([
     profileIds.length > 0
       ? supabaseAdmin
           .from("handicap_index_history")
@@ -45,13 +58,12 @@ export async function getSetupSnapshot(roundId: string) {
           .not("handicap_index", "is", null)
           .order("as_of_date", { ascending: false })
       : Promise.resolve({ data: [], error: null }),
-    round.pending_tee_box_id
+    teeBoxIdsNeeded.size > 0
       ? supabaseAdmin
           .from("course_tee_boxes")
-          .select("par, rating, slope")
-          .eq("id", round.pending_tee_box_id)
-          .single()
-      : Promise.resolve({ data: null, error: null }),
+          .select("id, par, rating, slope")
+          .in("id", [...teeBoxIdsNeeded])
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
   const handicapIndexes: Record<string, number> = {};
@@ -66,18 +78,27 @@ export async function getSetupSnapshot(roundId: string) {
     }
   }
 
-  const courseHandicaps: Record<string, number> = {};
-  if (!teeData.error && teeData.data) {
-    const par = Number((teeData.data as any).par);
-    const rating = Number((teeData.data as any).rating);
-    const slope = Number((teeData.data as any).slope);
+  // Build teeBoxId → { par, rating, slope }
+  const teeBoxStats: Record<string, { par: number; rating: number; slope: number }> = {};
+  for (const tb of (teeBoxesData.data ?? []) as any[]) {
+    teeBoxStats[tb.id as string] = {
+      par: Number(tb.par),
+      rating: Number(tb.rating),
+      slope: Number(tb.slope),
+    };
+  }
 
+  // Compute per-player course handicap using their assigned tee (fallback: round default tee)
+  const courseHandicaps: Record<string, number> = {};
+  for (const pid of profileIds) {
+    const hi = handicapIndexes[pid];
+    if (hi == null) continue;
+    const teeBoxId = participantTeeMap[pid] ?? round.pending_tee_box_id;
+    const tee = teeBoxId ? teeBoxStats[teeBoxId] : null;
+    if (!tee) continue;
+    const { par, rating, slope } = tee;
     if (Number.isFinite(par) && Number.isFinite(rating) && Number.isFinite(slope)) {
-      for (const pid of profileIds) {
-        const hi = handicapIndexes[pid];
-        if (hi == null) continue;
-        courseHandicaps[pid] = calcCourseHandicap(hi, slope, rating, par);
-      }
+      courseHandicaps[pid] = calcCourseHandicap(hi, slope, rating, par);
     }
   }
 

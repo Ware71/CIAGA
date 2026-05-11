@@ -14,37 +14,9 @@ import type {
   MajorGroup,
 } from "@/lib/majors/types";
 import type { PlayingHandicapMode } from "@/components/rounds/PlayingHandicapSettings";
-
-
-const COMP_CATEGORIES: { value: CompetitionCategory; label: string; desc: string }[] = [
-  { value: "round_based", label: "Round-based", desc: "Requires round submissions to score" },
-  { value: "aggregate", label: "Aggregate", desc: "Points race / Order of Merit — no round needed" },
-  { value: "standalone", label: "Standalone", desc: "Own leaderboard, round is optional" },
-];
-
-const COMP_TYPES: { value: CompetitionTypeV2; label: string }[] = [
-  { value: "stroke", label: "Strokeplay" },
-  { value: "stableford", label: "Stableford" },
-  { value: "matchplay", label: "Match Play" },
-  { value: "skins", label: "Skins" },
-  { value: "scramble", label: "Scramble" },
-  { value: "bestball", label: "Best Ball" },
-  { value: "custom", label: "Custom" },
-];
-
-const SCORING_MODELS: { value: CompetitionScoringModel; label: string }[] = [
-  { value: "net", label: "Net (handicap adjusted)" },
-  { value: "gross", label: "Gross (no handicap)" },
-  { value: "stableford_points", label: "Stableford Points" },
-  { value: "match_result", label: "Match Result" },
-];
-
-const POINTS_MODELS: { value: CompetitionPointsModel; label: string }[] = [
-  { value: "none", label: "No points (event result only)" },
-  { value: "fedex_style", label: "FedEx-style season points" },
-  { value: "position_based", label: "Position-based points" },
-  { value: "custom_table", label: "Custom points table" },
-];
+import { COMP_CATEGORIES, COMP_TYPES, SCORING_MODELS, POINTS_MODELS } from "@/lib/competitions/constants";
+import { HandicapRulesEditor } from "@/components/competitions/HandicapRulesEditor";
+import { CoursePickerModal } from "@/components/rounds/CoursePickerModal";
 
 const AGGREGATE_SOURCES = [
   { value: "group_standings", label: "Group season standings" },
@@ -54,15 +26,6 @@ const AGGREGATE_SOURCES = [
 
 type AggregateSource = "group_standings" | "competition_ids" | "custom";
 
-type CourseResult = {
-  id: string; // osm_id e.g. "way/123"
-  name: string;
-  lat: number;
-  lng: number;
-  subtitle: string;
-  city: string | null;
-  country: string | null;
-};
 
 type FormState = {
   name: string;
@@ -71,7 +34,6 @@ type FormState = {
   competition_category: CompetitionCategory;
   competition_type: CompetitionTypeV2;
   format: string;
-  course_search: string;
   course_id: string;
   course_name: string;
   competition_date: string;
@@ -103,7 +65,6 @@ const INITIAL: FormState = {
   competition_category: "round_based",
   competition_type: "stroke",
   format: "",
-  course_search: "",
   course_id: "",
   course_name: "",
   competition_date: "",
@@ -124,6 +85,74 @@ const INITIAL: FormState = {
   handicap_allowance_pct: "100",
   handicap_max: "",
 };
+
+function EntryWindowSection({
+  start, end, onChangeStart, onChangeEnd,
+}: { start: string; end: string; onChangeStart: (v: string) => void; onChangeEnd: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const hasValue = !!(start || end);
+  return (
+    <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between px-4 py-3 text-left"
+      >
+        <span className="text-[11px] uppercase tracking-wider text-emerald-200/65">Entry Window</span>
+        <span className="text-[10px] text-emerald-100/50">{hasValue ? "Set" : "Optional"} {open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="px-4 pb-4 space-y-3">
+          <div className="space-y-1">
+            <label className="text-[10px] text-emerald-200/55">Opens</label>
+            <input
+              type="datetime-local"
+              value={start}
+              onChange={(e) => onChangeStart(e.target.value)}
+              className="w-full rounded-xl border border-emerald-900/60 bg-[#042713] px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] text-emerald-200/55">Closes</label>
+            <input
+              type="datetime-local"
+              value={end}
+              onChange={(e) => onChangeEnd(e.target.value)}
+              className="w-full rounded-xl border border-emerald-900/60 bg-[#042713] px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RulesTextSection({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between px-4 py-3 text-left"
+      >
+        <span className="text-[11px] uppercase tracking-wider text-emerald-200/65">Rules Text</span>
+        <span className="text-[10px] text-emerald-100/50">{value ? "Set" : "Optional"} {open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="px-4 pb-4">
+          <textarea
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            rows={4}
+            placeholder="Any specific rules or conditions for this competition…"
+            className="w-full rounded-xl border border-emerald-900/60 bg-[#042713] px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600 resize-none"
+          />
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function CreateCompetitionClient() {
   const router = useRouter();
@@ -146,17 +175,16 @@ export default function CreateCompetitionClient() {
   const [seriesEventTemplates, setSeriesEventTemplates] = useState<SeriesEventTemplate[]>([]);
   const [myGroups, setMyGroups] = useState<MajorGroup[]>([]);
   const [groupSeries, setGroupSeries] = useState<CompetitionSeries[]>([]);
+  const [groupDefaultsApplied, setGroupDefaultsApplied] = useState(false);
   const [showNewSeriesModal, setShowNewSeriesModal] = useState(false);
   const [newSeriesName, setNewSeriesName] = useState("");
   const [creatingSeries, setCreatingSeries] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [courseResults, setCourseResults] = useState<CourseResult[]>([]);
-  const [courseSearchLoading, setCourseSearchLoading] = useState(false);
-  const [courseResolving, setCourseResolving] = useState(false);
+  const [showCoursePicker, setShowCoursePicker] = useState(false);
 
   const isAggregate = form.competition_category === "aggregate";
-  const totalSteps = 6;
+  const totalSteps = 4;
 
   useEffect(() => {
     (async () => {
@@ -167,12 +195,41 @@ export default function CreateCompetitionClient() {
       });
       if (res.ok) {
         const j = await res.json();
-        setMyGroups((j.groups ?? []).filter((g: any) =>
+        const groups: MajorGroup[] = (j.groups ?? []).filter((g: any) =>
           g.role === "owner" || g.role === "admin"
-        ));
+        );
+        setMyGroups(groups);
+        // Auto-apply defaults from pre-selected group
+        if (preselectedGroupId) {
+          const preGroup = groups.find((g) => g.id === preselectedGroupId);
+          if (preGroup) {
+            setForm((prev) => ({ ...prev, ...applyGroupDefaults(preGroup, prev) }));
+            setGroupDefaultsApplied(true);
+          }
+        }
       }
     })();
   }, []);
+
+  // Helper: apply group defaults to form (series/template settings take priority if set after)
+  const applyGroupDefaults = (group: MajorGroup, prevForm: FormState): Partial<FormState> => {
+    const prefs = group.default_scoring_prefs ?? {};
+    const updates: Partial<FormState> = {};
+    if (prefs.competition_type) updates.competition_type = prefs.competition_type;
+    if (prefs.scoring_model) updates.scoring_model = prefs.scoring_model;
+    if (prefs.points_model) updates.points_model = prefs.points_model;
+    if (prefs.standings_contribution) updates.standings_contribution = prefs.standings_contribution;
+    if (prefs.handicap_rules) {
+      updates.handicap_mode = (prefs.handicap_rules.mode as PlayingHandicapMode) ?? prevForm.handicap_mode;
+      updates.handicap_allowance_pct = prefs.handicap_rules.allowance_pct != null
+        ? String(prefs.handicap_rules.allowance_pct)
+        : prevForm.handicap_allowance_pct;
+      updates.handicap_max = prefs.handicap_rules.max_handicap != null
+        ? String(prefs.handicap_rules.max_handicap)
+        : prevForm.handicap_max;
+    }
+    return updates;
+  };
 
   // Helper: apply series + optional event template settings to form
   const applySeriesSettings = (
@@ -313,52 +370,9 @@ export default function CreateCompetitionClient() {
     }
   };
 
-  const handleCourseSearch = async () => {
-    const q = form.course_search.trim();
-    if (!q) return;
-    setCourseSearchLoading(true);
-    setCourseResults([]);
-    try {
-      const res = await fetch(`/api/courses/search?q=${encodeURIComponent(q)}&limit=8`);
-      if (res.ok) {
-        const j = await res.json();
-        setCourseResults(j.items ?? []);
-      }
-    } finally {
-      setCourseSearchLoading(false);
-    }
-  };
-
-  const handleCourseSelect = async (course: CourseResult) => {
-    setCourseResolving(true);
-    try {
-      const session = await getViewerSession();
-      if (!session) return;
-      const res = await fetch("/api/courses/resolve", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          osm_id: course.id,
-          name: course.name,
-          lat: course.lat,
-          lng: course.lng,
-          city: course.city ?? null,
-          country: course.country ?? null,
-        }),
-      });
-      if (res.ok) {
-        const j = await res.json();
-        setForm((prev) => ({
-          ...prev,
-          course_id: j.course_id ?? "",
-          course_name: course.name,
-          course_search: "",
-        }));
-        setCourseResults([]);
-      }
-    } finally {
-      setCourseResolving(false);
-    }
+  const handleCoursePickerSelect = (courseId: string, courseName?: string) => {
+    setForm((prev) => ({ ...prev, course_id: courseId, course_name: courseName ?? "" }));
+    setShowCoursePicker(false);
   };
 
   const handleSubmit = async () => {
@@ -421,8 +435,9 @@ export default function CreateCompetitionClient() {
   };
 
   const steps = [
-    /* Step 0: Name, Category, Format (if round-based/standalone) */
+    /* ── Step 0: Essentials ── */
     <div key="step0" className="space-y-5">
+      {/* Name */}
       <div className="space-y-2">
         <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Competition Name *</label>
         <input
@@ -433,19 +448,61 @@ export default function CreateCompetitionClient() {
           className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-3 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
         />
       </div>
+
+      {/* Group */}
       <div className="space-y-2">
-        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Description</label>
-        <textarea
-          value={form.description}
-          onChange={(e) => update("description", e.target.value)}
-          rows={2}
-          placeholder="Describe this competition"
-          className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-3 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600 resize-none"
-        />
+        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Group (optional)</label>
+        {myGroups.length > 0 ? (
+          <div className="space-y-1.5">
+            <button
+              type="button"
+              onClick={() => { update("group_id", ""); update("series_id", ""); setGroupDefaultsApplied(false); }}
+              className={`w-full text-left rounded-xl border px-4 py-2 text-sm transition-colors ${
+                form.group_id === ""
+                  ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
+                  : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
+              }`}
+            >
+              Standalone (no group)
+            </button>
+            {myGroups.map((g) => (
+              <button
+                key={g.id}
+                type="button"
+                onClick={() => {
+                  setForm((prev) => ({ ...prev, group_id: g.id, ...applyGroupDefaults(g, prev) }));
+                  setGroupDefaultsApplied(true);
+                }}
+                className={`w-full text-left rounded-xl border px-4 py-2 text-sm transition-colors ${
+                  form.group_id === g.id
+                    ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
+                    : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
+                }`}
+              >
+                {g.name}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="text-sm text-emerald-100/50">
+            No groups yet.{" "}
+            <button type="button" onClick={() => router.push("/majors/groups/create")} className="underline text-emerald-300">
+              Create one?
+            </button>
+          </div>
+        )}
       </div>
+
+      {groupDefaultsApplied && (
+        <div className="rounded-xl border border-emerald-700/50 bg-emerald-900/20 px-4 py-2 text-[11px] text-emerald-200/70">
+          ✓ Defaults applied from group — review & adjust on the next steps
+        </div>
+      )}
+
+      {/* Category */}
       <div className="space-y-2">
         <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Category</label>
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           {COMP_CATEGORIES.map((c) => (
             <button
               key={c.value}
@@ -463,167 +520,61 @@ export default function CreateCompetitionClient() {
           ))}
         </div>
       </div>
+
+      {/* Format + Scoring (inline chips, only for non-aggregate) */}
       {!isAggregate && (
-        <div className="space-y-2">
-          <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Format</label>
-          <div className="grid grid-cols-2 gap-2">
-            {COMP_TYPES.map((t) => (
-              <button
-                key={t.value}
-                type="button"
-                onClick={() => update("competition_type", t.value)}
-                className={`rounded-xl border px-3 py-2 text-sm transition-colors ${
-                  form.competition_type === t.value
-                    ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                    : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>,
-
-    /* Step 1: Group, Series, Date */
-    <div key="step1" className="space-y-5">
-      <div className="space-y-2">
-        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Parent Group (optional)</label>
-        {myGroups.length > 0 ? (
+        <>
           <div className="space-y-2">
-            <button
-              type="button"
-              onClick={() => { update("group_id", ""); update("series_id", ""); }}
-              className={`w-full text-left rounded-xl border px-4 py-2 text-sm transition-colors ${
-                form.group_id === ""
-                  ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                  : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
-              }`}
-            >
-              No group (standalone)
-            </button>
-            {myGroups.map((g) => (
-              <button
-                key={g.id}
-                type="button"
-                onClick={() => update("group_id", g.id)}
-                className={`w-full text-left rounded-xl border px-4 py-2 text-sm transition-colors ${
-                  form.group_id === g.id
-                    ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                    : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
-                }`}
-              >
-                {g.name}
-              </button>
-            ))}
+            <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Format</label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {COMP_TYPES.map((t) => (
+                <button
+                  key={t.value}
+                  type="button"
+                  onClick={() => update("competition_type", t.value)}
+                  className={`rounded-xl border px-3 py-2 text-sm transition-colors ${
+                    form.competition_type === t.value
+                      ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
+                      : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
           </div>
-        ) : (
-          <div className="text-sm text-emerald-100/50">
-            You have no groups to assign this to.{" "}
-            <button
-              type="button"
-              onClick={() => router.push("/majors/groups/create")}
-              className="underline text-emerald-300"
-            >
-              Create one first?
-            </button>
+          <div className="space-y-2">
+            <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Scoring</label>
+            <div className="flex gap-1.5">
+              {SCORING_MODELS.map((s) => (
+                <button
+                  key={s.value}
+                  type="button"
+                  onClick={() => update("scoring_model", s.value)}
+                  className={`flex-1 rounded-xl border px-3 py-2 text-sm transition-colors ${
+                    form.scoring_model === s.value
+                      ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
+                      : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
+                  }`}
+                >
+                  {s.shortLabel}
+                </button>
+              ))}
+            </div>
           </div>
-        )}
+        </>
+      )}
+
+      {/* Date + Course */}
+      <div className="space-y-2">
+        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Date</label>
+        <input
+          type="date"
+          value={form.competition_date}
+          onChange={(e) => update("competition_date", e.target.value)}
+          className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-3 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
+        />
       </div>
-
-      {/* Series selection — only shown when a group is selected */}
-      {form.group_id && (
-        <div className="space-y-2">
-          <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Competition Series (optional)</label>
-          <button
-            type="button"
-            onClick={() => { update("series_id", ""); update("series_event_template_id", ""); setSeriesEventTemplates([]); setTemplateSeries(null); }}
-            className={`w-full text-left rounded-xl border px-4 py-2 text-sm transition-colors ${
-              form.series_id === ""
-                ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
-            }`}
-          >
-            Not part of a series
-          </button>
-          {groupSeries.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => handleSeriesSelect(s.id)}
-              className={`w-full text-left rounded-xl border px-4 py-2 text-sm transition-colors ${
-                form.series_id === s.id
-                  ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                  : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
-              }`}
-            >
-              {s.name}
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => setShowNewSeriesModal(true)}
-            className="text-[11px] text-emerald-400 underline"
-          >
-            + Create new series
-          </button>
-        </div>
-      )}
-
-      {/* Event template — shown when the selected series has named events */}
-      {form.series_id && seriesEventTemplates.length > 0 && (
-        <div className="space-y-2">
-          <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Event (optional)</label>
-          <button
-            type="button"
-            onClick={() => handleEventTemplateSelect("")}
-            className={`w-full text-left rounded-xl border px-4 py-2 text-sm transition-colors ${
-              form.series_event_template_id === ""
-                ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
-            }`}
-          >
-            Not linked to a specific event
-          </button>
-          {seriesEventTemplates.map((et) => (
-            <button
-              key={et.id}
-              type="button"
-              onClick={() => handleEventTemplateSelect(et.id)}
-              className={`w-full text-left rounded-xl border px-4 py-2 text-sm transition-colors ${
-                form.series_event_template_id === et.id
-                  ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                  : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
-              }`}
-            >
-              <div>{et.name}</div>
-              {et.typical_month != null && (
-                <div className="text-[10px] text-emerald-200/45 mt-0.5">
-                  Usually {["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][et.typical_month - 1]}
-                </div>
-              )}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Year — shown when a series is selected */}
-      {form.series_id && (
-        <div className="space-y-2">
-          <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Year</label>
-          <input
-            type="number"
-            value={form.competition_year}
-            onChange={(e) => update("competition_year", e.target.value)}
-            min={2000}
-            max={2100}
-            className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-3 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
-          />
-        </div>
-      )}
-
-      {/* Course picker */}
       <div className="space-y-2">
         <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Course (optional)</label>
         {form.course_id ? (
@@ -638,81 +589,67 @@ export default function CreateCompetitionClient() {
             </button>
           </div>
         ) : (
-          <div className="space-y-2">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={form.course_search}
-                onChange={(e) => update("course_search", e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") handleCourseSearch(); }}
-                placeholder="Search for a course…"
-                className="flex-1 rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
-              />
-              <button
-                type="button"
-                onClick={handleCourseSearch}
-                disabled={!form.course_search.trim() || courseSearchLoading}
-                className="rounded-xl border border-emerald-700/60 bg-emerald-900/40 px-3 py-2 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-800/50 disabled:opacity-40"
-              >
-                {courseSearchLoading ? "…" : "Search"}
-              </button>
-            </div>
-            {courseResults.length > 0 && (
-              <div className="rounded-xl border border-emerald-900/60 bg-[#0b3b21]/80 divide-y divide-emerald-900/40 overflow-hidden">
-                {courseResults.map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => handleCourseSelect(c)}
-                    disabled={courseResolving}
-                    className="w-full text-left px-4 py-2.5 hover:bg-emerald-900/40 transition-colors disabled:opacity-50"
-                  >
-                    <div className="text-sm text-emerald-50">{c.name}</div>
-                    {c.subtitle && <div className="text-[10px] text-emerald-200/45 mt-0.5">{c.subtitle}</div>}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <button
+            type="button"
+            onClick={() => setShowCoursePicker(true)}
+            className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-100/40 hover:border-emerald-700/60 text-left"
+          >
+            Search for a course…
+          </button>
         )}
-      </div>
-
-      <div className="space-y-2">
-        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Competition Date</label>
-        <input
-          type="date"
-          value={form.competition_date}
-          onChange={(e) => update("competition_date", e.target.value)}
-          className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-3 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
-        />
       </div>
     </div>,
 
-    /* Step 2: Entry window / rounds — or aggregate config */
+    /* ── Step 1: Handicap & Entry ── */
+    <div key="step1" className="space-y-5">
+      {groupDefaultsApplied && (
+        <div className="rounded-xl border border-emerald-700/50 bg-emerald-900/20 px-4 py-2 text-[11px] text-emerald-200/70">
+          ✓ Handicap rules pre-filled from group defaults
+        </div>
+      )}
+
+      {/* Handicap rules */}
+      {form.scoring_model !== "gross" && (
+        <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 p-4 space-y-3">
+          <div className="text-[10px] uppercase tracking-wider text-emerald-200/55 font-semibold">Handicap Rules</div>
+          <HandicapRulesEditor
+            value={{ mode: form.handicap_mode as any, allowance_pct: form.handicap_allowance_pct, max_handicap: form.handicap_max }}
+            onChange={(v) => setForm((f) => ({ ...f, handicap_mode: v.mode as PlayingHandicapMode, handicap_allowance_pct: v.allowance_pct, handicap_max: v.max_handicap }))}
+          />
+        </div>
+      )}
+
+      {/* Entry window (collapsible) */}
+      <EntryWindowSection
+        start={form.entry_window_start}
+        end={form.entry_window_end}
+        onChangeStart={(v) => update("entry_window_start", v)}
+        onChangeEnd={(v) => update("entry_window_end", v)}
+      />
+
+      {/* Rules text (expandable) */}
+      <RulesTextSection value={form.rules_text} onChange={(v) => update("rules_text", v)} />
+    </div>,
+
+    /* ── Step 2: Structure ── */
     <div key="step2" className="space-y-5">
-      <div className="space-y-2">
-        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Entry Opens</label>
-        <input
-          type="datetime-local"
-          value={form.entry_window_start}
-          onChange={(e) => update("entry_window_start", e.target.value)}
-          className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-3 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
-        />
-      </div>
-      <div className="space-y-2">
-        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Entry Closes</label>
-        <input
-          type="datetime-local"
-          value={form.entry_window_end}
-          onChange={(e) => update("entry_window_end", e.target.value)}
-          className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-3 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
-        />
-      </div>
-      {isAggregate ? (
+      {!isAggregate ? (
+        <div className="space-y-2">
+          <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Number of Rounds</label>
+          <input
+            type="number"
+            min={1}
+            max={10}
+            value={form.num_rounds}
+            onChange={(e) => update("num_rounds", e.target.value)}
+            className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-3 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
+          />
+        </div>
+      ) : (
         <div className="space-y-4">
           <div className="space-y-2">
             <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Aggregate Source</label>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {AGGREGATE_SOURCES.map((s) => (
                 <button
                   key={s.value}
@@ -753,162 +690,160 @@ export default function CreateCompetitionClient() {
             <div className="text-[10px] text-emerald-200/55">e.g. a FedEx Cup finale round that also contributes to the score</div>
           </button>
         </div>
-      ) : (
-        <div className="space-y-2">
-          <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Number of Rounds</label>
-          <input
-            type="number"
-            min={1}
-            max={10}
-            value={form.num_rounds}
-            onChange={(e) => update("num_rounds", e.target.value)}
-            className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-3 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
-          />
-        </div>
-      )}
-    </div>,
-
-    /* Step 3: Scoring model + handicap */
-    <div key="step3" className="space-y-5">
-      <div className="space-y-2">
-        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Scoring Model</label>
-        <div className="space-y-2">
-          {SCORING_MODELS.map((s) => (
-            <button
-              key={s.value}
-              type="button"
-              onClick={() => update("scoring_model", s.value)}
-              className={`w-full text-left rounded-xl border px-4 py-2 text-sm transition-colors ${
-                form.scoring_model === s.value
-                  ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                  : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
-              }`}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Handicap config — shown when scoring involves handicap */}
-      {form.scoring_model !== "gross" && (
-        <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 p-4 space-y-3">
-          <div className="text-[10px] uppercase tracking-wider text-emerald-200/55 font-semibold">Handicap Rules</div>
-          <div className="space-y-1">
-            <label className="text-[11px] text-emerald-200/65">Handicap Mode</label>
-            <select
-              value={form.handicap_mode}
-              onChange={(e) => {
-                const m = e.target.value as PlayingHandicapMode;
-                update("handicap_mode", m);
-                if (m === "allowance_pct") update("handicap_allowance_pct", "100");
-              }}
-              className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
-            >
-              <option value="allowance_pct">Percentage Allowance</option>
-              <option value="compare_against_lowest">Off the Lowest</option>
-              <option value="fixed">Fixed Handicap</option>
-              <option value="none">No Handicap (Gross Only)</option>
-            </select>
-            {form.handicap_mode === "compare_against_lowest" && (
-              <p className="text-[10px] text-emerald-100/40">Best player plays off scratch. Others receive strokes equal to the difference from the lowest handicap.</p>
-            )}
-          </div>
-          {form.handicap_mode === "allowance_pct" && (
-            <div className="space-y-1">
-              <label className="text-[11px] text-emerald-200/65">Handicap Allowance %</label>
-              <input
-                type="number"
-                min={0}
-                max={100}
-                value={form.handicap_allowance_pct}
-                onChange={(e) => update("handicap_allowance_pct", e.target.value)}
-                className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
-              />
-              <p className="text-[10px] text-emerald-100/40">e.g. 90 = players use 90% of their course handicap</p>
-            </div>
-          )}
-          {form.handicap_mode !== "none" && (
-            <div className="space-y-1">
-              <label className="text-[11px] text-emerald-200/65">Max Handicap (optional)</label>
-              <input
-                type="number"
-                min={0}
-                value={form.handicap_max}
-                onChange={(e) => update("handicap_max", e.target.value)}
-                placeholder="Leave blank for no limit"
-                className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
-              />
-              <p className="text-[10px] text-emerald-100/40">Cap the maximum handicap that can be applied</p>
-            </div>
-          )}
-        </div>
       )}
 
+      {/* Points model */}
       <div className="space-y-2">
         <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Points Model</label>
-        <div className="space-y-2">
+        <div className="grid grid-cols-2 gap-1.5">
           {POINTS_MODELS.map((p) => (
             <button
               key={p.value}
               type="button"
               onClick={() => update("points_model", p.value)}
-              className={`w-full text-left rounded-xl border px-4 py-2 text-sm transition-colors ${
+              className={`rounded-xl border px-3 py-2 text-sm transition-colors ${
                 form.points_model === p.value
                   ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
                   : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
               }`}
             >
-              {p.label}
+              {p.shortLabel}
             </button>
           ))}
         </div>
       </div>
-    </div>,
 
-    /* Step 4: Rules, standings */
-    <div key="step4" className="space-y-5">
-      <div className="space-y-2">
-        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Competition Rules (optional)</label>
-        <textarea
-          value={form.rules_text}
-          onChange={(e) => update("rules_text", e.target.value)}
-          rows={5}
-          placeholder="Any specific rules or conditions for this competition..."
-          className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-3 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600 resize-none"
-        />
-      </div>
+      {/* Standings */}
       <div className="space-y-2">
         <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Season Standings</label>
-        {(["event_only", "season", "both"] as const).map((v) => (
+        <div className="flex gap-1.5">
+          {(["event_only", "season", "both"] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => update("standings_contribution", v)}
+              className={`flex-1 rounded-xl border px-2 py-2 text-[11px] text-center transition-colors ${
+                form.standings_contribution === v
+                  ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
+                  : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
+              }`}
+            >
+              {v === "event_only" && "Event only"}
+              {v === "season" && "Season"}
+              {v === "both" && "Both"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Series — only if group selected */}
+      {form.group_id && (
+        <div className="space-y-2">
+          <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Series (optional)</label>
           <button
-            key={v}
             type="button"
-            onClick={() => update("standings_contribution", v)}
+            onClick={() => { update("series_id", ""); update("series_event_template_id", ""); setSeriesEventTemplates([]); setTemplateSeries(null); }}
             className={`w-full text-left rounded-xl border px-4 py-2 text-sm transition-colors ${
-              form.standings_contribution === v
+              form.series_id === ""
                 ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
                 : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
             }`}
           >
-            {v === "event_only" && "Event only (no season points)"}
-            {v === "season" && "Season standings only"}
-            {v === "both" && "Event result + season standings"}
+            Not part of a series
           </button>
-        ))}
+          {groupSeries.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => handleSeriesSelect(s.id)}
+              className={`w-full text-left rounded-xl border px-4 py-2 text-sm transition-colors ${
+                form.series_id === s.id
+                  ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
+                  : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
+              }`}
+            >
+              {s.name}
+            </button>
+          ))}
+          <button type="button" onClick={() => setShowNewSeriesModal(true)} className="text-[11px] text-emerald-400 underline">
+            + Create new series
+          </button>
+        </div>
+      )}
+
+      {/* Event template + Year */}
+      {form.series_id && seriesEventTemplates.length > 0 && (
+        <div className="space-y-2">
+          <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Event (optional)</label>
+          <button
+            type="button"
+            onClick={() => handleEventTemplateSelect("")}
+            className={`w-full text-left rounded-xl border px-4 py-2 text-sm transition-colors ${
+              form.series_event_template_id === ""
+                ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
+                : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
+            }`}
+          >
+            Not linked to a specific event
+          </button>
+          {seriesEventTemplates.map((et) => (
+            <button
+              key={et.id}
+              type="button"
+              onClick={() => handleEventTemplateSelect(et.id)}
+              className={`w-full text-left rounded-xl border px-4 py-2 text-sm transition-colors ${
+                form.series_event_template_id === et.id
+                  ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
+                  : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
+              }`}
+            >
+              <div>{et.name}</div>
+              {et.typical_month != null && (
+                <div className="text-[10px] text-emerald-200/45 mt-0.5">
+                  Usually {["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][et.typical_month - 1]}
+                </div>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+      {form.series_id && (
+        <div className="space-y-2">
+          <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Year</label>
+          <input
+            type="number"
+            value={form.competition_year}
+            onChange={(e) => update("competition_year", e.target.value)}
+            min={2000}
+            max={2100}
+            className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-3 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
+          />
+        </div>
+      )}
+
+      {/* Description (optional, at the bottom) */}
+      <div className="space-y-2">
+        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Description (optional)</label>
+        <textarea
+          value={form.description}
+          onChange={(e) => update("description", e.target.value)}
+          rows={2}
+          placeholder="Describe this competition…"
+          className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-3 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600 resize-none"
+        />
       </div>
     </div>,
 
-    /* Step 5: Confirm */
-    <div key="step5" className="space-y-4">
-      <div className="text-sm font-semibold text-emerald-50">Confirm Competition</div>
+    /* ── Step 3: Review ── */
+    <div key="step3" className="space-y-4">
+      <div className="text-sm font-semibold text-emerald-50">Review & Create</div>
       <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4 space-y-2">
         {[
           { label: "Name", value: form.name },
           { label: "Category", value: form.competition_category },
           !isAggregate ? { label: "Format", value: form.competition_type } : null,
-          { label: "Scoring", value: form.scoring_model },
-          form.scoring_model !== "gross" ? {
+          !isAggregate ? { label: "Scoring", value: form.scoring_model } : null,
+          form.scoring_model !== "gross" && !isAggregate ? {
             label: "Handicap",
             value: form.handicap_mode === "compare_against_lowest"
               ? `Off the Lowest${form.handicap_max ? ` (max ${form.handicap_max})` : ""}`
@@ -922,12 +857,12 @@ export default function CreateCompetitionClient() {
           !isAggregate ? { label: "Rounds", value: form.num_rounds } : null,
           isAggregate ? { label: "Aggregate source", value: form.aggregate_source } : null,
           isAggregate && form.aggregate_top_n ? { label: "Top N events", value: form.aggregate_top_n } : null,
+          { label: "Standings", value: form.standings_contribution === "event_only" ? "Event only" : form.standings_contribution === "season" ? "Season" : "Both" },
           form.group_id ? { label: "Group", value: myGroups.find((g) => g.id === form.group_id)?.name ?? form.group_id } : null,
           form.series_id ? { label: "Series", value: groupSeries.find((s) => s.id === form.series_id)?.name ?? form.series_id } : null,
           form.series_id && form.competition_year ? { label: "Year", value: form.competition_year } : null,
           form.course_name ? { label: "Course", value: form.course_name } : null,
           form.competition_date ? { label: "Date", value: form.competition_date } : null,
-          form.standings_contribution !== "event_only" ? { label: "Standings", value: form.standings_contribution } : null,
         ]
           .filter(Boolean)
           .map((item) => (
@@ -1012,6 +947,13 @@ export default function CreateCompetitionClient() {
           </button>
         )}
       </div>
+
+      {/* Course picker modal */}
+      <CoursePickerModal
+        open={showCoursePicker}
+        onClose={() => setShowCoursePicker(false)}
+        onSelect={handleCoursePickerSelect}
+      />
 
       {/* New series modal */}
       {showNewSeriesModal && (

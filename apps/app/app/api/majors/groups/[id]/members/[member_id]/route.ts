@@ -63,6 +63,10 @@ export async function PATCH(
       updates.role = body.role;
     }
 
+    if (body.preferred_tee_name !== undefined) {
+      updates.preferred_tee_name = body.preferred_tee_name === "" ? null : (body.preferred_tee_name ?? null);
+    }
+
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
     }

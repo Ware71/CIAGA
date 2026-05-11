@@ -50,6 +50,134 @@ function PositionBadge({ position }: { position: number | null }) {
   );
 }
 
+const TEE_PRESETS = ["White", "Yellow", "Red", "Blue", "Gold", "Black", "Ladies", "Junior"];
+
+function MemberRow({
+  member,
+  isAdminOrOwner,
+  myRole,
+  myProfileId,
+  onRoleToggle,
+  onTeePrefSave,
+  onNavigate,
+}: {
+  member: MajorGroupMembershipWithProfile;
+  isAdminOrOwner: boolean;
+  myRole: string | null;
+  myProfileId: string | null;
+  onRoleToggle: () => void;
+  onTeePrefSave: (tee: string | null) => Promise<void>;
+  onNavigate: () => void;
+}) {
+  const [editingTee, setEditingTee] = useState(false);
+  const [teeValue, setTeeValue] = useState(member.preferred_tee_name ?? "");
+  const [teeSaving, setTeeSaving] = useState(false);
+
+  const roleCls =
+    member.role === "owner"
+      ? "text-[#f5e6b0] border-[#f5e6b0]/30 bg-[#f5e6b0]/10"
+      : member.role === "admin"
+      ? "text-emerald-300 border-emerald-700/50 bg-emerald-900/30"
+      : "text-emerald-200/50 border-emerald-900/50 bg-transparent";
+
+  const handleTeeSave = async () => {
+    setTeeSaving(true);
+    try {
+      await onTeePrefSave(teeValue.trim() || null);
+      setEditingTee(false);
+    } finally {
+      setTeeSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 space-y-1.5">
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
+          onClick={onNavigate}
+        >
+          {member.profile?.avatar_url ? (
+            <img src={member.profile.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
+          ) : (
+            <div className="h-8 w-8 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
+              {member.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
+            </div>
+          )}
+          <span className="flex-1 text-sm font-semibold text-emerald-50 truncate text-left">
+            {member.profile?.name ?? member.profile_id}
+          </span>
+        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border capitalize ${roleCls}`}>
+            {member.role}
+          </span>
+          {isAdminOrOwner && member.role !== "owner" && member.profile_id !== myProfileId && myRole === "owner" && (
+            <button
+              type="button"
+              onClick={onRoleToggle}
+              className="text-[9px] text-emerald-200/50 hover:text-emerald-200 transition-colors"
+            >
+              {member.role === "admin" ? "↓" : "↑"}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Tee preference — admins can set/edit */}
+      {isAdminOrOwner && (
+        <div className="flex items-center gap-2 pl-11">
+          {!editingTee ? (
+            <>
+              <span className="text-[10px] text-emerald-200/50">Tee pref:</span>
+              <span className="text-[10px] text-emerald-100/80">
+                {member.preferred_tee_name ?? <span className="text-emerald-100/40">not set</span>}
+              </span>
+              <button
+                type="button"
+                onClick={() => { setTeeValue(member.preferred_tee_name ?? ""); setEditingTee(true); }}
+                className="text-[9px] text-emerald-200/40 hover:text-emerald-200/80 underline"
+              >
+                {member.preferred_tee_name ? "change" : "set"}
+              </button>
+            </>
+          ) : (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <select
+                value={teeValue}
+                onChange={(e) => setTeeValue(e.target.value)}
+                className="rounded border border-emerald-900/70 bg-[#042713] px-2 py-0.5 text-[10px] text-emerald-50 focus:outline-none"
+                disabled={teeSaving}
+              >
+                <option value="">— none —</option>
+                {TEE_PRESETS.map((t) => <option key={t} value={t}>{t}</option>)}
+                {teeValue && !TEE_PRESETS.includes(teeValue) && (
+                  <option value={teeValue}>{teeValue}</option>
+                )}
+              </select>
+              <button
+                onClick={handleTeeSave}
+                disabled={teeSaving}
+                className="px-2 py-0.5 text-[10px] rounded bg-emerald-700 text-white hover:bg-emerald-600 disabled:opacity-50"
+              >
+                {teeSaving ? "..." : "Save"}
+              </button>
+              <button
+                onClick={() => setEditingTee(false)}
+                disabled={teeSaving}
+                className="px-2 py-0.5 text-[10px] rounded border border-emerald-900/70 text-emerald-200 hover:bg-emerald-900/20 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function GroupDetailClient({ groupId }: { groupId: string }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("overview");
@@ -567,37 +695,16 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         {/* Active members */}
         <div className="space-y-1.5">
           {activeMembers.map((m) => (
-            <div key={m.id} className="flex items-center gap-3 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5">
-              <button
-                type="button"
-                className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
-                onClick={() => router.push(`/player/${m.profile_id}`)}
-              >
-                {m.profile?.avatar_url ? (
-                  <img src={m.profile.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
-                ) : (
-                  <div className="h-8 w-8 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
-                    {m.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
-                  </div>
-                )}
-                <span className="flex-1 text-sm font-semibold text-emerald-50 truncate text-left">{m.profile?.name ?? m.profile_id}</span>
-              </button>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border capitalize ${roleBadge(m.role)}`}>
-                  {m.role}
-                </span>
-                {/* Admin can promote/demote members (not owner) */}
-                {isAdminOrOwner && m.role !== "owner" && m.profile_id !== myProfileId && myRole === "owner" && (
-                  <button
-                    type="button"
-                    onClick={() => handleMemberAction(m.id, { role: m.role === "admin" ? "member" : "admin" })}
-                    className="text-[9px] text-emerald-200/50 hover:text-emerald-200 transition-colors"
-                  >
-                    {m.role === "admin" ? "↓" : "↑"}
-                  </button>
-                )}
-              </div>
-            </div>
+            <MemberRow
+              key={m.id}
+              member={m}
+              isAdminOrOwner={isAdminOrOwner}
+              myRole={myRole}
+              myProfileId={myProfileId}
+              onRoleToggle={() => handleMemberAction(m.id, { role: m.role === "admin" ? "member" : "admin" })}
+              onTeePrefSave={async (tee) => { await handleMemberAction(m.id, { preferred_tee_name: tee } as any); }}
+              onNavigate={() => router.push(`/player/${m.profile_id}`)}
+            />
           ))}
         </div>
 

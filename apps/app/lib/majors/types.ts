@@ -212,6 +212,20 @@ export type EventTemplateHistory = {
   }>;
 };
 
+export type GroupHandicapRules = {
+  mode: "allowance_pct" | "compare_against_lowest" | "fixed" | "none";
+  allowance_pct: number | null;
+  max_handicap: number | null;
+};
+
+export type GroupScoringPrefs = {
+  scoring_model: CompetitionScoringModel | null;
+  competition_type: CompetitionTypeV2 | null;
+  handicap_rules: GroupHandicapRules | null;
+  points_model: CompetitionPointsModel | null;
+  standings_contribution: StandingsContribution | null;
+};
+
 export type MajorGroup = {
   id: string;
   name: string;
@@ -224,7 +238,7 @@ export type MajorGroup = {
   max_members: number | null;
   season_start: string | null;
   season_end: string | null;
-  default_scoring_prefs: Record<string, unknown>;
+  default_scoring_prefs: GroupScoringPrefs;
   ciaga_tag: MajorGroupCiagaTag;
   join_code: string | null;
   created_at: string;
@@ -240,6 +254,7 @@ export type MajorGroupMembership = {
   role: MajorMembershipRole;
   status: MajorMembershipStatus;
   joined_at: string;
+  preferred_tee_name: string | null;
 };
 
 export type MajorGroupMembershipWithProfile = MajorGroupMembership & {
