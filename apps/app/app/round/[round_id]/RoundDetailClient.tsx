@@ -1180,6 +1180,12 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
                 router.push("/social");
               } else if (from === "player") {
                 router.back();
+              } else if (from === "competition") {
+                const competitionId = sp.get("competitionId");
+                if (competitionId) router.push(`/majors/competitions/${competitionId}`);
+                else router.push("/majors");
+              } else if (from === "milestones") {
+                router.push("/stats/milestones");
               } else {
                 router.push("/round");
               }

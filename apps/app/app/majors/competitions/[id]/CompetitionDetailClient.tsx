@@ -1482,7 +1482,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
                 key={row.id}
                 type="button"
                 className={`${rowClass} hover:brightness-110 active:scale-[0.99] transition-all`}
-                onClick={() => router.push(`/round/${row.round_id}`)}
+                onClick={() => router.push(`/round/${row.round_id}?from=competition&competitionId=${competitionId}`)}
               >
                 {inner}
               </button>
@@ -1575,7 +1575,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
                     tt={tt}
                     isAdmin={isAdminOrOwner}
                     onDelete={() => handleDeleteTeeTime(tt.id)}
-                    onViewScorecard={tt.round?.id ? () => router.push(`/round/${tt.round!.id}`) : undefined}
+                    onViewScorecard={tt.round?.id ? () => router.push(`/round/${tt.round!.id}?from=competition&competitionId=${competitionId}`) : undefined}
                   />
                   {isSelfSelect && (
                     isMySlot ? (
