@@ -286,15 +286,26 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
 
   // Resolve competition ID from the tee time link so we can show live competition standings
   const [competitionId, setCompetitionId] = useState<string | null>(null);
+  const [competitionPointsModel, setCompetitionPointsModel] = useState<string | undefined>(undefined);
+  const [competitionPointsTable, setCompetitionPointsTable] = useState<Record<string, number> | undefined>(undefined);
+  const [competitionGroupId, setCompetitionGroupId] = useState<string | undefined>(undefined);
   useEffect(() => {
     if (!competitionTeeTimeId) return;
     supabase
       .from("competition_tee_times")
-      .select("competition_id")
+      .select("competition_id, competition:competitions(points_model, points_table, group_id)")
       .eq("id", competitionTeeTimeId)
       .single()
       .then(({ data }) => {
-        if (data?.competition_id) setCompetitionId(data.competition_id as string);
+        if (data?.competition_id) {
+          setCompetitionId(data.competition_id as string);
+          const comp = (data as any).competition;
+          if (comp) {
+            setCompetitionPointsModel(comp.points_model ?? undefined);
+            setCompetitionPointsTable(comp.points_table ?? undefined);
+            setCompetitionGroupId(comp.group_id ?? undefined);
+          }
+        }
       });
   }, [competitionTeeTimeId]);
 
@@ -1182,8 +1193,8 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
                 router.back();
               } else if (from === "competition") {
                 const competitionId = sp.get("competitionId");
-                if (competitionId) router.push(`/majors/competitions/${competitionId}`);
-                else router.push("/majors");
+                if (competitionId) router.replace(`/majors/competitions/${competitionId}`);
+                else router.replace("/majors");
               } else if (from === "milestones") {
                 router.push("/stats/milestones");
               } else {
@@ -1410,6 +1421,9 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
             allParticipants={isSingleBall ? participants : undefined}
             isTeamFormat={isSingleBall}
             competitionId={competitionId ?? undefined}
+            competitionPointsModel={competitionPointsModel}
+            competitionPointsTable={competitionPointsTable}
+            groupId={competitionGroupId}
           />
         )}
 

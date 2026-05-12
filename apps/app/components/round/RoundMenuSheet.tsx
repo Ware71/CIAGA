@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import type { Participant } from "@/lib/rounds/hooks/useRoundDetail";
@@ -36,7 +35,7 @@ function formatToPar(toPar: number | null) {
   return toPar > 0 ? `+${toPar}` : `${toPar}`;
 }
 
-type LeaderboardTab = "gross" | "net" | `format:${number}`;
+type LeaderboardTab = "gross" | "net" | `format:${number}` | "competition" | "season";
 
 type LeaderboardRow = {
   participantId: string;
@@ -53,10 +52,38 @@ type CompetitionStandingEntry = {
   avatar_url: string | null;
   gross_score: number | null;
   net_score: number | null;
+  points_earned: number | null;
+  position: number | null;
   thru: number;
+  holes_completed: number;
   is_live: boolean;
   is_submitted: boolean;
 };
+
+type SeasonStandingEntry = {
+  profile_id: string;
+  name: string | null;
+  avatar_url: string | null;
+  season_points: number;
+  events_played: number;
+  wins: number;
+  position: number | null;
+};
+
+const FEDEX_POINTS_SCALE = [500, 300, 190, 140, 110, 90, 75, 60, 48, 38, 30, 24, 18, 14, 10, 8, 6, 4, 2, 1];
+
+function projectedPoints(
+  rank: number | null,
+  pointsModel: string | undefined,
+  pointsTable: Record<string, number> | undefined
+): number | null {
+  if (!rank || !pointsModel || pointsModel === "none") return null;
+  if (pointsModel === "fedex_style") return FEDEX_POINTS_SCALE[rank - 1] ?? 0;
+  if ((pointsModel === "position_based" || pointsModel === "custom_table") && pointsTable) {
+    return pointsTable[String(rank)] ?? null;
+  }
+  return null;
+}
 
 export default function RoundMenuSheet(props: {
   onClose: () => void;
@@ -77,6 +104,9 @@ export default function RoundMenuSheet(props: {
   allParticipants?: Participant[];
   isTeamFormat?: boolean;
   competitionId?: string;
+  competitionPointsModel?: string;
+  competitionPointsTable?: Record<string, number>;
+  groupId?: string;
 }) {
   const {
     onClose,
@@ -97,32 +127,77 @@ export default function RoundMenuSheet(props: {
     allParticipants,
     isTeamFormat,
     competitionId,
+    competitionPointsModel,
+    competitionPointsTable,
+    groupId,
   } = props;
+
+  const showPts = !!competitionPointsModel && competitionPointsModel !== "none";
 
   const [activeTab, setActiveTab] = useState<LeaderboardTab>("gross");
 
-  // Competition standings (lazy-loaded when section is expanded)
-  const [standingsOpen, setStandingsOpen] = useState(false);
-  const [standings, setStandings] = useState<CompetitionStandingEntry[] | null>(null);
-  const [standingsLoading, setStandingsLoading] = useState(false);
+  // Competition standings (lazy-loaded when tab is selected)
+  const [compStandings, setCompStandings] = useState<CompetitionStandingEntry[] | null>(null);
+  const [compLoading, setCompLoading] = useState(false);
 
-  async function loadStandings() {
-    if (!competitionId || standings !== null) return;
-    setStandingsLoading(true);
+  async function loadCompStandings() {
+    if (!competitionId || compStandings !== null) return;
+    setCompLoading(true);
     try {
-      const res = await fetch(`/api/majors/competitions/${competitionId}/live-standings`);
+      const res = await fetch(`/api/majors/leaderboard?competition_id=${competitionId}`);
       const data = await res.json();
-      setStandings(data.standings ?? []);
+      const rows = (data.rows ?? []).map((r: any) => ({
+        profile_id: r.profile_id,
+        name: r.profile?.name ?? null,
+        avatar_url: r.profile?.avatar_url ?? null,
+        gross_score: r.gross_score,
+        net_score: r.net_score,
+        points_earned: r.points_earned ?? null,
+        position: r.position ?? null,
+        thru: r.holes_completed ?? 0,
+        holes_completed: r.holes_completed ?? 0,
+        is_live: r.is_live ?? false,
+        is_submitted: (r.rounds_submitted ?? 0) > 0,
+      }));
+      setCompStandings(rows);
     } catch {
-      setStandings([]);
+      setCompStandings([]);
     } finally {
-      setStandingsLoading(false);
+      setCompLoading(false);
     }
   }
 
-  function toggleStandings() {
-    if (!standingsOpen) loadStandings();
-    setStandingsOpen((o) => !o);
+  // Season/group standings (lazy-loaded when tab is selected)
+  const [seasonStandings, setSeasonStandings] = useState<SeasonStandingEntry[] | null>(null);
+  const [seasonLoading, setSeasonLoading] = useState(false);
+
+  async function loadSeasonStandings() {
+    if (!groupId || seasonStandings !== null) return;
+    setSeasonLoading(true);
+    try {
+      const res = await fetch(`/api/majors/leaderboard?group_id=${groupId}`);
+      const data = await res.json();
+      const rows = (data.rows ?? []).map((r: any) => ({
+        profile_id: r.profile_id,
+        name: r.profile?.name ?? null,
+        avatar_url: r.profile?.avatar_url ?? null,
+        season_points: r.season_points ?? 0,
+        events_played: r.events_played ?? 0,
+        wins: r.wins ?? 0,
+        position: r.position ?? null,
+      }));
+      setSeasonStandings(rows);
+    } catch {
+      setSeasonStandings([]);
+    } finally {
+      setSeasonLoading(false);
+    }
+  }
+
+  function handleTabChange(tab: LeaderboardTab) {
+    setActiveTab(tab);
+    if (tab === "competition") loadCompStandings();
+    if (tab === "season") loadSeasonStandings();
   }
 
   // Map from first-member participant ID → all team members (for showing players under each team row)
@@ -221,7 +296,7 @@ export default function RoundMenuSheet(props: {
 
   const rows = sortRows(buildRows());
 
-  // Available tabs
+  // Available tabs — round tabs, then competition / season if applicable
   const tabs: { key: LeaderboardTab; label: string }[] = [
     { key: "gross", label: "Gross" },
     { key: "net", label: "Net" },
@@ -229,6 +304,14 @@ export default function RoundMenuSheet(props: {
   for (let i = 0; i < formatDisplays.length; i++) {
     tabs.push({ key: `format:${i}` as LeaderboardTab, label: formatDisplays[i].tabLabel });
   }
+  if (competitionId) {
+    tabs.push({ key: "competition", label: "Competition" });
+  }
+  if (groupId) {
+    tabs.push({ key: "season", label: "Season" });
+  }
+
+  const isRoundTab = activeTab === "gross" || activeTab === "net" || activeTab.startsWith("format:");
 
   return (
     <div className="fixed inset-0 z-50">
@@ -277,7 +360,7 @@ export default function RoundMenuSheet(props: {
                           ? "bg-[#f5e6b0] text-[#042713]"
                           : "text-emerald-100/80 hover:bg-emerald-900/20"
                       }`}
-                      onClick={() => setActiveTab(tab.key)}
+                      onClick={() => handleTabChange(tab.key)}
                     >
                       {tab.label}
                     </button>
@@ -285,129 +368,159 @@ export default function RoundMenuSheet(props: {
                 </div>
               </div>
 
-              {/* Rows */}
-              <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/60 overflow-hidden divide-y divide-emerald-900/60">
-                {rows.map((r, idx) => {
-                  const prev = rows[idx - 1];
-                  const sameScore = prev && prev.score === r.score;
-                  const rank = idx === 0 ? 1 : sameScore ? null : idx + 1;
-                  const teamMembers = teamMembersByFirstId[r.participantId];
+              {/* Round leaderboard rows (only when a round tab is active) */}
+              {isRoundTab && (
+                <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/60 overflow-hidden divide-y divide-emerald-900/60">
+                  {rows.map((r, idx) => {
+                    const prev = rows[idx - 1];
+                    const sameScore = prev && prev.score === r.score;
+                    const rank = idx === 0 ? 1 : sameScore ? null : idx + 1;
+                    const effectiveRank = rank ?? idx + 1;
+                    const pts = showPts ? projectedPoints(effectiveRank, competitionPointsModel, competitionPointsTable) : null;
+                    const teamMembers = teamMembersByFirstId[r.participantId];
 
-                  return (
-                    <div key={r.participantId}>
-                      <div className="px-3 py-2.5 flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="w-6 text-center text-[11px] font-bold text-emerald-100/90">
-                            {rank ?? "•"}
-                          </div>
-                          <Avatar className="h-7 w-7 border border-emerald-200/70 shrink-0">
-                            {r.avatarUrl ? <AvatarImage src={r.avatarUrl} /> : null}
-                            <AvatarFallback className="text-[9px]">{initialsFrom(r.name)}</AvatarFallback>
-                          </Avatar>
-                          <div className="min-w-0">
-                            <div className="text-[12px] font-semibold text-emerald-50 truncate">{r.name}</div>
-                            {r.thru != null && (
-                              <div className="text-[10px] text-emerald-100/55 leading-none mt-0.5">Thru {r.thru}</div>
-                            )}
-                          </div>
-                        </div>
-                        <div className="shrink-0 text-right">
-                          <div className="text-[15px] font-extrabold tabular-nums text-[#f5e6b0]">
-                            {r.score}
-                            {r.toPar != null && (
-                              <span className="text-[10px] font-bold text-emerald-100/80 ml-1">
-                                ({formatToPar(r.toPar)})
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      {isTeamFormat && teamMembers && teamMembers.length > 0 && (
-                        <div className="pl-11 pr-3 pb-2 flex flex-wrap gap-1.5">
-                          {teamMembers.map((m) => {
-                            const mName = getParticipantLabel(m);
-                            const mUrl = getParticipantAvatar(m);
-                            return (
-                              <div key={m.id} className="flex items-center gap-1 text-[10px] text-emerald-100/60">
-                                <Avatar className="h-4 w-4 border border-emerald-200/50 shrink-0">
-                                  {mUrl ? <AvatarImage src={mUrl} /> : null}
-                                  <AvatarFallback className="text-[7px]">{initialsFrom(mName)}</AvatarFallback>
-                                </Avatar>
-                                <span>{mName}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-                {rows.length === 0 && (
-                  <div className="px-3 py-4 text-center text-[11px] text-emerald-100/50">
-                    No scores yet
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Competition Standings (only shown for competition-linked rounds) */}
-            {competitionId && (
-              <div className="p-4 border-b border-emerald-900/60">
-                <button
-                  type="button"
-                  className="w-full flex items-center justify-between"
-                  onClick={toggleStandings}
-                >
-                  <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70">
-                    Competition Standings
-                  </div>
-                  <ChevronDown
-                    className={`h-4 w-4 text-emerald-100/60 transition-transform duration-200 ${standingsOpen ? "rotate-180" : ""}`}
-                  />
-                </button>
-
-                {standingsOpen && (
-                  <div className="mt-3 rounded-2xl border border-emerald-900/70 bg-[#042713]/60 overflow-hidden divide-y divide-emerald-900/60">
-                    {standingsLoading && (
-                      <div className="px-3 py-4 text-center text-[11px] text-emerald-100/50">Loading…</div>
-                    )}
-                    {!standingsLoading && (standings ?? []).map((s, idx) => {
-                      const score = s.net_score ?? s.gross_score;
-                      return (
-                        <div key={s.profile_id} className="px-3 py-2.5 flex items-center gap-2.5">
-                          <div className="w-6 text-center text-[11px] font-bold text-emerald-100/90">{idx + 1}</div>
-                          <Avatar className="h-7 w-7 border border-emerald-200/70 shrink-0">
-                            {s.avatar_url ? <AvatarImage src={s.avatar_url} /> : null}
-                            <AvatarFallback className="text-[9px]">{initialsFrom(s.name ?? "")}</AvatarFallback>
-                          </Avatar>
-                          <div className="min-w-0 flex-1">
-                            <div className="text-[12px] font-semibold text-emerald-50 truncate">{s.name ?? "—"}</div>
-                            <div className="text-[10px] text-emerald-100/55 leading-none mt-0.5">
-                              {s.is_live
-                                ? `Live · Thru ${s.thru}`
-                                : s.is_submitted
-                                ? "Submitted"
-                                : "Pending"}
+                    return (
+                      <div key={r.participantId}>
+                        <div className="px-3 py-2.5 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-6 text-center text-[11px] font-bold text-emerald-100/90">
+                              {rank ?? "•"}
+                            </div>
+                            <Avatar className="h-7 w-7 border border-emerald-200/70 shrink-0">
+                              {r.avatarUrl ? <AvatarImage src={r.avatarUrl} /> : null}
+                              <AvatarFallback className="text-[9px]">{initialsFrom(r.name)}</AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-0">
+                              <div className="text-[12px] font-semibold text-emerald-50 truncate">{r.name}</div>
+                              {r.thru != null && (
+                                <div className="text-[10px] text-emerald-100/55 leading-none mt-0.5">Thru {r.thru}</div>
+                              )}
                             </div>
                           </div>
-                          <div className="shrink-0 text-right">
+                          <div className="flex items-center gap-3 shrink-0">
+                            {showPts && (
+                              <div className="text-right">
+                                <div className="text-[9px] text-emerald-200/50 uppercase tracking-wider leading-none">Pts</div>
+                                <div className="text-[11px] font-bold text-emerald-300 tabular-nums">{pts ?? "—"}</div>
+                              </div>
+                            )}
+                            <div className="text-right">
+                              <div className="text-[15px] font-extrabold tabular-nums text-[#f5e6b0]">
+                                {r.score}
+                                {r.toPar != null && (
+                                  <span className="text-[10px] font-bold text-emerald-100/80 ml-1">
+                                    ({formatToPar(r.toPar)})
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        {isTeamFormat && teamMembers && teamMembers.length > 0 && (
+                          <div className="pl-11 pr-3 pb-2 flex flex-wrap gap-1.5">
+                            {teamMembers.map((m) => {
+                              const mName = getParticipantLabel(m);
+                              const mUrl = getParticipantAvatar(m);
+                              return (
+                                <div key={m.id} className="flex items-center gap-1 text-[10px] text-emerald-100/60">
+                                  <Avatar className="h-4 w-4 border border-emerald-200/50 shrink-0">
+                                    {mUrl ? <AvatarImage src={mUrl} /> : null}
+                                    <AvatarFallback className="text-[7px]">{initialsFrom(mName)}</AvatarFallback>
+                                  </Avatar>
+                                  <span>{mName}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {rows.length === 0 && (
+                    <div className="px-3 py-4 text-center text-[11px] text-emerald-100/50">
+                      No scores yet
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Competition tab */}
+              {activeTab === "competition" && (
+                <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/60 overflow-hidden divide-y divide-emerald-900/60">
+                  {compLoading && (
+                    <div className="px-3 py-4 text-center text-[11px] text-emerald-100/50">Loading…</div>
+                  )}
+                  {!compLoading && (compStandings ?? []).map((s) => {
+                    const score = s.net_score ?? s.gross_score;
+                    const pts = showPts
+                      ? (s.points_earned ?? projectedPoints(s.position, competitionPointsModel, competitionPointsTable))
+                      : null;
+                    return (
+                      <div key={s.profile_id} className="px-3 py-2.5 flex items-center gap-2.5">
+                        <div className="w-6 text-center text-[11px] font-bold text-emerald-100/90">{s.position ?? "—"}</div>
+                        <Avatar className="h-7 w-7 border border-emerald-200/70 shrink-0">
+                          {s.avatar_url ? <AvatarImage src={s.avatar_url} /> : null}
+                          <AvatarFallback className="text-[9px]">{initialsFrom(s.name ?? "")}</AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[12px] font-semibold text-emerald-50 truncate">{s.name ?? "—"}</div>
+                          <div className="text-[10px] text-emerald-100/55 leading-none mt-0.5">
+                            {s.is_live ? `Live · Thru ${s.holes_completed}` : s.is_submitted ? "Submitted" : "Pending"}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          {showPts && (
+                            <div className="text-right">
+                              <div className="text-[9px] text-emerald-200/50 uppercase tracking-wider leading-none">Pts</div>
+                              <div className="text-[11px] font-bold text-emerald-300 tabular-nums">{pts ?? "—"}</div>
+                            </div>
+                          )}
+                          <div className="text-right">
                             <div className="text-[15px] font-extrabold tabular-nums text-[#f5e6b0]">
                               {score != null ? score : "—"}
                             </div>
-                            {s.net_score != null && s.gross_score != null && s.gross_score !== s.net_score && (
-                              <div className="text-[9px] text-emerald-100/50">G: {s.gross_score}</div>
-                            )}
                           </div>
                         </div>
-                      );
-                    })}
-                    {!standingsLoading && (standings ?? []).length === 0 && (
-                      <div className="px-3 py-4 text-center text-[11px] text-emerald-100/50">No scores yet</div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
+                      </div>
+                    );
+                  })}
+                  {!compLoading && (compStandings ?? []).length === 0 && (
+                    <div className="px-3 py-4 text-center text-[11px] text-emerald-100/50">No scores yet</div>
+                  )}
+                </div>
+              )}
+
+              {/* Season tab */}
+              {activeTab === "season" && (
+                <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/60 overflow-hidden divide-y divide-emerald-900/60">
+                  {seasonLoading && (
+                    <div className="px-3 py-4 text-center text-[11px] text-emerald-100/50">Loading…</div>
+                  )}
+                  {!seasonLoading && (seasonStandings ?? []).map((s) => (
+                    <div key={s.profile_id} className="px-3 py-2.5 flex items-center gap-2.5">
+                      <div className="w-6 text-center text-[11px] font-bold text-emerald-100/90">{s.position ?? "—"}</div>
+                      <Avatar className="h-7 w-7 border border-emerald-200/70 shrink-0">
+                        {s.avatar_url ? <AvatarImage src={s.avatar_url} /> : null}
+                        <AvatarFallback className="text-[9px]">{initialsFrom(s.name ?? "")}</AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[12px] font-semibold text-emerald-50 truncate">{s.name ?? "—"}</div>
+                        <div className="text-[10px] text-emerald-100/55 leading-none mt-0.5">
+                          {s.events_played} event{s.events_played !== 1 ? "s" : ""}{s.wins > 0 ? ` · ${s.wins}W` : ""}
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="text-[15px] font-extrabold tabular-nums text-[#f5e6b0]">{s.season_points}</div>
+                        <div className="text-[9px] text-emerald-100/50">pts</div>
+                      </div>
+                    </div>
+                  ))}
+                  {!seasonLoading && (seasonStandings ?? []).length === 0 && (
+                    <div className="px-3 py-4 text-center text-[11px] text-emerald-100/50">No standings yet</div>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Round Settings */}
             <div className="p-4">

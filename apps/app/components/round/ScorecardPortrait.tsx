@@ -286,9 +286,9 @@ export default function ScorecardPortrait(props: {
               const puLabel = state === "picked_up" ? "PU" : (isFinished && state === "not_started" && s !== null) ? "NS" : null;
 
               const recv =
-                scoreView === "net" && !puLabel
+                scoreView === "net" && !puLabel && state !== "not_started"
                   ? strokesReceivedOnHole(p.course_handicap ?? null, h.stroke_index ?? null, holesList.length)
-                  : isFormatView(scoreView) && formatDisplay && !puLabel
+                  : isFormatView(scoreView) && formatDisplay && !puLabel && state !== "not_started"
                   ? (formatDisplay.holeResults[key]?.recv ?? 0)
                   : 0;
 

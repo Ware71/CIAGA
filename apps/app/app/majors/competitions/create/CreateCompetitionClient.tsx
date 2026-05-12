@@ -42,6 +42,7 @@ type FormState = {
   rules_text: string;
   scoring_model: CompetitionScoringModel;
   points_model: CompetitionPointsModel;
+  points_table: Record<string, number>;
   num_rounds: string;
   standings_contribution: string;
   // Series fields
@@ -81,6 +82,7 @@ const INITIAL: FormState = {
   rules_text: "",
   scoring_model: "net",
   points_model: "none",
+  points_table: {},
   num_rounds: "1",
   standings_contribution: "event_only",
   series_id: "",
@@ -101,6 +103,70 @@ const INITIAL: FormState = {
   reveal_style: "none",
   reveal_top_x: "",
 };
+
+// Built-in FedEx-style points: positions 1–20
+const FEDEX_POINTS = [500, 300, 190, 140, 110, 90, 75, 60, 48, 38, 30, 24, 18, 14, 10, 8, 6, 4, 2, 1];
+
+function PointsTableEditor({
+  pointsModel,
+  pointsTable,
+  onChange,
+}: {
+  pointsModel: CompetitionPointsModel;
+  pointsTable: Record<string, number>;
+  onChange: (table: Record<string, number>) => void;
+}) {
+  if (pointsModel === "none") return null;
+
+  if (pointsModel === "fedex_style") {
+    return (
+      <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 p-4 space-y-2">
+        <div className="text-[10px] uppercase tracking-wider text-emerald-200/55 font-semibold">FedEx-Style Points (read-only)</div>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+          {FEDEX_POINTS.map((pts, i) => (
+            <div key={i} className="flex items-center justify-between py-0.5">
+              <span className="text-[11px] text-emerald-200/60">
+                {i + 1}{i === 0 ? "st" : i === 1 ? "nd" : i === 2 ? "rd" : "th"}
+              </span>
+              <span className="text-[11px] font-semibold text-[#f5e6b0]">{pts}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // position_based or custom_table — editable
+  const rows = Array.from({ length: 20 }, (_, i) => i + 1);
+
+  function handleChange(pos: number, raw: string) {
+    const val = raw === "" ? 0 : parseInt(raw, 10);
+    onChange({ ...pointsTable, [String(pos)]: isNaN(val) ? 0 : val });
+  }
+
+  return (
+    <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 p-4 space-y-2">
+      <div className="text-[10px] uppercase tracking-wider text-emerald-200/55 font-semibold">Points by Position</div>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+        {rows.map((pos) => (
+          <div key={pos} className="flex items-center gap-2">
+            <span className="text-[11px] text-emerald-200/60 w-8 shrink-0">
+              {pos}{pos === 1 ? "st" : pos === 2 ? "nd" : pos === 3 ? "rd" : "th"}
+            </span>
+            <input
+              type="number"
+              min={0}
+              value={pointsTable[String(pos)] ?? ""}
+              onChange={(e) => handleChange(pos, e.target.value)}
+              placeholder="0"
+              className="flex-1 rounded-lg border border-emerald-900/60 bg-[#042713] px-2 py-1 text-[11px] text-emerald-50 placeholder:text-emerald-100/30 focus:outline-none focus:border-emerald-600 text-right"
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function LeaderboardFreezeSection({
   form,
@@ -565,6 +631,7 @@ export default function CreateCompetitionClient() {
           rules_text: form.rules_text || null,
           scoring_model: form.scoring_model,
           points_model: form.points_model,
+          points_table: form.points_model !== "none" ? form.points_table : {},
           num_rounds: isAggregate ? 0 : (parseInt(form.num_rounds, 10) || 1),
           standings_contribution: form.standings_contribution,
           series_id: form.series_id || null,
@@ -881,6 +948,13 @@ export default function CreateCompetitionClient() {
           ))}
         </div>
       </div>
+
+      {/* Points table — visible when a points model is active */}
+      <PointsTableEditor
+        pointsModel={form.points_model}
+        pointsTable={form.points_table}
+        onChange={(table) => update("points_table", table as any)}
+      />
 
       {/* Standings */}
       <div className="space-y-2">

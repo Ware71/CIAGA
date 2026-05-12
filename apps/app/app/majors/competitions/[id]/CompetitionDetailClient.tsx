@@ -20,6 +20,24 @@ import { COMP_TYPES, SCORING_MODELS, POINTS_MODELS } from "@/lib/competitions/co
 import { HandicapRulesEditor } from "@/components/competitions/HandicapRulesEditor";
 import { CoursePickerModal } from "@/components/rounds/CoursePickerModal";
 
+const FEDEX_POINTS_SCALE = [500, 300, 190, 140, 110, 90, 75, 60, 48, 38, 30, 24, 18, 14, 10, 8, 6, 4, 2, 1];
+
+function getPointsForPosition(
+  position: number | null,
+  pointsModel: string,
+  pointsTable: Record<string, unknown>
+): number | null {
+  if (!position || pointsModel === "none") return null;
+  if (pointsModel === "fedex_style") {
+    return FEDEX_POINTS_SCALE[position - 1] ?? 0;
+  }
+  if (pointsModel === "position_based" || pointsModel === "custom_table") {
+    const val = pointsTable[String(position)];
+    return typeof val === "number" ? val : null;
+  }
+  return null;
+}
+
 type Tab = "overview" | "leaderboard" | "tee-times" | "rules" | "results" | "fixtures" | "bracket" | "league-table" | "winnings";
 
 const STROKE_TABS: { id: Tab; label: string }[] = [
@@ -1434,6 +1452,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
     leaderboard: (() => {
       const rankedIds = new Set(leaderboard.map((r) => r.profile_id));
       const unranked = participants.filter((p) => !rankedIds.has(p.profile_id));
+      const showPts = competition?.points_model && competition.points_model !== "none";
       return (
         <div className="space-y-2">
           {leaderboard.length === 0 && unranked.length === 0 && (
@@ -1442,6 +1461,9 @@ export default function CompetitionDetailClient({ competitionId }: { competition
             </div>
           )}
           {leaderboard.map((row) => {
+            const pts = showPts
+              ? (row.points_earned ?? getPointsForPosition(row.position ?? null, competition.points_model, competition.points_table as Record<string, unknown>))
+              : null;
             const inner = (
               <>
                 <PositionBadge position={row.position ?? null} />
@@ -1453,6 +1475,12 @@ export default function CompetitionDetailClient({ competitionId }: { competition
                   </div>
                 )}
                 <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{row.profile?.name ?? "Unknown"}</span>
+                {showPts && (
+                  <div className="text-right shrink-0 mr-1">
+                    <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider leading-none">Pts</div>
+                    <div className="text-xs font-bold text-emerald-300">{pts ?? "—"}</div>
+                  </div>
+                )}
                 <div className="text-right shrink-0">
                   <div className="text-xs font-extrabold text-[#f5e6b0]">{row.net_score ?? row.gross_score ?? "—"}</div>
                   <div className="text-[10px] text-emerald-100/50">{row.rounds_submitted} rnd</div>
