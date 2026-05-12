@@ -44,7 +44,11 @@ export async function POST(req: Request) {
       competition_date, entry_window_start, entry_window_end, rules_text,
       scoring_model, points_model, points_table, eligibility_rules, handicap_rules,
       num_rounds, round_rules, time_rules, membership_rules, standings_contribution,
-      series_id, series_event_template_id, competition_year, competition_category, aggregate_config } = body;
+      series_id, series_event_template_id, competition_year, competition_category, aggregate_config,
+      // Leaderboard freeze / ceremony reveal
+      leaderboard_freeze_last_holes, leaderboard_freeze_scope, leaderboard_freeze_top_x,
+      leaderboard_freeze_auto_reveal, leaderboard_reveal_style, leaderboard_reveal_top_x,
+    } = body;
 
     if (!name?.trim()) {
       return NextResponse.json({ error: "Competition name is required" }, { status: 400 });
@@ -95,6 +99,13 @@ export async function POST(req: Request) {
         competition_year: competition_year ?? null,
         competition_category: competition_category ?? "round_based",
         aggregate_config: aggregate_config ?? {},
+        leaderboard_freeze_last_holes: leaderboard_freeze_last_holes ?? null,
+        leaderboard_freeze_scope: leaderboard_freeze_scope ?? "all",
+        leaderboard_freeze_top_x: leaderboard_freeze_top_x ?? null,
+        leaderboard_freeze_auto_reveal: leaderboard_freeze_auto_reveal ?? false,
+        leaderboard_freeze_state: "live",
+        leaderboard_reveal_style: leaderboard_reveal_style ?? "none",
+        leaderboard_reveal_top_x: leaderboard_reveal_top_x ?? null,
       })
       .select("*")
       .single();

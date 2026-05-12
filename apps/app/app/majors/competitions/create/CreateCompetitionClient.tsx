@@ -56,6 +56,14 @@ type FormState = {
   handicap_mode: PlayingHandicapMode;
   handicap_allowance_pct: string;
   handicap_max: string;
+  // Leaderboard freeze / ceremony reveal
+  freeze_enabled: boolean;
+  freeze_last_holes: string;
+  freeze_scope: "all" | "top_x";
+  freeze_top_x: string;
+  freeze_auto_reveal: boolean;
+  reveal_style: "none" | "animated";
+  reveal_top_x: string;
 };
 
 const INITIAL: FormState = {
@@ -84,7 +92,157 @@ const INITIAL: FormState = {
   handicap_mode: "allowance_pct",
   handicap_allowance_pct: "100",
   handicap_max: "",
+  // Leaderboard freeze / ceremony reveal
+  freeze_enabled: false,
+  freeze_last_holes: "",
+  freeze_scope: "all",
+  freeze_top_x: "",
+  freeze_auto_reveal: false,
+  reveal_style: "none",
+  reveal_top_x: "",
 };
+
+function LeaderboardFreezeSection({
+  form,
+  update,
+}: {
+  form: FormState;
+  update: (k: keyof FormState, v: any) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const hasConfig = form.freeze_enabled;
+  return (
+    <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between px-4 py-3 text-left"
+      >
+        <span className="text-[11px] uppercase tracking-wider text-emerald-200/65">Ceremony Freeze</span>
+        <span className="text-[10px] text-emerald-100/50">{hasConfig ? "Configured" : "Optional"} {open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="px-4 pb-4 space-y-4">
+          {/* Enable toggle */}
+          <button
+            type="button"
+            onClick={() => update("freeze_enabled", !form.freeze_enabled)}
+            className={`w-full text-left rounded-xl border px-4 py-3 text-sm transition-colors ${
+              form.freeze_enabled
+                ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
+                : "border-emerald-900/50 bg-[#042713] text-emerald-200/60"
+            }`}
+          >
+            <div className="font-semibold">Hide results for ceremony</div>
+            <div className="text-[10px] text-emerald-200/50 mt-0.5">Freeze leaderboard before players finish</div>
+          </button>
+
+          {form.freeze_enabled && (
+            <>
+              {/* How many holes to hide */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] text-emerald-200/55">Hide last ___ holes</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={17}
+                  value={form.freeze_last_holes}
+                  onChange={(e) => update("freeze_last_holes", e.target.value)}
+                  placeholder="e.g. 5"
+                  className="w-full rounded-xl border border-emerald-900/60 bg-[#042713] px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
+                />
+                <p className="text-[10px] text-emerald-100/40">
+                  Scores through the earlier holes remain visible. Final holes are hidden until the reveal.
+                </p>
+              </div>
+
+              {/* Scope */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] text-emerald-200/55">Who is hidden?</label>
+                <div className="flex gap-1.5">
+                  {(["all", "top_x"] as const).map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => update("freeze_scope", v)}
+                      className={`flex-1 rounded-xl border px-3 py-2 text-xs transition-colors ${
+                        form.freeze_scope === v
+                          ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
+                          : "border-emerald-900/50 bg-[#042713] text-emerald-200/60"
+                      }`}
+                    >
+                      {v === "all" ? "Entire field" : "Top X only"}
+                    </button>
+                  ))}
+                </div>
+                {form.freeze_scope === "top_x" && (
+                  <input
+                    type="number"
+                    min={1}
+                    value={form.freeze_top_x}
+                    onChange={(e) => update("freeze_top_x", e.target.value)}
+                    placeholder="How many top positions to hide"
+                    className="w-full rounded-xl border border-emerald-900/60 bg-[#042713] px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
+                  />
+                )}
+              </div>
+
+              {/* Auto-reveal */}
+              <button
+                type="button"
+                onClick={() => update("freeze_auto_reveal", !form.freeze_auto_reveal)}
+                className={`w-full text-left rounded-xl border px-4 py-2 text-sm transition-colors ${
+                  form.freeze_auto_reveal
+                    ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
+                    : "border-emerald-900/50 bg-[#042713] text-emerald-200/60"
+                }`}
+              >
+                <div className="font-semibold">Auto-reveal when all finish</div>
+                <div className="text-[10px] text-emerald-200/50 mt-0.5">Automatically unfreeze once every player submits</div>
+              </button>
+
+              {/* Reveal style */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] text-emerald-200/55">Reveal style</label>
+                <div className="flex gap-1.5">
+                  {(["none", "animated"] as const).map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => update("reveal_style", v)}
+                      className={`flex-1 rounded-xl border px-3 py-2 text-xs transition-colors ${
+                        form.reveal_style === v
+                          ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
+                          : "border-emerald-900/50 bg-[#042713] text-emerald-200/60"
+                      }`}
+                    >
+                      {v === "none" ? "Instant" : "Animated"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Reveal top X */}
+              {form.reveal_style === "animated" && (
+                <div className="space-y-1.5">
+                  <label className="text-[10px] text-emerald-200/55">Animate top ___ positions (leave blank for full field)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={form.reveal_top_x}
+                    onChange={(e) => update("reveal_top_x", e.target.value)}
+                    placeholder="e.g. 10 — blank = entire field"
+                    className="w-full rounded-xl border border-emerald-900/60 bg-[#042713] px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
+                  />
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function EntryWindowSection({
   start, end, onChangeStart, onChangeEnd,
@@ -424,6 +582,17 @@ export default function CreateCompetitionClient() {
                 max_handicap: form.handicap_max ? parseInt(form.handicap_max, 10) : null,
               }
             : {},
+          // Leaderboard freeze / ceremony reveal
+          ...(form.freeze_enabled && !isAggregate ? {
+            leaderboard_freeze_last_holes: form.freeze_last_holes ? parseInt(form.freeze_last_holes, 10) : null,
+            leaderboard_freeze_scope: form.freeze_scope,
+            leaderboard_freeze_top_x: form.freeze_scope === "top_x" && form.freeze_top_x
+              ? parseInt(form.freeze_top_x, 10) : null,
+            leaderboard_freeze_auto_reveal: form.freeze_auto_reveal,
+            leaderboard_reveal_style: form.reveal_style,
+            leaderboard_reveal_top_x: form.reveal_style === "animated" && form.reveal_top_x
+              ? parseInt(form.reveal_top_x, 10) : null,
+          } : {}),
         }),
       });
       const json = await res.json();
@@ -821,6 +990,11 @@ export default function CreateCompetitionClient() {
         </div>
       )}
 
+      {/* Ceremony freeze (collapsible) */}
+      {!isAggregate && (
+        <LeaderboardFreezeSection form={form} update={update} />
+      )}
+
       {/* Description (optional, at the bottom) */}
       <div className="space-y-2">
         <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Description (optional)</label>
@@ -863,6 +1037,9 @@ export default function CreateCompetitionClient() {
           form.series_id && form.competition_year ? { label: "Year", value: form.competition_year } : null,
           form.course_name ? { label: "Course", value: form.course_name } : null,
           form.competition_date ? { label: "Date", value: form.competition_date } : null,
+          !isAggregate && form.freeze_enabled && form.freeze_last_holes
+            ? { label: "Freeze", value: `Last ${form.freeze_last_holes} holes hidden${form.freeze_scope === "top_x" && form.freeze_top_x ? ` (top ${form.freeze_top_x})` : ""}` }
+            : null,
         ]
           .filter(Boolean)
           .map((item) => (

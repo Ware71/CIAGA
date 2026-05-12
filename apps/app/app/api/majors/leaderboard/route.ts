@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
-import { getCompetitionLeaderboard, getGroupStandings } from "@/lib/majors/queries";
+import {
+  getCompetitionLeaderboard,
+  getGroupStandings,
+  getCompetitionById,
+  getCompetitionSubmissionMap,
+} from "@/lib/majors/queries";
+import type { FrozenLeaderboardEntry } from "@/lib/majors/types";
 
 export const runtime = "nodejs";
 
@@ -13,8 +20,55 @@ export async function GET(req: Request) {
     const groupId = url.searchParams.get("group_id");
 
     if (competitionId) {
-      const rows = await getCompetitionLeaderboard(competitionId);
-      return NextResponse.json({ rows }, { headers: { "Cache-Control": "no-store" } });
+      const competition = await getCompetitionById(competitionId);
+      if (!competition) {
+        return NextResponse.json({ error: "Competition not found" }, { status: 404 });
+      }
+
+      const {
+        leaderboard_freeze_state,
+        leaderboard_freeze_last_holes,
+        leaderboard_freeze_scope,
+        leaderboard_freeze_top_x,
+        leaderboard_reveal_style,
+        leaderboard_reveal_top_x,
+        num_rounds,
+      } = competition as any;
+
+      const freezeConfig = {
+        freeze_state: leaderboard_freeze_state ?? "live",
+        freeze_last_holes: leaderboard_freeze_last_holes ?? null,
+        freeze_scope: leaderboard_freeze_scope ?? "all",
+        freeze_top_x: leaderboard_freeze_top_x ?? null,
+        reveal_style: leaderboard_reveal_style ?? "none",
+        reveal_top_x: leaderboard_reveal_top_x ?? null,
+        total_holes: (num_rounds ?? 1) * 18,
+      };
+
+      const isFrozen = freezeConfig.freeze_state === "frozen" && freezeConfig.freeze_last_holes != null;
+
+      if (isFrozen) {
+        const threshold = freezeConfig.total_holes - (freezeConfig.freeze_last_holes as number);
+        const rows = await getFrozenLeaderboard(competitionId, threshold, freezeConfig);
+        return NextResponse.json(
+          { rows, freeze: freezeConfig },
+          { headers: { "Cache-Control": "no-store" } }
+        );
+      }
+
+      const [liveRows, submissionMap] = await Promise.all([
+        getCompetitionLeaderboard(competitionId),
+        getCompetitionSubmissionMap(competitionId),
+      ]);
+      const rows = liveRows.map((r) => ({
+        ...r,
+        round_id: submissionMap[r.profile_id] ?? null,
+      }));
+
+      return NextResponse.json(
+        { rows, freeze: freezeConfig },
+        { headers: { "Cache-Control": "no-store" } }
+      );
     }
 
     if (groupId) {
@@ -28,4 +82,64 @@ export async function GET(req: Request) {
     const status = String(msg).toLowerCase().includes("auth") ? 401 : 500;
     return NextResponse.json({ error: msg }, { status });
   }
+}
+
+async function getFrozenLeaderboard(
+  competitionId: string,
+  threshold: number,
+  freezeConfig: {
+    freeze_scope: string;
+    freeze_top_x: number | null;
+  }
+): Promise<FrozenLeaderboardEntry[]> {
+  // Get per-hole-truncated scores from DB function
+  const { data: frozenRows, error } = await supabaseAdmin.rpc(
+    "ciaga_get_frozen_leaderboard",
+    { p_competition_id: competitionId, p_threshold_hole: threshold }
+  );
+  if (error) throw error;
+
+  // Fetch profiles for all players in frozen results
+  const profileIds = (frozenRows ?? []).map((r: any) => r.profile_id as string);
+  const { data: profiles } = await supabaseAdmin
+    .from("profiles")
+    .select("id, name, avatar_url")
+    .in("id", profileIds);
+  const profileMap = Object.fromEntries((profiles ?? []).map((p: any) => [p.id, p]));
+
+  const frozen = ((frozenRows ?? []) as any[]).map((r): FrozenLeaderboardEntry => ({
+    profile_id: r.profile_id,
+    gross_score: r.gross_score,
+    net_score: r.net_score,
+    holes_shown: r.holes_shown,
+    is_live: r.is_live,
+    position: r.leaderboard_pos,
+    profile: profileMap[r.profile_id] ?? undefined,
+  }));
+
+  // For top_x freeze scope: only freeze positions 1..top_x; the rest show live scores
+  if (freezeConfig.freeze_scope === "top_x" && freezeConfig.freeze_top_x != null) {
+    const topX = freezeConfig.freeze_top_x;
+    const liveRows = await getCompetitionLeaderboard(competitionId);
+    const liveByProfile = Object.fromEntries(liveRows.map((r) => [r.profile_id, r]));
+
+    return frozen.map((row) => {
+      if (row.position > topX) {
+        // Replace with live data for this player
+        const live = liveByProfile[row.profile_id];
+        if (live) {
+          return {
+            ...row,
+            gross_score: live.gross_score,
+            net_score: live.net_score,
+            holes_shown: live.holes_completed,
+            is_live: live.is_live,
+          };
+        }
+      }
+      return row;
+    });
+  }
+
+  return frozen;
 }

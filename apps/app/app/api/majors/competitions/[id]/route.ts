@@ -56,7 +56,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       "majors_status",
       // Upgrade additions
       "allow_self_withdrawal", "tee_time_mode", "waitlist_enabled", "max_entries",
-      "prize_table", "entry_fee_amount", "entry_fee_currency", "entry_fee_notes"];
+      "prize_table", "entry_fee_amount", "entry_fee_currency", "entry_fee_notes",
+      // Leaderboard freeze / ceremony reveal config
+      "leaderboard_freeze_last_holes", "leaderboard_freeze_scope", "leaderboard_freeze_top_x",
+      "leaderboard_freeze_auto_reveal", "leaderboard_reveal_style", "leaderboard_reveal_top_x"];
     const updates: Record<string, unknown> = {};
     for (const field of allowedFields) {
       if (field in body) updates[field] = body[field];

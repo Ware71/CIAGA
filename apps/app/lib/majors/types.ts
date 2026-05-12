@@ -95,6 +95,20 @@ export type CompetitionMajorsStatus =
 
 export type StandingsContribution = "event_only" | "season" | "both";
 
+export type LeaderboardFreezeScope = "all" | "top_x";
+export type LeaderboardFreezeState = "live" | "frozen" | "revealed";
+export type LeaderboardRevealStyle = "none" | "animated";
+
+export type LeaderboardFreezeConfig = {
+  leaderboard_freeze_last_holes: number | null;
+  leaderboard_freeze_scope: LeaderboardFreezeScope;
+  leaderboard_freeze_top_x: number | null;
+  leaderboard_freeze_auto_reveal: boolean;
+  leaderboard_freeze_state: LeaderboardFreezeState;
+  leaderboard_reveal_style: LeaderboardRevealStyle;
+  leaderboard_reveal_top_x: number | null;
+};
+
 export type CompetitionCategory = "round_based" | "aggregate" | "standalone";
 
 // ─── Core entities ───────────────────────────────────────────────────────────
@@ -320,6 +334,14 @@ export type CompetitionFull = {
   entry_fee_amount: number | null;
   entry_fee_currency: string;
   entry_fee_notes: string | null;
+  // Leaderboard freeze / ceremony reveal
+  leaderboard_freeze_last_holes: number | null;
+  leaderboard_freeze_scope: LeaderboardFreezeScope;
+  leaderboard_freeze_top_x: number | null;
+  leaderboard_freeze_auto_reveal: boolean;
+  leaderboard_freeze_state: LeaderboardFreezeState;
+  leaderboard_reveal_style: LeaderboardRevealStyle;
+  leaderboard_reveal_top_x: number | null;
 };
 
 export type CompetitionWithGroup = CompetitionFull & {
@@ -366,10 +388,28 @@ export type CompetitionLeaderboardEntry = {
   rounds_submitted: number;
   last_submission_at: string | null;
   computed_at: string;
+  is_live: boolean;
+  holes_completed: number;
 };
 
 export type LeaderboardEntryWithProfile = CompetitionLeaderboardEntry & {
   profile: {
+    id: string;
+    name: string | null;
+    avatar_url: string | null;
+  };
+  // Round ID from submission map (may be present on competition-scoped leaderboard)
+  round_id?: string | null;
+};
+
+export type FrozenLeaderboardEntry = {
+  profile_id: string;
+  gross_score: number | null;
+  net_score: number | null;
+  holes_shown: number;
+  is_live: boolean;
+  position: number;
+  profile?: {
     id: string;
     name: string | null;
     avatar_url: string | null;
