@@ -104,7 +104,7 @@ export async function POST(req: Request) {
       const playedAt = must(first.played_at, `Round ${roundKey}: missing played_at`);
 
       const roundName = first.round_name || roundKey;
-      const status = first.status || "in_progress";
+      const status = first.status || "live";
       const visibility = first.visibility || "private";
 
       // 1) Course lookup (for snapshot)

@@ -207,6 +207,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     if (participantErr) throw participantErr;
 
+    // Set the round's default tee box from the first player with an assigned tee
+    const defaultTeeBoxId = playerList.find((p) => p.tee_box_id)?.tee_box_id ?? null;
+    if (defaultTeeBoxId) {
+      await supabaseAdmin
+        .from("rounds")
+        .update({ pending_tee_box_id: defaultTeeBoxId })
+        .eq("id", round.id);
+    }
+
     // Create the tee time record, linking it to the competition round it belongs to
     const { data: teeTimeRow, error: ttErr } = await supabaseAdmin
       .from("competition_tee_times")

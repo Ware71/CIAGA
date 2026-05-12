@@ -468,11 +468,15 @@ function TeeTimeCard({
   isAdmin,
   onDelete,
   onViewScorecard,
+  onStartRound,
+  isStarting,
 }: {
   tt: CompetitionTeeTime;
   isAdmin: boolean;
   onDelete: () => void;
   onViewScorecard?: () => void;
+  onStartRound?: () => void;
+  isStarting?: boolean;
 }) {
   const slots: (TeeTimeParticipant | null)[] = [...(tt.round?.participants ?? [])];
   while (slots.length < 4) slots.push(null);
@@ -524,6 +528,16 @@ function TeeTimeCard({
           className="text-[11px] text-emerald-400 hover:text-emerald-300 text-left"
         >
           View Scorecard →
+        </button>
+      )}
+      {tt.round?.status === "scheduled" && onStartRound && (
+        <button
+          type="button"
+          onClick={onStartRound}
+          disabled={isStarting}
+          className="text-[11px] text-emerald-400 hover:text-emerald-300 text-left disabled:opacity-50"
+        >
+          {isStarting ? "Starting…" : "Start Round →"}
         </button>
       )}
       <div className="grid grid-cols-4 gap-2">
@@ -912,6 +926,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
   const [proposedWinnings, setProposedWinnings] = useState<ProposedWinning[] | null>(null);
   const [proposingWinnings, setProposingWinnings] = useState(false);
   const [showSetupSheet, setShowSetupSheet] = useState(false);
+  const [startingRoundId, setStartingRoundId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -1191,6 +1206,24 @@ export default function CompetitionDetailClient({ competitionId }: { competition
       headers: { Authorization: `Bearer ${session.accessToken}` },
     });
     if (res.ok) refreshTeeTimes();
+  };
+
+  const handleStartRound = async (roundId: string) => {
+    setStartingRoundId(roundId);
+    try {
+      const session = await getViewerSession();
+      if (!session) return;
+      const res = await fetch("/api/rounds/start", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ round_id: roundId }),
+      });
+      if (res.ok) {
+        router.push(`/round/${roundId}?from=competition&competitionId=${competitionId}`);
+      }
+    } finally {
+      setStartingRoundId(null);
+    }
   };
 
   const now = new Date();
@@ -1537,6 +1570,8 @@ export default function CompetitionDetailClient({ competitionId }: { competition
                     isAdmin={isAdminOrOwner}
                     onDelete={() => handleDeleteTeeTime(tt.id)}
                     onViewScorecard={tt.round?.id ? () => router.push(`/round/${tt.round!.id}?from=competition&competitionId=${competitionId}`) : undefined}
+                    onStartRound={hasSlot && tt.round?.status === "scheduled" && tt.round?.id ? () => handleStartRound(tt.round!.id) : undefined}
+                    isStarting={startingRoundId === tt.round?.id}
                   />
                   {isSelfSelect && (
                     isMySlot ? (
