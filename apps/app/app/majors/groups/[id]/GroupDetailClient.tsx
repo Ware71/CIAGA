@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getViewerSession } from "@/lib/auth/viewerSession";
+import { supabase } from "@/lib/supabaseClient";
 import type {
   MajorGroup,
   MajorGroupMembershipWithProfile,
@@ -292,6 +293,37 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       setMembers(j.members ?? []);
     }
   };
+
+  const refreshStandings = async () => {
+    const session = await getViewerSession();
+    if (!session) return;
+    const res = await fetch(`/api/majors/leaderboard?group_id=${groupId}`, {
+      headers: { Authorization: `Bearer ${session.accessToken}` },
+    });
+    if (res.ok) {
+      const j = await res.json();
+      setStandings(j.rows ?? []);
+    }
+  };
+
+  // Realtime: season standings
+  useEffect(() => {
+    let cancelled = false;
+    const channel = supabase
+      .channel(`group-standings:${groupId}`)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "major_group_standings",
+        filter: `group_id=eq.${groupId}`,
+      }, () => { if (!cancelled) refreshStandings(); })
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
+  }, [groupId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleJoin = async () => {
     setJoining(true);

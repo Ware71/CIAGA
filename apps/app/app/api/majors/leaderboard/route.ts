@@ -13,7 +13,7 @@ export const runtime = "nodejs";
 
 export async function GET(req: Request) {
   try {
-    await getAuthedProfileOrThrow(req);
+    const { profileId } = await getAuthedProfileOrThrow(req);
     const url = new URL(req.url);
 
     const competitionId = url.searchParams.get("competition_id");
@@ -45,13 +45,27 @@ export async function GET(req: Request) {
         total_holes: (num_rounds ?? 1) * 18,
       };
 
+      let myRole: string | null = null;
+      if ((competition as any).group_id) {
+        const { data: mem } = await supabaseAdmin
+          .from("major_group_memberships")
+          .select("role")
+          .eq("group_id", (competition as any).group_id)
+          .eq("profile_id", profileId)
+          .eq("status", "active")
+          .maybeSingle();
+        myRole = (mem as any)?.role ?? null;
+      } else if ((competition as any).created_by_profile_id === profileId) {
+        myRole = "owner";
+      }
+
       const isFrozen = freezeConfig.freeze_state === "frozen" && freezeConfig.freeze_last_holes != null;
 
       if (isFrozen) {
         const threshold = freezeConfig.total_holes - (freezeConfig.freeze_last_holes as number);
         const rows = await getFrozenLeaderboard(competitionId, threshold, freezeConfig);
         return NextResponse.json(
-          { rows, freeze: freezeConfig },
+          { rows, freeze: freezeConfig, my_role: myRole },
           { headers: { "Cache-Control": "no-store" } }
         );
       }
@@ -66,7 +80,7 @@ export async function GET(req: Request) {
       }));
 
       return NextResponse.json(
-        { rows, freeze: freezeConfig },
+        { rows, freeze: freezeConfig, my_role: myRole },
         { headers: { "Cache-Control": "no-store" } }
       );
     }

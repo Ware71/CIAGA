@@ -60,6 +60,8 @@ export default function LeaderboardClient() {
   const [freeze, setFreeze] = useState<FreezeConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [showReveal, setShowReveal] = useState(false);
+  const [myRole, setMyRole] = useState<string | null>(null);
+  const [revealLoading, setRevealLoading] = useState(false);
   const accessTokenRef = useRef<string | null>(null);
 
   async function fetchLeaderboard(id: string, t: Tab) {
@@ -76,6 +78,7 @@ export default function LeaderboardClient() {
     if (t === "competition") {
       setCompRows(json.rows ?? []);
       if (json.freeze) setFreeze(json.freeze);
+      if (json.my_role !== undefined) setMyRole(json.my_role);
     } else {
       setGroupRows(json.rows ?? []);
     }
@@ -151,9 +154,29 @@ export default function LeaderboardClient() {
     return () => { cancelled = true; };
   }, [tab, competitionId, groupId]);
 
+  async function handleReveal() {
+    if (!competitionId) return;
+    setRevealLoading(true);
+    try {
+      const session = await getViewerSession();
+      if (!session) return;
+      await fetch(`/api/majors/competitions/${competitionId}/freeze-control`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.accessToken}`,
+        },
+        body: JSON.stringify({ action: "reveal" }),
+      });
+    } finally {
+      setRevealLoading(false);
+    }
+  }
+
   const rows = tab === "competition" ? compRows : groupRows;
   const isFrozen = freeze?.freeze_state === "frozen";
   const totalHoles = freeze?.total_holes ?? 18;
+  const canReveal = isFrozen && (myRole === "owner" || myRole === "admin");
 
   return (
     <div className="min-h-[100dvh] pb-[env(safe-area-inset-bottom)] px-4 pt-8 max-w-sm mx-auto space-y-5">
@@ -201,6 +224,18 @@ export default function LeaderboardClient() {
             )}
           </div>
         </div>
+      )}
+
+      {/* Reveal button — owners and admins only */}
+      {canReveal && (
+        <button
+          type="button"
+          onClick={handleReveal}
+          disabled={revealLoading}
+          className="w-full py-3 rounded-full bg-[#f5e6b0] text-[#042713] text-sm font-semibold disabled:opacity-50"
+        >
+          {revealLoading ? "Revealing…" : "Reveal Results"}
+        </button>
       )}
 
       {loading && (

@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import type { Participant } from "@/lib/rounds/hooks/useRoundDetail";
 import type { RoundFormatType } from "@/lib/rounds/hooks/useRoundDetail";
 import type { FormatDisplayData } from "@/lib/rounds/formatScoring";
+import { supabase } from "@/lib/supabaseClient";
 
 const FORMAT_LABELS: Record<RoundFormatType, string> = {
   strokeplay: "Stroke Play",
@@ -34,6 +35,16 @@ function formatToPar(toPar: number | null) {
   if (toPar === 0) return "E";
   return toPar > 0 ? `+${toPar}` : `${toPar}`;
 }
+
+type FreezeConfig = {
+  freeze_state: "live" | "frozen" | "revealed";
+  freeze_last_holes: number | null;
+  freeze_scope: "all" | "top_x";
+  freeze_top_x: number | null;
+  reveal_style: "none" | "animated";
+  reveal_top_x: number | null;
+  total_holes: number;
+};
 
 type LeaderboardTab = "gross" | "net" | `format:${number}` | "competition" | "season";
 
@@ -134,14 +145,15 @@ export default function RoundMenuSheet(props: {
 
   const showPts = !!competitionPointsModel && competitionPointsModel !== "none";
 
-  const [activeTab, setActiveTab] = useState<LeaderboardTab>("gross");
+  const [activeTab, setActiveTab] = useState<LeaderboardTab>(competitionId ? "competition" : "gross");
 
-  // Competition standings (lazy-loaded when tab is selected)
+  // Competition standings (realtime-synced)
   const [compStandings, setCompStandings] = useState<CompetitionStandingEntry[] | null>(null);
   const [compLoading, setCompLoading] = useState(false);
+  const [compFreeze, setCompFreeze] = useState<FreezeConfig | null>(null);
 
-  async function loadCompStandings() {
-    if (!competitionId || compStandings !== null) return;
+  async function fetchCompStandings() {
+    if (!competitionId) return;
     setCompLoading(true);
     try {
       const res = await fetch(`/api/majors/leaderboard?competition_id=${competitionId}`);
@@ -160,6 +172,7 @@ export default function RoundMenuSheet(props: {
         is_submitted: (r.rounds_submitted ?? 0) > 0,
       }));
       setCompStandings(rows);
+      if (data.freeze) setCompFreeze(data.freeze);
     } catch {
       setCompStandings([]);
     } finally {
@@ -167,12 +180,12 @@ export default function RoundMenuSheet(props: {
     }
   }
 
-  // Season/group standings (lazy-loaded when tab is selected)
+  // Season/group standings (realtime-synced)
   const [seasonStandings, setSeasonStandings] = useState<SeasonStandingEntry[] | null>(null);
   const [seasonLoading, setSeasonLoading] = useState(false);
 
-  async function loadSeasonStandings() {
-    if (!groupId || seasonStandings !== null) return;
+  async function fetchSeasonStandings() {
+    if (!groupId) return;
     setSeasonLoading(true);
     try {
       const res = await fetch(`/api/majors/leaderboard?group_id=${groupId}`);
@@ -196,9 +209,67 @@ export default function RoundMenuSheet(props: {
 
   function handleTabChange(tab: LeaderboardTab) {
     setActiveTab(tab);
-    if (tab === "competition") loadCompStandings();
-    if (tab === "season") loadSeasonStandings();
+    if (tab === "competition") fetchCompStandings();
+    if (tab === "season") fetchSeasonStandings();
   }
+
+  // Realtime: competition leaderboard
+  useEffect(() => {
+    if (!competitionId) return;
+    fetchCompStandings();
+
+    let cancelled = false;
+    const channel = supabase
+      .channel(`round-menu:comp:${competitionId}`)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "competition_leaderboard_entries",
+        filter: `competition_id=eq.${competitionId}`,
+      }, () => { if (!cancelled) fetchCompStandings(); })
+      .on("postgres_changes", {
+        event: "UPDATE",
+        schema: "public",
+        table: "competitions",
+        filter: `id=eq.${competitionId}`,
+      }, (payload) => {
+        if (!cancelled && payload.new) {
+          const c = payload.new as any;
+          setCompFreeze((prev) =>
+            prev ? { ...prev, freeze_state: c.leaderboard_freeze_state ?? prev.freeze_state } : prev
+          );
+          if (c.leaderboard_freeze_state === "revealed") fetchCompStandings();
+        }
+      })
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
+  }, [competitionId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Realtime: season standings
+  useEffect(() => {
+    if (!groupId) return;
+    fetchSeasonStandings();
+
+    let cancelled = false;
+    const channel = supabase
+      .channel(`round-menu:season:${groupId}`)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "major_group_standings",
+        filter: `group_id=eq.${groupId}`,
+      }, () => { if (!cancelled) fetchSeasonStandings(); })
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
+  }, [groupId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Map from first-member participant ID → all team members (for showing players under each team row)
   const teamMembersByFirstId = useMemo<Record<string, Participant[]>>(() => {
@@ -299,7 +370,7 @@ export default function RoundMenuSheet(props: {
   // Available tabs — round tabs, then competition / season if applicable
   const tabs: { key: LeaderboardTab; label: string }[] = [
     { key: "gross", label: "Gross" },
-    { key: "net", label: "Net" },
+    ...(!competitionId ? [{ key: "net" as LeaderboardTab, label: "Net" }] : []),
   ];
   for (let i = 0; i < formatDisplays.length; i++) {
     tabs.push({ key: `format:${i}` as LeaderboardTab, label: formatDisplays[i].tabLabel });
@@ -446,6 +517,23 @@ export default function RoundMenuSheet(props: {
 
               {/* Competition tab */}
               {activeTab === "competition" && (
+                <>
+                {compFreeze?.freeze_state === "frozen" && (
+                  <div className="flex items-center gap-2 rounded-xl border border-amber-700/50 bg-amber-900/20 px-3 py-2 mb-3">
+                    <span className="text-amber-400 text-sm">🔒</span>
+                    <div>
+                      <p className="text-xs font-semibold text-amber-300">Leaderboard frozen</p>
+                      {compFreeze.freeze_last_holes != null && (
+                        <p className="text-[10px] text-amber-300/70">
+                          Last {compFreeze.freeze_last_holes} hole{compFreeze.freeze_last_holes !== 1 ? "s" : ""} hidden
+                          {compFreeze.freeze_scope === "top_x" && compFreeze.freeze_top_x != null
+                            ? ` (top ${compFreeze.freeze_top_x} positions only)`
+                            : ""}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
                 <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/60 overflow-hidden divide-y divide-emerald-900/60">
                   {compLoading && (
                     <div className="px-3 py-4 text-center text-[11px] text-emerald-100/50">Loading…</div>
@@ -488,6 +576,7 @@ export default function RoundMenuSheet(props: {
                     <div className="px-3 py-4 text-center text-[11px] text-emerald-100/50">No scores yet</div>
                   )}
                 </div>
+                </>
               )}
 
               {/* Season tab */}
