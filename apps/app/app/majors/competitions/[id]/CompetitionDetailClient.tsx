@@ -19,6 +19,7 @@ import type {
 import { COMP_TYPES, SCORING_MODELS, POINTS_MODELS } from "@/lib/competitions/constants";
 import { HandicapRulesEditor } from "@/components/competitions/HandicapRulesEditor";
 import { CoursePickerModal } from "@/components/rounds/CoursePickerModal";
+import { supabase } from "@/lib/supabaseClient";
 
 const FEDEX_POINTS_SCALE = [500, 300, 190, 140, 110, 90, 75, 60, 48, 38, 30, 24, 18, 14, 10, 8, 6, 4, 2, 1];
 
@@ -189,12 +190,13 @@ type GroupMember = {
   preferred_tee_name: string | null;
 };
 
-type TeeBoxOption = { id: string; name: string; yards: number | null; rating: number | null; slope: number | null };
+type TeeBoxOption = { id: string; name: string; gender: string | null; yards: number | null; rating: number | null; slope: number | null };
 
 function AddTeeTimeSheet({
   competitionId,
   courseId,
   groupMembers,
+  entrantProfileIds,
   entryFeeAmount,
   entryFeeCurrency,
   onClose,
@@ -203,6 +205,7 @@ function AddTeeTimeSheet({
   competitionId: string;
   courseId: string | null;
   groupMembers: GroupMember[];
+  entrantProfileIds: Set<string>;
   entryFeeAmount: number | null;
   entryFeeCurrency: string;
   onClose: () => void;
@@ -357,7 +360,7 @@ function AddTeeTimeSheet({
             <span className="text-[10px] text-emerald-200/50">{totalPlayers}/4</span>
           </div>
           <div className="space-y-1.5 max-h-48 overflow-y-auto">
-            {groupMembers.map((m) => {
+            {groupMembers.filter((m) => entrantProfileIds.has(m.profile_id)).map((m) => {
               const selected = selectedPlayers.includes(m.profile_id);
               const disabled = !selected && totalPlayers >= 4;
               return (
@@ -395,7 +398,7 @@ function AddTeeTimeSheet({
                         <option value="">— round default —</option>
                         {teeBoxes.map((t) => (
                           <option key={t.id} value={t.id}>
-                            {t.name}{t.yards ? ` (${t.yards}y)` : ""}{t.rating ? ` · ${t.rating}` : ""}
+                            {t.name}{t.gender ? ` (${t.gender})` : ""}{t.yards ? ` · ${t.yards}y` : ""}{t.rating ? ` · ${t.rating}/${t.slope ?? "—"}` : ""}
                           </option>
                         ))}
                       </select>
@@ -485,12 +488,14 @@ function EditTeeTimeSheet({
   competitionId,
   tt,
   groupMembers,
+  entrantProfileIds,
   onClose,
   onSaved,
 }: {
   competitionId: string;
   tt: CompetitionTeeTime;
   groupMembers: GroupMember[];
+  entrantProfileIds: Set<string>;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -605,7 +610,7 @@ function EditTeeTimeSheet({
             <span className="text-[10px] text-emerald-200/50">{totalPlayers}/4</span>
           </div>
           <div className="space-y-1.5 max-h-48 overflow-y-auto">
-            {groupMembers.map((m) => {
+            {groupMembers.filter((m) => entrantProfileIds.has(m.profile_id) || selectedPlayers.includes(m.profile_id)).map((m) => {
               const selected = selectedPlayers.includes(m.profile_id);
               const disabled = !selected && totalPlayers >= 4;
               return (
@@ -1263,6 +1268,33 @@ export default function CompetitionDetailClient({ competitionId }: { competition
     return () => { cancelled = true; };
   }, [competitionId]);
 
+  // Realtime: recompute leaderboard whenever competition_leaderboard_entries changes
+  useEffect(() => {
+    const channel = supabase
+      .channel(`competition-lb:${competitionId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "competition_leaderboard_entries",
+          filter: `competition_id=eq.${competitionId}`,
+        },
+        () => {
+          getViewerSession().then((session) => {
+            if (!session) return;
+            fetch(`/api/majors/competitions/${competitionId}/leaderboard`, {
+              headers: { Authorization: `Bearer ${session.accessToken}` },
+            })
+              .then((r) => (r.ok ? r.json() : null))
+              .then((j) => { if (j) setLeaderboard(j.rows ?? []); });
+          });
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [competitionId]);
+
   const refreshTeeTimes = async () => {
     const session = await getViewerSession();
     if (!session) return;
@@ -1468,6 +1500,11 @@ export default function CompetitionDetailClient({ competitionId }: { competition
     myRole === "admin" ||
     (!competition?.group_id && competition?.created_by_profile_id === myProfileId);
 
+  const scoringModel = competition?.scoring_model ?? "net";
+  const displayScore = (row: LeaderboardEntryWithProfile) =>
+    scoringModel === "gross" ? row.gross_score : (row.net_score ?? row.gross_score);
+  const scoreLabel = scoringModel === "gross" ? "Gross" : "Net";
+
   const visibleTabs = (() => {
     const BASE = getTabsForCompetition(competition);
     let tabs = competition?.majors_status === "completed" ? BASE : BASE.filter((t) => t.id !== "results");
@@ -1622,7 +1659,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
               <div className="flex-1 py-3 rounded-full border border-emerald-700/50 text-sm font-semibold text-emerald-400 text-center">
                 ✓ Entered
               </div>
-              {entryOpen && !competitionOwnsRound && (
+              {entryOpen && !competitionOwnsRound && isAdminOrOwner && (
                 <button
                   type="button"
                   onClick={() => setShowSubmitSheet(true)}
@@ -1693,8 +1730,8 @@ export default function CompetitionDetailClient({ competitionId }: { competition
                   </div>
                 )}
                 <div className="text-right shrink-0">
-                  <div className="text-xs font-extrabold text-[#f5e6b0]">{row.net_score ?? row.gross_score ?? "—"}</div>
-                  <div className="text-[10px] text-emerald-100/50">{row.rounds_submitted} rnd</div>
+                  <div className="text-xs font-extrabold text-[#f5e6b0]">{displayScore(row) ?? "—"}</div>
+                  <div className="text-[10px] text-emerald-100/50">{row.rounds_submitted} rnd · {scoreLabel}</div>
                 </div>
                 {row.round_id && (
                   <span className="text-[10px] text-emerald-400/70 shrink-0">→</span>
@@ -2032,7 +2069,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
               <PositionBadge position={row.position ?? null} />
               <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{row.profile?.name ?? "Unknown"}</span>
               <div className="text-right shrink-0">
-                <div className="text-xs font-extrabold text-[#f5e6b0]">{row.net_score ?? row.gross_score ?? "—"}</div>
+                <div className="text-xs font-extrabold text-[#f5e6b0]">{displayScore(row) ?? "—"}</div>
                 {row.points_earned != null && row.points_earned > 0 && (
                   <div className="text-[10px] text-amber-300/70">+{row.points_earned} pts</div>
                 )}
@@ -2150,6 +2187,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
           competitionId={competitionId}
           courseId={competition.course_id ?? null}
           groupMembers={groupMembers}
+          entrantProfileIds={new Set(participants.map((p) => p.profile_id))}
           entryFeeAmount={(competition as any).entry_fee_amount ?? null}
           entryFeeCurrency={(competition as any).entry_fee_currency ?? "GBP"}
           onClose={() => setShowAddTeeTime(false)}
@@ -2162,6 +2200,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
           competitionId={competitionId}
           tt={editingTeeTime}
           groupMembers={groupMembers}
+          entrantProfileIds={new Set(participants.map((p) => p.profile_id))}
           onClose={() => setEditingTeeTime(null)}
           onSaved={refreshTeeTimes}
         />

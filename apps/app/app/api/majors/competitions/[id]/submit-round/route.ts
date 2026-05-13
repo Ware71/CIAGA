@@ -21,6 +21,22 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const competition = await getCompetitionById(competitionId);
     if (!competition) return NextResponse.json({ error: "Competition not found" }, { status: 404 });
 
+    // Only owners/admins may submit rounds
+    if (competition.group_id) {
+      const { data: membership } = await supabaseAdmin
+        .from("major_group_memberships")
+        .select("role")
+        .eq("group_id", competition.group_id)
+        .eq("profile_id", profileId)
+        .eq("status", "active")
+        .maybeSingle();
+      if (!membership || !["owner", "admin"].includes((membership as any).role)) {
+        return NextResponse.json({ error: "Only group owner or admin can submit rounds" }, { status: 403 });
+      }
+    } else if ((competition as any).created_by_profile_id !== profileId) {
+      return NextResponse.json({ error: "Only the competition creator can submit rounds" }, { status: 403 });
+    }
+
     if (competition.majors_status === "cancelled") {
       return NextResponse.json({ error: "Competition is cancelled" }, { status: 400 });
     }
@@ -65,7 +81,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // Validate player was a participant in this round
     const { data: participant } = await supabaseAdmin
       .from("round_participants")
-      .select("id, course_handicap_used")
+      .select("id, course_handicap_used, playing_handicap_used")
       .eq("round_id", round_id)
       .eq("profile_id", profileId)
       .maybeSingle();
@@ -85,7 +101,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (hrr) {
       const hrrData = hrr as any;
       const gross = hrrData.adjusted_gross_score as number | null;
-      const ch = hrrData.course_handicap_used as number | null;
+      // Use playing_handicap_used (allowance applied) for competition scoring.
+      // Fall back to course_handicap_used for legacy rounds where playing_handicap_used is null.
+      const ch: number | null =
+        (participant as any).playing_handicap_used != null
+          ? (participant as any).playing_handicap_used as number
+          : (hrrData.course_handicap_used as number | null);
 
       if (gross != null) {
         if (competition.scoring_model === "gross") {
