@@ -48,12 +48,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       );
     }
 
-    // Check entry window has not closed
-    const now = new Date();
-    if (competition.entry_window_end && new Date(competition.entry_window_end) < now) {
-      return NextResponse.json({ error: "Entry window has closed" }, { status: 400 });
-    }
-
     // Check player has entered this competition
     const { data: entry } = await supabaseAdmin
       .from("competition_entries")

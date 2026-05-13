@@ -1187,6 +1187,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
   const [loading, setLoading] = useState(true);
   const [isEntered, setIsEntered] = useState(false);
   const [entering, setEntering] = useState(false);
+  const [enterError, setEnterError] = useState<string | null>(null);
   const [showSubmitSheet, setShowSubmitSheet] = useState(false);
   const [showAddTeeTime, setShowAddTeeTime] = useState(false);
   const [editingTeeTime, setEditingTeeTime] = useState<CompetitionTeeTime | null>(null);
@@ -1354,6 +1355,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
 
   const handleEnter = async () => {
     setEntering(true);
+    setEnterError(null);
     try {
       const session = await getViewerSession();
       if (!session) return;
@@ -1372,6 +1374,9 @@ export default function CompetitionDetailClient({ competitionId }: { competition
           const pj = await pRes.json();
           setParticipants(pj.participants ?? []);
         }
+      } else {
+        const j = await res.json().catch(() => ({}));
+        setEnterError(j.error ?? "Entry failed. Please try again.");
       }
     } finally {
       setEntering(false);
@@ -1649,14 +1654,19 @@ export default function CompetitionDetailClient({ competitionId }: { competition
 
         {/* Entry / Submit CTAs */}
         {!isEntered && entryOpen && (
-          <button
-            type="button"
-            onClick={handleEnter}
-            disabled={entering}
-            className="w-full py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
-          >
-            {entering ? "Entering…" : "Enter Competition"}
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={handleEnter}
+              disabled={entering}
+              className="w-full py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
+            >
+              {entering ? "Entering…" : "Enter Competition"}
+            </button>
+            {enterError && (
+              <div className="text-sm text-red-400 text-center">{enterError}</div>
+            )}
+          </>
         )}
 
         {/* Waitlist CTA */}
@@ -1704,7 +1714,8 @@ export default function CompetitionDetailClient({ competitionId }: { competition
               <div className="flex-1 py-3 rounded-full border border-emerald-700/50 text-sm font-semibold text-emerald-400 text-center">
                 ✓ Entered
               </div>
-              {entryOpen && !competitionOwnsRound && isAdminOrOwner && (
+              {competition.majors_status !== "completed" && competition.majors_status !== "cancelled"
+                && !competitionOwnsRound && isAdminOrOwner && (
                 <button
                   type="button"
                   onClick={() => setShowSubmitSheet(true)}

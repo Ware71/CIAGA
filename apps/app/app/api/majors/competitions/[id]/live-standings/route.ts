@@ -52,21 +52,26 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
           .in("round_id", liveRoundIds),
         supabaseAdmin
           .from("round_participants")
-          .select("id, profile_id, course_handicap_used, round_id")
+          .select("id, profile_id, course_handicap_used, playing_handicap_used, round_id")
           .in("round_id", liveRoundIds),
       ]);
 
       if (scoresRes.error) throw scoresRes.error;
       if (participantsRes.error) throw participantsRes.error;
 
-      // Build participant lookup: participant_id → { profile_id, course_handicap_used }
+      // Build participant lookup: participant_id → { profile_id, hcp }
+      // Prefer playing_handicap_used (allowance-adjusted) over course_handicap_used for consistency
+      // with submitted scores, which also use playing_handicap_used.
       const participantMap = new Map<string, { profileId: string; courseHcp: number }>();
       for (const p of participantsRes.data ?? []) {
         if (!p.profile_id) continue;
-        participantMap.set(p.id, {
-          profileId: p.profile_id,
-          courseHcp: typeof p.course_handicap_used === "number" ? p.course_handicap_used : 0,
-        });
+        const hcp =
+          typeof (p as any).playing_handicap_used === "number"
+            ? (p as any).playing_handicap_used
+            : typeof p.course_handicap_used === "number"
+            ? p.course_handicap_used
+            : 0;
+        participantMap.set(p.id, { profileId: p.profile_id, courseHcp: hcp });
       }
 
       // Aggregate scores per participant

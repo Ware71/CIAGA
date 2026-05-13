@@ -144,11 +144,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: "Maximum 4 players per tee time" }, { status: 400 });
     }
 
-    // Ensure no player is already assigned to a tee time in this competition (per round)
+    // Ensure no player is already assigned to a tee time in this competition (per round).
+    // Only check/move players who are explicitly in the player list — don't pull the creating
+    // admin out of their own tee time when they're just organising a group for other players.
     const nonGuestProfileIds = playerList
-      .filter((p) => !p.is_guest && p.profile_id && p.profile_id !== profileId)
+      .filter((p) => !p.is_guest && p.profile_id)
       .map((p) => p.profile_id as string);
-    const checkProfileIds = [profileId, ...nonGuestProfileIds];
+    const checkProfileIds = nonGuestProfileIds;
 
     let existingTTQuery = supabaseAdmin
       .from("competition_tee_times")
@@ -160,7 +162,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const { data: existingTTs } = await existingTTQuery;
     const existingRoundIds = (existingTTs ?? []).map((t) => t.round_id).filter(Boolean) as string[];
 
-    if (existingRoundIds.length > 0) {
+    if (existingRoundIds.length > 0 && checkProfileIds.length > 0) {
       const { data: conflicts } = await supabaseAdmin
         .from("round_participants")
         .select("profile_id")
@@ -211,18 +213,24 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     if (roundErr) throw roundErr;
 
-    // Add creator as owner participant
-    const participantInserts: any[] = [
-      {
+    // Build participant inserts. The admin/creator is only added if they're in the explicit
+    // player list — otherwise they're just the organiser and the round's created_by is enough
+    // for management (rounds are setup_locked so any participant can start them).
+    const adminInPlayerList = nonGuestProfileIds.includes(profileId);
+    const participantInserts: any[] = [];
+
+    if (adminInPlayerList) {
+      participantInserts.push({
         round_id: round.id,
         profile_id: profileId,
         role: "owner",
         is_guest: false,
-      },
-    ];
+        pending_tee_box_id:
+          playerList.find((p) => p.profile_id === profileId)?.tee_box_id ?? null,
+      });
+    }
 
     for (const player of playerList) {
-      // Don't duplicate if the creator is also in the players list
       if (player.profile_id === profileId) continue;
       participantInserts.push({
         round_id: round.id,
@@ -234,11 +242,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       });
     }
 
-    const { error: participantErr } = await supabaseAdmin
-      .from("round_participants")
-      .insert(participantInserts);
-
-    if (participantErr) throw participantErr;
+    if (participantInserts.length > 0) {
+      const { error: participantErr } = await supabaseAdmin
+        .from("round_participants")
+        .insert(participantInserts);
+      if (participantErr) throw participantErr;
+    }
 
     // Set the round's default tee box from the first player with an assigned tee
     const defaultTeeBoxId = playerList.find((p) => p.tee_box_id)?.tee_box_id ?? null;
