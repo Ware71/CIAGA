@@ -50,6 +50,7 @@ type LeaderboardTab = "gross" | "net" | `format:${number}` | "competition" | "se
 
 type LeaderboardRow = {
   participantId: string;
+  profileId?: string;
   name: string;
   avatarUrl: string | null;
   score: number | string;
@@ -118,6 +119,7 @@ export default function RoundMenuSheet(props: {
   competitionPointsModel?: string;
   competitionPointsTable?: Record<string, number>;
   groupId?: string;
+  seasonId?: string;
 }) {
   const {
     onClose,
@@ -141,6 +143,7 @@ export default function RoundMenuSheet(props: {
     competitionPointsModel,
     competitionPointsTable,
     groupId,
+    seasonId,
   } = props;
 
   const showPts = !!competitionPointsModel && competitionPointsModel !== "none";
@@ -185,20 +188,35 @@ export default function RoundMenuSheet(props: {
   const [seasonLoading, setSeasonLoading] = useState(false);
 
   async function fetchSeasonStandings() {
-    if (!groupId) return;
+    if (!seasonId && !groupId) return;
     setSeasonLoading(true);
     try {
-      const res = await fetch(`/api/majors/leaderboard?group_id=${groupId}`);
-      const data = await res.json();
-      const rows = (data.rows ?? []).map((r: any) => ({
-        profile_id: r.profile_id,
-        name: r.profile?.name ?? null,
-        avatar_url: r.profile?.avatar_url ?? null,
-        season_points: r.season_points ?? 0,
-        events_played: r.events_played ?? 0,
-        wins: r.wins ?? 0,
-        position: r.position ?? null,
-      }));
+      let rows: SeasonStandingEntry[] = [];
+      if (seasonId) {
+        const res = await fetch(`/api/majors/seasons/${seasonId}/standings`);
+        const data = await res.json();
+        rows = (data.standings ?? []).map((r: any) => ({
+          profile_id: r.profile_id,
+          name: r.profile?.name ?? null,
+          avatar_url: r.profile?.avatar_url ?? null,
+          season_points: r.season_points ?? 0,
+          events_played: r.events_played ?? 0,
+          wins: r.wins ?? 0,
+          position: r.position ?? null,
+        }));
+      } else {
+        const res = await fetch(`/api/majors/leaderboard?group_id=${groupId}`);
+        const data = await res.json();
+        rows = (data.rows ?? []).map((r: any) => ({
+          profile_id: r.profile_id,
+          name: r.profile?.name ?? null,
+          avatar_url: r.profile?.avatar_url ?? null,
+          season_points: r.season_points ?? 0,
+          events_played: r.events_played ?? 0,
+          wins: r.wins ?? 0,
+          position: r.position ?? null,
+        }));
+      }
       setSeasonStandings(rows);
     } catch {
       setSeasonStandings([]);
@@ -212,6 +230,8 @@ export default function RoundMenuSheet(props: {
     if (tab === "competition") fetchCompStandings();
     if (tab === "season") fetchSeasonStandings();
   }
+
+  const hasSeasonTab = !!(groupId || seasonId);
 
   // Realtime: competition leaderboard
   useEffect(() => {
@@ -251,17 +271,20 @@ export default function RoundMenuSheet(props: {
 
   // Realtime: season standings
   useEffect(() => {
-    if (!groupId) return;
+    if (!seasonId && !groupId) return;
     fetchSeasonStandings();
 
     let cancelled = false;
+    const channelKey = seasonId ?? groupId!;
+    const table = seasonId ? "season_standings_entries" : "major_group_standings";
+    const filter = seasonId ? `season_id=eq.${seasonId}` : `group_id=eq.${groupId}`;
     const channel = supabase
-      .channel(`round-menu:season:${groupId}`)
+      .channel(`round-menu:season:${channelKey}`)
       .on("postgres_changes", {
         event: "*",
         schema: "public",
-        table: "major_group_standings",
-        filter: `group_id=eq.${groupId}`,
+        table,
+        filter,
       }, () => { if (!cancelled) fetchSeasonStandings(); })
       .subscribe();
 
@@ -269,7 +292,7 @@ export default function RoundMenuSheet(props: {
       cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, [groupId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [seasonId, groupId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Map from first-member participant ID → all team members (for showing players under each team row)
   const teamMembersByFirstId = useMemo<Record<string, Participant[]>>(() => {
@@ -292,6 +315,7 @@ export default function RoundMenuSheet(props: {
         const thru = holesCompletedByParticipantId[p.id] ?? null;
         return {
           participantId: p.id,
+          profileId: (p as any).profile_id ?? undefined,
           name: getParticipantLabel(p),
           avatarUrl: getParticipantAvatar(p),
           score: total,
@@ -308,6 +332,7 @@ export default function RoundMenuSheet(props: {
         const thru = holesCompletedByParticipantId[p.id] ?? null;
         return {
           participantId: p.id,
+          profileId: (p as any).profile_id ?? undefined,
           name: getParticipantLabel(p),
           avatarUrl: getParticipantAvatar(p),
           score: total,
@@ -329,6 +354,7 @@ export default function RoundMenuSheet(props: {
         const thru = holesCompletedByParticipantId[p.id] ?? null;
         return {
           participantId: p.id,
+          profileId: (p as any).profile_id ?? undefined,
           name: getParticipantLabel(p),
           avatarUrl: getParticipantAvatar(p),
           score: summary?.total ?? "–",
@@ -378,7 +404,7 @@ export default function RoundMenuSheet(props: {
   if (competitionId) {
     tabs.push({ key: "competition", label: "Competition" });
   }
-  if (groupId) {
+  if (hasSeasonTab) {
     tabs.push({ key: "season", label: "Season" });
   }
 
@@ -447,7 +473,15 @@ export default function RoundMenuSheet(props: {
                     const sameScore = prev && prev.score === r.score;
                     const rank = idx === 0 ? 1 : sameScore ? null : idx + 1;
                     const effectiveRank = rank ?? idx + 1;
-                    const pts = showPts ? projectedPoints(effectiveRank, competitionPointsModel, competitionPointsTable) : null;
+                    // When this is a competition round, use full-field position from compStandings
+                    const compEntry = (competitionId && compStandings && r.profileId)
+                      ? compStandings.find((s) => s.profile_id === r.profileId)
+                      : null;
+                    const pts = showPts
+                      ? (compEntry
+                          ? (compEntry.points_earned ?? projectedPoints(compEntry.position, competitionPointsModel, competitionPointsTable))
+                          : projectedPoints(effectiveRank, competitionPointsModel, competitionPointsTable))
+                      : null;
                     const teamMembers = teamMembersByFirstId[r.participantId];
 
                     return (

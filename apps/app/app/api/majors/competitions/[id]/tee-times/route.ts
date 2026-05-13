@@ -144,6 +144,36 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: "Maximum 4 players per tee time" }, { status: 400 });
     }
 
+    // Ensure no player is already assigned to a tee time in this competition (per round)
+    const nonGuestProfileIds = playerList
+      .filter((p) => !p.is_guest && p.profile_id && p.profile_id !== profileId)
+      .map((p) => p.profile_id as string);
+    const checkProfileIds = [profileId, ...nonGuestProfileIds];
+
+    let existingTTQuery = supabaseAdmin
+      .from("competition_tee_times")
+      .select("round_id")
+      .eq("competition_id", id);
+    if (competitionRoundId) {
+      existingTTQuery = existingTTQuery.eq("competition_round_id", competitionRoundId);
+    }
+    const { data: existingTTs } = await existingTTQuery;
+    const existingRoundIds = (existingTTs ?? []).map((t) => t.round_id).filter(Boolean) as string[];
+
+    if (existingRoundIds.length > 0) {
+      const { data: conflicts } = await supabaseAdmin
+        .from("round_participants")
+        .select("profile_id")
+        .in("round_id", existingRoundIds)
+        .in("profile_id", checkProfileIds);
+      if (conflicts && conflicts.length > 0) {
+        return NextResponse.json(
+          { error: "One or more players are already assigned to a tee time for this round" },
+          { status: 409 }
+        );
+      }
+    }
+
     // Derive round format and handicap settings from the competition
     const isMatchplay =
       competition.competition_type === "matchplay" ||

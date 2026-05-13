@@ -479,12 +479,197 @@ function AddTeeTimeSheet({
   );
 }
 
+// ─── Edit Tee Time Sheet ──────────────────────────────────────────────────────
+
+function EditTeeTimeSheet({
+  competitionId,
+  tt,
+  groupMembers,
+  onClose,
+  onSaved,
+}: {
+  competitionId: string;
+  tt: CompetitionTeeTime;
+  groupMembers: GroupMember[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const d = new Date(tt.tee_time);
+  const toLocalInput = (date: Date) => {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  };
+
+  const existingMemberIds = (tt.round?.participants ?? [])
+    .filter((p) => !p.is_guest && p.profile_id)
+    .map((p) => p.profile_id as string);
+
+  const [teeTime, setTeeTime] = useState(toLocalInput(d));
+  const [groupNumber, setGroupNumber] = useState(tt.group_number != null ? String(tt.group_number) : "");
+  const [notes, setNotes] = useState(tt.notes ?? "");
+  const [selectedPlayers, setSelectedPlayers] = useState<string[]>(existingMemberIds);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const guestParticipants = (tt.round?.participants ?? []).filter((p) => p.is_guest);
+
+  const totalPlayers = selectedPlayers.length + guestParticipants.length;
+
+  const togglePlayer = (profileId: string) => {
+    setSelectedPlayers((prev) => {
+      if (prev.includes(profileId)) return prev.filter((id) => id !== profileId);
+      if (totalPlayers >= 4) return prev;
+      return [...prev, profileId];
+    });
+  };
+
+  const handleSave = async () => {
+    if (!teeTime) { setError("Please select a tee time"); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      const session = await getViewerSession();
+      if (!session) return;
+      const players = [
+        ...selectedPlayers.map((pid) => ({ profile_id: pid })),
+        ...guestParticipants.map((g) => ({ is_guest: true, display_name: g.display_name ?? "" })),
+      ];
+      const res = await fetch(`/api/majors/competitions/${competitionId}/tee-times/${tt.id}`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tee_time: new Date(teeTime).toISOString(),
+          group_number: groupNumber ? parseInt(groupNumber, 10) : null,
+          notes: notes || null,
+          players,
+        }),
+      });
+      if (!res.ok) {
+        const j = await res.json();
+        setError(j.error ?? "Failed to save");
+        return;
+      }
+      onSaved();
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={onClose}>
+      <div
+        className="w-full max-w-sm mx-auto rounded-t-3xl bg-[#071f13] border-t border-emerald-900/70 px-4 pt-5 pb-[env(safe-area-inset-bottom)] space-y-4 max-h-[85dvh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="w-10 h-1 rounded-full bg-emerald-800/60 mx-auto mb-1" />
+        <div className="text-sm font-semibold text-emerald-50">Edit Tee Time</div>
+
+        <div className="space-y-1">
+          <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Tee Time *</label>
+          <input
+            type="datetime-local"
+            value={teeTime}
+            onChange={(e) => setTeeTime(e.target.value)}
+            className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2.5 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Group #</label>
+            <input
+              type="number"
+              min={1}
+              value={groupNumber}
+              onChange={(e) => setGroupNumber(e.target.value)}
+              placeholder="e.g. 1"
+              className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2.5 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Notes</label>
+            <input
+              type="text"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Optional"
+              className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2.5 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Players</label>
+            <span className="text-[10px] text-emerald-200/50">{totalPlayers}/4</span>
+          </div>
+          <div className="space-y-1.5 max-h-48 overflow-y-auto">
+            {groupMembers.map((m) => {
+              const selected = selectedPlayers.includes(m.profile_id);
+              const disabled = !selected && totalPlayers >= 4;
+              return (
+                <button
+                  key={m.profile_id}
+                  type="button"
+                  onClick={() => togglePlayer(m.profile_id)}
+                  disabled={disabled}
+                  className={`w-full flex items-center gap-3 rounded-xl border px-3 py-2 text-left transition-colors ${
+                    selected
+                      ? "border-emerald-500 bg-emerald-900/50"
+                      : disabled
+                      ? "border-emerald-900/30 bg-transparent opacity-40"
+                      : "border-emerald-900/50 bg-emerald-900/20 hover:border-emerald-700/50"
+                  }`}
+                >
+                  {m.profile?.avatar_url ? (
+                    <img src={m.profile.avatar_url} alt="" className="h-6 w-6 rounded-full object-cover" />
+                  ) : (
+                    <div className="h-6 w-6 rounded-full bg-emerald-900/60 grid place-items-center text-[9px] font-bold text-emerald-200">
+                      {m.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
+                    </div>
+                  )}
+                  <span className="flex-1 text-sm text-emerald-50">{m.profile?.name ?? m.profile_id}</span>
+                  {selected && <span className="text-emerald-400 text-xs">✓</span>}
+                </button>
+              );
+            })}
+            {guestParticipants.map((g) => (
+              <div key={g.display_name} className="flex items-center gap-3 rounded-xl border border-emerald-900/30 bg-emerald-900/10 px-3 py-2 opacity-60">
+                <div className="h-6 w-6 rounded-full bg-emerald-900/60 grid place-items-center text-[9px] font-bold text-emerald-200">★</div>
+                <span className="flex-1 text-sm text-emerald-100">{g.display_name} <span className="text-[10px] text-emerald-200/50">guest</span></span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {error && <div className="text-sm text-red-400">{error}</div>}
+
+        <div className="flex gap-3 pb-2">
+          <button type="button" onClick={onClose} className="flex-1 py-3 rounded-full border border-emerald-900/60 text-sm text-emerald-200/70">
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="flex-1 py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {saving ? "Saving…" : "Save Changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Tee Time card ────────────────────────────────────────────────────────────
 
 function TeeTimeCard({
   tt,
   isAdmin,
   onDelete,
+  onEdit,
   onViewScorecard,
   onStartRound,
   isStarting,
@@ -492,6 +677,7 @@ function TeeTimeCard({
   tt: CompetitionTeeTime;
   isAdmin: boolean;
   onDelete: () => void;
+  onEdit?: () => void;
   onViewScorecard?: () => void;
   onStartRound?: () => void;
   isStarting?: boolean;
@@ -526,6 +712,15 @@ function TeeTimeCard({
             }`}>
               {tt.round.status}
             </span>
+          )}
+          {isAdmin && onEdit && tt.round?.status !== "live" && tt.round?.status !== "finished" && (
+            <button
+              type="button"
+              onClick={onEdit}
+              className="text-[11px] text-emerald-200/40 hover:text-emerald-200 transition-colors px-1"
+            >
+              ✎
+            </button>
           )}
           {isAdmin && (
             <button
@@ -673,6 +868,7 @@ function CompetitionSetupSheet({
   const [pointsModel, setPointsModel] = useState<string>(competition.points_model ?? "none");
   const [numRounds, setNumRounds] = useState(String(competition.num_rounds ?? 1));
   const [standingsContrib, setStandingsContrib] = useState(competition.standings_contribution ?? "event_only");
+  const [teeTimeMode, setTeeTimeMode] = useState<"admin_assigned" | "self_select">((competition as any).tee_time_mode ?? "admin_assigned");
   const [rulesText, setRulesText] = useState(competition.rules_text ?? "");
   const [handicapMode, setHandicapMode] = useState<string>((handicap.mode as string) ?? "allowance_pct");
   const [handicapPct, setHandicapPct] = useState(handicap.allowance_pct != null ? String(handicap.allowance_pct) : "100");
@@ -714,6 +910,7 @@ function CompetitionSetupSheet({
           num_rounds: isAggregate ? competition.num_rounds : (parseInt(numRounds, 10) || 1),
           rules_text: rulesText.trim() || null,
           standings_contribution: standingsContrib,
+          tee_time_mode: teeTimeMode,
         }),
       });
       const json = await res.json();
@@ -878,6 +1075,19 @@ function CompetitionSetupSheet({
               ))}
             </div>
           </div>
+
+          {/* Tee time mode */}
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Tee Time Assignment</label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {(["admin_assigned", "self_select"] as const).map((v) => (
+                <button key={v} type="button" onClick={() => setTeeTimeMode(v)}
+                  className={`rounded-xl border px-2 py-1.5 text-[10px] text-center transition-colors ${teeTimeMode === v ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
+                  {v === "admin_assigned" ? "Admin assigned" : "Self select"}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {error && <div className="text-sm text-red-400 pb-2">{error}</div>}
@@ -929,6 +1139,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
   const [entering, setEntering] = useState(false);
   const [showSubmitSheet, setShowSubmitSheet] = useState(false);
   const [showAddTeeTime, setShowAddTeeTime] = useState(false);
+  const [editingTeeTime, setEditingTeeTime] = useState<CompetitionTeeTime | null>(null);
   const [finishedRounds, setFinishedRounds] = useState<FinishedRound[]>([]);
   const [myProfileId, setMyProfileId] = useState<string | null>(null);
   const [myRole, setMyRole] = useState<string | null>(null);
@@ -1597,6 +1808,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
                     tt={tt}
                     isAdmin={isAdminOrOwner}
                     onDelete={() => handleDeleteTeeTime(tt.id)}
+                    onEdit={isAdminOrOwner ? () => setEditingTeeTime(tt) : undefined}
                     onViewScorecard={tt.round?.id ? () => router.push(`/round/${tt.round!.id}?from=competition&competitionId=${competitionId}`) : undefined}
                     onStartRound={hasSlot && tt.round?.status === "scheduled" && tt.round?.id ? () => handleStartRound(tt.round!.id) : undefined}
                     isStarting={startingRoundId === tt.round?.id}
@@ -1942,6 +2154,16 @@ export default function CompetitionDetailClient({ competitionId }: { competition
           entryFeeCurrency={(competition as any).entry_fee_currency ?? "GBP"}
           onClose={() => setShowAddTeeTime(false)}
           onCreated={refreshTeeTimes}
+        />
+      )}
+
+      {editingTeeTime && (
+        <EditTeeTimeSheet
+          competitionId={competitionId}
+          tt={editingTeeTime}
+          groupMembers={groupMembers}
+          onClose={() => setEditingTeeTime(null)}
+          onSaved={refreshTeeTimes}
         />
       )}
 
