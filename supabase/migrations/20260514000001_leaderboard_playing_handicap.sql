@@ -79,7 +79,7 @@ BEGIN
       FROM competition_tee_times ctt
       JOIN rounds r
         ON r.competition_tee_time_id = ctt.id
-        AND r.status IN ('scheduled', 'in_progress')
+        AND r.status IN ('scheduled', 'live')
       JOIN round_participants rp
         ON rp.round_id = r.id
       LEFT JOIN LATERAL (
