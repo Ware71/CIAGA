@@ -145,6 +145,48 @@ export async function getCompetitionLeaderboard(
   return (data ?? []) as unknown as LeaderboardEntryWithProfile[];
 }
 
+export async function getCompetitionPendingParticipants(
+  competitionId: string,
+  scoredProfileIds: Set<string>
+): Promise<Array<{ profile_id: string; name: string | null; avatar_url: string | null; tee_time: string }>> {
+  const { data, error } = await supabaseAdmin
+    .from("competition_tee_times")
+    .select(`
+      tee_time,
+      round:rounds(
+        round_participants(
+          profile_id,
+          profile:profiles(id, name, avatar_url)
+        )
+      )
+    `)
+    .eq("competition_id", competitionId);
+  if (error) throw error;
+
+  const results: Array<{ profile_id: string; name: string | null; avatar_url: string | null; tee_time: string }> = [];
+  const seen = new Set<string>();
+
+  for (const tt of data ?? []) {
+    const teeTime = (tt as any).tee_time as string;
+    const round = (tt as any).round as any;
+    if (!round) continue;
+    const participants = round.round_participants ?? [];
+    for (const rp of participants) {
+      const profileId = rp.profile_id as string;
+      if (!profileId || scoredProfileIds.has(profileId) || seen.has(profileId)) continue;
+      seen.add(profileId);
+      results.push({
+        profile_id: profileId,
+        name: rp.profile?.name ?? null,
+        avatar_url: rp.profile?.avatar_url ?? null,
+        tee_time: teeTime,
+      });
+    }
+  }
+
+  return results;
+}
+
 export async function getGroupStandings(
   groupId: string
 ): Promise<GroupStandingWithProfile[]> {

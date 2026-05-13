@@ -468,6 +468,14 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSingleBall, formatDisplays.length]);
 
+  // Net tab is hidden during live competition rounds — fall back to gross if it was active
+  useEffect(() => {
+    if (scoreView === "net" && competitionId && !isFinished) {
+      setScoreView("gross");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [competitionId, isFinished]);
+
   // Displayed score:
   // - not_started (non-acceptable) => null (render blank)
   // - not_started (acceptable)     => penalty score (cell shows NS badge)
@@ -660,6 +668,24 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     }
     return byPid;
   }, [participants, holesList, scoreFor, holeStatesByKey]);
+
+  const parThroughByParticipantId = useMemo(() => {
+    const map: Record<string, number | null> = {};
+    for (const p of participants) {
+      let parThrough = 0;
+      let hasAny = false;
+      for (const h of holesList) {
+        const st = holeStatesByKey[`${p.id}:${h.hole_number}`] ?? "not_started";
+        const s = scoreFor(p.id, h.hole_number);
+        if ((st === "picked_up" || typeof s === "number") && typeof h.par === "number") {
+          parThrough += h.par;
+          hasAny = true;
+        }
+      }
+      map[p.id] = hasAny ? parThrough : null;
+    }
+    return map;
+  }, [participants, holesList, holeStatesByKey, scoreFor]);
 
   const landscapePlan: LandscapeCol[] = useMemo(() => {
     const front = holesList.filter((h) => h.hole_number <= 9);
@@ -1224,14 +1250,16 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
                         >
                           Gross
                         </button>
-                        <button
-                          className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 ${
-                            scoreView === "net" ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
-                          }`}
-                          onClick={() => setScoreView("net")}
-                        >
-                          Net
-                        </button>
+                        {(!competitionId || isFinished) && (
+                          <button
+                            className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 ${
+                              scoreView === "net" ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
+                            }`}
+                            onClick={() => setScoreView("net")}
+                          >
+                            Net
+                          </button>
+                        )}
                       </>
                     )}
                     {formatDisplays.length > 0 && (
@@ -1292,14 +1320,16 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
                       >
                         Gross
                       </button>
-                      <button
-                        className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 ${
-                          scoreView === "net" ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
-                        }`}
-                        onClick={() => setScoreView("net")}
-                      >
-                        Net
-                      </button>
+                      {(!competitionId || isFinished) && (
+                        <button
+                          className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 ${
+                            scoreView === "net" ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
+                          }`}
+                          onClick={() => setScoreView("net")}
+                        >
+                          Net
+                        </button>
+                      )}
                     </>
                   )}
                   {formatDisplays.length > 0 && (
@@ -1413,7 +1443,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
             formatDisplays={formatDisplays}
             grossTotals={grossTotals}
             netTotals={netTotals}
-            parTotal={metaSums.parTot}
+            parThroughByParticipantId={parThroughByParticipantId}
             getParticipantLabel={singleBallGetLabel}
             getParticipantAvatar={singleBallGetAvatar}
             courseLabel={courseLabel}

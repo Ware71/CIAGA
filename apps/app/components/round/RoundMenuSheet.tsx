@@ -36,6 +36,14 @@ function formatToPar(toPar: number | null) {
   return toPar > 0 ? `+${toPar}` : `${toPar}`;
 }
 
+function formatTeeTime(iso: string) {
+  try {
+    return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  } catch {
+    return iso;
+  }
+}
+
 type FreezeConfig = {
   freeze_state: "live" | "frozen" | "revealed";
   freeze_last_holes: number | null;
@@ -70,6 +78,7 @@ type CompetitionStandingEntry = {
   holes_completed: number;
   is_live: boolean;
   is_submitted: boolean;
+  tee_time?: string | null;
 };
 
 type SeasonStandingEntry = {
@@ -106,7 +115,7 @@ export default function RoundMenuSheet(props: {
   formatDisplays: FormatDisplayData[];
   grossTotals: Record<string, { out: number; in: number; total: number }>;
   netTotals: Record<string, { out: number; in: number; total: number }>;
-  parTotal: number | null;
+  parThroughByParticipantId: Record<string, number | null>;
   getParticipantLabel: (p: Participant) => string;
   getParticipantAvatar: (p: Participant) => string | null;
   courseLabel: string;
@@ -130,7 +139,7 @@ export default function RoundMenuSheet(props: {
     formatDisplays,
     grossTotals,
     netTotals,
-    parTotal,
+    parThroughByParticipantId,
     getParticipantLabel,
     getParticipantAvatar,
     courseLabel,
@@ -173,6 +182,7 @@ export default function RoundMenuSheet(props: {
         holes_completed: r.holes_completed ?? 0,
         is_live: r.is_live ?? false,
         is_submitted: (r.rounds_submitted ?? 0) > 0,
+        tee_time: r.tee_time ?? null,
       }));
       setCompStandings(rows);
       if (data.freeze) setCompFreeze(data.freeze);
@@ -313,13 +323,14 @@ export default function RoundMenuSheet(props: {
         const t = grossTotals[p.id];
         const total = t?.total ?? 0;
         const thru = holesCompletedByParticipantId[p.id] ?? null;
+        const parThru = parThroughByParticipantId[p.id] ?? null;
         return {
           participantId: p.id,
           profileId: (p as any).profile_id ?? undefined,
           name: getParticipantLabel(p),
           avatarUrl: getParticipantAvatar(p),
           score: total,
-          toPar: typeof parTotal === "number" && total > 0 ? total - parTotal : null,
+          toPar: typeof parThru === "number" && total > 0 ? total - parThru : null,
           thru: thru > 0 ? thru : null,
         };
       });
@@ -330,13 +341,14 @@ export default function RoundMenuSheet(props: {
         const t = netTotals[p.id];
         const total = t?.total ?? 0;
         const thru = holesCompletedByParticipantId[p.id] ?? null;
+        const parThru = parThroughByParticipantId[p.id] ?? null;
         return {
           participantId: p.id,
           profileId: (p as any).profile_id ?? undefined,
           name: getParticipantLabel(p),
           avatarUrl: getParticipantAvatar(p),
           score: total,
-          toPar: typeof parTotal === "number" && total > 0 ? total - parTotal : null,
+          toPar: typeof parThru === "number" && total > 0 ? total - parThru : null,
           thru: thru > 0 ? thru : null,
         };
       });
@@ -396,7 +408,7 @@ export default function RoundMenuSheet(props: {
   // Available tabs — round tabs, then competition / season if applicable
   const tabs: { key: LeaderboardTab; label: string }[] = [
     { key: "gross", label: "Gross" },
-    ...(!competitionId ? [{ key: "net" as LeaderboardTab, label: "Net" }] : []),
+    ...(!competitionId || isFinished ? [{ key: "net" as LeaderboardTab, label: "Net" }] : []),
   ];
   for (let i = 0; i < formatDisplays.length; i++) {
     tabs.push({ key: `format:${i}` as LeaderboardTab, label: formatDisplays[i].tabLabel });
@@ -587,7 +599,13 @@ export default function RoundMenuSheet(props: {
                         <div className="min-w-0 flex-1">
                           <div className="text-[12px] font-semibold text-emerald-50 truncate">{s.name ?? "—"}</div>
                           <div className="text-[10px] text-emerald-100/55 leading-none mt-0.5">
-                            {s.is_live ? `Live · Thru ${s.holes_completed}` : s.is_submitted ? "Submitted" : "Pending"}
+                            {s.is_live
+                              ? `Live · Thru ${s.holes_completed}`
+                              : s.is_submitted
+                              ? "Submitted"
+                              : s.tee_time
+                              ? formatTeeTime(s.tee_time)
+                              : "Pending"}
                           </div>
                         </div>
                         <div className="flex items-center gap-3 shrink-0">

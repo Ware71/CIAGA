@@ -258,10 +258,14 @@ export default function ScorecardLandscape(props: {
                       const puLabel = state === "picked_up" ? "PU" : (isFinished && state === "not_started" && s !== null) ? "NS" : null;
 
                       const recv =
-                        scoreView === "net" && !puLabel && state !== "not_started"
+                        scoreView === "net" && !puLabel
                           ? strokesReceivedOnHole(p.course_handicap ?? null, h.stroke_index ?? null, holesList.length)
-                          : isFormatView(scoreView) && formatDisplay && !puLabel && state !== "not_started"
-                          ? (formatDisplay.holeResults[key]?.recv ?? 0)
+                          : isFormatView(scoreView) && formatDisplay && !puLabel
+                          ? strokesReceivedOnHole(
+                              formatDisplay.playingHandicaps?.[p.id] ?? p.course_handicap ?? null,
+                              h.stroke_index ?? null,
+                              holesList.length
+                            )
                           : 0;
 
                       const fmtHint =

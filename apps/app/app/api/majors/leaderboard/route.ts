@@ -6,6 +6,7 @@ import {
   getGroupStandings,
   getCompetitionById,
   getCompetitionSubmissionMap,
+  getCompetitionPendingParticipants,
 } from "@/lib/majors/queries";
 import type { FrozenLeaderboardEntry } from "@/lib/majors/types";
 
@@ -74,10 +75,34 @@ export async function GET(req: Request) {
         getCompetitionLeaderboard(competitionId),
         getCompetitionSubmissionMap(competitionId),
       ]);
-      const rows = liveRows.map((r) => ({
-        ...r,
-        round_id: submissionMap[r.profile_id] ?? null,
-      }));
+
+      const scoredIds = new Set(liveRows.map((r) => r.profile_id));
+      const pendingParticipants = await getCompetitionPendingParticipants(competitionId, scoredIds);
+
+      const rows = [
+        ...liveRows.map((r) => ({
+          ...r,
+          round_id: submissionMap[r.profile_id] ?? null,
+          tee_time: null as string | null,
+        })),
+        ...pendingParticipants.map((p) => ({
+          profile_id: p.profile_id,
+          profile: { id: p.profile_id, name: p.name, avatar_url: p.avatar_url },
+          gross_score: null,
+          net_score: null,
+          format_points: null,
+          points_earned: null,
+          rounds_submitted: 0,
+          last_submission_at: null,
+          is_live: false,
+          holes_completed: 0,
+          position: null,
+          computed_at: null,
+          competition_id: competitionId,
+          round_id: null,
+          tee_time: p.tee_time,
+        })),
+      ];
 
       return NextResponse.json(
         { rows, freeze: freezeConfig, my_role: myRole },
