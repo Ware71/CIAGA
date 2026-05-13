@@ -84,7 +84,7 @@ const INITIAL: FormState = {
   points_model: "none",
   points_table: {},
   num_rounds: "1",
-  standings_contribution: "event_only",
+  standings_contribution: "season",
   series_id: "",
   series_event_template_id: "",
   competition_year: String(new Date().getFullYear()),

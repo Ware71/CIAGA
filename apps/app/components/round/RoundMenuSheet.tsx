@@ -7,6 +7,7 @@ import type { Participant } from "@/lib/rounds/hooks/useRoundDetail";
 import type { RoundFormatType } from "@/lib/rounds/hooks/useRoundDetail";
 import type { FormatDisplayData } from "@/lib/rounds/formatScoring";
 import { supabase } from "@/lib/supabaseClient";
+import { getViewerSession } from "@/lib/auth/viewerSession";
 
 const FORMAT_LABELS: Record<RoundFormatType, string> = {
   strokeplay: "Stroke Play",
@@ -168,7 +169,11 @@ export default function RoundMenuSheet(props: {
     if (!competitionId) return;
     setCompLoading(true);
     try {
-      const res = await fetch(`/api/majors/leaderboard?competition_id=${competitionId}`);
+      const session = await getViewerSession();
+      if (!session) { setCompStandings([]); return; }
+      const res = await fetch(`/api/majors/leaderboard?competition_id=${competitionId}`, {
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+      });
       const data = await res.json();
       const rows = (data.rows ?? []).map((r: any) => ({
         profile_id: r.profile_id,
@@ -201,9 +206,12 @@ export default function RoundMenuSheet(props: {
     if (!seasonId && !groupId) return;
     setSeasonLoading(true);
     try {
+      const session = await getViewerSession();
+      if (!session) { setSeasonStandings([]); return; }
+      const authHeaders = { Authorization: `Bearer ${session.accessToken}` };
       let rows: SeasonStandingEntry[] = [];
       if (seasonId) {
-        const res = await fetch(`/api/majors/seasons/${seasonId}/standings`);
+        const res = await fetch(`/api/majors/seasons/${seasonId}/standings`, { headers: authHeaders });
         const data = await res.json();
         rows = (data.standings ?? []).map((r: any) => ({
           profile_id: r.profile_id,
@@ -215,7 +223,7 @@ export default function RoundMenuSheet(props: {
           position: r.position ?? null,
         }));
       } else {
-        const res = await fetch(`/api/majors/leaderboard?group_id=${groupId}`);
+        const res = await fetch(`/api/majors/leaderboard?group_id=${groupId}`, { headers: authHeaders });
         const data = await res.json();
         rows = (data.rows ?? []).map((r: any) => ({
           profile_id: r.profile_id,
