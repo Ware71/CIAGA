@@ -186,7 +186,7 @@ function SubmitRoundSheet({
 
 type GroupMember = {
   profile_id: string;
-  profile: { name: string | null; avatar_url: string | null } | null;
+  profile: { name: string | null; avatar_url: string | null; gender: string | null } | null;
   preferred_tee_name: string | null;
 };
 
@@ -199,6 +199,7 @@ function AddTeeTimeSheet({
   entrantProfileIds,
   entryFeeAmount,
   entryFeeCurrency,
+  teeTimes,
   onClose,
   onCreated,
 }: {
@@ -208,6 +209,7 @@ function AddTeeTimeSheet({
   entrantProfileIds: Set<string>;
   entryFeeAmount: number | null;
   entryFeeCurrency: string;
+  teeTimes: CompetitionTeeTime[];
   onClose: () => void;
   onCreated: () => void;
 }) {
@@ -237,10 +239,30 @@ function AddTeeTimeSheet({
 
   const totalPlayers = selectedPlayers.length + guests.length;
 
-  // Resolve a member's preferred tee name to an actual tee_box_id
-  const resolvePreferredTee = (preferredTeeName: string | null): string | undefined => {
+  // Map of profileId → tee time they're currently assigned to (for badge display)
+  const assignedMap = new Map<string, { groupNumber: number | null }>();
+  for (const tt of teeTimes) {
+    for (const p of tt.round?.participants ?? []) {
+      if (p.profile_id) assignedMap.set(p.profile_id, { groupNumber: tt.group_number });
+    }
+  }
+
+  // Filter tee boxes to only those appropriate for a player's gender
+  const getTeeBoxesForPlayer = (profileId: string): TeeBoxOption[] => {
+    const member = groupMembers.find((m) => m.profile_id === profileId);
+    const playerGender = member?.profile?.gender ?? "male";
+    return teeBoxes.filter((t) => {
+      if (!t.gender) return true;
+      if (playerGender === "female") return t.gender === "female" || t.gender === "unisex";
+      return t.gender === "male" || t.gender === "unisex";
+    });
+  };
+
+  // Resolve a member's preferred tee name to an actual tee_box_id, respecting gender
+  const resolvePreferredTee = (preferredTeeName: string | null, profileId: string): string | undefined => {
     if (!preferredTeeName || teeBoxes.length === 0) return undefined;
-    const match = teeBoxes.find(
+    const filtered = getTeeBoxesForPlayer(profileId);
+    const match = filtered.find(
       (t) => t.name.toLowerCase().trim() === preferredTeeName.toLowerCase().trim()
     );
     return match?.id;
@@ -257,7 +279,7 @@ function AddTeeTimeSheet({
       // Pre-fill tee preference for newly added player
       const member = groupMembers.find((m) => m.profile_id === profileId);
       if (member?.preferred_tee_name) {
-        const teeId = resolvePreferredTee(member.preferred_tee_name);
+        const teeId = resolvePreferredTee(member.preferred_tee_name, profileId);
         if (teeId) setPlayerTees((tees) => ({ ...tees, [profileId]: teeId }));
       }
       return [...prev, profileId];
@@ -363,6 +385,8 @@ function AddTeeTimeSheet({
             {groupMembers.filter((m) => entrantProfileIds.has(m.profile_id)).map((m) => {
               const selected = selectedPlayers.includes(m.profile_id);
               const disabled = !selected && totalPlayers >= 4;
+              const assignment = !selected ? assignedMap.get(m.profile_id) : undefined;
+              const filteredTees = getTeeBoxesForPlayer(m.profile_id);
               return (
                 <div key={m.profile_id} className="space-y-1">
                   <button
@@ -385,9 +409,14 @@ function AddTeeTimeSheet({
                       </div>
                     )}
                     <span className="flex-1 text-sm text-emerald-50">{m.profile?.name ?? m.profile_id}</span>
+                    {assignment && (
+                      <span className="text-[9px] text-amber-400/80 bg-amber-900/30 rounded px-1.5 py-0.5 shrink-0">
+                        {assignment.groupNumber != null ? `Grp ${assignment.groupNumber}` : "Assigned"}
+                      </span>
+                    )}
                     {selected && <span className="text-emerald-400 text-xs">✓</span>}
                   </button>
-                  {selected && teeBoxes.length > 0 && (
+                  {selected && filteredTees.length > 0 && (
                     <div className="flex items-center gap-2 pl-9">
                       <span className="text-[10px] text-emerald-200/50 shrink-0">Tee:</span>
                       <select
@@ -396,7 +425,7 @@ function AddTeeTimeSheet({
                         className="flex-1 rounded-lg bg-emerald-900/30 border border-emerald-800/40 px-2 py-1 text-xs text-emerald-50 focus:outline-none"
                       >
                         <option value="">— round default —</option>
-                        {teeBoxes.map((t) => (
+                        {filteredTees.map((t) => (
                           <option key={t.id} value={t.id}>
                             {t.name}{t.gender ? ` (${t.gender})` : ""}{t.yards ? ` · ${t.yards}y` : ""}{t.rating ? ` · ${t.rating}/${t.slope ?? "—"}` : ""}
                           </option>
@@ -489,6 +518,7 @@ function EditTeeTimeSheet({
   tt,
   groupMembers,
   entrantProfileIds,
+  teeTimes,
   onClose,
   onSaved,
 }: {
@@ -496,6 +526,7 @@ function EditTeeTimeSheet({
   tt: CompetitionTeeTime;
   groupMembers: GroupMember[];
   entrantProfileIds: Set<string>;
+  teeTimes: CompetitionTeeTime[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -519,6 +550,14 @@ function EditTeeTimeSheet({
   const guestParticipants = (tt.round?.participants ?? []).filter((p) => p.is_guest);
 
   const totalPlayers = selectedPlayers.length + guestParticipants.length;
+
+  // Map profileId → other tee time they're in (exclude current tee time)
+  const assignedMap = new Map<string, { groupNumber: number | null }>();
+  for (const other of teeTimes) {
+    for (const p of other.round?.participants ?? []) {
+      if (p.profile_id) assignedMap.set(p.profile_id, { groupNumber: other.group_number });
+    }
+  }
 
   const togglePlayer = (profileId: string) => {
     setSelectedPlayers((prev) => {
@@ -613,6 +652,7 @@ function EditTeeTimeSheet({
             {groupMembers.filter((m) => entrantProfileIds.has(m.profile_id) || selectedPlayers.includes(m.profile_id)).map((m) => {
               const selected = selectedPlayers.includes(m.profile_id);
               const disabled = !selected && totalPlayers >= 4;
+              const assignment = !selected ? assignedMap.get(m.profile_id) : undefined;
               return (
                 <button
                   key={m.profile_id}
@@ -635,6 +675,11 @@ function EditTeeTimeSheet({
                     </div>
                   )}
                   <span className="flex-1 text-sm text-emerald-50">{m.profile?.name ?? m.profile_id}</span>
+                  {assignment && (
+                    <span className="text-[9px] text-amber-400/80 bg-amber-900/30 rounded px-1.5 py-0.5 shrink-0">
+                      {assignment.groupNumber != null ? `Grp ${assignment.groupNumber}` : "Assigned"}
+                    </span>
+                  )}
                   {selected && <span className="text-emerald-400 text-xs">✓</span>}
                 </button>
               );
@@ -2190,6 +2235,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
           entrantProfileIds={new Set(participants.map((p) => p.profile_id))}
           entryFeeAmount={(competition as any).entry_fee_amount ?? null}
           entryFeeCurrency={(competition as any).entry_fee_currency ?? "GBP"}
+          teeTimes={teeTimes}
           onClose={() => setShowAddTeeTime(false)}
           onCreated={refreshTeeTimes}
         />
@@ -2201,6 +2247,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
           tt={editingTeeTime}
           groupMembers={groupMembers}
           entrantProfileIds={new Set(participants.map((p) => p.profile_id))}
+          teeTimes={teeTimes.filter((t) => t.id !== editingTeeTime.id)}
           onClose={() => setEditingTeeTime(null)}
           onSaved={refreshTeeTimes}
         />

@@ -120,6 +120,24 @@ export async function PATCH(
         return p.profile_id && !existingProfileIds.includes(p.profile_id) && p.profile_id !== ownerProfileId;
       });
       if (toAdd.length > 0) {
+        // Remove any newly-added non-guest players from other tee times in this competition
+        const newNonGuestIds = toAdd.filter((p) => !p.is_guest && p.profile_id).map((p) => p.profile_id as string);
+        if (newNonGuestIds.length > 0) {
+          const { data: otherTTs } = await supabaseAdmin
+            .from("competition_tee_times")
+            .select("round_id")
+            .eq("competition_id", id)
+            .neq("id", tee_time_id);
+          const otherRoundIds = (otherTTs ?? []).map((t) => (t as any).round_id).filter(Boolean) as string[];
+          if (otherRoundIds.length > 0) {
+            await supabaseAdmin
+              .from("round_participants")
+              .delete()
+              .in("round_id", otherRoundIds)
+              .in("profile_id", newNonGuestIds);
+          }
+        }
+
         await supabaseAdmin.from("round_participants").insert(
           toAdd.map((p) => ({
             round_id: roundId,

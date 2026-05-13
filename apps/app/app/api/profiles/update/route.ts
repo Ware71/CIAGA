@@ -15,6 +15,7 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const name = typeof body?.name === "string" ? body.name.trim() : null;
     const avatar_url = typeof body?.avatar_url === "string" ? body.avatar_url.trim() : null;
+    const gender = typeof body?.gender === "string" ? body.gender : null;
 
     // Only allow updating specific fields
     const patch: Record<string, any> = {};
@@ -24,6 +25,11 @@ export async function POST(req: Request) {
       patch.name = name;
     }
     if (avatar_url != null) patch.avatar_url = avatar_url;
+    if (gender != null) {
+      if (!["male", "female"].includes(gender))
+        return NextResponse.json({ error: "Invalid gender" }, { status: 400 });
+      patch.gender = gender;
+    }
 
     if (Object.keys(patch).length === 0) {
       return NextResponse.json({ error: "No fields to update" }, { status: 400 });
@@ -34,7 +40,7 @@ export async function POST(req: Request) {
       .from("profiles")
       .update(patch)
       .eq("owner_user_id", user.id)
-      .select("id, owner_user_id, name, email, avatar_url")
+      .select("id, owner_user_id, name, email, avatar_url, gender")
       .maybeSingle();
 
     if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 });

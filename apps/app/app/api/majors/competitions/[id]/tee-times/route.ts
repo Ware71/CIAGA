@@ -167,10 +167,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         .in("round_id", existingRoundIds)
         .in("profile_id", checkProfileIds);
       if (conflicts && conflicts.length > 0) {
-        return NextResponse.json(
-          { error: "One or more players are already assigned to a tee time for this round" },
-          { status: 409 }
-        );
+        // Remove conflicting players from their current tee times so they can be moved
+        const conflictingIds = conflicts.map((c: any) => c.profile_id);
+        await supabaseAdmin
+          .from("round_participants")
+          .delete()
+          .in("round_id", existingRoundIds)
+          .in("profile_id", conflictingIds);
       }
     }
 

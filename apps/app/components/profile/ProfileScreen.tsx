@@ -32,6 +32,7 @@ type ProfileRow = {
   name?: string | null;
   email?: string | null;
   avatar_url?: string | null;
+  gender?: string | null;
 };
 
 type HandicapRow = {
@@ -93,6 +94,8 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
   const [editingName, setEditingName] = useState(false);
   const [displayName, setDisplayName] = useState<string>((initialProfile?.name ?? "").trim());
   const [savingName, setSavingName] = useState(false);
+  const [gender, setGender] = useState<string>((initialProfile as any)?.gender ?? "male");
+  const [savingGender, setSavingGender] = useState(false);
 
   // -------- Self-only: avatar upload --------
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -385,6 +388,27 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
     }
   };
 
+  // -------- Self-only: save gender --------
+  const saveGender = async (newGender: string) => {
+    if (!isMe) return;
+    setSavingGender(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) return;
+      await fetch("/api/profiles/update", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ gender: newGender }),
+      });
+      setGender(newGender);
+    } catch (e) {
+      console.warn("Save gender failed:", e);
+    } finally {
+      setSavingGender(false);
+    }
+  };
+
   // -------- Self-only: avatar upload (UPDATED: uses /api/profiles/update) --------
   const onPickFile = () => fileRef.current?.click();
 
@@ -510,9 +534,12 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
         if (!alive) return;
         setProfile(p);
 
-        // self: prime displayName when we have profile
+        // self: prime displayName and gender when we have profile
         if ((mode === "self" || isMe) && p?.name != null) {
           setDisplayName(p.name ?? "");
+        }
+        if ((mode === "self" || isMe) && (p as any)?.gender) {
+          setGender((p as any).gender);
         }
 
         if (p?.id) {
@@ -918,6 +945,28 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
                   </Button>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Gender toggle (self only) */}
+          {isMe && (
+            <div className="mt-3 flex items-center gap-2">
+              <span className="text-[10px] uppercase tracking-wider text-emerald-200/50">Gender</span>
+              {(["male", "female"] as const).map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  disabled={savingGender}
+                  onClick={() => { if (gender !== g) saveGender(g); }}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                    gender === g
+                      ? "bg-emerald-700 text-white"
+                      : "border border-emerald-900/60 text-emerald-200/60 hover:border-emerald-700/60"
+                  }`}
+                >
+                  {g === "male" ? "Male" : "Female"}
+                </button>
+              ))}
             </div>
           )}
 
