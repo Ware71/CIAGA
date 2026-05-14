@@ -90,6 +90,7 @@ type CompetitionStandingEntry = {
   avatar_url: string | null;
   gross_score: number | null;
   net_score: number | null;
+  format_points?: number | null;
   to_par: number | null;
   points_earned: number | null;
   position: number | null;
@@ -452,7 +453,7 @@ export default function RoundMenuSheet(props: {
     ...(!competitionId || isFinished ? [{ key: "net" as LeaderboardTab, label: "Net" }] : []),
   ];
   for (let i = 0; i < formatDisplays.length; i++) {
-    tabs.push({ key: `format:${i}` as LeaderboardTab, label: formatDisplays[i].tabLabel });
+    tabs.push({ key: `format:${i}` as LeaderboardTab, label: competitionId ? "Group" : formatDisplays[i].tabLabel });
   }
   if (competitionId) {
     tabs.push({ key: "competition", label: "Competition" });
@@ -626,9 +627,6 @@ export default function RoundMenuSheet(props: {
                     <div className="px-3 py-4 text-center text-[11px] text-emerald-100/50">Loading…</div>
                   )}
                   {!compLoading && (compStandings ?? []).map((s) => {
-                    const pts = showPts
-                      ? (s.points_earned ?? projectedPoints(s.position, competitionPointsModel, competitionPointsTable))
-                      : null;
                     const thruText = s.is_live
                       ? `Live · Thru ${s.holes_completed}`
                       : s.is_submitted
@@ -648,19 +646,17 @@ export default function RoundMenuSheet(props: {
                           <div className="text-[10px] text-emerald-100/55 leading-none mt-0.5">{thruText}</div>
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
-                          {showPts && (
-                            <div className="text-right">
-                              <div className="text-[9px] text-emerald-200/50 uppercase tracking-wider leading-none">Pts</div>
-                              <div className="text-[11px] font-bold text-emerald-300 tabular-nums">{pts ?? "—"}</div>
-                            </div>
-                          )}
                           <div className="text-right">
                             <div className="text-[15px] font-extrabold tabular-nums text-[#f5e6b0]">
-                              {formatLeaderboardScore(s.to_par, s.net_score ?? s.gross_score, scoringModel)}
+                              {scoringModel === "stableford_points"
+                                ? (s.format_points ?? "—")
+                                : (s.gross_score ?? "—")}
                             </div>
-                            <div className="text-[9px] text-emerald-100/50">
-                              {formatLeaderboardLabel(scoringModel)}
-                            </div>
+                            {scoringModel !== "stableford_points" && s.to_par != null && (
+                              <div className="text-[9px] text-emerald-100/50">
+                                {formatToPar(s.to_par)} net
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>

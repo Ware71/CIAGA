@@ -1181,7 +1181,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("overview");
   const [competition, setCompetition] = useState<CompetitionWithGroup | null>(null);
-  const [leaderboard, setLeaderboard] = useState<LeaderboardRowWithRoundId[]>([]);
+  const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [teeTimes, setTeeTimes] = useState<CompetitionTeeTime[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1207,6 +1207,13 @@ export default function CompetitionDetailClient({ competitionId }: { competition
   const [proposingWinnings, setProposingWinnings] = useState(false);
   const [showSetupSheet, setShowSetupSheet] = useState(false);
   const [startingRoundId, setStartingRoundId] = useState<string | null>(null);
+  const [leaderboardFreeze, setLeaderboardFreeze] = useState<{
+    freeze_state: string;
+    freeze_last_holes: number | null;
+    freeze_scope: string;
+    freeze_top_x: number | null;
+  } | null>(null);
+  const [lbView, setLbView] = useState<"score" | "gross">("score");
 
   useEffect(() => {
     let cancelled = false;
@@ -1220,7 +1227,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
 
         const [compRes, lbRes, roundsRes, teeTimesRes, participantsRes, winningsRes] = await Promise.all([
           fetch(`/api/majors/competitions/${competitionId}`, { headers }),
-          fetch(`/api/majors/competitions/${competitionId}/leaderboard`, { headers }),
+          fetch(`/api/majors/leaderboard?competition_id=${competitionId}`, { headers }),
           fetch(`/api/rounds?status=finished&limit=20`, { headers }),
           fetch(`/api/majors/competitions/${competitionId}/tee-times`, { headers }),
           fetch(`/api/majors/competitions/${competitionId}/participants`, { headers }),
@@ -1269,6 +1276,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
         if (lbRes.ok) {
           const j = await lbRes.json();
           setLeaderboard(j.rows ?? []);
+          if (j.freeze) setLeaderboardFreeze(j.freeze);
         }
 
         if (roundsRes.ok) {
@@ -1329,11 +1337,16 @@ export default function CompetitionDetailClient({ competitionId }: { competition
         () => {
           getViewerSession().then((session) => {
             if (!session) return;
-            fetch(`/api/majors/competitions/${competitionId}/leaderboard`, {
+            fetch(`/api/majors/leaderboard?competition_id=${competitionId}`, {
               headers: { Authorization: `Bearer ${session.accessToken}` },
             })
               .then((r) => (r.ok ? r.json() : null))
-              .then((j) => { if (j) setLeaderboard(j.rows ?? []); });
+              .then((j) => {
+                if (j) {
+                  setLeaderboard(j.rows ?? []);
+                  if (j.freeze) setLeaderboardFreeze(j.freeze);
+                }
+              });
           });
         }
       )
@@ -1386,12 +1399,13 @@ export default function CompetitionDetailClient({ competitionId }: { competition
   const handleSubmitDone = async () => {
     const session = await getViewerSession();
     if (!session) return;
-    const res = await fetch(`/api/majors/competitions/${competitionId}/leaderboard`, {
+    const res = await fetch(`/api/majors/leaderboard?competition_id=${competitionId}`, {
       headers: { Authorization: `Bearer ${session.accessToken}` },
     });
     if (res.ok) {
       const j = await res.json();
       setLeaderboard(j.rows ?? []);
+      if (j.freeze) setLeaderboardFreeze(j.freeze);
       setIsEntered(true);
     }
   };
@@ -1551,7 +1565,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
     (!competition?.group_id && competition?.created_by_profile_id === myProfileId);
 
   const scoringModel = competition?.scoring_model ?? "net";
-  const displayScore = (row: LeaderboardEntryWithProfile) =>
+  const displayScore = (row: any) =>
     scoringModel === "gross" ? row.gross_score : (row.net_score ?? row.gross_score);
   const scoreLabel = scoringModel === "gross" ? "Gross" : "Net";
 
@@ -1754,20 +1768,81 @@ export default function CompetitionDetailClient({ competitionId }: { competition
     ) : null,
 
     leaderboard: (() => {
+      function getThruLabel(row: any): string {
+        const holesPerRound = 18;
+        const holesCompleted = row.holes_completed ?? row.holes_shown ?? 0;
+        if (holesCompleted === 0) return "";
+        const completedRounds = Math.floor(holesCompleted / holesPerRound);
+        const holesInRound = holesCompleted % holesPerRound;
+        if (row.is_live) {
+          return `R${completedRounds + 1} thru ${holesInRound || holesPerRound}`;
+        }
+        if (holesInRound === 0) {
+          return `R${Math.min(completedRounds, competition?.num_rounds ?? 1)} [F]`;
+        }
+        return `R${completedRounds + 1} thru ${holesInRound}`;
+      }
       const rankedIds = new Set(leaderboard.map((r) => r.profile_id));
       const unranked = participants.filter((p) => !rankedIds.has(p.profile_id));
       const showPts = competition?.points_model && competition.points_model !== "none";
+      const displayRows = lbView === "gross"
+        ? [...leaderboard].sort((a, b) => {
+            if (a.gross_score == null && b.gross_score == null) return 0;
+            if (a.gross_score == null) return 1;
+            if (b.gross_score == null) return -1;
+            return a.gross_score - b.gross_score;
+          })
+        : leaderboard;
       return (
+        <>
+          {leaderboardFreeze?.freeze_state === "frozen" && (
+            <div className="flex items-center gap-2 rounded-xl border border-amber-700/50 bg-amber-900/20 px-3 py-2 mb-2">
+              <span className="text-amber-400 text-sm">🔒</span>
+              <div>
+                <p className="text-xs font-semibold text-amber-300">Leaderboard frozen</p>
+                {leaderboardFreeze.freeze_last_holes != null && (
+                  <p className="text-[10px] text-amber-300/70">
+                    Last {leaderboardFreeze.freeze_last_holes} hole{leaderboardFreeze.freeze_last_holes !== 1 ? "s" : ""} hidden
+                    {leaderboardFreeze.freeze_scope === "top_x" && leaderboardFreeze.freeze_top_x != null
+                      ? ` (top ${leaderboardFreeze.freeze_top_x} positions only)` : ""}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
         <div className="space-y-2">
+          {leaderboard.length > 0 && (
+            <div className="flex gap-1 mb-2">
+              {(["score", "gross"] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setLbView(v)}
+                  className={`px-3 py-1 rounded-full text-[11px] font-semibold transition-colors ${
+                    lbView === v
+                      ? "bg-emerald-700 text-white"
+                      : "border border-emerald-900/60 text-emerald-200/70 hover:text-emerald-50"
+                  }`}
+                >
+                  {v === "score" ? "By Score" : "By Gross"}
+                </button>
+              ))}
+            </div>
+          )}
           {leaderboard.length === 0 && unranked.length === 0 && (
             <div className="text-sm text-emerald-100/60 text-center py-8">
               No participants yet. Enter to appear here.
             </div>
           )}
-          {leaderboard.map((row) => {
+          {displayRows.map((row) => {
             const pts = showPts
               ? (row.points_earned ?? getPointsForPosition(row.position ?? null, competition.points_model, competition.points_table as Record<string, unknown>))
               : null;
+            const thru = getThruLabel(row);
+            const subLabel = (() => {
+              const label = lbView === "gross" ? "Gross" : scoreLabel;
+              return thru ? `${thru} · ${label}` : label;
+            })();
             const inner = (
               <>
                 <PositionBadge position={row.position ?? null} />
@@ -1786,8 +1861,10 @@ export default function CompetitionDetailClient({ competitionId }: { competition
                   </div>
                 )}
                 <div className="text-right shrink-0">
-                  <div className="text-xs font-extrabold text-[#f5e6b0]">{displayScore(row) ?? "—"}</div>
-                  <div className="text-[10px] text-emerald-100/50">{row.rounds_submitted} rnd · {scoreLabel}</div>
+                  <div className="text-xs font-extrabold text-[#f5e6b0]">
+                    {lbView === "gross" ? (row.gross_score ?? "—") : (displayScore(row) ?? "—")}
+                  </div>
+                  <div className="text-[10px] text-emerald-100/50">{subLabel}</div>
                 </div>
                 {row.round_id && (
                   <span className="text-[10px] text-emerald-400/70 shrink-0">→</span>
@@ -1805,7 +1882,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
             }`;
             return row.round_id ? (
               <button
-                key={row.id}
+                key={row.profile_id ?? row.id}
                 type="button"
                 className={`${rowClass} hover:brightness-110 active:scale-[0.99] transition-all`}
                 onClick={() => router.push(`/round/${row.round_id}?from=competition&competitionId=${competitionId}`)}
@@ -1813,7 +1890,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
                 {inner}
               </button>
             ) : (
-              <div key={row.id} className={rowClass}>
+              <div key={row.profile_id ?? row.id} className={rowClass}>
                 {inner}
               </div>
             );
@@ -1850,6 +1927,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
             </>
           )}
         </div>
+        </>
       );
     })(),
 
