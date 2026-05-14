@@ -275,11 +275,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     if (ttErr) throw ttErr;
 
-    // Back-link the round to this tee time so the rounds page can identify it
-    await supabaseAdmin
+    // Back-link the round to this tee time so the rounds page can identify it.
+    // Non-critical: all leaderboard queries use ctt.round_id (the reliable direction).
+    const { error: backLinkErr } = await supabaseAdmin
       .from("rounds")
       .update({ competition_tee_time_id: teeTimeRow.id })
       .eq("id", round.id);
+    if (backLinkErr) console.error("[tee-times] back-link update failed:", backLinkErr);
 
     // Charge guest entry fees to host players if requested
     if (competition.group_id && (competition as any).entry_fee_amount > 0) {

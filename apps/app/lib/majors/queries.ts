@@ -149,41 +149,44 @@ export async function getCompetitionPendingParticipants(
   competitionId: string,
   scoredProfileIds: Set<string>
 ): Promise<Array<{ profile_id: string; name: string | null; avatar_url: string | null; tee_time: string }>> {
-  const { data, error } = await supabaseAdmin
+  // Use the reliable FK direction: competition_tee_times.round_id → rounds.id
+  // (rounds.competition_tee_time_id is a back-link set without error handling and may be NULL)
+  const { data: teeTimes, error: ttErr } = await supabaseAdmin
     .from("competition_tee_times")
-    .select(`
-      tee_time,
-      round:rounds!competition_tee_time_id(
-        round_participants(
-          profile_id,
-          profile:profiles(id, name, avatar_url)
-        )
-      )
-    `)
+    .select("id, tee_time, round_id")
     .eq("competition_id", competitionId);
-  if (error) throw error;
+  if (ttErr) throw ttErr;
+
+  const roundIds = (teeTimes ?? []).map((t) => (t as any).round_id).filter(Boolean) as string[];
+  if (!roundIds.length) return [];
+
+  const teeTimeByRoundId = new Map<string, string>();
+  for (const tt of teeTimes ?? []) {
+    if ((tt as any).round_id) teeTimeByRoundId.set((tt as any).round_id, (tt as any).tee_time);
+  }
+
+  const { data: participants, error: partErr } = await supabaseAdmin
+    .from("round_participants")
+    .select("round_id, profile_id, profile:profiles(id, name, avatar_url)")
+    .in("round_id", roundIds)
+    .eq("is_guest", false)
+    .not("profile_id", "is", null);
+  if (partErr) throw partErr;
 
   const results: Array<{ profile_id: string; name: string | null; avatar_url: string | null; tee_time: string }> = [];
   const seen = new Set<string>();
 
-  for (const tt of data ?? []) {
-    const teeTime = (tt as any).tee_time as string;
-    // round:rounds is a one-to-many embed — Supabase returns an array
-    const rounds = ((tt as any).round ?? []) as any[];
-    for (const round of rounds) {
-    const participants = round.round_participants ?? [];
-    for (const rp of participants) {
-      const profileId = rp.profile_id as string;
-      if (!profileId || scoredProfileIds.has(profileId) || seen.has(profileId)) continue;
-      seen.add(profileId);
-      results.push({
-        profile_id: profileId,
-        name: rp.profile?.name ?? null,
-        avatar_url: rp.profile?.avatar_url ?? null,
-        tee_time: teeTime,
-      });
-    }
-    } // end for round of rounds
+  for (const rp of participants ?? []) {
+    const profileId = (rp as any).profile_id as string;
+    const teeTime = teeTimeByRoundId.get((rp as any).round_id);
+    if (!profileId || !teeTime || scoredProfileIds.has(profileId) || seen.has(profileId)) continue;
+    seen.add(profileId);
+    results.push({
+      profile_id: profileId,
+      name: (rp as any).profile?.name ?? null,
+      avatar_url: (rp as any).profile?.avatar_url ?? null,
+      tee_time: teeTime,
+    });
   }
 
   return results;

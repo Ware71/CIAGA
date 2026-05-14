@@ -25,8 +25,9 @@ export async function POST(
 
     if (rpErr) throw rpErr;
 
-    const role = (rp as any)?.role as string | undefined;
-    if (!role || (role !== "owner" && role !== "scorer")) {
+    // Any participant can finish — consistent with any-participant scoring policy.
+    // Competition rounds add players as role="player", so owner/scorer-only would block them.
+    if (!rp) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
