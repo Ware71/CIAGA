@@ -153,7 +153,7 @@ export async function getCompetitionPendingParticipants(
     .from("competition_tee_times")
     .select(`
       tee_time,
-      round:rounds(
+      round:rounds!competition_tee_time_id(
         round_participants(
           profile_id,
           profile:profiles(id, name, avatar_url)
