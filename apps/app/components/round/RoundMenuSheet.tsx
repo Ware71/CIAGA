@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import type { Participant } from "@/lib/rounds/hooks/useRoundDetail";
@@ -35,6 +35,23 @@ function formatToPar(toPar: number | null) {
   if (toPar == null) return "";
   if (toPar === 0) return "E";
   return toPar > 0 ? `+${toPar}` : `${toPar}`;
+}
+
+function formatLeaderboardScore(
+  toPar: number | null,
+  rawScore: number | null,
+  scoringModel?: string
+): string {
+  if (scoringModel === "stableford_points") {
+    return rawScore != null ? String(rawScore) : "—";
+  }
+  if (toPar != null) return toPar === 0 ? "E" : toPar > 0 ? `+${toPar}` : String(toPar);
+  return rawScore != null ? String(rawScore) : "—";
+}
+
+function formatLeaderboardLabel(scoringModel?: string): string {
+  if (scoringModel === "stableford_points") return "pts";
+  return "to par";
 }
 
 function formatTeeTime(iso: string) {
@@ -73,6 +90,7 @@ type CompetitionStandingEntry = {
   avatar_url: string | null;
   gross_score: number | null;
   net_score: number | null;
+  to_par: number | null;
   points_earned: number | null;
   position: number | null;
   thru: number;
@@ -130,6 +148,7 @@ export default function RoundMenuSheet(props: {
   competitionPointsTable?: Record<string, number>;
   groupId?: string;
   seasonId?: string;
+  scoringModel?: string;
 }) {
   const {
     onClose,
@@ -154,11 +173,15 @@ export default function RoundMenuSheet(props: {
     competitionPointsTable,
     groupId,
     seasonId,
+    scoringModel,
   } = props;
 
   const showPts = !!competitionPointsModel && competitionPointsModel !== "none";
 
   const [activeTab, setActiveTab] = useState<LeaderboardTab>(competitionId ? "competition" : "gross");
+  // Track whether the user has explicitly clicked a tab (vs auto-selected on init).
+  // Used to auto-switch to "competition" when competitionId arrives after initial render.
+  const tabUserSelected = useRef(false);
 
   // Competition standings (realtime-synced)
   const [compStandings, setCompStandings] = useState<CompetitionStandingEntry[] | null>(null);
@@ -181,6 +204,7 @@ export default function RoundMenuSheet(props: {
         avatar_url: r.profile?.avatar_url ?? null,
         gross_score: r.gross_score,
         net_score: r.net_score,
+        to_par: r.to_par ?? null,
         points_earned: r.points_earned ?? null,
         position: r.position ?? null,
         thru: r.holes_completed ?? 0,
@@ -243,7 +267,16 @@ export default function RoundMenuSheet(props: {
     }
   }
 
+  // If competitionId arrives after initial render (race condition), auto-switch from
+  // the default "gross" tab to "competition" so cross-tee-time data shows immediately.
+  useEffect(() => {
+    if (competitionId && !tabUserSelected.current && activeTab === "gross") {
+      setActiveTab("competition");
+    }
+  }, [competitionId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   function handleTabChange(tab: LeaderboardTab) {
+    tabUserSelected.current = true;
     setActiveTab(tab);
     if (tab === "competition") fetchCompStandings();
     if (tab === "season") fetchSeasonStandings();
@@ -593,10 +626,16 @@ export default function RoundMenuSheet(props: {
                     <div className="px-3 py-4 text-center text-[11px] text-emerald-100/50">Loading…</div>
                   )}
                   {!compLoading && (compStandings ?? []).map((s) => {
-                    const score = s.net_score ?? s.gross_score;
                     const pts = showPts
                       ? (s.points_earned ?? projectedPoints(s.position, competitionPointsModel, competitionPointsTable))
                       : null;
+                    const thruText = s.is_live
+                      ? `Live · Thru ${s.holes_completed}`
+                      : s.is_submitted
+                      ? s.holes_completed > 0 ? `F (${s.holes_completed})` : "Submitted"
+                      : s.tee_time
+                      ? formatTeeTime(s.tee_time)
+                      : "Pending";
                     return (
                       <div key={s.profile_id} className="px-3 py-2.5 flex items-center gap-2.5">
                         <div className="w-6 text-center text-[11px] font-bold text-emerald-100/90">{s.position ?? "—"}</div>
@@ -606,15 +645,7 @@ export default function RoundMenuSheet(props: {
                         </Avatar>
                         <div className="min-w-0 flex-1">
                           <div className="text-[12px] font-semibold text-emerald-50 truncate">{s.name ?? "—"}</div>
-                          <div className="text-[10px] text-emerald-100/55 leading-none mt-0.5">
-                            {s.is_live
-                              ? `Live · Thru ${s.holes_completed}`
-                              : s.is_submitted
-                              ? "Submitted"
-                              : s.tee_time
-                              ? formatTeeTime(s.tee_time)
-                              : "Pending"}
-                          </div>
+                          <div className="text-[10px] text-emerald-100/55 leading-none mt-0.5">{thruText}</div>
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
                           {showPts && (
@@ -625,7 +656,10 @@ export default function RoundMenuSheet(props: {
                           )}
                           <div className="text-right">
                             <div className="text-[15px] font-extrabold tabular-nums text-[#f5e6b0]">
-                              {score != null ? score : "—"}
+                              {formatLeaderboardScore(s.to_par, s.net_score ?? s.gross_score, scoringModel)}
+                            </div>
+                            <div className="text-[9px] text-emerald-100/50">
+                              {formatLeaderboardLabel(scoringModel)}
                             </div>
                           </div>
                         </div>

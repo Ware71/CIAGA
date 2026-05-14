@@ -66,7 +66,12 @@ export async function GET(req: Request) {
         const threshold = freezeConfig.total_holes - (freezeConfig.freeze_last_holes as number);
         const rows = await getFrozenLeaderboard(competitionId, threshold, freezeConfig);
         return NextResponse.json(
-          { rows, freeze: freezeConfig, my_role: myRole },
+          {
+            rows,
+            freeze: freezeConfig,
+            my_role: myRole,
+            scoring_model: (competition as any).scoring_model ?? "net",
+          },
           { headers: { "Cache-Control": "no-store" } }
         );
       }
@@ -105,7 +110,12 @@ export async function GET(req: Request) {
       ];
 
       return NextResponse.json(
-        { rows, freeze: freezeConfig, my_role: myRole },
+        {
+          rows,
+          freeze: freezeConfig,
+          my_role: myRole,
+          scoring_model: (competition as any).scoring_model ?? "net",
+        },
         { headers: { "Cache-Control": "no-store" } }
       );
     }

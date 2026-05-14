@@ -168,8 +168,9 @@ export async function getCompetitionPendingParticipants(
 
   for (const tt of data ?? []) {
     const teeTime = (tt as any).tee_time as string;
-    const round = (tt as any).round as any;
-    if (!round) continue;
+    // round:rounds is a one-to-many embed — Supabase returns an array
+    const rounds = ((tt as any).round ?? []) as any[];
+    for (const round of rounds) {
     const participants = round.round_participants ?? [];
     for (const rp of participants) {
       const profileId = rp.profile_id as string;
@@ -182,6 +183,7 @@ export async function getCompetitionPendingParticipants(
         tee_time: teeTime,
       });
     }
+    } // end for round of rounds
   }
 
   return results;

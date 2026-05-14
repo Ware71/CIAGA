@@ -290,11 +290,12 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
   const [competitionPointsTable, setCompetitionPointsTable] = useState<Record<string, number> | undefined>(undefined);
   const [competitionGroupId, setCompetitionGroupId] = useState<string | undefined>(undefined);
   const [competitionSeasonId, setCompetitionSeasonId] = useState<string | undefined>(undefined);
+  const [competitionScoringModel, setCompetitionScoringModel] = useState<string | undefined>(undefined);
   useEffect(() => {
     if (!competitionTeeTimeId) return;
     supabase
       .from("competition_tee_times")
-      .select("competition_id, competition:competitions(points_model, points_table, group_id, season_id)")
+      .select("competition_id, competition:competitions(points_model, points_table, group_id, season_id, scoring_model)")
       .eq("id", competitionTeeTimeId)
       .single()
       .then(({ data }) => {
@@ -306,6 +307,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
             setCompetitionPointsTable(comp.points_table ?? undefined);
             setCompetitionGroupId(comp.group_id ?? undefined);
             setCompetitionSeasonId(comp.season_id ?? undefined);
+            setCompetitionScoringModel(comp.scoring_model ?? undefined);
           }
         }
       });
@@ -1457,6 +1459,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
             competitionPointsTable={competitionPointsTable}
             groupId={competitionGroupId}
             seasonId={competitionSeasonId}
+            scoringModel={competitionScoringModel}
           />
         )}
 

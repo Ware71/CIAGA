@@ -36,6 +36,22 @@ function getScore(row: CompetitionRow): number | null {
   return (row as FrozenLeaderboardEntry).net_score ?? (row as FrozenLeaderboardEntry).gross_score ?? null;
 }
 
+function getToPar(row: CompetitionRow): number | null {
+  return (row as any).to_par ?? null;
+}
+
+function formatLeaderboardScore(
+  toPar: number | null,
+  rawScore: number | null,
+  scoringModel: string
+): string {
+  if (scoringModel === "stableford_points") {
+    return rawScore != null ? String(rawScore) : "—";
+  }
+  if (toPar != null) return toPar === 0 ? "E" : toPar > 0 ? `+${toPar}` : String(toPar);
+  return rawScore != null ? String(rawScore) : "—";
+}
+
 function getHoles(row: CompetitionRow): number {
   if (isCompetitionRow(row)) return row.holes_completed ?? 0;
   return (row as FrozenLeaderboardEntry).holes_shown ?? 0;
@@ -58,6 +74,7 @@ export default function LeaderboardClient() {
   const [compRows, setCompRows] = useState<CompetitionRow[]>([]);
   const [groupRows, setGroupRows] = useState<GroupStandingWithProfile[]>([]);
   const [freeze, setFreeze] = useState<FreezeConfig | null>(null);
+  const [scoringModel, setScoringModel] = useState<string>("net");
   const [loading, setLoading] = useState(true);
   const [showReveal, setShowReveal] = useState(false);
   const [myRole, setMyRole] = useState<string | null>(null);
@@ -79,6 +96,7 @@ export default function LeaderboardClient() {
       setCompRows(json.rows ?? []);
       if (json.freeze) setFreeze(json.freeze);
       if (json.my_role !== undefined) setMyRole(json.my_role);
+      if (json.scoring_model) setScoringModel(json.scoring_model);
     } else {
       setGroupRows(json.rows ?? []);
     }
@@ -291,9 +309,11 @@ export default function LeaderboardClient() {
                 {tab === "competition" ? (
                   <>
                     <div className="text-xs font-extrabold text-[#f5e6b0]">
-                      {score ?? "—"}
+                      {formatLeaderboardScore(getToPar(row), score, scoringModel)}
                     </div>
-                    <div className="text-[10px] text-emerald-100/50">net</div>
+                    <div className="text-[10px] text-emerald-100/50">
+                      {scoringModel === "stableford_points" ? "pts" : "to par"}
+                    </div>
                   </>
                 ) : (
                   <>
