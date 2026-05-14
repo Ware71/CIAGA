@@ -284,7 +284,8 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     canScore,
   } = useRoundDetail(roundId, initialSnapshot);
 
-  // Resolve competition ID from the tee time link so we can show live competition standings
+  // Resolve competition ID via the reliable FK direction: competition_tee_times.round_id → rounds.id
+  // (rounds.competition_tee_time_id is a back-link set without error handling and may be NULL)
   const [competitionId, setCompetitionId] = useState<string | null>(null);
   const [competitionPointsModel, setCompetitionPointsModel] = useState<string | undefined>(undefined);
   const [competitionPointsTable, setCompetitionPointsTable] = useState<Record<string, number> | undefined>(undefined);
@@ -292,12 +293,11 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
   const [competitionSeasonId, setCompetitionSeasonId] = useState<string | undefined>(undefined);
   const [competitionScoringModel, setCompetitionScoringModel] = useState<string | undefined>(undefined);
   useEffect(() => {
-    if (!competitionTeeTimeId) return;
     supabase
       .from("competition_tee_times")
       .select("competition_id, competition:competitions(points_model, points_table, group_id, season_id, scoring_model)")
-      .eq("id", competitionTeeTimeId)
-      .single()
+      .eq("round_id", roundId)
+      .maybeSingle()
       .then(({ data }) => {
         if (data?.competition_id) {
           setCompetitionId(data.competition_id as string);
@@ -311,7 +311,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
           }
         }
       });
-  }, [competitionTeeTimeId]);
+  }, [roundId]);
 
   // Tracks hole keys with scores not yet confirmed by the server
   const [pendingKeys, setPendingKeys] = useState<Set<string>>(new Set());

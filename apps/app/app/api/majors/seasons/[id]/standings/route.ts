@@ -4,11 +4,36 @@ import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 
 export const runtime = "nodejs";
 
-// GET /api/majors/seasons/[id]/standings — get season standings table
+// Refreshes competition leaderboard entries for any live competitions in the season,
+// then recomputes season standings so the result always includes current in-progress scores.
+async function refreshSeasonStandings(seasonId: string) {
+  const { data: liveComps } = await supabaseAdmin
+    .from("competitions")
+    .select("id")
+    .eq("season_id", seasonId)
+    .eq("majors_status", "live")
+    .in("standings_contribution", ["season", "both"]);
+
+  // Refresh each live competition's leaderboard (reads live round_score_events);
+  // the DB function already cascades to season standings, but we call it explicitly below too.
+  await Promise.all(
+    (liveComps ?? []).map((comp: any) =>
+      supabaseAdmin.rpc("ciaga_compute_competition_leaderboard", { p_competition_id: comp.id })
+    )
+  );
+
+  // Explicit season standings recompute ensures seasons with no live competitions
+  // (only completed/official) are also aggregated correctly.
+  await supabaseAdmin.rpc("ciaga_compute_season_standings", { p_season_id: seasonId });
+}
+
+// GET /api/majors/seasons/[id]/standings — refresh then return season standings
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     await getAuthedProfileOrThrow(req);
     const { id } = await params;
+
+    await refreshSeasonStandings(id);
 
     const { data: standings, error } = await supabaseAdmin
       .from("season_standings_entries")
@@ -63,11 +88,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
     }
 
-    const { error } = await supabaseAdmin.rpc("ciaga_compute_season_standings", {
-      p_season_id: id,
-    });
-
-    if (error) throw error;
+    await refreshSeasonStandings(id);
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {
