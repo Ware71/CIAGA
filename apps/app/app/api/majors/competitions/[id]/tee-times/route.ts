@@ -23,6 +23,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       return NextResponse.json({ tee_times: [] }, { headers: { "Cache-Control": "no-store" } });
     }
 
+    // Fetch competition rounds for grouping context
+    const { data: compRounds } = await supabaseAdmin
+      .from("competition_rounds")
+      .select("id, round_number, name, scheduled_date")
+      .eq("competition_id", id);
+
+    const compRoundById: Record<string, { id: string; round_number: number; name: string; scheduled_date: string | null }> =
+      Object.fromEntries((compRounds ?? []).map((r: any) => [r.id, r]));
+
     // Fetch linked rounds with participants + profiles
     const roundIds = teeTimes.map((t) => t.round_id).filter(Boolean) as string[];
 
@@ -69,6 +78,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     const result = teeTimes.map((t) => ({
       ...t,
+      competition_round: t.competition_round_id ? (compRoundById[t.competition_round_id] ?? null) : null,
       round: t.round_id ? (roundMap[t.round_id] ?? null) : null,
     }));
 

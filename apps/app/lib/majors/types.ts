@@ -508,17 +508,24 @@ export type TeeTimeParticipant = {
 export type CompetitionTeeTime = {
   id: string;
   competition_id: string;
+  competition_round_id: string | null;
   round_id: string | null;
   tee_time: string;
   group_number: number | null;
   notes: string | null;
   created_by: string;
   created_at: string;
+  competition_round?: {
+    id: string;
+    round_number: number;
+    name: string;
+    scheduled_date: string | null;
+  } | null;
   round?: {
     id: string;
     status: string;
     participants: TeeTimeParticipant[];
-  };
+  } | null;
 };
 
 // ─── Matchplay types ─────────────────────────────────────────────────────────

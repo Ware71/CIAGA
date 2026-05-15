@@ -111,6 +111,19 @@ export async function POST(req: Request) {
       .single();
 
     if (error) throw error;
+
+    // Auto-create competition_rounds for every round in this competition
+    const numRounds = (competition as any).num_rounds ?? 1;
+    if (numRounds > 0) {
+      const roundRows = Array.from({ length: numRounds }, (_, i) => ({
+        competition_id: (competition as any).id,
+        round_number: i + 1,
+        name: `Round ${i + 1}`,
+        status: "scheduled",
+      }));
+      await supabaseAdmin.from("competition_rounds").insert(roundRows);
+    }
+
     return NextResponse.json({ competition }, { status: 201 });
   } catch (e: any) {
     const msg = e?.message ?? "Unknown error";

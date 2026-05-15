@@ -6,6 +6,7 @@ import { getViewerSession } from "@/lib/auth/viewerSession";
 import type {
   CompetitionWithGroup,
   CompetitionTypeV2,
+  CompetitionRound,
   LeaderboardEntryWithProfile,
   CompetitionTeeTime,
   TeeTimeParticipant,
@@ -192,6 +193,103 @@ type GroupMember = {
 
 type TeeBoxOption = { id: string; name: string; gender: string | null; yards: number | null; rating: number | null; slope: number | null };
 
+function EditRoundSheet({
+  competitionId,
+  round,
+  onClose,
+  onSaved,
+}: {
+  competitionId: string;
+  round: CompetitionRound;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState(round.name);
+  const [scheduledDate, setScheduledDate] = useState(round.scheduled_date ?? "");
+  const [status, setStatus] = useState(round.status);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const session = await getViewerSession();
+      if (!session) return;
+      const res = await fetch(`/api/majors/competitions/${competitionId}/rounds/${round.id}`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim() || round.name,
+          scheduled_date: scheduledDate || null,
+          status,
+        }),
+      });
+      if (!res.ok) {
+        const j = await res.json();
+        setError(j.error ?? "Failed to save");
+        return;
+      }
+      onSaved();
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={onClose}>
+      <div
+        className="w-full max-w-sm mx-auto rounded-t-3xl bg-[#071f13] border-t border-emerald-900/70 px-4 pt-5 pb-[env(safe-area-inset-bottom)] space-y-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="w-10 h-1 rounded-full bg-emerald-800/60 mx-auto mb-1" />
+        <div className="text-sm font-semibold text-emerald-50">Edit {round.name}</div>
+        {error && <div className="text-[11px] text-red-400">{error}</div>}
+        <div className="space-y-1">
+          <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Name</label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2.5 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Date</label>
+          <input
+            type="date"
+            value={scheduledDate}
+            onChange={(e) => setScheduledDate(e.target.value)}
+            className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2.5 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Status</label>
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value as CompetitionRound["status"])}
+            className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2.5 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
+          >
+            <option value="scheduled">Scheduled</option>
+            <option value="live">Live</option>
+            <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving}
+          className="w-full py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white disabled:opacity-50"
+        >
+          {saving ? "Saving…" : "Save"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function AddTeeTimeSheet({
   competitionId,
   courseId,
@@ -200,6 +298,7 @@ function AddTeeTimeSheet({
   entryFeeAmount,
   entryFeeCurrency,
   teeTimes,
+  competitionRounds,
   onClose,
   onCreated,
 }: {
@@ -210,12 +309,16 @@ function AddTeeTimeSheet({
   entryFeeAmount: number | null;
   entryFeeCurrency: string;
   teeTimes: CompetitionTeeTime[];
+  competitionRounds: CompetitionRound[];
   onClose: () => void;
   onCreated: () => void;
 }) {
   const [teeTime, setTeeTime] = useState("");
   const [groupNumber, setGroupNumber] = useState("");
   const [notes, setNotes] = useState("");
+  const [selectedRoundId, setSelectedRoundId] = useState<string | null>(
+    () => competitionRounds.length === 1 ? competitionRounds[0].id : null
+  );
   const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
   const [playerTees, setPlayerTees] = useState<Record<string, string>>({}); // profile_id → tee_box_id
   const [teeBoxes, setTeeBoxes] = useState<TeeBoxOption[]>([]);
@@ -316,6 +419,7 @@ function AddTeeTimeSheet({
           group_number: groupNumber ? parseInt(groupNumber, 10) : undefined,
           notes: notes || undefined,
           players,
+          competition_round_id: selectedRoundId ?? undefined,
         }),
       });
       if (!res.ok) {
@@ -338,6 +442,29 @@ function AddTeeTimeSheet({
       >
         <div className="w-10 h-1 rounded-full bg-emerald-800/60 mx-auto mb-1" />
         <div className="text-sm font-semibold text-emerald-50">Add Tee Time</div>
+
+        {/* Round picker — only shown when there are multiple rounds */}
+        {competitionRounds.length > 1 && (
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Round *</label>
+            <div className="flex flex-wrap gap-2">
+              {competitionRounds.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => setSelectedRoundId(r.id)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                    selectedRoundId === r.id
+                      ? "bg-emerald-700 border-emerald-600 text-white"
+                      : "border-emerald-800/60 text-emerald-200/70 hover:border-emerald-600"
+                  }`}
+                >
+                  {r.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Date/time */}
         <div className="space-y-1">
@@ -1207,6 +1334,8 @@ export default function CompetitionDetailClient({ competitionId }: { competition
   const [proposingWinnings, setProposingWinnings] = useState(false);
   const [showSetupSheet, setShowSetupSheet] = useState(false);
   const [startingRoundId, setStartingRoundId] = useState<string | null>(null);
+  const [competitionRounds, setCompetitionRounds] = useState<CompetitionRound[]>([]);
+  const [editingRound, setEditingRound] = useState<CompetitionRound | null>(null);
   const [leaderboardFreeze, setLeaderboardFreeze] = useState<{
     freeze_state: string;
     freeze_last_holes: number | null;
@@ -1225,13 +1354,14 @@ export default function CompetitionDetailClient({ competitionId }: { competition
         setMyProfileId(session.profileId);
         const headers = { Authorization: `Bearer ${session.accessToken}` };
 
-        const [compRes, lbRes, roundsRes, teeTimesRes, participantsRes, winningsRes] = await Promise.all([
+        const [compRes, lbRes, roundsRes, teeTimesRes, participantsRes, winningsRes, compRoundsRes] = await Promise.all([
           fetch(`/api/majors/competitions/${competitionId}`, { headers }),
           fetch(`/api/majors/leaderboard?competition_id=${competitionId}`, { headers }),
           fetch(`/api/rounds?status=finished&limit=20`, { headers }),
           fetch(`/api/majors/competitions/${competitionId}/tee-times`, { headers }),
           fetch(`/api/majors/competitions/${competitionId}/participants`, { headers }),
           fetch(`/api/majors/competitions/${competitionId}/winnings`, { headers }),
+          fetch(`/api/majors/competitions/${competitionId}/rounds`, { headers }),
         ]);
 
         if (cancelled) return;
@@ -1315,6 +1445,11 @@ export default function CompetitionDetailClient({ competitionId }: { competition
           const j = await winningsRes.json();
           setWinnings(j.winnings ?? []);
         }
+
+        if (compRoundsRes.ok) {
+          const j = await compRoundsRes.json();
+          setCompetitionRounds(j.rounds ?? []);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -1357,12 +1492,18 @@ export default function CompetitionDetailClient({ competitionId }: { competition
   const refreshTeeTimes = async () => {
     const session = await getViewerSession();
     if (!session) return;
-    const res = await fetch(`/api/majors/competitions/${competitionId}/tee-times`, {
-      headers: { Authorization: `Bearer ${session.accessToken}` },
-    });
-    if (res.ok) {
-      const j = await res.json();
+    const headers = { Authorization: `Bearer ${session.accessToken}` };
+    const [ttRes, crRes] = await Promise.all([
+      fetch(`/api/majors/competitions/${competitionId}/tee-times`, { headers }),
+      fetch(`/api/majors/competitions/${competitionId}/rounds`, { headers }),
+    ]);
+    if (ttRes.ok) {
+      const j = await ttRes.json();
       setTeeTimes(j.tee_times ?? []);
+    }
+    if (crRes.ok) {
+      const j = await crRes.json();
+      setCompetitionRounds(j.rounds ?? []);
     }
   };
 
@@ -1940,11 +2081,89 @@ export default function CompetitionDetailClient({ competitionId }: { competition
           )?.id ?? null
         : null;
 
+      // Group tee times by competition_round_id for structured display
+      const teeTimesByRound = new Map<string | null, CompetitionTeeTime[]>();
+      for (const tt of teeTimes) {
+        const key = tt.competition_round_id ?? null;
+        if (!teeTimesByRound.has(key)) teeTimesByRound.set(key, []);
+        teeTimesByRound.get(key)!.push(tt);
+      }
+
+      const renderTeeTimeCard = (tt: CompetitionTeeTime) => {
+        const participantCount = tt.round?.participants?.length ?? 0;
+        const hasSlot = tt.round?.participants?.some((p) => p.profile_id === myProfileId) ?? false;
+        const canJoin = isSelfSelect && isEntered && myProfileId && !myTeeTimeId && participantCount < 4;
+        return (
+          <div key={tt.id} className="space-y-2">
+            {hasSlot && tt.competition_round && (
+              <div className="text-[10px] text-emerald-400/80 font-semibold uppercase tracking-wider px-0.5">
+                {tt.competition_round.name} · Your tee time
+              </div>
+            )}
+            <TeeTimeCard
+              tt={tt}
+              isAdmin={isAdminOrOwner}
+              onDelete={() => handleDeleteTeeTime(tt.id)}
+              onEdit={isAdminOrOwner ? () => setEditingTeeTime(tt) : undefined}
+              onViewScorecard={tt.round?.id ? () => router.push(`/round/${tt.round!.id}?from=competition&competitionId=${competitionId}`) : undefined}
+              onStartRound={hasSlot && tt.round?.status === "scheduled" && tt.round?.id ? () => handleStartRound(tt.round!.id) : undefined}
+              isStarting={startingRoundId === tt.round?.id}
+            />
+            {isSelfSelect && (
+              hasSlot ? (
+                <button
+                  type="button"
+                  onClick={() => handleLeaveTeeTimeSlot(tt.id)}
+                  className="w-full py-2 rounded-full border border-red-900/40 text-[11px] text-red-400/70 hover:text-red-400"
+                >
+                  Leave this slot
+                </button>
+              ) : canJoin ? (
+                <button
+                  type="button"
+                  onClick={() => handleJoinTeeTimeSlot(tt.id)}
+                  className="w-full py-2 rounded-full bg-emerald-700/80 text-[11px] font-semibold text-white hover:bg-emerald-700"
+                >
+                  Join this slot
+                </button>
+              ) : null
+            )}
+          </div>
+        );
+      };
+
+      const numRounds = (competition as any)?.num_rounds ?? 1;
+      const hasMultipleRounds = numRounds > 1;
+
       return (
         <div className="space-y-3">
           {isSelfSelect && (
             <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2 text-[11px] text-emerald-200/60">
               Players can choose their own tee time slot.
+            </div>
+          )}
+          {/* Admin: init rounds banner for competitions missing competition_round rows */}
+          {isAdminOrOwner && hasMultipleRounds && competitionRounds.length === 0 && (
+            <div className="rounded-xl border border-amber-800/50 bg-amber-900/20 px-3 py-2.5 flex items-center justify-between gap-2">
+              <span className="text-[11px] text-amber-200/80">Rounds not yet initialised.</span>
+              <button
+                type="button"
+                className="text-[11px] font-semibold text-amber-300 hover:text-amber-100 shrink-0"
+                onClick={async () => {
+                  const session = await getViewerSession();
+                  if (!session) return;
+                  for (let i = 1; i <= numRounds; i++) {
+                    await fetch(`/api/majors/competitions/${competitionId}/rounds`, {
+                      method: "POST",
+                      headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+                      body: JSON.stringify({ round_number: i, name: `Round ${i}` }),
+                    });
+                  }
+                  await refreshTeeTimes();
+                }}
+              >
+                Initialise rounds
+              </button>
             </div>
           )}
           {isAdminOrOwner && (
@@ -1956,7 +2175,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
               + {isSelfSelect ? "Add Slot" : "Add Tee Time"}
             </button>
           )}
-          {teeTimes.length === 0 ? (
+          {teeTimes.length === 0 && competitionRounds.length === 0 ? (
             <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 p-5 text-center space-y-1">
               <div className="text-sm text-emerald-100/60">
                 {isAdminOrOwner
@@ -1966,46 +2185,61 @@ export default function CompetitionDetailClient({ competitionId }: { competition
                   : "No tee times have been scheduled yet."}
               </div>
             </div>
-          ) : (
-            teeTimes.map((tt) => {
-              const participantCount = tt.round?.participants?.length ?? 0;
-              const hasSlot = tt.round?.participants?.some((p) => p.profile_id === myProfileId) ?? false;
-              const isMySlot = hasSlot;
-              const canJoin = isSelfSelect && isEntered && myProfileId && !myTeeTimeId && participantCount < 4;
-
-              return (
-                <div key={tt.id} className="space-y-2">
-                  <TeeTimeCard
-                    tt={tt}
-                    isAdmin={isAdminOrOwner}
-                    onDelete={() => handleDeleteTeeTime(tt.id)}
-                    onEdit={isAdminOrOwner ? () => setEditingTeeTime(tt) : undefined}
-                    onViewScorecard={tt.round?.id ? () => router.push(`/round/${tt.round!.id}?from=competition&competitionId=${competitionId}`) : undefined}
-                    onStartRound={hasSlot && tt.round?.status === "scheduled" && tt.round?.id ? () => handleStartRound(tt.round!.id) : undefined}
-                    isStarting={startingRoundId === tt.round?.id}
-                  />
-                  {isSelfSelect && (
-                    isMySlot ? (
-                      <button
-                        type="button"
-                        onClick={() => handleLeaveTeeTimeSlot(tt.id)}
-                        className="w-full py-2 rounded-full border border-red-900/40 text-[11px] text-red-400/70 hover:text-red-400"
-                      >
-                        Leave this slot
-                      </button>
-                    ) : canJoin ? (
-                      <button
-                        type="button"
-                        onClick={() => handleJoinTeeTimeSlot(tt.id)}
-                        className="w-full py-2 rounded-full bg-emerald-700/80 text-[11px] font-semibold text-white hover:bg-emerald-700"
-                      >
-                        Join this slot
-                      </button>
-                    ) : null
-                  )}
+          ) : competitionRounds.length > 0 ? (
+            // Grouped view: one section per competition round
+            <div className="space-y-5">
+              {competitionRounds.map((cr) => {
+                const roundTeeTimes = teeTimesByRound.get(cr.id) ?? [];
+                const dateLabel = cr.scheduled_date
+                  ? new Date(cr.scheduled_date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+                  : null;
+                const statusColour =
+                  cr.status === "live" ? "text-emerald-400" :
+                  cr.status === "completed" ? "text-emerald-200/40" :
+                  cr.status === "cancelled" ? "text-red-400/60" :
+                  "text-emerald-200/50";
+                return (
+                  <div key={cr.id} className="space-y-2">
+                    {/* Round header */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-300">
+                          {cr.name}
+                        </span>
+                        {dateLabel && (
+                          <span className="text-[10px] text-emerald-200/50">{dateLabel}</span>
+                        )}
+                        <span className={`text-[10px] capitalize ${statusColour}`}>{cr.status}</span>
+                      </div>
+                      {isAdminOrOwner && (
+                        <button
+                          type="button"
+                          onClick={() => setEditingRound(cr)}
+                          className="text-[10px] text-emerald-400/60 hover:text-emerald-300 px-1"
+                        >
+                          Edit
+                        </button>
+                      )}
+                    </div>
+                    {roundTeeTimes.length === 0 ? (
+                      <div className="text-[11px] text-emerald-200/40 pl-0.5">No tee times for this round yet.</div>
+                    ) : (
+                      <div className="space-y-3">{roundTeeTimes.map(renderTeeTimeCard)}</div>
+                    )}
+                  </div>
+                );
+              })}
+              {/* Unlinked tee times (legacy) */}
+              {(teeTimesByRound.get(null)?.length ?? 0) > 0 && (
+                <div className="space-y-2">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-200/40">Unassigned</div>
+                  <div className="space-y-3">{(teeTimesByRound.get(null) ?? []).map(renderTeeTimeCard)}</div>
                 </div>
-              );
-            })
+              )}
+            </div>
+          ) : (
+            // No competition_rounds yet (single-round or legacy) — flat list
+            <div className="space-y-3">{teeTimes.map(renderTeeTimeCard)}</div>
           )}
         </div>
       );
@@ -2325,6 +2559,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
           entryFeeAmount={(competition as any).entry_fee_amount ?? null}
           entryFeeCurrency={(competition as any).entry_fee_currency ?? "GBP"}
           teeTimes={teeTimes}
+          competitionRounds={competitionRounds}
           onClose={() => setShowAddTeeTime(false)}
           onCreated={refreshTeeTimes}
         />
@@ -2338,6 +2573,15 @@ export default function CompetitionDetailClient({ competitionId }: { competition
           entrantProfileIds={new Set(participants.map((p) => p.profile_id))}
           teeTimes={teeTimes.filter((t) => t.id !== editingTeeTime.id)}
           onClose={() => setEditingTeeTime(null)}
+          onSaved={refreshTeeTimes}
+        />
+      )}
+
+      {editingRound && (
+        <EditRoundSheet
+          competitionId={competitionId}
+          round={editingRound}
+          onClose={() => setEditingRound(null)}
           onSaved={refreshTeeTimes}
         />
       )}
