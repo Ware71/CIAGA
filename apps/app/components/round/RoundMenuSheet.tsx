@@ -565,13 +565,11 @@ export default function RoundMenuSheet(props: {
                             )}
                             <div className="text-right">
                               <div className="text-[15px] font-extrabold tabular-nums text-[#f5e6b0]">
-                                {r.score}
-                                {r.toPar != null && (
-                                  <span className="text-[10px] font-bold text-emerald-100/80 ml-1">
-                                    ({formatToPar(r.toPar)})
-                                  </span>
-                                )}
+                                {r.toPar != null ? formatToPar(r.toPar) : r.score}
                               </div>
+                              {r.toPar != null && (
+                                <div className="text-[9px] text-emerald-100/50">({r.score})</div>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -650,11 +648,13 @@ export default function RoundMenuSheet(props: {
                             <div className="text-[15px] font-extrabold tabular-nums text-[#f5e6b0]">
                               {scoringModel === "stableford_points"
                                 ? (s.format_points ?? "—")
-                                : (s.gross_score ?? "—")}
+                                : s.to_par != null
+                                ? formatToPar(s.to_par)
+                                : (s.net_score ?? s.gross_score ?? "—")}
                             </div>
                             {scoringModel !== "stableford_points" && s.to_par != null && (
                               <div className="text-[9px] text-emerald-100/50">
-                                {formatToPar(s.to_par)} net
+                                ({s.net_score ?? s.gross_score ?? "—"})
                               </div>
                             )}
                           </div>

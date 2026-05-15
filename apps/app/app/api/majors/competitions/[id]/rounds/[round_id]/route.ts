@@ -42,6 +42,8 @@ export async function PATCH(
     if (body.scheduled_date !== undefined) allowed.scheduled_date = body.scheduled_date ?? null;
     if (body.course_id !== undefined) allowed.course_id = body.course_id ?? null;
     if (body.status !== undefined) allowed.status = body.status;
+    if (body.default_tee_box_id_male !== undefined) allowed.default_tee_box_id_male = body.default_tee_box_id_male ?? null;
+    if (body.default_tee_box_id_female !== undefined) allowed.default_tee_box_id_female = body.default_tee_box_id_female ?? null;
 
     if (Object.keys(allowed).length === 0) {
       return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });

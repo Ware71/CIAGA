@@ -24,6 +24,11 @@ import { supabase } from "@/lib/supabaseClient";
 
 const FEDEX_POINTS_SCALE = [500, 300, 190, 140, 110, 90, 75, 60, 48, 38, 30, 24, 18, 14, 10, 8, 6, 4, 2, 1];
 
+function formatToPar(n: number): string {
+  if (n === 0) return "E";
+  return n > 0 ? `+${n}` : `${n}`;
+}
+
 function getPointsForPosition(
   position: number | null,
   pointsModel: string,
@@ -207,8 +212,24 @@ function EditRoundSheet({
   const [name, setName] = useState(round.name);
   const [scheduledDate, setScheduledDate] = useState(round.scheduled_date ?? "");
   const [status, setStatus] = useState(round.status);
+  const [courseId, setCourseId] = useState(round.course_id ?? "");
+  const [courseName, setCourseName] = useState(round.course?.name ?? "");
+  const [maleTeeId, setMaleTeeId] = useState(round.default_tee_box_id_male ?? "");
+  const [femaleTeeId, setFemaleTeeId] = useState(round.default_tee_box_id_female ?? "");
+  const [teeBoxes, setTeeBoxes] = useState<TeeBoxOption[]>([]);
+  const [showCoursePicker, setShowCoursePicker] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!courseId) { setTeeBoxes([]); return; }
+    fetch(`/api/courses/tee-boxes?course_id=${courseId}`)
+      .then((r) => r.json())
+      .then((j) => setTeeBoxes(j.tee_boxes ?? []));
+  }, [courseId]);
+
+  const maleTees = teeBoxes.filter((t) => !t.gender || t.gender === "male" || t.gender === "unisex");
+  const femaleTees = teeBoxes.filter((t) => !t.gender || t.gender === "female" || t.gender === "unisex");
 
   const handleSave = async () => {
     setSaving(true);
@@ -223,6 +244,9 @@ function EditRoundSheet({
           name: name.trim() || round.name,
           scheduled_date: scheduledDate || null,
           status,
+          course_id: courseId || null,
+          default_tee_box_id_male: maleTeeId || null,
+          default_tee_box_id_female: femaleTeeId || null,
         }),
       });
       if (!res.ok) {
@@ -237,10 +261,13 @@ function EditRoundSheet({
     }
   };
 
+  const inputCls = "w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2.5 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600";
+
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={onClose}>
       <div
-        className="w-full max-w-sm mx-auto rounded-t-3xl bg-[#071f13] border-t border-emerald-900/70 px-4 pt-5 pb-[env(safe-area-inset-bottom)] space-y-4"
+        className="w-full max-w-sm mx-auto rounded-t-3xl bg-[#071f13] border-t border-emerald-900/70 px-4 pt-5 pb-[env(safe-area-inset-bottom)] space-y-4 overflow-y-auto max-h-[85vh]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="w-10 h-1 rounded-full bg-emerald-800/60 mx-auto mb-1" />
@@ -248,35 +275,58 @@ function EditRoundSheet({
         {error && <div className="text-[11px] text-red-400">{error}</div>}
         <div className="space-y-1">
           <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Name</label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2.5 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
-          />
+          <input type="text" value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
         </div>
         <div className="space-y-1">
           <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Date</label>
-          <input
-            type="date"
-            value={scheduledDate}
-            onChange={(e) => setScheduledDate(e.target.value)}
-            className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2.5 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
-          />
+          <input type="date" value={scheduledDate} onChange={(e) => setScheduledDate(e.target.value)} className={inputCls} />
         </div>
         <div className="space-y-1">
           <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Status</label>
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value as CompetitionRound["status"])}
-            className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2.5 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
-          >
+          <select value={status} onChange={(e) => setStatus(e.target.value as CompetitionRound["status"])} className={inputCls}>
             <option value="scheduled">Scheduled</option>
             <option value="live">Live</option>
             <option value="completed">Completed</option>
             <option value="cancelled">Cancelled</option>
           </select>
         </div>
+        <div className="space-y-1">
+          <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Course</label>
+          {courseName ? (
+            <div className="flex items-center gap-2">
+              <span className="flex-1 text-sm text-emerald-50 truncate">{courseName}</span>
+              <button type="button" onClick={() => setShowCoursePicker(true)}
+                className="text-[11px] text-emerald-400/70 hover:text-emerald-300 shrink-0">Change</button>
+            </div>
+          ) : (
+            <button type="button" onClick={() => setShowCoursePicker(true)}
+              className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2.5 text-sm text-emerald-200/50 text-left">
+              Select course…
+            </button>
+          )}
+        </div>
+        {teeBoxes.length > 0 && (
+          <>
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Men&apos;s Default Tee</label>
+              <select value={maleTeeId} onChange={(e) => setMaleTeeId(e.target.value)} className={inputCls}>
+                <option value="">— None —</option>
+                {maleTees.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Women&apos;s Default Tee</label>
+              <select value={femaleTeeId} onChange={(e) => setFemaleTeeId(e.target.value)} className={inputCls}>
+                <option value="">— None —</option>
+                {femaleTees.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+          </>
+        )}
         <button
           type="button"
           onClick={handleSave}
@@ -287,6 +337,18 @@ function EditRoundSheet({
         </button>
       </div>
     </div>
+    <CoursePickerModal
+      open={showCoursePicker}
+      onClose={() => setShowCoursePicker(false)}
+      onSelect={(id, cname) => {
+        setCourseId(id);
+        setCourseName(cname ?? "");
+        setMaleTeeId("");
+        setFemaleTeeId("");
+        setShowCoursePicker(false);
+      }}
+    />
+    </>
   );
 }
 
@@ -371,6 +433,18 @@ function AddTeeTimeSheet({
     return match?.id;
   };
 
+  // Resolve the gender-appropriate default tee from the selected competition round.
+  // Takes priority over the player's stored preferred tee.
+  const resolveRoundDefaultTee = (profileId: string): string | undefined => {
+    if (!selectedRoundId) return undefined;
+    const cr = competitionRounds.find((r) => r.id === selectedRoundId);
+    if (!cr) return undefined;
+    const member = groupMembers.find((m) => m.profile_id === profileId);
+    const isFemale = member?.profile?.gender === "female";
+    const defaultId = isFemale ? cr.default_tee_box_id_female : cr.default_tee_box_id_male;
+    return defaultId ?? undefined;
+  };
+
   const togglePlayer = (profileId: string) => {
     setSelectedPlayers((prev) => {
       if (prev.includes(profileId)) {
@@ -379,11 +453,16 @@ function AddTeeTimeSheet({
         return next;
       }
       if (totalPlayers >= 4) return prev;
-      // Pre-fill tee preference for newly added player
-      const member = groupMembers.find((m) => m.profile_id === profileId);
-      if (member?.preferred_tee_name) {
-        const teeId = resolvePreferredTee(member.preferred_tee_name, profileId);
-        if (teeId) setPlayerTees((tees) => ({ ...tees, [profileId]: teeId }));
+      // Pre-fill tee: competition round default takes priority over player's stored preference
+      const roundTeeId = resolveRoundDefaultTee(profileId);
+      if (roundTeeId) {
+        setPlayerTees((tees) => ({ ...tees, [profileId]: roundTeeId }));
+      } else {
+        const member = groupMembers.find((m) => m.profile_id === profileId);
+        if (member?.preferred_tee_name) {
+          const teeId = resolvePreferredTee(member.preferred_tee_name, profileId);
+          if (teeId) setPlayerTees((tees) => ({ ...tees, [profileId]: teeId }));
+        }
       }
       return [...prev, profileId];
     });
@@ -1343,6 +1422,9 @@ export default function CompetitionDetailClient({ competitionId }: { competition
     freeze_top_x: number | null;
   } | null>(null);
   const [lbView, setLbView] = useState<"score" | "gross">("score");
+  const [detailPlayer, setDetailPlayer] = useState<any | null>(null);
+  const [playerRounds, setPlayerRounds] = useState<any[] | null>(null);
+  const [playerRoundsLoading, setPlayerRoundsLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -1980,6 +2062,18 @@ export default function CompetitionDetailClient({ competitionId }: { competition
               ? (row.points_earned ?? getPointsForPosition(row.position ?? null, competition.points_model, competition.points_table as Record<string, unknown>))
               : null;
             const thru = getThruLabel(row);
+            // Compute to-par for net and gross views
+            const netToPar: number | null = row.to_par ?? null;
+            const grossToPar: number | null =
+              row.gross_score != null && row.course_par != null
+                ? row.gross_score - row.course_par
+                : null;
+            const mainToPar = lbView === "gross" ? grossToPar : netToPar;
+            const mainTotal = lbView === "gross" ? row.gross_score : displayScore(row);
+            const mainScoreText = mainToPar != null
+              ? formatToPar(mainToPar)
+              : mainTotal != null ? String(mainTotal) : "—";
+            const bracketText = mainToPar != null && mainTotal != null ? `(${mainTotal})` : null;
             const subLabel = (() => {
               const label = lbView === "gross" ? "Gross" : scoreLabel;
               return thru ? `${thru} · ${label}` : label;
@@ -2002,17 +2096,17 @@ export default function CompetitionDetailClient({ competitionId }: { competition
                   </div>
                 )}
                 <div className="text-right shrink-0">
-                  <div className="text-xs font-extrabold text-[#f5e6b0]">
-                    {lbView === "gross" ? (row.gross_score ?? "—") : (displayScore(row) ?? "—")}
-                  </div>
-                  <div className="text-[10px] text-emerald-100/50">{subLabel}</div>
+                  <div className="text-xs font-extrabold text-[#f5e6b0]">{mainScoreText}</div>
+                  {bracketText ? (
+                    <div className="text-[10px] text-emerald-100/50">{bracketText} · {subLabel}</div>
+                  ) : (
+                    <div className="text-[10px] text-emerald-100/50">{subLabel}</div>
+                  )}
                 </div>
-                {row.round_id && (
-                  <span className="text-[10px] text-emerald-400/70 shrink-0">→</span>
-                )}
+                <span className="text-[10px] text-emerald-400/70 shrink-0">→</span>
               </>
             );
-            const rowClass = `flex items-center gap-3 rounded-xl border px-3 py-2.5 w-full text-left ${
+            const rowClass = `flex items-center gap-3 rounded-xl border px-3 py-2.5 w-full text-left hover:brightness-110 active:scale-[0.99] transition-all ${
               row.position === 1
                 ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5"
                 : row.position === 2
@@ -2021,19 +2115,31 @@ export default function CompetitionDetailClient({ competitionId }: { competition
                 ? "border-[#cd7f32]/20 bg-[#cd7f32]/5"
                 : "border-emerald-900/50 bg-[#0b3b21]/60"
             }`;
-            return row.round_id ? (
+            const handleRowClick = async () => {
+              setDetailPlayer(row);
+              setPlayerRounds(null);
+              setPlayerRoundsLoading(true);
+              try {
+                const session = await getViewerSession();
+                const res = await fetch(
+                  `/api/majors/competitions/${competitionId}/leaderboard/${row.profile_id}`,
+                  { headers: { Authorization: `Bearer ${session?.accessToken}` } }
+                );
+                const j = await res.json();
+                setPlayerRounds(j.rounds ?? []);
+              } finally {
+                setPlayerRoundsLoading(false);
+              }
+            };
+            return (
               <button
                 key={row.profile_id ?? row.id}
                 type="button"
-                className={`${rowClass} hover:brightness-110 active:scale-[0.99] transition-all`}
-                onClick={() => router.push(`/round/${row.round_id}?from=competition&competitionId=${competitionId}`)}
+                className={rowClass}
+                onClick={handleRowClick}
               >
                 {inner}
               </button>
-            ) : (
-              <div key={row.profile_id ?? row.id} className={rowClass}>
-                {inner}
-              </div>
             );
           })}
           {unranked.length > 0 && (
@@ -2068,6 +2174,87 @@ export default function CompetitionDetailClient({ competitionId }: { competition
             </>
           )}
         </div>
+        {/* Player round breakdown sheet */}
+        {detailPlayer && (
+          <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={() => setDetailPlayer(null)}>
+            <div
+              className="bg-[#0a2e1a] border-t border-emerald-900/60 rounded-t-2xl px-4 pb-8 pt-4 max-h-[80vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center gap-3 mb-4">
+                {detailPlayer.profile?.avatar_url ? (
+                  <img src={detailPlayer.profile.avatar_url} alt="" className="h-10 w-10 rounded-full object-cover shrink-0" />
+                ) : (
+                  <div className="h-10 w-10 rounded-full bg-emerald-900/60 grid place-items-center text-sm font-bold text-emerald-200 shrink-0">
+                    {detailPlayer.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-bold text-emerald-50 truncate">{detailPlayer.profile?.name ?? "Unknown"}</div>
+                  <div className="text-[10px] text-emerald-200/50">
+                    {detailPlayer.position != null ? `#${detailPlayer.position}` : ""}
+                    {detailPlayer.to_par != null ? ` · ${formatToPar(detailPlayer.to_par)}` : ""}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDetailPlayer(null)}
+                  className="text-emerald-200/60 text-sm px-3 py-1 rounded-lg border border-emerald-900/50"
+                >
+                  Close
+                </button>
+              </div>
+              {/* Round rows */}
+              {playerRoundsLoading ? (
+                <div className="text-center py-6 text-emerald-200/50 text-sm">Loading…</div>
+              ) : playerRounds && playerRounds.length > 0 ? (
+                <div className="space-y-1">
+                  {/* Column headers */}
+                  <div className="grid grid-cols-[1fr_auto_auto] gap-2 px-2 pb-1">
+                    <div className="text-[10px] text-emerald-200/40 uppercase tracking-wider">Round</div>
+                    <div className="text-[10px] text-emerald-200/40 uppercase tracking-wider text-right w-12">Gross</div>
+                    <div className="text-[10px] text-emerald-200/40 uppercase tracking-wider text-right w-12">Net</div>
+                  </div>
+                  {playerRounds.map((r: any, i: number) => {
+                    const label = r.competition_round?.name ?? `R${r.competition_round?.round_number ?? i + 1}`;
+                    return (
+                      <div key={r.competition_round_id ?? i} className="grid grid-cols-[1fr_auto_auto] gap-2 items-center rounded-xl border border-emerald-900/40 bg-[#0b3b21]/60 px-3 py-2">
+                        <div className="text-sm font-semibold text-emerald-100 truncate">{label}</div>
+                        <div className="text-sm font-bold tabular-nums text-[#f5e6b0] text-right w-12">
+                          {r.gross_score != null ? r.gross_score : "—"}
+                        </div>
+                        <div className="text-sm font-bold tabular-nums text-emerald-300 text-right w-12">
+                          {r.net_score_snapshot != null ? r.net_score_snapshot : "—"}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {/* Totals */}
+                  {playerRounds.length > 1 && (() => {
+                    const totalGross = playerRounds.every((r: any) => r.gross_score != null)
+                      ? playerRounds.reduce((s: number, r: any) => s + r.gross_score, 0) : null;
+                    const totalNet = playerRounds.every((r: any) => r.net_score_snapshot != null)
+                      ? playerRounds.reduce((s: number, r: any) => s + r.net_score_snapshot, 0) : null;
+                    return (
+                      <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-center rounded-xl border border-emerald-700/40 bg-emerald-900/20 px-3 py-2 mt-1">
+                        <div className="text-[11px] font-bold text-emerald-300 uppercase tracking-wider">Total</div>
+                        <div className="text-sm font-bold tabular-nums text-[#f5e6b0] text-right w-12">
+                          {totalGross != null ? totalGross : "—"}
+                        </div>
+                        <div className="text-sm font-bold tabular-nums text-emerald-300 text-right w-12">
+                          {totalNet != null ? totalNet : "—"}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              ) : playerRounds != null ? (
+                <div className="text-center py-6 text-emerald-200/40 text-sm">No accepted rounds yet.</div>
+              ) : null}
+            </div>
+          </div>
+        )}
         </>
       );
     })(),
@@ -2202,20 +2389,33 @@ export default function CompetitionDetailClient({ competitionId }: { competition
                   <div key={cr.id} className="space-y-2">
                     {/* Round header */}
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-300">
-                          {cr.name}
-                        </span>
-                        {dateLabel && (
-                          <span className="text-[10px] text-emerald-200/50">{dateLabel}</span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-300">
+                            {cr.name}
+                          </span>
+                          {dateLabel && (
+                            <span className="text-[10px] text-emerald-200/50">{dateLabel}</span>
+                          )}
+                          <span className={`text-[10px] capitalize ${statusColour}`}>{cr.status}</span>
+                        </div>
+                        {(cr.course?.name || cr.tee_male?.name || cr.tee_female?.name) && (
+                          <div className="text-[10px] text-emerald-200/50 mt-0.5 flex items-center gap-1.5">
+                            {cr.course?.name && <span>{cr.course.name}</span>}
+                            {cr.tee_male?.name && (
+                              <span className="text-emerald-200/40">· ♂ {cr.tee_male.name}</span>
+                            )}
+                            {cr.tee_female?.name && (
+                              <span className="text-emerald-200/40">· ♀ {cr.tee_female.name}</span>
+                            )}
+                          </div>
                         )}
-                        <span className={`text-[10px] capitalize ${statusColour}`}>{cr.status}</span>
                       </div>
                       {isAdminOrOwner && (
                         <button
                           type="button"
                           onClick={() => setEditingRound(cr)}
-                          className="text-[10px] text-emerald-400/60 hover:text-emerald-300 px-1"
+                          className="text-[10px] text-emerald-400/60 hover:text-emerald-300 px-1 shrink-0"
                         >
                           Edit
                         </button>

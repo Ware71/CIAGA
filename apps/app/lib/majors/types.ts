@@ -390,6 +390,8 @@ export type CompetitionLeaderboardEntry = {
   computed_at: string;
   is_live: boolean;
   holes_completed: number;
+  to_par: number | null;
+  course_par: number | null;
 };
 
 export type LeaderboardEntryWithProfile = CompetitionLeaderboardEntry & {
@@ -464,8 +466,13 @@ export type CompetitionRound = {
   name: string;
   scheduled_date: string | null;
   course_id: string | null;
+  default_tee_box_id_male: string | null;
+  default_tee_box_id_female: string | null;
   status: CompetitionRoundStatus;
   created_at: string;
+  course?: { id: string; name: string } | null;
+  tee_male?: { id: string; name: string } | null;
+  tee_female?: { id: string; name: string } | null;
 };
 
 // ─── Audit log ───────────────────────────────────────────────────────────────

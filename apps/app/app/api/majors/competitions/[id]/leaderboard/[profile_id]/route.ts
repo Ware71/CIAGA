@@ -1,0 +1,44 @@
+import { NextResponse } from "next/server";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
+
+export const runtime = "nodejs";
+
+// GET /api/majors/competitions/[id]/leaderboard/[profile_id]
+// Returns accepted round submissions for a player in this competition, ordered by round number.
+// Used by the player breakdown sheet on the competition leaderboard.
+export async function GET(
+  req: Request,
+  { params }: { params: Promise<{ id: string; profile_id: string }> }
+) {
+  try {
+    await getAuthedProfileOrThrow(req);
+    const { id, profile_id } = await params;
+
+    const { data, error } = await supabaseAdmin
+      .from("competition_round_submissions")
+      .select(
+        `competition_round_id, round_id, gross_score, net_score_snapshot,
+         format_points, accepted,
+         competition_round:competition_rounds(round_number, name)`
+      )
+      .eq("competition_id", id)
+      .eq("profile_id", profile_id)
+      .eq("accepted", true);
+
+    if (error) throw error;
+
+    // Sort by round_number (nulls last)
+    const sorted = (data ?? []).slice().sort((a: any, b: any) => {
+      const na = a.competition_round?.round_number ?? Infinity;
+      const nb = b.competition_round?.round_number ?? Infinity;
+      return na - nb;
+    });
+
+    return NextResponse.json({ rounds: sorted }, { headers: { "Cache-Control": "no-store" } });
+  } catch (e: any) {
+    const msg = e?.message ?? "Unknown error";
+    const status = String(msg).toLowerCase().includes("auth") ? 401 : 500;
+    return NextResponse.json({ error: msg }, { status });
+  }
+}

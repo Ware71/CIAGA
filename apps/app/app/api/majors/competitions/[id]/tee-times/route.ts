@@ -138,15 +138,24 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // Explicit competition_round_id takes priority (multi-round competitions).
     // For single-round competitions, auto-link to the sole competition_round.
     let competitionRoundId: string | null = bodyCompetitionRoundId ?? null;
+    let compRoundLabel: string | null = null;
     if (!competitionRoundId) {
       const { data: rounds } = await supabaseAdmin
         .from("competition_rounds")
-        .select("id")
+        .select("id, round_number, name, default_tee_box_id_male, default_tee_box_id_female")
         .eq("competition_id", id)
         .order("round_number", { ascending: true });
       if (rounds && rounds.length === 1) {
         competitionRoundId = (rounds[0] as any).id;
+        compRoundLabel = (rounds[0] as any).name ?? `Round ${(rounds[0] as any).round_number}`;
       }
+    } else {
+      const { data: cr } = await supabaseAdmin
+        .from("competition_rounds")
+        .select("round_number, name, default_tee_box_id_male, default_tee_box_id_female")
+        .eq("id", competitionRoundId)
+        .maybeSingle();
+      if (cr) compRoundLabel = (cr as any).name ?? `Round ${(cr as any).round_number}`;
     }
 
     const playerList = players ?? [];
@@ -211,7 +220,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         status: "scheduled",
         scheduled_at: tee_time,
         course_id: competition.course_id ?? null,
-        name: competition.name,
+        name: compRoundLabel ? `${competition.name} · ${compRoundLabel}` : competition.name,
         visibility: "private",
         format_type: formatType,
         default_playing_handicap_mode: handicapMode,

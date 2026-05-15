@@ -12,7 +12,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     const { data, error } = await supabaseAdmin
       .from("competition_rounds")
-      .select("*")
+      .select(`
+        *,
+        course:courses(id, name),
+        tee_male:course_tee_boxes!competition_rounds_default_tee_box_id_male_fkey(id, name),
+        tee_female:course_tee_boxes!competition_rounds_default_tee_box_id_female_fkey(id, name)
+      `)
       .eq("competition_id", id)
       .order("round_number", { ascending: true });
 

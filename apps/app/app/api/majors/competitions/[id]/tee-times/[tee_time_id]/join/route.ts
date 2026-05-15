@@ -37,10 +37,10 @@ export async function POST(
       return NextResponse.json({ error: "You must be entered in this competition to join a tee time." }, { status: 403 });
     }
 
-    // Fetch the tee time
+    // Fetch the tee time (including competition_round_id for default tee lookup)
     const { data: teeTime } = await supabaseAdmin
       .from("competition_tee_times")
-      .select("id, round_id, competition_id")
+      .select("id, round_id, competition_id, competition_round_id")
       .eq("id", tee_time_id)
       .eq("competition_id", id)
       .maybeSingle();
@@ -79,6 +79,27 @@ export async function POST(
       return NextResponse.json({ error: "This tee time is full." }, { status: 409 });
     }
 
+    // Resolve gender-appropriate default tee box from the competition round
+    let defaultTeeBoxId: string | null = null;
+    if ((teeTime as any).competition_round_id) {
+      const { data: compRound } = await supabaseAdmin
+        .from("competition_rounds")
+        .select("default_tee_box_id_male, default_tee_box_id_female")
+        .eq("id", (teeTime as any).competition_round_id)
+        .maybeSingle();
+      if (compRound) {
+        const { data: playerProfile } = await supabaseAdmin
+          .from("profiles")
+          .select("gender")
+          .eq("id", profileId)
+          .maybeSingle();
+        const isFemale = (playerProfile as any)?.gender === "female";
+        defaultTeeBoxId = isFemale
+          ? ((compRound as any).default_tee_box_id_female ?? null)
+          : ((compRound as any).default_tee_box_id_male ?? null);
+      }
+    }
+
     // Add player to round_participants
     const { error: insertErr } = await supabaseAdmin
       .from("round_participants")
@@ -87,6 +108,7 @@ export async function POST(
         profile_id: profileId,
         role: "player",
         is_guest: false,
+        pending_tee_box_id: defaultTeeBoxId,
       });
 
     if (insertErr) throw insertErr;
