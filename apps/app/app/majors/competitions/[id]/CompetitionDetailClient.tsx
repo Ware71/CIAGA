@@ -1991,12 +1991,33 @@ export default function CompetitionDetailClient({ competitionId }: { competition
     ) : null,
 
     leaderboard: (() => {
+      const isFrozen = leaderboardFreeze?.freeze_state === "frozen";
       function getThruLabel(row: any): string {
         const holesPerRound = 18;
-        const holesCompleted = row.holes_completed ?? row.holes_shown ?? 0;
-        if (holesCompleted === 0) return "";
-        const completedRounds = Math.floor(holesCompleted / holesPerRound);
-        const holesInRound = holesCompleted % holesPerRound;
+        const holesShown = row.holes_completed ?? row.holes_shown ?? 0;
+        if (holesShown === 0) return "";
+        const completedRounds = Math.floor(holesShown / holesPerRound);
+        const holesInRound = holesShown % holesPerRound;
+
+        const isFrozenRow = isFrozen && (
+          leaderboardFreeze?.freeze_scope !== "top_x" ||
+          (row.position ?? 999) <= (leaderboardFreeze?.freeze_top_x ?? Infinity)
+        );
+        const actualHoles: number | undefined = row.actual_holes_completed;
+
+        if (isFrozenRow && actualHoles != null && actualHoles > holesShown) {
+          if (holesInRound === 0) {
+            return `R${Math.min(completedRounds, competition?.num_rounds ?? 1)} thru ${holesPerRound} (${actualHoles})`;
+          }
+          return `R${completedRounds + 1} thru ${holesInRound} (${actualHoles})`;
+        }
+        if (isFrozenRow && !row.is_live) {
+          if (holesInRound === 0) {
+            return `R${Math.min(completedRounds, competition?.num_rounds ?? 1)} [F] (F)`;
+          }
+          return `R${completedRounds + 1} thru ${holesInRound} (F)`;
+        }
+
         if (row.is_live) {
           return `R${completedRounds + 1} thru ${holesInRound || holesPerRound}`;
         }
@@ -2062,6 +2083,10 @@ export default function CompetitionDetailClient({ competitionId }: { competition
               ? (row.points_earned ?? getPointsForPosition(row.position ?? null, competition.points_model, competition.points_table as Record<string, unknown>))
               : null;
             const thru = getThruLabel(row);
+            const isFrozenRow = isFrozen && (
+              leaderboardFreeze?.freeze_scope !== "top_x" ||
+              (row.position ?? 999) <= (leaderboardFreeze?.freeze_top_x ?? Infinity)
+            );
             // Compute to-par for net and gross views
             const netToPar: number | null = row.to_par ?? null;
             const grossToPar: number | null =
@@ -2088,7 +2113,10 @@ export default function CompetitionDetailClient({ competitionId }: { competition
                     {row.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
                   </div>
                 )}
-                <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{row.profile?.name ?? "Unknown"}</span>
+                <div className="flex items-center gap-1 flex-1 min-w-0">
+                  <span className="text-sm font-semibold text-emerald-50 truncate">{row.profile?.name ?? "Unknown"}</span>
+                  {isFrozenRow && <span className="text-[11px] leading-none shrink-0">❄️</span>}
+                </div>
                 {showPts && (
                   <div className="text-right shrink-0 mr-1">
                     <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider leading-none">Pts</div>
@@ -2107,7 +2135,9 @@ export default function CompetitionDetailClient({ competitionId }: { competition
               </>
             );
             const rowClass = `flex items-center gap-3 rounded-xl border px-3 py-2.5 w-full text-left hover:brightness-110 active:scale-[0.99] transition-all ${
-              row.position === 1
+              isFrozenRow
+                ? "border-cyan-700/40 bg-cyan-900/30"
+                : row.position === 1
                 ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5"
                 : row.position === 2
                 ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5"

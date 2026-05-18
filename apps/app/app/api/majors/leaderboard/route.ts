@@ -161,6 +161,7 @@ async function getFrozenLeaderboard(
     gross_score: r.gross_score,
     net_score: r.net_score,
     holes_shown: r.holes_shown,
+    actual_holes_completed: r.actual_holes_completed ?? undefined,
     is_live: r.is_live,
     position: r.leaderboard_pos,
     profile: profileMap[r.profile_id] ?? undefined,
@@ -182,6 +183,7 @@ async function getFrozenLeaderboard(
             gross_score: live.gross_score,
             net_score: live.net_score,
             holes_shown: live.holes_completed,
+            actual_holes_completed: live.holes_completed,
             is_live: live.is_live,
           };
         }

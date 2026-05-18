@@ -26,10 +26,10 @@ export async function emitRoundPlayedFeedItem(params: {
   const { roundId, actorProfileId } = params;
   if (!roundId || !actorProfileId) throw new Error("Missing roundId/actorProfileId");
 
-  // Round lookup
+  // Round lookup (include competition_tee_time_id for freeze lookup)
   const { data: round, error: roundErr } = await supabaseAdmin
     .from("rounds")
-    .select("id, status, finished_at, format_type")
+    .select("id, status, finished_at, format_type, competition_tee_time_id")
     .eq("id", roundId)
     .single();
 
@@ -106,8 +106,9 @@ export async function emitRoundPlayedFeedItem(params: {
   const profileIds = Array.from(new Set((participants ?? []).map((r: any) => r.profile_id as string).filter(Boolean)));
 
   // --- FIX: TRUE gross strokes from round_current_scores ----------------------
-  // We compute gross_total = SUM(strokes) for each participant in this round.
+  // We compute gross_total = SUM(strokes) and holes_completed = COUNT(rows) per participant.
   const grossByParticipantId = new Map<string, number>();
+  const holesCompletedByParticipantId = new Map<string, number>();
 
   if (participantIds.length) {
     const { data: scores, error: scErr } = await supabaseAdmin
@@ -123,6 +124,34 @@ export async function emitRoundPlayedFeedItem(params: {
       const n = typeof strokes === "number" ? strokes : Number(strokes);
       if (!pid || !Number.isFinite(n)) continue;
       grossByParticipantId.set(pid, (grossByParticipantId.get(pid) ?? 0) + n);
+      holesCompletedByParticipantId.set(pid, (holesCompletedByParticipantId.get(pid) ?? 0) + 1);
+    }
+  }
+
+  // Look up competition freeze state if this round is part of a competition
+  let competitionHolesShown: number | null = null;
+  const competitionTeeTimeId = (round as any).competition_tee_time_id as string | null;
+  if (competitionTeeTimeId) {
+    try {
+      const { data: teeTime } = await supabaseAdmin
+        .from("competition_tee_times")
+        .select("competition_id")
+        .eq("id", competitionTeeTimeId)
+        .maybeSingle();
+      const compId = (teeTime as any)?.competition_id as string | null;
+      if (compId) {
+        const { data: comp } = await supabaseAdmin
+          .from("competitions")
+          .select("leaderboard_freeze_state, leaderboard_freeze_last_holes, num_rounds")
+          .eq("id", compId)
+          .maybeSingle();
+        if (comp && (comp as any).leaderboard_freeze_state === "frozen" && (comp as any).leaderboard_freeze_last_holes != null) {
+          const numRounds = (comp as any).num_rounds ?? 1;
+          competitionHolesShown = numRounds * 18 - (comp as any).leaderboard_freeze_last_holes;
+        }
+      }
+    } catch {
+      // Non-fatal: proceed without freeze context
     }
   }
 
@@ -190,6 +219,7 @@ export async function emitRoundPlayedFeedItem(params: {
     const net_to_par = typeof net_total === "number" && typeof parTotal === "number" ? net_total - parTotal : null;
 
     const format_score = formatSummary?.player_scores.get(pid) ?? null;
+    const holes_completed = holesCompletedByParticipantId.get(pid) ?? null;
 
     return {
       profile_id,
@@ -201,6 +231,8 @@ export async function emitRoundPlayedFeedItem(params: {
       net_to_par,
       par_total: parTotal,
       format_score,
+      holes_completed,
+      ...(competitionHolesShown != null ? { competition_holes_shown: competitionHolesShown } : {}),
     };
   });
 

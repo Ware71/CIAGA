@@ -271,13 +271,30 @@ export default function LeaderboardClient() {
           const score = tab === "competition" ? getScore(row) : null;
           const holes = tab === "competition" ? getHoles(row) : null;
           const live = tab === "competition" ? isLive(row) : false;
-          const isHidden = isFrozen && holes != null && totalHoles - holes < (freeze?.freeze_last_holes ?? 0)
-            && (freeze?.freeze_scope !== "top_x" || (row.position ?? idx + 1) <= (freeze?.freeze_top_x ?? Infinity));
+          const isFrozenRow = isFrozen && tab === "competition" && (
+            freeze?.freeze_scope !== "top_x" ||
+            (row.position ?? idx + 1) <= (freeze?.freeze_top_x ?? Infinity)
+          );
+          const actualHoles: number | undefined = (row as any).actual_holes_completed;
+
+          const thruLabel = (() => {
+            if (holes == null || holes === 0) return null;
+            if (isFrozenRow && actualHoles != null && actualHoles > holes) {
+              return `thru ${holes} (${actualHoles})`;
+            }
+            if (isFrozenRow && !live) return `thru ${holes} (F)`;
+            if (live) return `thru ${holes}`;
+            return holes >= totalHoles ? "F" : `thru ${holes}`;
+          })();
 
           return (
             <div
               key={row.id ?? row.profile_id}
-              className="flex items-center gap-3 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2"
+              className={`flex items-center gap-3 rounded-xl border px-3 py-2 ${
+                isFrozenRow
+                  ? "border-cyan-700/40 bg-cyan-900/30"
+                  : "border-emerald-900/50 bg-[#0b3b21]/60"
+              }`}
             >
               <span className="w-6 text-center text-xs font-extrabold text-[#f5e6b0]">
                 {row.position ?? idx + 1}
@@ -295,12 +312,15 @@ export default function LeaderboardClient() {
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
-                  <span className="block text-sm font-semibold text-emerald-50 truncate text-left">
-                    {row.profile?.name ?? "Unknown"}
-                  </span>
-                  {tab === "competition" && holes != null && holes > 0 && (
-                    <span className="text-[10px] text-emerald-100/40">
-                      {live ? `thru ${holes}` : holes >= totalHoles ? "F" : `thru ${holes}`}
+                  <div className="flex items-center gap-1">
+                    <span className="block text-sm font-semibold text-emerald-50 truncate text-left">
+                      {row.profile?.name ?? "Unknown"}
+                    </span>
+                    {isFrozenRow && <span className="text-[11px] leading-none shrink-0">❄️</span>}
+                  </div>
+                  {tab === "competition" && thruLabel && (
+                    <span className={`text-[10px] ${isFrozenRow ? "text-cyan-300/70" : "text-emerald-100/40"}`}>
+                      {thruLabel}
                     </span>
                   )}
                 </div>

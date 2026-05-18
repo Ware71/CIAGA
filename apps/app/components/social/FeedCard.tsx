@@ -257,11 +257,13 @@ function RoundPlayedBody({ payload, isLive }: { payload: any; isLive: boolean })
             const holesCompleted = safeNum(p?.holes_completed);
             const formatScore = p?.format_score;
             const hasFormatScore = formatScore !== null && formatScore !== undefined;
+            const compHolesShown = safeNum(p?.competition_holes_shown);
+            const isFrozenCard = compHolesShown != null && holesCompleted != null && holesCompleted > compHolesShown;
 
             return (
               <div
                 key={`${p?.profile_id ?? p?.name ?? idx}`}
-                className="rounded-xl border border-emerald-900/40 bg-emerald-950/10 px-2 py-2"
+                className={`rounded-xl border px-2 py-2 ${isFrozenCard ? "border-cyan-700/40 bg-cyan-900/20" : "border-emerald-900/40 bg-emerald-950/10"}`}
               >
                 {/* Line 1: Avatar | Name | Gross | Net */}
                 <div className="flex items-center gap-2">
@@ -277,8 +279,15 @@ function RoundPlayedBody({ payload, isLive }: { payload: any; isLive: boolean })
                   )}
 
                   <div className="min-w-0 flex-1">
-                    <div className="text-sm font-extrabold text-emerald-50 truncate">{p?.name ?? "Player"}</div>
-                    {holesCompleted !== null ? (
+                    <div className="flex items-center gap-1">
+                      <div className="text-sm font-extrabold text-emerald-50 truncate">{p?.name ?? "Player"}</div>
+                      {isFrozenCard && <span className="text-[11px] leading-none shrink-0">❄️</span>}
+                    </div>
+                    {isFrozenCard ? (
+                      <div className="text-[11px] font-semibold text-cyan-300/70">
+                        Thru {compHolesShown} ({holesCompleted})
+                      </div>
+                    ) : holesCompleted !== null ? (
                       <div className="text-[11px] font-semibold text-emerald-100/55">Thru {holesCompleted}</div>
                     ) : parTotal !== null ? (
                       <div className="text-[11px] font-semibold text-emerald-100/55">Par {parTotal}</div>

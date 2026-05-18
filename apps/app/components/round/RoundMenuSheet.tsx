@@ -96,6 +96,8 @@ type CompetitionStandingEntry = {
   position: number | null;
   thru: number;
   holes_completed: number;
+  holes_shown: number;
+  actual_holes_completed: number;
   is_live: boolean;
   is_submitted: boolean;
   tee_time?: string | null;
@@ -199,21 +201,27 @@ export default function RoundMenuSheet(props: {
         headers: { Authorization: `Bearer ${session.accessToken}` },
       });
       const data = await res.json();
-      const rows = (data.rows ?? []).map((r: any) => ({
-        profile_id: r.profile_id,
-        name: r.profile?.name ?? null,
-        avatar_url: r.profile?.avatar_url ?? null,
-        gross_score: r.gross_score,
-        net_score: r.net_score,
-        to_par: r.to_par ?? null,
-        points_earned: r.points_earned ?? null,
-        position: r.position ?? null,
-        thru: r.holes_completed ?? 0,
-        holes_completed: r.holes_completed ?? 0,
-        is_live: r.is_live ?? false,
-        is_submitted: (r.rounds_submitted ?? 0) > 0,
-        tee_time: r.tee_time ?? null,
-      }));
+      const rows = (data.rows ?? []).map((r: any) => {
+        const holesShown = r.holes_shown ?? r.holes_completed ?? 0;
+        const actualHoles = r.actual_holes_completed ?? holesShown;
+        return {
+          profile_id: r.profile_id,
+          name: r.profile?.name ?? null,
+          avatar_url: r.profile?.avatar_url ?? null,
+          gross_score: r.gross_score,
+          net_score: r.net_score,
+          to_par: r.to_par ?? null,
+          points_earned: r.points_earned ?? null,
+          position: r.position ?? null,
+          thru: holesShown,
+          holes_completed: r.holes_completed ?? holesShown,
+          holes_shown: holesShown,
+          actual_holes_completed: actualHoles,
+          is_live: r.is_live ?? false,
+          is_submitted: (r.rounds_submitted ?? 0) > 0,
+          tee_time: r.tee_time ?? null,
+        };
+      });
       setCompStandings(rows);
       if (data.freeze) setCompFreeze(data.freeze);
     } catch {
@@ -625,23 +633,39 @@ export default function RoundMenuSheet(props: {
                     <div className="px-3 py-4 text-center text-[11px] text-emerald-100/50">Loading…</div>
                   )}
                   {!compLoading && (compStandings ?? []).map((s) => {
-                    const thruText = s.is_live
-                      ? `Live · Thru ${s.holes_completed}`
-                      : s.is_submitted
-                      ? s.holes_completed > 0 ? `F (${s.holes_completed})` : "Submitted"
-                      : s.tee_time
-                      ? formatTeeTime(s.tee_time)
-                      : "Pending";
+                    const isFrozenRow = compFreeze?.freeze_state === "frozen" && (
+                      compFreeze.freeze_scope !== "top_x" ||
+                      (s.position ?? 999) <= (compFreeze.freeze_top_x ?? Infinity)
+                    );
+                    const thruText = (() => {
+                      if (isFrozenRow) {
+                        if (s.actual_holes_completed > s.holes_shown) {
+                          return `thru ${s.holes_shown} (${s.actual_holes_completed})`;
+                        }
+                        if (!s.is_live) return `thru ${s.holes_shown} (F)`;
+                        return `thru ${s.holes_shown}`;
+                      }
+                      if (s.is_live) return `Live · Thru ${s.holes_completed}`;
+                      if (s.is_submitted) return s.holes_completed > 0 ? `F (${s.holes_completed})` : "Submitted";
+                      if (s.tee_time) return formatTeeTime(s.tee_time);
+                      return "Pending";
+                    })();
                     return (
-                      <div key={s.profile_id} className="px-3 py-2.5 flex items-center gap-2.5">
+                      <div
+                        key={s.profile_id}
+                        className={`px-3 py-2.5 flex items-center gap-2.5 ${isFrozenRow ? "bg-cyan-900/20" : ""}`}
+                      >
                         <div className="w-6 text-center text-[11px] font-bold text-emerald-100/90">{s.position ?? "—"}</div>
                         <Avatar className="h-7 w-7 border border-emerald-200/70 shrink-0">
                           {s.avatar_url ? <AvatarImage src={s.avatar_url} /> : null}
                           <AvatarFallback className="text-[9px]">{initialsFrom(s.name ?? "")}</AvatarFallback>
                         </Avatar>
                         <div className="min-w-0 flex-1">
-                          <div className="text-[12px] font-semibold text-emerald-50 truncate">{s.name ?? "—"}</div>
-                          <div className="text-[10px] text-emerald-100/55 leading-none mt-0.5">{thruText}</div>
+                          <div className="flex items-center gap-1">
+                            <div className="text-[12px] font-semibold text-emerald-50 truncate">{s.name ?? "—"}</div>
+                            {isFrozenRow && <span className="text-[10px] leading-none shrink-0">❄️</span>}
+                          </div>
+                          <div className={`text-[10px] leading-none mt-0.5 ${isFrozenRow ? "text-cyan-300/70" : "text-emerald-100/55"}`}>{thruText}</div>
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
                           <div className="text-right">
