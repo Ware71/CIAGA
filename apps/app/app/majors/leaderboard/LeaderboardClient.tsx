@@ -279,7 +279,7 @@ export default function LeaderboardClient() {
 
           const thruLabel = (() => {
             if (holes == null || holes === 0) return null;
-            if (isFrozenRow && actualHoles != null && actualHoles > holes) {
+            if (isFrozenRow && live && actualHoles != null && actualHoles > holes) {
               return `thru ${holes} (${actualHoles})`;
             }
             if (isFrozenRow && !live) return `thru ${holes} (F)`;

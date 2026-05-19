@@ -639,7 +639,7 @@ export default function RoundMenuSheet(props: {
                     );
                     const thruText = (() => {
                       if (isFrozenRow) {
-                        if (s.actual_holes_completed > s.holes_shown) {
+                        if (s.is_live && s.actual_holes_completed > s.holes_shown) {
                           return `thru ${s.holes_shown} (${s.actual_holes_completed})`;
                         }
                         if (!s.is_live) return `thru ${s.holes_shown} (F)`;
