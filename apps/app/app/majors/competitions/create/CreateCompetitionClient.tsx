@@ -14,7 +14,7 @@ import type {
   MajorGroup,
 } from "@/lib/majors/types";
 import type { PlayingHandicapMode } from "@/components/rounds/PlayingHandicapSettings";
-import { COMP_CATEGORIES, COMP_TYPES, SCORING_MODELS, POINTS_MODELS } from "@/lib/competitions/constants";
+import { COMP_CATEGORIES, COMP_TYPES, SCORING_MODELS, POINTS_MODELS, FORMAT_DEFAULT_SCORING, FORMAT_ALLOWS_SCORING_CHOICE } from "@/lib/competitions/constants";
 import { HandicapRulesEditor } from "@/components/competitions/HandicapRulesEditor";
 import { CoursePickerModal } from "@/components/rounds/CoursePickerModal";
 
@@ -439,8 +439,13 @@ export default function CreateCompetitionClient() {
   const applyGroupDefaults = (group: MajorGroup, prevForm: FormState): Partial<FormState> => {
     const prefs = group.default_scoring_prefs ?? {};
     const updates: Partial<FormState> = {};
-    if (prefs.competition_type) updates.competition_type = prefs.competition_type;
-    if (prefs.scoring_model) updates.scoring_model = prefs.scoring_model;
+    if (prefs.competition_type) {
+      updates.competition_type = prefs.competition_type;
+      // Always couple scoring_model with type — use explicit prefs value if present, otherwise derive
+      updates.scoring_model = prefs.scoring_model ?? FORMAT_DEFAULT_SCORING[prefs.competition_type] ?? prevForm.scoring_model;
+    } else if (prefs.scoring_model) {
+      updates.scoring_model = prefs.scoring_model;
+    }
     if (prefs.points_model) updates.points_model = prefs.points_model;
     if (prefs.standings_contribution) updates.standings_contribution = prefs.standings_contribution;
     if (prefs.handicap_rules) {
@@ -464,10 +469,17 @@ export default function CreateCompetitionClient() {
     const baseSettings = (s.template_settings ?? {}) as Record<string, unknown>;
     const etSettings = (et?.template_settings ?? {}) as Record<string, unknown>;
     const mergedSettings = { ...baseSettings, ...etSettings };
+
+    const appliedType = (et?.template_competition_type ?? s.template_competition_type) ?? prevForm.competition_type;
+    // Use explicit template scoring_model if provided; otherwise derive from type when type changed
+    const explicitModel = et?.template_scoring_model ?? s.template_scoring_model;
+    const appliedModel = explicitModel
+      ?? (appliedType !== prevForm.competition_type ? FORMAT_DEFAULT_SCORING[appliedType] : prevForm.scoring_model);
+
     return {
       competition_category: s.template_competition_category ?? prevForm.competition_category,
-      competition_type: (et?.template_competition_type ?? s.template_competition_type) ?? prevForm.competition_type,
-      scoring_model: (et?.template_scoring_model ?? s.template_scoring_model) ?? prevForm.scoring_model,
+      competition_type: appliedType,
+      scoring_model: appliedModel,
       points_model: (et?.template_points_model ?? s.template_points_model) ?? prevForm.points_model,
       rules_text: (et?.template_rules_text ?? s.template_rules_text) ?? prevForm.rules_text,
       handicap_mode: (mergedSettings.handicap_mode as PlayingHandicapMode | undefined) ?? prevForm.handicap_mode,
@@ -560,11 +572,11 @@ export default function CreateCompetitionClient() {
     setForm((prev) => ({ ...prev, [field]: value }));
 
   const handleTypeChange = (type: CompetitionTypeV2) => {
-    const model: CompetitionScoringModel =
-      type === "stableford" ? "stableford_points" :
-      type === "matchplay"  ? "match_result" :
-      "net";
-    setForm((prev) => ({ ...prev, competition_type: type, scoring_model: model }));
+    setForm((prev) => ({
+      ...prev,
+      competition_type: type,
+      scoring_model: FORMAT_DEFAULT_SCORING[type] ?? "net",
+    }));
   };
 
   const canNext = (): boolean => {
@@ -789,22 +801,28 @@ export default function CreateCompetitionClient() {
           </div>
           <div className="space-y-2">
             <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Scoring</label>
-            <div className="flex gap-1.5">
-              {SCORING_MODELS.map((s) => (
-                <button
-                  key={s.value}
-                  type="button"
-                  onClick={() => update("scoring_model", s.value)}
-                  className={`flex-1 rounded-xl border px-3 py-2 text-sm transition-colors ${
-                    form.scoring_model === s.value
-                      ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                      : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
-                  }`}
-                >
-                  {s.shortLabel}
-                </button>
-              ))}
-            </div>
+            {FORMAT_ALLOWS_SCORING_CHOICE(form.competition_type) ? (
+              <div className="flex gap-1.5">
+                {SCORING_MODELS.filter((s) => s.value === "net" || s.value === "gross").map((s) => (
+                  <button
+                    key={s.value}
+                    type="button"
+                    onClick={() => update("scoring_model", s.value)}
+                    className={`flex-1 rounded-xl border px-3 py-2 text-sm transition-colors ${
+                      form.scoring_model === s.value
+                        ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
+                        : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
+                    }`}
+                  >
+                    {s.shortLabel}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 px-3 py-2 text-sm text-emerald-200/55">
+                {form.scoring_model === "stableford_points" ? "Stableford Points" : "Match Result"} — determined by format
+              </div>
+            )}
           </div>
         </>
       )}

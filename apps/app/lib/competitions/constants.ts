@@ -5,6 +5,25 @@ import type {
   CompetitionCategory,
 } from "@/lib/majors/types";
 
+export const FORMAT_DEFAULT_SCORING: Record<CompetitionTypeV2, CompetitionScoringModel> = {
+  stroke: "net",
+  stableford: "stableford_points",
+  matchplay: "match_result",
+  skins: "net",
+  scramble: "net",
+  bestball: "net",
+  custom: "net",
+  stroke_play: "net",
+  matchplay_fixture: "match_result",
+  matchplay_knockout_match: "match_result",
+  aggregate_stroke_play: "net",
+  team_best_ball: "net",
+  team_scramble: "net",
+};
+
+export const FORMAT_ALLOWS_SCORING_CHOICE = (type: CompetitionTypeV2): boolean =>
+  !["stableford", "matchplay", "matchplay_fixture", "matchplay_knockout_match"].includes(type);
+
 export const COMP_CATEGORIES: { value: CompetitionCategory; label: string; desc: string }[] = [
   { value: "round_based", label: "Round-based", desc: "Requires round submissions to score" },
   { value: "aggregate", label: "Aggregate", desc: "Points race / Order of Merit — no round needed" },

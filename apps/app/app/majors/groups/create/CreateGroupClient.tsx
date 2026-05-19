@@ -9,8 +9,10 @@ import type {
   MajorGroupPrivacy,
   MajorGroupJoinMethod,
   GroupScoringPrefs,
+  CompetitionTypeV2,
+  CompetitionScoringModel,
 } from "@/lib/majors/types";
-import { SCORING_MODELS, POINTS_MODELS, STANDINGS_CONTRIBUTIONS, COMP_TYPES } from "@/lib/competitions/constants";
+import { SCORING_MODELS, POINTS_MODELS, STANDINGS_CONTRIBUTIONS, COMP_TYPES, FORMAT_DEFAULT_SCORING, FORMAT_ALLOWS_SCORING_CHOICE } from "@/lib/competitions/constants";
 import { HandicapRulesEditor, type HandicapRules } from "@/components/competitions/HandicapRulesEditor";
 
 const GROUP_TYPES: { value: MajorGroupType; label: string; desc: string }[] = [
@@ -68,8 +70,8 @@ export default function CreateGroupClient() {
   const [error, setError] = useState<string | null>(null);
 
   // Competition defaults state (optional step — can be skipped)
-  const [defaultScoringModel, setDefaultScoringModel] = useState<string | null>(null);
-  const [defaultCompType, setDefaultCompType] = useState<string | null>(null);
+  const [defaultScoringModel, setDefaultScoringModel] = useState<CompetitionScoringModel | null>(null);
+  const [defaultCompType, setDefaultCompType] = useState<CompetitionTypeV2 | null>(null);
   const [defaultHandicap, setDefaultHandicap] = useState<HandicapRules>(EMPTY_HANDICAP);
   const [defaultPointsModel, setDefaultPointsModel] = useState<string | null>(null);
   const [defaultStandingsContrib, setDefaultStandingsContrib] = useState<string | null>(null);
@@ -94,8 +96,8 @@ export default function CreateGroupClient() {
       standings_contribution: null,
     };
     return {
-      scoring_model: (defaultScoringModel as any) ?? null,
-      competition_type: (defaultCompType as any) ?? null,
+      scoring_model: defaultScoringModel,
+      competition_type: defaultCompType,
       handicap_rules: defaultScoringModel !== "gross"
         ? {
             mode: defaultHandicap.mode,
@@ -261,7 +263,13 @@ export default function CreateGroupClient() {
                 <button
                   key={t.value}
                   type="button"
-                  onClick={() => setDefaultCompType(defaultCompType === t.value ? null : t.value)}
+                  onClick={() => {
+                    const next = defaultCompType === t.value ? null : t.value;
+                    setDefaultCompType(next);
+                    // Auto-couple scoring model with format
+                    if (next) setDefaultScoringModel(FORMAT_DEFAULT_SCORING[next]);
+                    else setDefaultScoringModel(null);
+                  }}
                   className={`rounded-xl border px-3 py-2 text-left text-[11px] transition-colors ${
                     defaultCompType === t.value
                       ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
@@ -274,25 +282,34 @@ export default function CreateGroupClient() {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Default Scoring</label>
-            <div className="grid grid-cols-2 gap-2">
-              {SCORING_MODELS.map((s) => (
-                <button
-                  key={s.value}
-                  type="button"
-                  onClick={() => setDefaultScoringModel(defaultScoringModel === s.value ? null : s.value)}
-                  className={`rounded-xl border px-3 py-2 text-[11px] text-left transition-colors ${
-                    defaultScoringModel === s.value
-                      ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                      : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
-                  }`}
-                >
-                  {s.shortLabel}
-                </button>
-              ))}
+          {defaultCompType && !FORMAT_ALLOWS_SCORING_CHOICE(defaultCompType as any) ? (
+            <div className="space-y-2">
+              <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Default Scoring</label>
+              <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 px-3 py-2 text-[11px] text-emerald-200/55">
+                {defaultScoringModel === "stableford_points" ? "Stableford Points" : "Match Result"} — determined by format
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="space-y-2">
+              <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Default Scoring</label>
+              <div className="grid grid-cols-2 gap-2">
+                {SCORING_MODELS.filter((s) => s.value === "net" || s.value === "gross").map((s) => (
+                  <button
+                    key={s.value}
+                    type="button"
+                    onClick={() => setDefaultScoringModel(defaultScoringModel === s.value ? null : s.value)}
+                    className={`rounded-xl border px-3 py-2 text-[11px] text-left transition-colors ${
+                      defaultScoringModel === s.value
+                        ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
+                        : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
+                    }`}
+                  >
+                    {s.shortLabel}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {defaultScoringModel && defaultScoringModel !== "gross" && (
             <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 p-3 space-y-2">
