@@ -651,7 +651,7 @@ export default function CreateCompetitionClient() {
           handicap_rules: form.scoring_model !== "gross"
             ? {
                 mode: form.handicap_mode,
-                allowance_pct: form.handicap_mode === "allowance_pct"
+                allowance_pct: (form.handicap_mode === "allowance_pct" || form.handicap_mode === "compare_against_lowest")
                   ? (parseInt(form.handicap_allowance_pct, 10) || 100)
                   : null,
                 max_handicap: form.handicap_max ? parseInt(form.handicap_max, 10) : null,
@@ -1102,7 +1102,7 @@ export default function CreateCompetitionClient() {
           form.scoring_model !== "gross" && !isAggregate ? {
             label: "Handicap",
             value: form.handicap_mode === "compare_against_lowest"
-              ? `Off the Lowest${form.handicap_max ? ` (max ${form.handicap_max})` : ""}`
+              ? `Off the Lowest (${form.handicap_allowance_pct || 100}%)${form.handicap_max ? ` (max ${form.handicap_max})` : ""}`
               : form.handicap_mode === "none"
               ? "No Handicap"
               : form.handicap_mode === "fixed"

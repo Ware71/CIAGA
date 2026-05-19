@@ -35,7 +35,7 @@ export function HandicapRulesEditor({ value, onChange, disabled, compact }: Prop
             onChange({
               ...value,
               mode: m,
-              allowance_pct: m === "allowance_pct" ? (value.allowance_pct || "100") : value.allowance_pct,
+              allowance_pct: (m === "allowance_pct" || m === "compare_against_lowest") ? (value.allowance_pct || "100") : value.allowance_pct,
             });
           }}
           className={inputClass}
@@ -52,7 +52,7 @@ export function HandicapRulesEditor({ value, onChange, disabled, compact }: Prop
         )}
       </div>
 
-      {value.mode === "allowance_pct" && (
+      {(value.mode === "allowance_pct" || value.mode === "compare_against_lowest") && (
         <div className="space-y-1">
           <label className={labelClass}>Handicap Allowance %</label>
           <input

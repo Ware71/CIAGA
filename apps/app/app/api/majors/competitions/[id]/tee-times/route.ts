@@ -208,7 +208,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const handicapRules = (competition.handicap_rules ?? {}) as Record<string, unknown>;
     const handicapMode = (handicapRules.mode as string) ?? "allowance_pct";
     const handicapValue =
-      handicapMode === "allowance_pct"
+      (handicapMode === "allowance_pct" || handicapMode === "compare_against_lowest")
         ? (typeof handicapRules.allowance_pct === "number" ? handicapRules.allowance_pct : 100)
         : 0;
 
