@@ -30,6 +30,7 @@ export async function POST(req: Request) {
     }
 
     const origin = process.env.NEXT_PUBLIC_SITE_URL || new URL(req.url).origin;
+    const callbackUrl = new URL("/auth/callback", origin).toString();
 
     let targetEmail: string;
 
@@ -81,7 +82,7 @@ export async function POST(req: Request) {
     const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
       type: "magiclink",
       email: targetEmail,
-      options: { redirectTo: origin },
+      options: { redirectTo: callbackUrl },
     });
 
     if (linkErr || !linkData?.properties?.action_link) {
