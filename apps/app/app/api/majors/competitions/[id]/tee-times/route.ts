@@ -199,11 +199,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
 
     // Derive round format and handicap settings from the competition
-    const isMatchplay =
-      competition.competition_type === "matchplay" ||
-      competition.competition_type === "matchplay_knockout_match" ||
-      competition.competition_type === "matchplay_fixture";
-    const formatType = isMatchplay ? "matchplay" : "strokeplay";
+    const formatType =
+      competition.competition_type === "stableford"
+        ? "stableford"
+        : competition.competition_type === "matchplay" ||
+          competition.competition_type === "matchplay_knockout_match" ||
+          competition.competition_type === "matchplay_fixture"
+        ? "matchplay"
+        : "strokeplay";
 
     const handicapRules = (competition.handicap_rules ?? {}) as Record<string, unknown>;
     const handicapMode = (handicapRules.mode as string) ?? "allowance_pct";

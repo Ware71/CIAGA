@@ -87,106 +87,8 @@ function getTabsForCompetition(comp: CompetitionWithGroup | null) {
   return STROKE_TABS;
 }
 
-type FinishedRound = { id: string; name: string | null; finished_at: string | null };
 type LeaderboardRowWithRoundId = LeaderboardEntryWithProfile & { round_id: string | null };
 type Participant = { profile_id: string; profile: { id: string; name: string | null; avatar_url: string | null } | null };
-
-// ─── Submit Round sheet ───────────────────────────────────────────────────────
-// Only shown for competitions without admin-managed tee times (e.g. open competitions
-// where a player records their own round and manually submits it).
-
-function SubmitRoundSheet({
-  competitionId,
-  rounds,
-  onClose,
-  onSubmit,
-}: {
-  competitionId: string;
-  rounds: FinishedRound[];
-  onClose: () => void;
-  onSubmit: () => void;
-}) {
-  const [selected, setSelected] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleSubmit = async () => {
-    if (!selected) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      const session = await getViewerSession();
-      if (!session) return;
-      const res = await fetch(`/api/majors/competitions/${competitionId}/submit-round`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ round_id: selected }),
-      });
-      if (res.ok) {
-        onSubmit();
-        onClose();
-      } else {
-        const j = await res.json().catch(() => ({}));
-        setError(j.error ?? "Submission failed");
-      }
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={onClose}>
-      <div
-        className="w-full max-w-sm mx-auto rounded-t-3xl bg-[#071f13] border-t border-emerald-900/70 px-4 pt-5 pb-[env(safe-area-inset-bottom)] space-y-4"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="w-10 h-1 rounded-full bg-emerald-800/60 mx-auto mb-1" />
-        <div className="text-sm font-semibold text-emerald-50">Submit a Round</div>
-        {rounds.length === 0 ? (
-          <div className="text-sm text-emerald-100/60 py-4 text-center">
-            No finished rounds available to submit.
-          </div>
-        ) : (
-          <div className="space-y-2 max-h-60 overflow-y-auto">
-            {rounds.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                onClick={() => setSelected(r.id)}
-                className={`w-full text-left rounded-xl border px-3 py-2 transition-colors ${
-                  selected === r.id
-                    ? "border-emerald-500 bg-emerald-900/50"
-                    : "border-emerald-900/50 bg-emerald-900/20 hover:border-emerald-700/50"
-                }`}
-              >
-                <div className="text-sm font-semibold text-emerald-50">{r.name ?? r.id.slice(0, 8)}</div>
-                {r.finished_at && (
-                  <div className="text-[10px] text-emerald-100/55">
-                    {new Date(r.finished_at).toLocaleDateString()}
-                  </div>
-                )}
-              </button>
-            ))}
-          </div>
-        )}
-        {error && <div className="text-sm text-red-400">{error}</div>}
-        <div className="flex gap-3">
-          <button type="button" onClick={onClose} className="flex-1 py-3 rounded-full border border-emerald-900/60 text-sm text-emerald-200/70">
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={!selected || submitting}
-            className="flex-1 py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white disabled:opacity-50"
-          >
-            {submitting ? "Submitting…" : "Submit"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ─── Add Tee Time sheet ───────────────────────────────────────────────────────
 
@@ -1394,10 +1296,8 @@ export default function CompetitionDetailClient({ competitionId }: { competition
   const [isEntered, setIsEntered] = useState(false);
   const [entering, setEntering] = useState(false);
   const [enterError, setEnterError] = useState<string | null>(null);
-  const [showSubmitSheet, setShowSubmitSheet] = useState(false);
   const [showAddTeeTime, setShowAddTeeTime] = useState(false);
   const [editingTeeTime, setEditingTeeTime] = useState<CompetitionTeeTime | null>(null);
-  const [finishedRounds, setFinishedRounds] = useState<FinishedRound[]>([]);
   const [myProfileId, setMyProfileId] = useState<string | null>(null);
   const [myRole, setMyRole] = useState<string | null>(null);
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
@@ -1436,10 +1336,9 @@ export default function CompetitionDetailClient({ competitionId }: { competition
         setMyProfileId(session.profileId);
         const headers = { Authorization: `Bearer ${session.accessToken}` };
 
-        const [compRes, lbRes, roundsRes, teeTimesRes, participantsRes, winningsRes, compRoundsRes] = await Promise.all([
+        const [compRes, lbRes, teeTimesRes, participantsRes, winningsRes, compRoundsRes] = await Promise.all([
           fetch(`/api/majors/competitions/${competitionId}`, { headers }),
           fetch(`/api/majors/leaderboard?competition_id=${competitionId}`, { headers }),
-          fetch(`/api/rounds?status=finished&limit=20`, { headers }),
           fetch(`/api/majors/competitions/${competitionId}/tee-times`, { headers }),
           fetch(`/api/majors/competitions/${competitionId}/participants`, { headers }),
           fetch(`/api/majors/competitions/${competitionId}/winnings`, { headers }),
@@ -1489,15 +1388,6 @@ export default function CompetitionDetailClient({ competitionId }: { competition
           const j = await lbRes.json();
           setLeaderboard(j.rows ?? []);
           if (j.freeze) setLeaderboardFreeze(j.freeze);
-        }
-
-        if (roundsRes.ok) {
-          const j = await roundsRes.json();
-          setFinishedRounds((j.rounds ?? []).map((r: any) => ({
-            id: r.id,
-            name: r.name,
-            finished_at: r.finished_at,
-          })));
         }
 
         if (teeTimesRes.ok) {
@@ -1616,20 +1506,6 @@ export default function CompetitionDetailClient({ competitionId }: { competition
       }
     } finally {
       setEntering(false);
-    }
-  };
-
-  const handleSubmitDone = async () => {
-    const session = await getViewerSession();
-    if (!session) return;
-    const res = await fetch(`/api/majors/leaderboard?competition_id=${competitionId}`, {
-      headers: { Authorization: `Bearer ${session.accessToken}` },
-    });
-    if (res.ok) {
-      const j = await res.json();
-      setLeaderboard(j.rows ?? []);
-      if (j.freeze) setLeaderboardFreeze(j.freeze);
-      setIsEntered(true);
     }
   };
 
@@ -1951,16 +1827,6 @@ export default function CompetitionDetailClient({ competitionId }: { competition
               <div className="flex-1 py-3 rounded-full border border-emerald-700/50 text-sm font-semibold text-emerald-400 text-center">
                 ✓ Entered
               </div>
-              {competition.majors_status !== "completed" && competition.majors_status !== "cancelled"
-                && !competitionOwnsRound && isAdminOrOwner && (
-                <button
-                  type="button"
-                  onClick={() => setShowSubmitSheet(true)}
-                  className="flex-1 py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600"
-                >
-                  Submit Round
-                </button>
-              )}
             </div>
             {entryOpen && competitionOwnsRound && myTeeTime && (
               <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 text-[11px] text-emerald-200/60">
@@ -2768,15 +2634,6 @@ export default function CompetitionDetailClient({ competitionId }: { competition
             setCompetition(updated);
             setShowSetupSheet(false);
           }}
-        />
-      )}
-
-      {showSubmitSheet && (
-        <SubmitRoundSheet
-          competitionId={competitionId}
-          rounds={finishedRounds}
-          onClose={() => setShowSubmitSheet(false)}
-          onSubmit={handleSubmitDone}
         />
       )}
 
