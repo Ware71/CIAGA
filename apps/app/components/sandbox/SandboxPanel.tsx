@@ -37,9 +37,10 @@ export function SandboxPanel() {
     return session?.accessToken ?? null;
   };
 
-  const authHeaders = async () => {
+  const authHeaders = async (): Promise<Record<string, string>> => {
     const token = await getToken();
-    return token ? { Authorization: `Bearer ${token}` } : {};
+    if (!token) return {};
+    return { Authorization: `Bearer ${token}` };
   };
 
   const loadProfiles = async () => {
