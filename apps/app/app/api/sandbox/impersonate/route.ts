@@ -29,9 +29,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Profile not found" }, { status: 404 });
     }
 
-    const origin = process.env.NEXT_PUBLIC_SITE_URL || new URL(req.url).origin;
-    const callbackUrl = new URL("/auth/callback", origin).toString();
-
     let targetEmail: string;
 
     if (profileRow.owner_user_id) {
@@ -82,17 +79,22 @@ export async function POST(req: Request) {
     const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
       type: "magiclink",
       email: targetEmail,
-      options: { redirectTo: callbackUrl },
     });
 
-    if (linkErr || !linkData?.properties?.action_link) {
+    if (linkErr || !linkData?.properties?.hashed_token) {
       return NextResponse.json(
         { error: linkErr?.message || "Failed to generate sign-in link" },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({ actionLink: linkData.properties.action_link });
+    // Build callback URL locally — no Supabase redirect needed, bypasses allowlist validation
+    const appUrl = process.env.NEXT_PUBLIC_SITE_URL || new URL(req.url).origin;
+    const actionLink = new URL("/auth/callback", appUrl);
+    actionLink.searchParams.set("token_hash", linkData.properties.hashed_token);
+    actionLink.searchParams.set("type", "magiclink");
+
+    return NextResponse.json({ actionLink: actionLink.toString() });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Server error" }, { status: 500 });
   }
