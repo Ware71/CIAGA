@@ -1665,8 +1665,13 @@ export default function CompetitionDetailClient({ competitionId }: { competition
 
   const scoringModel = competition?.scoring_model ?? "net";
   const displayScore = (row: any) =>
-    scoringModel === "gross" ? row.gross_score : (row.net_score ?? row.gross_score);
-  const scoreLabel = scoringModel === "gross" ? "Gross" : "Net";
+    scoringModel === "gross"
+      ? row.gross_score
+      : scoringModel === "stableford_points"
+      ? (row.format_points ?? row.net_score ?? null)
+      : (row.net_score ?? row.gross_score);
+  const scoreLabel =
+    scoringModel === "gross" ? "Gross" : scoringModel === "stableford_points" ? "Pts" : "Net";
 
   const visibleTabs = (() => {
     const BASE = getTabsForCompetition(competition);

@@ -36,7 +36,7 @@ export async function POST(
       .from("rounds")
       .update({ status: "finished" })
       .eq("id", roundId)
-      .select("id, competition_tee_time_id")
+      .select("id")
       .single();
 
     if (upErr) throw upErr;
@@ -44,8 +44,16 @@ export async function POST(
     // If this round belongs to a competition (created via a tee time), auto-submit
     // scores for all participants. The round is owned by the competition — there is
     // no separate manual submit step.
-    if ((roundRow as any).competition_tee_time_id) {
-      await autoSubmitCompetitionRound(roundId, (roundRow as any).competition_tee_time_id);
+    // Use the reliable FK direction (ctt.round_id) — rounds.competition_tee_time_id
+    // is a back-link set without error handling and may be NULL.
+    const { data: cttRow } = await supabaseAdmin
+      .from("competition_tee_times")
+      .select("id")
+      .eq("round_id", roundId)
+      .maybeSingle();
+
+    if (cttRow?.id) {
+      await autoSubmitCompetitionRound(roundId, cttRow.id);
     }
 
     // Emit feed items (best effort)
@@ -78,6 +86,14 @@ async function autoSubmitCompetitionRound(roundId: string, teeTimeId: string) {
     .maybeSingle();
 
   if (!teeTime) return;
+
+  // Fetch the competition's scoring model so we know whether to require a score
+  const { data: comp } = await supabaseAdmin
+    .from("competitions")
+    .select("scoring_model")
+    .eq("id", (teeTime as any).competition_id)
+    .maybeSingle();
+  const isStableford = (comp as any)?.scoring_model === "stableford_points";
 
   let competitionRoundId: string | null = (teeTime as any).competition_round_id ?? null;
 
@@ -115,7 +131,12 @@ async function autoSubmitCompetitionRound(roundId: string, teeTimeId: string) {
     (hrrRows ?? []).map((h: any) => [h.participant_id, h])
   );
 
-  // Build submission rows — one per participant that has a score
+  // Build submission rows — one per participant that has a score.
+  // For stableford competitions the stab_pts CTE computes points from
+  // round_score_events directly; it only needs the submission to exist
+  // (accepted = true) and does not use score_used. So we create the
+  // submission even when score_used is null to ensure the player appears
+  // on the leaderboard after finishing.
   const submissions = (participants as any[])
     .map((p) => {
       const hrr = hrrMap.get(p.id) as any | undefined;
@@ -133,7 +154,7 @@ async function autoSubmitCompetitionRound(roundId: string, teeTimeId: string) {
         submitted_at: new Date().toISOString(),
       };
     })
-    .filter((s) => s.score_used != null);
+    .filter((s) => isStableford || s.score_used != null);
 
   if (submissions.length === 0) return;
 
