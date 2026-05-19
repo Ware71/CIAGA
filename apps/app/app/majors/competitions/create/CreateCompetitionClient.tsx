@@ -559,6 +559,14 @@ export default function CreateCompetitionClient() {
   const update = (field: keyof FormState, value: string | boolean) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
+  const handleTypeChange = (type: CompetitionTypeV2) => {
+    const model: CompetitionScoringModel =
+      type === "stableford" ? "stableford_points" :
+      type === "matchplay"  ? "match_result" :
+      "net";
+    setForm((prev) => ({ ...prev, competition_type: type, scoring_model: model }));
+  };
+
   const canNext = (): boolean => {
     if (step === 0) return form.name.trim().length > 0;
     return true;
@@ -767,7 +775,7 @@ export default function CreateCompetitionClient() {
                 <button
                   key={t.value}
                   type="button"
-                  onClick={() => update("competition_type", t.value)}
+                  onClick={() => handleTypeChange(t.value)}
                   className={`rounded-xl border px-3 py-2 text-sm transition-colors ${
                     form.competition_type === t.value
                       ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"

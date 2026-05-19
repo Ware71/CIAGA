@@ -32,7 +32,7 @@ function isCompetitionRow(row: any): row is LeaderboardEntryWithProfile {
 }
 
 function getScore(row: CompetitionRow): number | null {
-  if (isCompetitionRow(row)) return row.net_score ?? row.gross_score ?? null;
+  if (isCompetitionRow(row)) return (row as any).format_points ?? row.net_score ?? row.gross_score ?? null;
   return (row as FrozenLeaderboardEntry).net_score ?? (row as FrozenLeaderboardEntry).gross_score ?? null;
 }
 
