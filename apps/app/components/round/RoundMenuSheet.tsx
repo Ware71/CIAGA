@@ -211,6 +211,7 @@ export default function RoundMenuSheet(props: {
           gross_score: r.gross_score,
           net_score: r.net_score,
           to_par: r.to_par ?? null,
+          format_points: r.format_points ?? null,
           points_earned: r.points_earned ?? null,
           position: r.position ?? null,
           thru: holesShown,
