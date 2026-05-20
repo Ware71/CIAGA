@@ -8,7 +8,12 @@
 -- ciaga_compute_competition_leaderboard.  The combined CTE
 -- sums these into course_par and the final SELECT emits
 -- to_par = net_score - course_par (NULL for stableford).
+--
+-- DROP required because PostgreSQL won't allow CREATE OR REPLACE
+-- to change the return type of an existing function.
 -- ============================================================
+
+DROP FUNCTION IF EXISTS public.ciaga_get_frozen_leaderboard(uuid, integer);
 
 CREATE OR REPLACE FUNCTION public.ciaga_get_frozen_leaderboard(
   p_competition_id uuid,
