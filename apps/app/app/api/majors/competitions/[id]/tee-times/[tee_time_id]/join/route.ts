@@ -113,6 +113,42 @@ export async function POST(
 
     if (insertErr) throw insertErr;
 
+    // If the round is already live, assign the tee snapshot now.
+    // The start API sets tee_snapshot_id only for participants present at start time.
+    const { data: roundStatus } = await supabaseAdmin
+      .from("rounds")
+      .select("status, pending_tee_box_id")
+      .eq("id", teeTime.round_id)
+      .maybeSingle();
+
+    if (roundStatus?.status === "live") {
+      const teeBoxId = defaultTeeBoxId ?? (roundStatus as any).pending_tee_box_id as string | null;
+      if (teeBoxId) {
+        const { data: courseSnap } = await supabaseAdmin
+          .from("round_course_snapshots")
+          .select("id")
+          .eq("round_id", teeTime.round_id)
+          .maybeSingle();
+
+        if (courseSnap) {
+          const { data: rts } = await supabaseAdmin
+            .from("round_tee_snapshots")
+            .select("id")
+            .eq("round_course_snapshot_id", courseSnap.id)
+            .eq("source_tee_box_id", teeBoxId)
+            .maybeSingle();
+
+          if (rts) {
+            await supabaseAdmin
+              .from("round_participants")
+              .update({ tee_snapshot_id: rts.id })
+              .eq("round_id", teeTime.round_id)
+              .eq("profile_id", profileId);
+          }
+        }
+      }
+    }
+
     // Send notification confirming the slot
     await supabaseAdmin.from("user_notifications").insert({
       profile_id: profileId,
