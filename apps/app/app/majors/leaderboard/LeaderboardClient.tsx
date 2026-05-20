@@ -153,6 +153,10 @@ export default function LeaderboardClient() {
                     }
                   : prev
               );
+              // Switch to frozen data as soon as freeze activates
+              if (c.leaderboard_freeze_state === "frozen") {
+                fetchLeaderboard(competitionId, "competition");
+              }
               // If just revealed, trigger reveal sequence
               if (c.leaderboard_freeze_state === "revealed") {
                 fetchLeaderboard(competitionId, "competition");
