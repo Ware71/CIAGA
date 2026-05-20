@@ -1430,7 +1430,24 @@ export default function CompetitionDetailClient({ competitionId }: { competition
   }, [competitionId]);
 
   // Realtime: recompute leaderboard whenever competition_leaderboard_entries changes
+  // or the competition freeze state transitions.
   useEffect(() => {
+    function fetchLeaderboard() {
+      getViewerSession().then((session) => {
+        if (!session) return;
+        fetch(`/api/majors/leaderboard?competition_id=${competitionId}`, {
+          headers: { Authorization: `Bearer ${session.accessToken}` },
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((j) => {
+            if (j) {
+              setLeaderboard(j.rows ?? []);
+              if (j.freeze) setLeaderboardFreeze(j.freeze);
+            }
+          });
+      });
+    }
+
     const channel = supabase
       .channel(`competition-lb:${competitionId}`)
       .on(
@@ -1441,20 +1458,21 @@ export default function CompetitionDetailClient({ competitionId }: { competition
           table: "competition_leaderboard_entries",
           filter: `competition_id=eq.${competitionId}`,
         },
-        () => {
-          getViewerSession().then((session) => {
-            if (!session) return;
-            fetch(`/api/majors/leaderboard?competition_id=${competitionId}`, {
-              headers: { Authorization: `Bearer ${session.accessToken}` },
-            })
-              .then((r) => (r.ok ? r.json() : null))
-              .then((j) => {
-                if (j) {
-                  setLeaderboard(j.rows ?? []);
-                  if (j.freeze) setLeaderboardFreeze(j.freeze);
-                }
-              });
-          });
+        fetchLeaderboard
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "competitions",
+          filter: `id=eq.${competitionId}`,
+        },
+        (payload) => {
+          const freezeState = (payload.new as any)?.leaderboard_freeze_state;
+          if (freezeState === "frozen" || freezeState === "revealed") {
+            fetchLeaderboard();
+          }
         }
       )
       .subscribe();

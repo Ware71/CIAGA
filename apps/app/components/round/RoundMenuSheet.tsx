@@ -319,7 +319,7 @@ export default function RoundMenuSheet(props: {
           setCompFreeze((prev) =>
             prev ? { ...prev, freeze_state: c.leaderboard_freeze_state ?? prev.freeze_state } : prev
           );
-          if (c.leaderboard_freeze_state === "revealed") fetchCompStandings();
+          if (c.leaderboard_freeze_state === "frozen" || c.leaderboard_freeze_state === "revealed") fetchCompStandings();
         }
       })
       .subscribe();
