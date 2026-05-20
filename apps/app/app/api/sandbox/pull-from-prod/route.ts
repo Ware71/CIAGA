@@ -43,9 +43,11 @@ async function insertRows(
 }
 
 function isTableNotFound(e: any): boolean {
+  const msg = (e?.message ?? "").toLowerCase();
   return (
     e?.code === "42P01" ||
-    (e?.message ?? "").toLowerCase().includes("does not exist")
+    msg.includes("does not exist") ||
+    msg.includes("schema cache")
   );
 }
 
