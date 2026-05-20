@@ -21,6 +21,7 @@ import { COMP_TYPES, SCORING_MODELS, POINTS_MODELS } from "@/lib/competitions/co
 import { HandicapRulesEditor } from "@/components/competitions/HandicapRulesEditor";
 import { CoursePickerModal } from "@/components/rounds/CoursePickerModal";
 import { supabase } from "@/lib/supabaseClient";
+import { LeaderboardReveal } from "@/components/majors/LeaderboardReveal";
 
 const FEDEX_POINTS_SCALE = [500, 300, 190, 140, 110, 90, 75, 60, 48, 38, 30, 24, 18, 14, 10, 8, 6, 4, 2, 1];
 
@@ -1320,7 +1321,11 @@ export default function CompetitionDetailClient({ competitionId }: { competition
     freeze_last_holes: number | null;
     freeze_scope: string;
     freeze_top_x: number | null;
+    reveal_style: string;
+    reveal_top_x: number | null;
   } | null>(null);
+  const [showReveal, setShowReveal] = useState(false);
+  const [revealLoading, setRevealLoading] = useState(false);
   const [lbView, setLbView] = useState<"score" | "gross">("score");
   const [detailPlayer, setDetailPlayer] = useState<any | null>(null);
   const [playerRounds, setPlayerRounds] = useState<any[] | null>(null);
@@ -1473,11 +1478,32 @@ export default function CompetitionDetailClient({ competitionId }: { competition
           if (freezeState === "frozen" || freezeState === "revealed") {
             fetchLeaderboard();
           }
+          if (freezeState === "revealed") {
+            setShowReveal(true);
+          }
         }
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [competitionId]);
+
+  async function handleReveal() {
+    setRevealLoading(true);
+    try {
+      const session = await getViewerSession();
+      if (!session) return;
+      await fetch(`/api/majors/competitions/${competitionId}/freeze-control`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.accessToken}`,
+        },
+        body: JSON.stringify({ action: "reveal" }),
+      });
+    } finally {
+      setRevealLoading(false);
+    }
+  }
 
   const refreshTeeTimes = async () => {
     const session = await getViewerSession();
@@ -1943,6 +1969,16 @@ export default function CompetitionDetailClient({ competitionId }: { competition
               </div>
             </div>
           )}
+          {isAdminOrOwner && leaderboardFreeze?.freeze_state !== "revealed" && (
+            <button
+              type="button"
+              onClick={handleReveal}
+              disabled={revealLoading}
+              className="w-full py-3 mb-2 rounded-full bg-[#f5e6b0] text-[#042713] text-sm font-semibold disabled:opacity-50"
+            >
+              {revealLoading ? "Revealing…" : leaderboardFreeze?.freeze_state === "frozen" ? "Reveal Results" : "Start Ceremony"}
+            </button>
+          )}
         <div className="space-y-2">
           {leaderboard.length > 0 && (
             <div className="flex gap-1 mb-2">
@@ -2093,6 +2129,14 @@ export default function CompetitionDetailClient({ competitionId }: { competition
             </>
           )}
         </div>
+        {showReveal && (
+          <LeaderboardReveal
+            rows={leaderboard}
+            revealStyle="animated"
+            revealTopX={leaderboardFreeze?.reveal_top_x ?? null}
+            onDone={() => setShowReveal(false)}
+          />
+        )}
         {/* Player round breakdown sheet */}
         {detailPlayer && (
           <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={() => setDetailPlayer(null)}>
