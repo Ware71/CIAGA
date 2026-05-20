@@ -46,13 +46,16 @@ async function insertRows(
 
   for (let i = 0; i < prepared.length; i += chunkSize) {
     const chunk = prepared.slice(i, i + chunkSize);
-    const { error } = await client.from(table).insert(chunk);
+    // Upsert so trigger-created rows (e.g. round_hole_states created when rounds
+    // are inserted) get overwritten with production data rather than causing
+    // duplicate key violations.
+    const { error } = await client.from(table).upsert(chunk, { onConflict: "id" });
     if (!error) {
       inserted += chunk.length;
     } else if (isFKViolation(error)) {
       // Chunk contains orphaned rows — fall back to row-by-row and skip bad rows
       for (const row of chunk) {
-        const { error: rowErr } = await client.from(table).insert(row);
+        const { error: rowErr } = await client.from(table).upsert(row, { onConflict: "id" });
         if (!rowErr) {
           inserted++;
         } else if (isFKViolation(rowErr)) {
