@@ -36,7 +36,8 @@ async function insertRows(
   client: SupabaseClient,
   table: string,
   rows: any[],
-  transform?: (row: any) => any
+  transform?: (row: any) => any,
+  onConflict: string = "id"
 ): Promise<{ inserted: number; skipped: number }> {
   if (rows.length === 0) return { inserted: 0, skipped: 0 };
   const prepared = transform ? rows.map(transform) : rows;
@@ -49,13 +50,13 @@ async function insertRows(
     // Upsert so trigger-created rows (e.g. round_hole_states created when rounds
     // are inserted) get overwritten with production data rather than causing
     // duplicate key violations.
-    const { error } = await client.from(table).upsert(chunk, { onConflict: "id" });
+    const { error } = await client.from(table).upsert(chunk, { onConflict });
     if (!error) {
       inserted += chunk.length;
     } else if (isFKViolation(error)) {
       // Chunk contains orphaned rows — fall back to row-by-row and skip bad rows
       for (const row of chunk) {
-        const { error: rowErr } = await client.from(table).upsert(row, { onConflict: "id" });
+        const { error: rowErr } = await client.from(table).upsert(row, { onConflict });
         if (!rowErr) {
           inserted++;
         } else if (isFKViolation(rowErr)) {
@@ -82,7 +83,7 @@ function isTableNotFound(e: any): boolean {
 }
 
 // Tables in FK-safe insertion order (dependencies before dependents)
-const TABLE_PLAN: Array<{ table: string; transform?: (row: any) => any }> = [
+const TABLE_PLAN: Array<{ table: string; transform?: (row: any) => any; onConflict?: string }> = [
   { table: "courses" },
   { table: "course_tee_boxes" },
   { table: "course_tee_holes" },
@@ -96,7 +97,7 @@ const TABLE_PLAN: Array<{ table: string; transform?: (row: any) => any }> = [
   // round_teams must precede round_participants: participants have a nullable FK to teams
   { table: "round_teams" },
   { table: "round_participants" },
-  { table: "round_hole_states" },
+  { table: "round_hole_states", onConflict: "participant_id,hole_number" },
   { table: "round_score_events" },
   { table: "round_hole_snapshots" },
   { table: "round_format_results" },
@@ -199,13 +200,14 @@ export async function POST(req: Request) {
         // abort the rest — staging will simply be missing that table's data.
         let totalRows = 0;
         let tablesCopied = 0;
-        for (const { table, transform } of TABLE_PLAN) {
+        for (const { table, transform, onConflict } of TABLE_PLAN) {
           try {
             const { inserted, skipped } = await insertRows(
               supabaseAdmin as any,
               table,
               snapshot[table],
-              transform
+              transform,
+              onConflict
             );
             totalRows += inserted;
             if (inserted > 0) tablesCopied++;
