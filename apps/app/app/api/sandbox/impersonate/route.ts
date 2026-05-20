@@ -44,36 +44,45 @@ export async function POST(req: Request) {
       // Unowned profile — create or reuse a sandbox throwaway auth user
       const sandboxEmail = `sandbox+${profileId}@ciagasandbox.dev`;
 
-      // Check if a sandbox user already exists for this email
-      const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
-      const existing = listData?.users?.find((u) => u.email === sandboxEmail);
+      let sandboxUserId: string;
 
-      if (existing) {
-        targetEmail = sandboxEmail;
-        // Ensure the profile is linked (in case a previous attempt failed mid-way)
-        if (!profileRow.owner_user_id) {
-          await supabaseAdmin
-            .from("profiles")
-            .update({ owner_user_id: existing.id })
-            .eq("id", profileId);
+      const { data: newUser, error: createErr } = await supabaseAdmin.auth.admin.createUser({
+        email: sandboxEmail,
+        email_confirm: true,
+      });
+
+      if (newUser?.user) {
+        sandboxUserId = newUser.user.id;
+      } else if (
+        createErr &&
+        (createErr.message?.toLowerCase().includes("already") || (createErr as any).status === 422)
+      ) {
+        // Sandbox user exists but may be beyond the first listUsers page — paginate to find them
+        let found: { id: string } | null = null;
+        let page = 1;
+        while (!found) {
+          const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 1000 });
+          const match = listData?.users?.find((u) => u.email === sandboxEmail);
+          if (match) { found = match; break; }
+          if (!listData?.users?.length || listData.users.length < 1000) break;
+          page++;
         }
+        if (!found) {
+          return NextResponse.json({ error: "Could not locate existing sandbox user" }, { status: 500 });
+        }
+        sandboxUserId = found.id;
       } else {
-        const { data: newUser, error: createErr } = await supabaseAdmin.auth.admin.createUser({
-          email: sandboxEmail,
-          email_confirm: true,
-        });
-        if (createErr || !newUser?.user) {
-          return NextResponse.json(
-            { error: createErr?.message || "Failed to create sandbox user" },
-            { status: 500 }
-          );
-        }
-        targetEmail = sandboxEmail;
-        await supabaseAdmin
-          .from("profiles")
-          .update({ owner_user_id: newUser.user.id })
-          .eq("id", profileId);
+        return NextResponse.json(
+          { error: createErr?.message || "Failed to create sandbox user" },
+          { status: 500 }
+        );
       }
+
+      targetEmail = sandboxEmail;
+      await supabaseAdmin
+        .from("profiles")
+        .update({ owner_user_id: sandboxUserId })
+        .eq("id", profileId);
     }
 
     const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({

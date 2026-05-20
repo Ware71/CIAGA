@@ -672,7 +672,7 @@ export default function RoundMenuSheet(props: {
                           <div className="text-right">
                             <div className="text-[15px] font-extrabold tabular-nums text-[#f5e6b0]">
                               {scoringModel === "stableford_points"
-                                ? (s.format_points ?? "—")
+                                ? (s.format_points ?? s.net_score ?? "—")
                                 : s.to_par != null
                                 ? formatToPar(s.to_par)
                                 : (s.net_score ?? s.gross_score ?? "—")}

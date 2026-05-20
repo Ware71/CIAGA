@@ -160,6 +160,7 @@ async function getFrozenLeaderboard(
     profile_id: r.profile_id,
     gross_score: r.gross_score,
     net_score: r.net_score,
+    to_par: r.to_par ?? null,
     holes_shown: r.holes_shown,
     actual_holes_completed: r.actual_holes_completed ?? undefined,
     is_live: r.is_live,
