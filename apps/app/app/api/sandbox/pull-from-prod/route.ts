@@ -87,13 +87,16 @@ const TABLE_PLAN: Array<{ table: string; transform?: (row: any) => any }> = [
   // The impersonation feature creates sandbox auth users on demand.
   { table: "profiles", transform: (row) => ({ ...row, owner_user_id: null }) },
   { table: "rounds" },
-  { table: "round_participants" },
+  // round_teams must precede round_participants: participants have a nullable FK to teams
+  { table: "round_teams" },
+  { table: "round_participants", transform: (row) => ({ ...row, tee_snapshot_id: null }) },
   { table: "round_hole_states" },
   { table: "round_score_events" },
-  { table: "round_course_snapshots" },
-  { table: "round_tee_snapshots" },
+  // Null source_course_id/source_tee_box_id — these are supplementary back-references
+  // that may point to rows with their own orphan history; core snapshot data is intact
+  { table: "round_course_snapshots", transform: (row) => ({ ...row, source_course_id: null }) },
+  { table: "round_tee_snapshots", transform: (row) => ({ ...row, source_tee_box_id: null }) },
   { table: "round_hole_snapshots" },
-  { table: "round_teams" },
   { table: "round_format_results" },
   { table: "round_sidegame_results" },
   { table: "follows" },
@@ -106,8 +109,9 @@ const TABLE_PLAN: Array<{ table: string; transform?: (row: any) => any }> = [
   { table: "feed_comment_votes" },
   { table: "invites" },
   { table: "handicap_index_history" },
-  { table: "handicap_round_results" },
-  { table: "competitions" },
+  { table: "handicap_round_results", transform: (row) => ({ ...row, tee_snapshot_id: null }) },
+  // competition_rules_versions is not in TABLE_PLAN — null out FKs that reference it
+  { table: "competitions", transform: (row) => ({ ...row, published_rules_version_id: null }) },
   { table: "competition_entries" },
   { table: "competition_tee_times" },
   { table: "competition_rounds" },
@@ -121,7 +125,7 @@ const TABLE_PLAN: Array<{ table: string; transform?: (row: any) => any }> = [
   { table: "major_group_standings" },
   { table: "competition_series" },
   { table: "series_event_templates" },
-  { table: "series_seasons" },
+  { table: "series_seasons", transform: (row) => ({ ...row, standings_rules_version_id: null }) },
   { table: "season_standings_entries" },
   { table: "matchplay_stages" },
   { table: "matchplay_fixtures" },
