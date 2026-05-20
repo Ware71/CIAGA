@@ -124,12 +124,23 @@ export async function POST(req: Request) {
       };
 
       try {
-        // Phase 1: read all tables from production
+        // Phase 1: read all tables from production.
+        // Tables added in develop but not yet deployed to production are skipped gracefully.
         const snapshot: Record<string, any[]> = {};
         for (const { table } of TABLE_PLAN) {
-          const rows = await readAllRows(prodClient, table);
-          snapshot[table] = rows;
-          send({ type: "read", table, rows: rows.length });
+          try {
+            const rows = await readAllRows(prodClient, table);
+            snapshot[table] = rows;
+            send({ type: "read", table, rows: rows.length });
+          } catch (e: any) {
+            const msg: string = e?.message ?? "";
+            if (msg.toLowerCase().includes("does not exist") || msg.includes("42P01")) {
+              snapshot[table] = [];
+              send({ type: "skip", table });
+            } else {
+              throw e;
+            }
+          }
         }
 
         // Phase 2: wipe staging

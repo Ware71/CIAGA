@@ -14,6 +14,7 @@ type ProfileItem = {
 
 type PullEvent =
   | { type: "read"; table: string; rows: number }
+  | { type: "skip"; table: string }
   | { type: "wipe" }
   | { type: "write"; table: string; rows: number }
   | { type: "done"; tablesCopied: number; rowsCopied: number }
@@ -344,8 +345,16 @@ export function SandboxPanel() {
                     <p className="mb-0.5 text-[#f5e6b0]/40">Reading from production</p>
                   )}
                   {pullLog
-                    .filter((e) => e.type === "read")
+                    .filter((e) => e.type === "read" || e.type === "skip")
                     .map((e, i) => {
+                      if (e.type === "skip") {
+                        return (
+                          <div key={i} className="flex justify-between pl-2">
+                            <span className="truncate text-slate-600">{e.table}</span>
+                            <span className="ml-2 shrink-0 text-slate-700">not in prod</span>
+                          </div>
+                        );
+                      }
                       const ev = e as Extract<PullEvent, { type: "read" }>;
                       return (
                         <div key={i} className="flex justify-between pl-2">
