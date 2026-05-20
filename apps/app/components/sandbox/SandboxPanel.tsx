@@ -24,6 +24,9 @@ export function SandboxPanel() {
   const [confirmReset, setConfirmReset] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [resetDone, setResetDone] = useState(false);
+  const [confirmPull, setConfirmPull] = useState(false);
+  const [pulling, setPulling] = useState(false);
+  const [pullResult, setPullResult] = useState<{ rowsCopied: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -77,6 +80,28 @@ export function SandboxPanel() {
     } catch {
       setError("Network error");
       setImpersonating(null);
+    }
+  };
+
+  const handlePullFromProd = async () => {
+    setPulling(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/sandbox/pull-from-prod", {
+        method: "POST",
+        headers: await authHeaders(),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setPullResult({ rowsCopied: data.rowsCopied });
+        setConfirmPull(false);
+      } else {
+        setError(data.error ?? "Pull failed");
+      }
+    } catch {
+      setError("Network error");
+    } finally {
+      setPulling(false);
     }
   };
 
@@ -253,6 +278,57 @@ export function SandboxPanel() {
               )}
 
               {error && <p className="mt-2 text-[10px] text-red-400">{error}</p>}
+            </div>
+
+            {/* Divider */}
+            <div className="mx-4 my-4 border-t border-[#f5e6b0]/10" />
+
+            {/* ── Pull from Production ── */}
+            <div className="px-4 pb-8">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[#f5e6b0]/50">
+                Pull from Production
+              </p>
+              <p className="mb-3 text-[10px] leading-relaxed text-slate-400">
+                Replaces all staging data with a live snapshot from production. Auth accounts are
+                stripped — use Switch Profile to sign in as any user.
+              </p>
+
+              {pullResult && (
+                <p className="mb-2 text-xs text-emerald-400">
+                  ✓ Snapshot copied ({pullResult.rowsCopied.toLocaleString()} rows)
+                </p>
+              )}
+
+              {!confirmPull ? (
+                <button
+                  onClick={() => setConfirmPull(true)}
+                  className="w-full rounded-md border border-amber-600/50 bg-amber-900/30 py-2 text-xs font-medium text-amber-300 transition-colors hover:bg-amber-900/50"
+                >
+                  Pull from Production
+                </button>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-[10px] font-semibold text-amber-400">
+                    This will wipe all staging data. Confirm?
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setConfirmPull(false)}
+                      disabled={pulling}
+                      className="flex-1 rounded-md border border-white/10 bg-white/5 py-1.5 text-xs text-slate-300 transition-colors hover:bg-white/10 disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handlePullFromProd}
+                      disabled={pulling}
+                      className="flex-1 rounded-md bg-amber-700 py-1.5 text-xs font-medium text-white transition-colors hover:bg-amber-600 disabled:opacity-50"
+                    >
+                      {pulling ? "Pulling…" : "Yes, Pull"}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
