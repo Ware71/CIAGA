@@ -64,7 +64,7 @@ export async function GET(req: Request) {
 
       if (isFrozen) {
         const threshold = freezeConfig.total_holes - (freezeConfig.freeze_last_holes as number);
-        const rows = await getFrozenLeaderboard(competitionId, threshold, freezeConfig);
+        const rows = await getFrozenLeaderboard(competitionId, threshold, freezeConfig, (competition as any).scoring_model ?? "net");
         return NextResponse.json(
           {
             rows,
@@ -139,7 +139,8 @@ async function getFrozenLeaderboard(
   freezeConfig: {
     freeze_scope: string;
     freeze_top_x: number | null;
-  }
+  },
+  scoringModel: string
 ): Promise<FrozenLeaderboardEntry[]> {
   // Prefer the per-player snapshot written at freeze time. Fall back to the
   // dynamic function only when the snapshot is absent (manual freeze before
@@ -147,10 +148,12 @@ async function getFrozenLeaderboard(
   const { data: snapshotRows } = await supabaseAdmin
     .from("competition_player_freeze_snapshots")
     .select("*")
-    .eq("competition_id", competitionId)
-    .order("position", { ascending: true });
+    .eq("competition_id", competitionId);
 
-  let rawRows: Array<{
+  // Always fetch live entries — needed for below-threshold players and top_x scope.
+  const liveRows = await getCompetitionLeaderboard(competitionId);
+
+  type RawRow = {
     profile_id: string;
     gross_score: number | null;
     net_score: number | null;
@@ -158,11 +161,12 @@ async function getFrozenLeaderboard(
     holes_shown: number;
     actual_holes_completed: number | null;
     is_live: boolean;
-    leaderboard_pos: number;
-  }>;
+  };
+
+  let frozenRows: RawRow[];
 
   if (snapshotRows && snapshotRows.length > 0) {
-    rawRows = (snapshotRows as any[]).map((r) => ({
+    frozenRows = (snapshotRows as any[]).map((r) => ({
       profile_id: r.profile_id,
       gross_score: r.gross_score,
       net_score: r.net_score,
@@ -170,27 +174,65 @@ async function getFrozenLeaderboard(
       holes_shown: r.holes_shown,
       actual_holes_completed: r.actual_holes_completed ?? null,
       is_live: r.is_live,
-      leaderboard_pos: r.position,
     }));
   } else {
     // Dynamic fallback: recompute from score events (original behaviour)
-    const { data: frozenRows, error } = await supabaseAdmin.rpc(
+    const { data: rpcRows, error } = await supabaseAdmin.rpc(
       "ciaga_get_frozen_leaderboard",
       { p_competition_id: competitionId, p_threshold_hole: threshold }
     );
     if (error) throw error;
-    rawRows = (frozenRows ?? []) as any[];
+    frozenRows = ((rpcRows ?? []) as any[]).map((r) => ({
+      profile_id: r.profile_id,
+      gross_score: r.gross_score,
+      net_score: r.net_score,
+      to_par: r.to_par ?? null,
+      holes_shown: r.holes_shown,
+      actual_holes_completed: r.actual_holes_completed ?? null,
+      is_live: r.is_live,
+    }));
   }
 
-  // Fetch profiles for all players in the result set
-  const profileIds = rawRows.map((r) => r.profile_id);
+  // Players in the snapshot are frozen. Players not yet in the snapshot are
+  // still below the threshold and should show live, updating scores.
+  const frozenProfileIds = new Set(frozenRows.map((r) => r.profile_id));
+  const liveOnlyRows: RawRow[] = liveRows
+    .filter((r) => !frozenProfileIds.has(r.profile_id))
+    .map((r) => ({
+      profile_id: r.profile_id,
+      gross_score: r.gross_score ?? null,
+      net_score: r.net_score ?? null,
+      to_par: (r as any).to_par ?? null,
+      holes_shown: r.holes_completed ?? 0,
+      actual_holes_completed: r.holes_completed ?? null,
+      is_live: r.is_live ?? false,
+    }));
+
+  const combined: RawRow[] = [...frozenRows, ...liveOnlyRows];
+
+  // Fetch profiles for everyone in the combined set
+  const profileIds = combined.map((r) => r.profile_id);
   const { data: profiles } = await supabaseAdmin
     .from("profiles")
     .select("id, name, avatar_url")
     .in("id", profileIds);
   const profileMap = Object.fromEntries((profiles ?? []).map((p: any) => [p.id, p]));
 
-  const frozen = rawRows.map((r): FrozenLeaderboardEntry => ({
+  // Sort by displayed score and assign positions
+  const higherBetter = scoringModel === "stableford_points";
+  combined.sort((a, b) => {
+    const aScore = a.net_score ?? a.gross_score;
+    const bScore = b.net_score ?? b.gross_score;
+    if (aScore == null && bScore == null) return 0;
+    if (aScore == null) return 1;
+    if (bScore == null) return -1;
+    // Secondary: more holes completed ranks higher
+    const scoreDiff = higherBetter ? bScore - aScore : aScore - bScore;
+    if (scoreDiff !== 0) return scoreDiff;
+    return (b.holes_shown ?? 0) - (a.holes_shown ?? 0);
+  });
+
+  const result: FrozenLeaderboardEntry[] = combined.map((r, i) => ({
     profile_id: r.profile_id,
     gross_score: r.gross_score,
     net_score: r.net_score,
@@ -198,36 +240,31 @@ async function getFrozenLeaderboard(
     holes_shown: r.holes_shown,
     actual_holes_completed: r.actual_holes_completed ?? undefined,
     is_live: r.is_live,
-    position: r.leaderboard_pos,
+    position: i + 1,
     profile: profileMap[r.profile_id] ?? undefined,
   }));
 
-  // For top_x freeze scope: only freeze positions 1..top_x; the rest show live scores
+  // For top_x freeze scope: players outside top-x always show live scores
   if (freezeConfig.freeze_scope === "top_x" && freezeConfig.freeze_top_x != null) {
     const topX = freezeConfig.freeze_top_x;
-    const liveRows = await getCompetitionLeaderboard(competitionId);
     const liveByProfile = Object.fromEntries(liveRows.map((r) => [r.profile_id, r]));
-
-    const result = frozen.map((row) => {
+    return result.map((row) => {
       if (row.position > topX) {
         const live = liveByProfile[row.profile_id];
         if (live) {
           return {
             ...row,
-            gross_score: live.gross_score,
-            net_score: live.net_score,
-            holes_shown: live.holes_completed,
-            actual_holes_completed: live.holes_completed,
-            is_live: live.is_live,
+            gross_score: live.gross_score ?? null,
+            net_score: live.net_score ?? null,
+            holes_shown: live.holes_completed ?? 0,
+            actual_holes_completed: live.holes_completed ?? undefined,
+            is_live: live.is_live ?? false,
           };
         }
       }
       return row;
     });
-    result.sort((a, b) => (a.position ?? 999) - (b.position ?? 999));
-    return result;
   }
 
-  frozen.sort((a, b) => (a.position ?? 999) - (b.position ?? 999));
-  return frozen;
+  return result;
 }

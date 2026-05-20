@@ -198,7 +198,7 @@ export default function LeaderboardClient() {
   const rows = tab === "competition" ? compRows : groupRows;
   const isFrozen = freeze?.freeze_state === "frozen";
   const totalHoles = freeze?.total_holes ?? 18;
-  const canReveal = isFrozen && (myRole === "owner" || myRole === "admin");
+  const canReveal = freeze?.freeze_state !== "revealed" && (myRole === "owner" || myRole === "admin");
 
   return (
     <div className="min-h-[100dvh] pb-[env(safe-area-inset-bottom)] px-4 pt-8 max-w-sm mx-auto space-y-5">
@@ -249,14 +249,14 @@ export default function LeaderboardClient() {
       )}
 
       {/* Reveal button — owners and admins only */}
-      {canReveal && (
+      {tab === "competition" && canReveal && (
         <button
           type="button"
           onClick={handleReveal}
           disabled={revealLoading}
           className="w-full py-3 rounded-full bg-[#f5e6b0] text-[#042713] text-sm font-semibold disabled:opacity-50"
         >
-          {revealLoading ? "Revealing…" : "Reveal Results"}
+          {revealLoading ? "Revealing…" : isFrozen ? "Reveal Results" : "Start Ceremony"}
         </button>
       )}
 
@@ -365,7 +365,7 @@ export default function LeaderboardClient() {
       {showReveal && freeze && tab === "competition" && (
         <LeaderboardReveal
           rows={compRows as LeaderboardEntryWithProfile[]}
-          revealStyle={freeze.reveal_style}
+          revealStyle="animated"
           revealTopX={freeze.reveal_top_x}
           onDone={() => setShowReveal(false)}
         />

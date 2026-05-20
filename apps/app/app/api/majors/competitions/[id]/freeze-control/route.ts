@@ -51,9 +51,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         { status: 400 }
       );
     }
-    if (action === "reveal" && currentState !== "frozen") {
+    if (action === "reveal" && currentState === "revealed") {
       return NextResponse.json(
-        { error: `Cannot reveal a leaderboard that is '${currentState}'` },
+        { error: "Leaderboard is already revealed" },
         { status: 400 }
       );
     }
