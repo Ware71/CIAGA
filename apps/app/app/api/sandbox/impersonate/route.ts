@@ -88,13 +88,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // Build callback URL locally — no Supabase redirect needed, bypasses allowlist validation
-    const appUrl = process.env.NEXT_PUBLIC_SITE_URL || new URL(req.url).origin;
-    const actionLink = new URL("/auth/callback", appUrl);
-    actionLink.searchParams.set("token_hash", linkData.properties.hashed_token);
-    actionLink.searchParams.set("type", "magiclink");
-
-    return NextResponse.json({ actionLink: actionLink.toString() });
+    return NextResponse.json({ tokenHash: linkData.properties.hashed_token });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Server error" }, { status: 500 });
   }

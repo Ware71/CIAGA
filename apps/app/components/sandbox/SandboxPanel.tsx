@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { getViewerSession } from "@/lib/auth/viewerSession";
+import { supabase } from "@/lib/supabaseClient";
 
 type ProfileItem = {
   id: string;
@@ -85,8 +86,17 @@ export function SandboxPanel() {
         body: JSON.stringify({ profileId }),
       });
       const data = await res.json();
-      if (data.actionLink) {
-        window.location.href = data.actionLink;
+      if (data.tokenHash) {
+        const { error: otpErr } = await supabase.auth.verifyOtp({
+          token_hash: data.tokenHash,
+          type: "magiclink",
+        });
+        if (otpErr) {
+          setError(otpErr.message || "Failed to sign in");
+          setImpersonating(null);
+        } else {
+          window.location.href = "/";
+        }
       } else {
         setError(data.error ?? "Failed to switch profile");
         setImpersonating(null);
