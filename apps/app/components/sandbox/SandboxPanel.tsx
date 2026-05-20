@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 
@@ -11,6 +11,13 @@ type ProfileItem = {
   avatar_url: string | null;
   owner_user_id: string | null;
 };
+
+type PullEvent =
+  | { type: "read"; table: string; rows: number }
+  | { type: "wipe" }
+  | { type: "write"; table: string; rows: number }
+  | { type: "done"; tablesCopied: number; rowsCopied: number }
+  | { type: "error"; message: string };
 
 const PANEL_WIDTH = 312;
 const TAB_WIDTH = 28;
@@ -26,14 +33,19 @@ export function SandboxPanel() {
   const [resetDone, setResetDone] = useState(false);
   const [confirmPull, setConfirmPull] = useState(false);
   const [pulling, setPulling] = useState(false);
-  const [pullResult, setPullResult] = useState<{ rowsCopied: number } | null>(null);
+  const [pullLog, setPullLog] = useState<PullEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const logBottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isOpen && profiles.length === 0) {
       loadProfiles();
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    logBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [pullLog]);
 
   const getToken = async () => {
     const session = await getViewerSession();
@@ -85,18 +97,41 @@ export function SandboxPanel() {
 
   const handlePullFromProd = async () => {
     setPulling(true);
+    setPullLog([]);
     setError(null);
     try {
       const res = await fetch("/api/sandbox/pull-from-prod", {
         method: "POST",
         headers: await authHeaders(),
       });
-      const data = await res.json();
-      if (data.ok) {
-        setPullResult({ rowsCopied: data.rowsCopied });
-        setConfirmPull(false);
-      } else {
+
+      // Pre-stream errors (auth, missing credentials) come back as JSON
+      if (!res.ok || !res.body) {
+        const data = await res.json().catch(() => ({ error: "Request failed" }));
         setError(data.error ?? "Pull failed");
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const event = JSON.parse(line) as PullEvent;
+            setPullLog((prev) => [...prev, event]);
+            if (event.type === "error") setError(event.message);
+          } catch {
+            // malformed line — ignore
+          }
+        }
       }
     } catch {
       setError("Network error");
@@ -134,6 +169,15 @@ export function SandboxPanel() {
       p.email?.toLowerCase().includes(search.toLowerCase())
   );
 
+  // Derive phase headers from the log so they appear at the right point
+  const hasReadEvents = pullLog.some((e) => e.type === "read");
+  const hasWipeEvent = pullLog.some((e) => e.type === "wipe");
+  const hasWriteEvents = pullLog.some((e) => e.type === "write");
+  const doneEvent = pullLog.find((e) => e.type === "done") as
+    | Extract<PullEvent, { type: "done" }>
+    | undefined;
+  const showLog = pulling || pullLog.length > 0;
+
   return (
     <div
       className="fixed top-0 right-0 h-full pointer-events-none"
@@ -145,7 +189,7 @@ export function SandboxPanel() {
         animate={{ x: isOpen ? 0 : PANEL_WIDTH }}
         transition={{ type: "spring", damping: 28, stiffness: 260 }}
       >
-        {/* Toggle tab — always the visible leftmost strip when closed */}
+        {/* Toggle tab */}
         <button
           onClick={() => setIsOpen(!isOpen)}
           title="Sandbox Dev Tools"
@@ -293,20 +337,81 @@ export function SandboxPanel() {
                 stripped — use Switch Profile to sign in as any user.
               </p>
 
-              {pullResult && (
-                <p className="mb-2 text-xs text-emerald-400">
-                  ✓ Snapshot copied ({pullResult.rowsCopied.toLocaleString()} rows)
-                </p>
+              {/* Live log — shown while pulling and after completion */}
+              {showLog && (
+                <div className="mb-3 max-h-48 overflow-y-auto rounded-md bg-black/40 p-2 font-mono text-[9px]">
+                  {hasReadEvents && (
+                    <p className="mb-0.5 text-[#f5e6b0]/40">Reading from production</p>
+                  )}
+                  {pullLog
+                    .filter((e) => e.type === "read")
+                    .map((e, i) => {
+                      const ev = e as Extract<PullEvent, { type: "read" }>;
+                      return (
+                        <div key={i} className="flex justify-between pl-2">
+                          <span className="truncate text-slate-500">{ev.table}</span>
+                          <span className="ml-2 shrink-0 text-slate-600">
+                            {ev.rows.toLocaleString()}
+                          </span>
+                        </div>
+                      );
+                    })}
+
+                  {hasWipeEvent && (
+                    <p className="mb-0.5 mt-1 text-[#f5e6b0]/40">Wiping staging…</p>
+                  )}
+
+                  {hasWriteEvents && (
+                    <p className="mb-0.5 mt-1 text-[#f5e6b0]/40">Writing to staging</p>
+                  )}
+                  {pullLog
+                    .filter((e) => e.type === "write")
+                    .map((e, i) => {
+                      const ev = e as Extract<PullEvent, { type: "write" }>;
+                      return (
+                        <div key={i} className="flex justify-between pl-2">
+                          <span className="truncate text-slate-500">{ev.table}</span>
+                          <span className="ml-2 shrink-0 text-emerald-600">✓</span>
+                        </div>
+                      );
+                    })}
+
+                  {pullLog
+                    .filter((e) => e.type === "error")
+                    .map((e, i) => {
+                      const ev = e as Extract<PullEvent, { type: "error" }>;
+                      return (
+                        <p key={i} className="mt-1 text-red-400">
+                          ✗ {ev.message}
+                        </p>
+                      );
+                    })}
+
+                  {doneEvent && (
+                    <p className="mt-1 text-emerald-400">
+                      Done — {doneEvent.tablesCopied} tables,{" "}
+                      {doneEvent.rowsCopied.toLocaleString()} rows
+                    </p>
+                  )}
+
+                  {pulling && !doneEvent && (
+                    <p className="mt-1 animate-pulse text-slate-500">…</p>
+                  )}
+
+                  <div ref={logBottomRef} />
+                </div>
               )}
 
-              {!confirmPull ? (
+              {!pulling && !confirmPull && (
                 <button
-                  onClick={() => setConfirmPull(true)}
+                  onClick={() => { setConfirmPull(true); setPullLog([]); setError(null); }}
                   className="w-full rounded-md border border-amber-600/50 bg-amber-900/30 py-2 text-xs font-medium text-amber-300 transition-colors hover:bg-amber-900/50"
                 >
-                  Pull from Production
+                  {doneEvent ? "Pull Again" : "Pull from Production"}
                 </button>
-              ) : (
+              )}
+
+              {!pulling && confirmPull && (
                 <div className="space-y-2">
                   <p className="text-[10px] font-semibold text-amber-400">
                     This will wipe all staging data. Confirm?
@@ -314,21 +419,21 @@ export function SandboxPanel() {
                   <div className="flex gap-2">
                     <button
                       onClick={() => setConfirmPull(false)}
-                      disabled={pulling}
-                      className="flex-1 rounded-md border border-white/10 bg-white/5 py-1.5 text-xs text-slate-300 transition-colors hover:bg-white/10 disabled:opacity-50"
+                      className="flex-1 rounded-md border border-white/10 bg-white/5 py-1.5 text-xs text-slate-300 transition-colors hover:bg-white/10"
                     >
                       Cancel
                     </button>
                     <button
                       onClick={handlePullFromProd}
-                      disabled={pulling}
-                      className="flex-1 rounded-md bg-amber-700 py-1.5 text-xs font-medium text-white transition-colors hover:bg-amber-600 disabled:opacity-50"
+                      className="flex-1 rounded-md bg-amber-700 py-1.5 text-xs font-medium text-white transition-colors hover:bg-amber-600"
                     >
-                      {pulling ? "Pulling…" : "Yes, Pull"}
+                      Yes, Pull
                     </button>
                   </div>
                 </div>
               )}
+
+              {error && <p className="mt-2 text-[10px] text-red-400">{error}</p>}
             </div>
           </div>
         </div>

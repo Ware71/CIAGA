@@ -29,7 +29,6 @@ async function insertRows(
 ): Promise<number> {
   if (rows.length === 0) return 0;
   const prepared = transform ? rows.map(transform) : rows;
-  // Insert in chunks to avoid request size limits
   const chunkSize = 500;
   for (let i = 0; i < prepared.length; i += chunkSize) {
     const chunk = prepared.slice(i, i + chunkSize);
@@ -98,50 +97,66 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Not available" }, { status: 403 });
   }
 
-  try {
-    const authHeader = req.headers.get("authorization") || "";
-    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-    if (!token) return NextResponse.json({ error: "Missing bearer token" }, { status: 401 });
+  const authHeader = req.headers.get("authorization") || "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  if (!token) return NextResponse.json({ error: "Missing bearer token" }, { status: 401 });
 
-    const { data: userData, error: userErr } = await supabaseAdmin.auth.getUser(token);
-    if (userErr || !userData?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    let prodClient: SupabaseClient;
-    try {
-      prodClient = getProductionReaderClient();
-    } catch (e: any) {
-      return NextResponse.json(
-        { error: `Production credentials not configured: ${e.message}` },
-        { status: 500 }
-      );
-    }
-
-    // Read all production data first (before wiping staging)
-    const snapshot: Record<string, any[]> = {};
-    for (const { table } of TABLE_PLAN) {
-      snapshot[table] = await readAllRows(prodClient, table);
-    }
-
-    // Wipe staging completely (profiles + courses + all transient data)
-    const { error: resetError } = await supabaseAdmin.rpc("sandbox_full_reset_database");
-    if (resetError) {
-      return NextResponse.json({ error: `Reset failed: ${resetError.message}` }, { status: 500 });
-    }
-
-    // Write production data into staging in FK-safe order
-    let totalRows = 0;
-    let tablesCopied = 0;
-    for (const { table, transform } of TABLE_PLAN) {
-      const rows = snapshot[table];
-      const count = await insertRows(supabaseAdmin as any, table, rows, transform);
-      totalRows += count;
-      if (count > 0) tablesCopied++;
-    }
-
-    return NextResponse.json({ ok: true, tablesCopied, rowsCopied: totalRows });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "Server error" }, { status: 500 });
+  const { data: userData, error: userErr } = await supabaseAdmin.auth.getUser(token);
+  if (userErr || !userData?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  let prodClient: SupabaseClient;
+  try {
+    prodClient = getProductionReaderClient();
+  } catch (e: any) {
+    return NextResponse.json(
+      { error: `Production credentials not configured: ${e.message}` },
+      { status: 500 }
+    );
+  }
+
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (event: object) => {
+        controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
+      };
+
+      try {
+        // Phase 1: read all tables from production
+        const snapshot: Record<string, any[]> = {};
+        for (const { table } of TABLE_PLAN) {
+          const rows = await readAllRows(prodClient, table);
+          snapshot[table] = rows;
+          send({ type: "read", table, rows: rows.length });
+        }
+
+        // Phase 2: wipe staging
+        const { error: resetError } = await supabaseAdmin.rpc("sandbox_full_reset_database");
+        if (resetError) throw new Error(`Reset failed: ${resetError.message}`);
+        send({ type: "wipe" });
+
+        // Phase 3: write production data into staging
+        let totalRows = 0;
+        let tablesCopied = 0;
+        for (const { table, transform } of TABLE_PLAN) {
+          const count = await insertRows(supabaseAdmin as any, table, snapshot[table], transform);
+          totalRows += count;
+          if (count > 0) tablesCopied++;
+          send({ type: "write", table, rows: count });
+        }
+
+        send({ type: "done", tablesCopied, rowsCopied: totalRows });
+      } catch (e: any) {
+        send({ type: "error", message: e?.message ?? "Server error" });
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: { "Content-Type": "text/plain; charset=utf-8" },
+  });
 }
