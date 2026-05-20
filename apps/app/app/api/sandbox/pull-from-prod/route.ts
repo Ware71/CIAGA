@@ -12,7 +12,11 @@ async function readAllRows(client: SupabaseClient, table: string): Promise<any[]
       .from(table)
       .select("*")
       .range(from, from + pageSize - 1);
-    if (error) throw new Error(`Failed reading ${table}: ${error.message}`);
+    if (error) {
+      // Preserve the original Supabase error code so callers can distinguish
+      // "table not found" (42P01) from real network/permission errors.
+      throw Object.assign(new Error(error.message), { code: error.code });
+    }
     if (!data || data.length === 0) break;
     rows.push(...data);
     if (data.length < pageSize) break;
@@ -33,9 +37,16 @@ async function insertRows(
   for (let i = 0; i < prepared.length; i += chunkSize) {
     const chunk = prepared.slice(i, i + chunkSize);
     const { error } = await client.from(table).insert(chunk);
-    if (error) throw new Error(`Failed inserting into ${table}: ${error.message}`);
+    if (error) throw Object.assign(new Error(error.message), { code: error.code });
   }
   return prepared.length;
+}
+
+function isTableNotFound(e: any): boolean {
+  return (
+    e?.code === "42P01" ||
+    (e?.message ?? "").toLowerCase().includes("does not exist")
+  );
 }
 
 // Tables in FK-safe insertion order (dependencies before dependents)
@@ -125,7 +136,7 @@ export async function POST(req: Request) {
 
       try {
         // Phase 1: read all tables from production.
-        // Tables added in develop but not yet deployed to production are skipped gracefully.
+        // Tables that don't exist in production yet (new in develop) are skipped.
         const snapshot: Record<string, any[]> = {};
         for (const { table } of TABLE_PLAN) {
           try {
@@ -133,11 +144,11 @@ export async function POST(req: Request) {
             snapshot[table] = rows;
             send({ type: "read", table, rows: rows.length });
           } catch (e: any) {
-            const msg: string = e?.message ?? "";
-            if (msg.toLowerCase().includes("does not exist") || msg.includes("42P01")) {
+            if (isTableNotFound(e)) {
               snapshot[table] = [];
               send({ type: "skip", table });
             } else {
+              // Real error (network, permissions) — abort before touching staging
               throw e;
             }
           }
@@ -148,14 +159,25 @@ export async function POST(req: Request) {
         if (resetError) throw new Error(`Reset failed: ${resetError.message}`);
         send({ type: "wipe" });
 
-        // Phase 3: write production data into staging
+        // Phase 3: write production data into staging.
+        // Per-table errors (schema mismatch, column drift) are reported but don't
+        // abort the rest — staging will simply be missing that table's data.
         let totalRows = 0;
         let tablesCopied = 0;
         for (const { table, transform } of TABLE_PLAN) {
-          const count = await insertRows(supabaseAdmin as any, table, snapshot[table], transform);
-          totalRows += count;
-          if (count > 0) tablesCopied++;
-          send({ type: "write", table, rows: count });
+          try {
+            const count = await insertRows(
+              supabaseAdmin as any,
+              table,
+              snapshot[table],
+              transform
+            );
+            totalRows += count;
+            if (count > 0) tablesCopied++;
+            send({ type: "write", table, rows: count });
+          } catch (e: any) {
+            send({ type: "write_error", table, message: e?.message ?? "Insert failed" });
+          }
         }
 
         send({ type: "done", tablesCopied, rowsCopied: totalRows });

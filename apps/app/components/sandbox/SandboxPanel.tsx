@@ -17,6 +17,7 @@ type PullEvent =
   | { type: "skip"; table: string }
   | { type: "wipe" }
   | { type: "write"; table: string; rows: number }
+  | { type: "write_error"; table: string; message: string }
   | { type: "done"; tablesCopied: number; rowsCopied: number }
   | { type: "error"; message: string };
 
@@ -173,7 +174,7 @@ export function SandboxPanel() {
   // Derive phase headers from the log so they appear at the right point
   const hasReadEvents = pullLog.some((e) => e.type === "read");
   const hasWipeEvent = pullLog.some((e) => e.type === "wipe");
-  const hasWriteEvents = pullLog.some((e) => e.type === "write");
+  const hasWriteEvents = pullLog.some((e) => e.type === "write" || e.type === "write_error");
   const doneEvent = pullLog.find((e) => e.type === "done") as
     | Extract<PullEvent, { type: "done" }>
     | undefined;
@@ -374,8 +375,16 @@ export function SandboxPanel() {
                     <p className="mb-0.5 mt-1 text-[#f5e6b0]/40">Writing to staging</p>
                   )}
                   {pullLog
-                    .filter((e) => e.type === "write")
+                    .filter((e) => e.type === "write" || e.type === "write_error")
                     .map((e, i) => {
+                      if (e.type === "write_error") {
+                        return (
+                          <div key={i} className="pl-2">
+                            <span className="truncate text-red-500">{e.table}</span>
+                            <span className="ml-1 text-red-600/70">✗ {e.message}</span>
+                          </div>
+                        );
+                      }
                       const ev = e as Extract<PullEvent, { type: "write" }>;
                       return (
                         <div key={i} className="flex justify-between pl-2">
