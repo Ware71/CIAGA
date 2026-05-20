@@ -90,15 +90,14 @@ const TABLE_PLAN: Array<{ table: string; transform?: (row: any) => any }> = [
   // The impersonation feature creates sandbox auth users on demand.
   { table: "profiles", transform: (row) => ({ ...row, owner_user_id: null }) },
   { table: "rounds" },
+  // Snapshots reference rounds and must precede round_participants (which FK to tee_snapshots)
+  { table: "round_course_snapshots", transform: (row) => ({ ...row, source_course_id: null }) },
+  { table: "round_tee_snapshots", transform: (row) => ({ ...row, source_tee_box_id: null }) },
   // round_teams must precede round_participants: participants have a nullable FK to teams
   { table: "round_teams" },
   { table: "round_participants" },
   { table: "round_hole_states" },
   { table: "round_score_events" },
-  // Null source_course_id/source_tee_box_id — these are supplementary back-references
-  // that may point to rows with their own orphan history; core snapshot data is intact
-  { table: "round_course_snapshots", transform: (row) => ({ ...row, source_course_id: null }) },
-  { table: "round_tee_snapshots", transform: (row) => ({ ...row, source_tee_box_id: null }) },
   { table: "round_hole_snapshots" },
   { table: "round_format_results" },
   { table: "round_sidegame_results" },
