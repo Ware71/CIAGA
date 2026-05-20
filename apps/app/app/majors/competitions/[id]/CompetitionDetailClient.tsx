@@ -1492,7 +1492,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
     try {
       const session = await getViewerSession();
       if (!session) return;
-      await fetch(`/api/majors/competitions/${competitionId}/freeze-control`, {
+      const res = await fetch(`/api/majors/competitions/${competitionId}/freeze-control`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1500,6 +1500,10 @@ export default function CompetitionDetailClient({ competitionId }: { competition
         },
         body: JSON.stringify({ action: "reveal" }),
       });
+      if (res.ok) {
+        setLeaderboardFreeze((prev) => prev ? { ...prev, freeze_state: "revealed" } : prev);
+        setShowReveal(true);
+      }
     } finally {
       setRevealLoading(false);
     }
