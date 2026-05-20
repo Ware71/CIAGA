@@ -141,22 +141,56 @@ async function getFrozenLeaderboard(
     freeze_top_x: number | null;
   }
 ): Promise<FrozenLeaderboardEntry[]> {
-  // Get per-hole-truncated scores from DB function
-  const { data: frozenRows, error } = await supabaseAdmin.rpc(
-    "ciaga_get_frozen_leaderboard",
-    { p_competition_id: competitionId, p_threshold_hole: threshold }
-  );
-  if (error) throw error;
+  // Prefer the per-player snapshot written at freeze time. Fall back to the
+  // dynamic function only when the snapshot is absent (manual freeze before
+  // this migration ran, or a race where the trigger hadn't fired yet).
+  const { data: snapshotRows } = await supabaseAdmin
+    .from("competition_player_freeze_snapshots")
+    .select("*")
+    .eq("competition_id", competitionId)
+    .order("position", { ascending: true });
 
-  // Fetch profiles for all players in frozen results
-  const profileIds = (frozenRows ?? []).map((r: any) => r.profile_id as string);
+  let rawRows: Array<{
+    profile_id: string;
+    gross_score: number | null;
+    net_score: number | null;
+    to_par: number | null;
+    holes_shown: number;
+    actual_holes_completed: number | null;
+    is_live: boolean;
+    leaderboard_pos: number;
+  }>;
+
+  if (snapshotRows && snapshotRows.length > 0) {
+    rawRows = (snapshotRows as any[]).map((r) => ({
+      profile_id: r.profile_id,
+      gross_score: r.gross_score,
+      net_score: r.net_score,
+      to_par: r.to_par ?? null,
+      holes_shown: r.holes_shown,
+      actual_holes_completed: r.actual_holes_completed ?? null,
+      is_live: r.is_live,
+      leaderboard_pos: r.position,
+    }));
+  } else {
+    // Dynamic fallback: recompute from score events (original behaviour)
+    const { data: frozenRows, error } = await supabaseAdmin.rpc(
+      "ciaga_get_frozen_leaderboard",
+      { p_competition_id: competitionId, p_threshold_hole: threshold }
+    );
+    if (error) throw error;
+    rawRows = (frozenRows ?? []) as any[];
+  }
+
+  // Fetch profiles for all players in the result set
+  const profileIds = rawRows.map((r) => r.profile_id);
   const { data: profiles } = await supabaseAdmin
     .from("profiles")
     .select("id, name, avatar_url")
     .in("id", profileIds);
   const profileMap = Object.fromEntries((profiles ?? []).map((p: any) => [p.id, p]));
 
-  const frozen = ((frozenRows ?? []) as any[]).map((r): FrozenLeaderboardEntry => ({
+  const frozen = rawRows.map((r): FrozenLeaderboardEntry => ({
     profile_id: r.profile_id,
     gross_score: r.gross_score,
     net_score: r.net_score,
@@ -176,7 +210,6 @@ async function getFrozenLeaderboard(
 
     const result = frozen.map((row) => {
       if (row.position > topX) {
-        // Replace with live data for this player
         const live = liveByProfile[row.profile_id];
         if (live) {
           return {
