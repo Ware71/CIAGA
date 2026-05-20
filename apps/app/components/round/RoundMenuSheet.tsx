@@ -634,10 +634,12 @@ export default function RoundMenuSheet(props: {
                     <div className="px-3 py-4 text-center text-[11px] text-emerald-100/50">Loading…</div>
                   )}
                   {!compLoading && (compStandings ?? []).map((s) => {
-                    const isFrozenRow = compFreeze?.freeze_state === "frozen" && (
-                      compFreeze.freeze_scope !== "top_x" ||
-                      (s.position ?? 999) <= (compFreeze.freeze_top_x ?? Infinity)
-                    );
+                    const freezeThreshold = compFreeze
+                      ? compFreeze.total_holes - (compFreeze.freeze_last_holes ?? 0)
+                      : Infinity;
+                    const isFrozenRow = compFreeze?.freeze_state === "frozen" &&
+                      s.holes_shown >= freezeThreshold &&
+                      (compFreeze.freeze_scope !== "top_x" || (s.position ?? 999) <= (compFreeze.freeze_top_x ?? Infinity));
                     const thruText = (() => {
                       if (isFrozenRow) {
                         if (s.is_live && s.actual_holes_completed > s.holes_shown) {
@@ -677,9 +679,9 @@ export default function RoundMenuSheet(props: {
                                 ? formatToPar(s.to_par)
                                 : (s.net_score ?? s.gross_score ?? "—")}
                             </div>
-                            {scoringModel !== "stableford_points" && s.to_par != null && (
+                            {scoringModel !== "stableford_points" && s.to_par != null && s.gross_score != null && (
                               <div className="text-[9px] text-emerald-100/50">
-                                ({s.net_score ?? s.gross_score ?? "—"})
+                                ({s.gross_score} gross)
                               </div>
                             )}
                           </div>

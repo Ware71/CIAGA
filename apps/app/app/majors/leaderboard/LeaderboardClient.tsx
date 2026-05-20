@@ -275,10 +275,13 @@ export default function LeaderboardClient() {
           const score = tab === "competition" ? getScore(row) : null;
           const holes = tab === "competition" ? getHoles(row) : null;
           const live = tab === "competition" ? isLive(row) : false;
-          const isFrozenRow = isFrozen && tab === "competition" && (
-            freeze?.freeze_scope !== "top_x" ||
-            (row.position ?? idx + 1) <= (freeze?.freeze_top_x ?? Infinity)
-          );
+          const threshold = freeze
+            ? freeze.total_holes - (freeze.freeze_last_holes ?? 0)
+            : Infinity;
+          const playerHolesShown = (row as any).holes_shown ?? (isCompetitionRow(row) ? row.holes_completed ?? 0 : 0);
+          const isFrozenRow = isFrozen && tab === "competition" &&
+            playerHolesShown >= threshold &&
+            (freeze?.freeze_scope !== "top_x" || (row.position ?? idx + 1) <= (freeze?.freeze_top_x ?? Infinity));
           const actualHoles: number | undefined = (row as any).actual_holes_completed;
 
           const thruLabel = (() => {
@@ -335,9 +338,16 @@ export default function LeaderboardClient() {
                     <div className="text-xs font-extrabold text-[#f5e6b0]">
                       {formatLeaderboardScore(getToPar(row), score, scoringModel)}
                     </div>
-                    <div className="text-[10px] text-emerald-100/50">
-                      {scoringModel === "stableford_points" ? "pts" : "to par"}
-                    </div>
+                    {scoringModel === "stableford_points" ? (
+                      <div className="text-[10px] text-emerald-100/50">pts</div>
+                    ) : (
+                      <>
+                        <div className="text-[10px] text-emerald-100/50">to par</div>
+                        {(row as any).gross_score != null && (
+                          <div className="text-[10px] text-emerald-100/40">{(row as any).gross_score} gross</div>
+                        )}
+                      </>
+                    )}
                   </>
                 ) : (
                   <>

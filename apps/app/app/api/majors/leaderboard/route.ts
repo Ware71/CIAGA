@@ -174,7 +174,7 @@ async function getFrozenLeaderboard(
     const liveRows = await getCompetitionLeaderboard(competitionId);
     const liveByProfile = Object.fromEntries(liveRows.map((r) => [r.profile_id, r]));
 
-    return frozen.map((row) => {
+    const result = frozen.map((row) => {
       if (row.position > topX) {
         // Replace with live data for this player
         const live = liveByProfile[row.profile_id];
@@ -191,7 +191,10 @@ async function getFrozenLeaderboard(
       }
       return row;
     });
+    result.sort((a, b) => (a.position ?? 999) - (b.position ?? 999));
+    return result;
   }
 
+  frozen.sort((a, b) => (a.position ?? 999) - (b.position ?? 999));
   return frozen;
 }
