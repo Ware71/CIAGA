@@ -25,21 +25,48 @@ async function readAllRows(client: SupabaseClient, table: string): Promise<any[]
   return rows;
 }
 
+function isFKViolation(error: any): boolean {
+  return (
+    error?.code === "23503" ||
+    (error?.message ?? "").toLowerCase().includes("violates foreign key constraint")
+  );
+}
+
 async function insertRows(
   client: SupabaseClient,
   table: string,
   rows: any[],
   transform?: (row: any) => any
-): Promise<number> {
-  if (rows.length === 0) return 0;
+): Promise<{ inserted: number; skipped: number }> {
+  if (rows.length === 0) return { inserted: 0, skipped: 0 };
   const prepared = transform ? rows.map(transform) : rows;
   const chunkSize = 500;
+  let inserted = 0;
+  let skipped = 0;
+
   for (let i = 0; i < prepared.length; i += chunkSize) {
     const chunk = prepared.slice(i, i + chunkSize);
     const { error } = await client.from(table).insert(chunk);
-    if (error) throw Object.assign(new Error(error.message), { code: error.code });
+    if (!error) {
+      inserted += chunk.length;
+    } else if (isFKViolation(error)) {
+      // Chunk contains orphaned rows — fall back to row-by-row and skip bad rows
+      for (const row of chunk) {
+        const { error: rowErr } = await client.from(table).insert(row);
+        if (!rowErr) {
+          inserted++;
+        } else if (isFKViolation(rowErr)) {
+          skipped++;
+        } else {
+          throw Object.assign(new Error(rowErr.message), { code: rowErr.code });
+        }
+      }
+    } else {
+      throw Object.assign(new Error(error.message), { code: error.code });
+    }
   }
-  return prepared.length;
+
+  return { inserted, skipped };
 }
 
 function isTableNotFound(e: any): boolean {
@@ -168,15 +195,15 @@ export async function POST(req: Request) {
         let tablesCopied = 0;
         for (const { table, transform } of TABLE_PLAN) {
           try {
-            const count = await insertRows(
+            const { inserted, skipped } = await insertRows(
               supabaseAdmin as any,
               table,
               snapshot[table],
               transform
             );
-            totalRows += count;
-            if (count > 0) tablesCopied++;
-            send({ type: "write", table, rows: count });
+            totalRows += inserted;
+            if (inserted > 0) tablesCopied++;
+            send({ type: "write", table, rows: inserted, skipped });
           } catch (e: any) {
             send({ type: "write_error", table, message: e?.message ?? "Insert failed" });
           }

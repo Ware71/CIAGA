@@ -16,7 +16,7 @@ type PullEvent =
   | { type: "read"; table: string; rows: number }
   | { type: "skip"; table: string }
   | { type: "wipe" }
-  | { type: "write"; table: string; rows: number }
+  | { type: "write"; table: string; rows: number; skipped: number }
   | { type: "write_error"; table: string; message: string }
   | { type: "done"; tablesCopied: number; rowsCopied: number }
   | { type: "error"; message: string };
@@ -389,7 +389,13 @@ export function SandboxPanel() {
                       return (
                         <div key={i} className="flex justify-between pl-2">
                           <span className="truncate text-slate-500">{ev.table}</span>
-                          <span className="ml-2 shrink-0 text-emerald-600">✓</span>
+                          <span className="ml-2 shrink-0 text-emerald-600">
+                            ✓{ev.skipped > 0 && (
+                              <span className="ml-1 text-amber-600/70">
+                                ({ev.skipped} orphaned)
+                              </span>
+                            )}
+                          </span>
                         </div>
                       );
                     })}
