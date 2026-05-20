@@ -92,7 +92,7 @@ const TABLE_PLAN: Array<{ table: string; transform?: (row: any) => any }> = [
   { table: "rounds" },
   // round_teams must precede round_participants: participants have a nullable FK to teams
   { table: "round_teams" },
-  { table: "round_participants", transform: (row) => ({ ...row, tee_snapshot_id: null }) },
+  { table: "round_participants" },
   { table: "round_hole_states" },
   { table: "round_score_events" },
   // Null source_course_id/source_tee_box_id — these are supplementary back-references
