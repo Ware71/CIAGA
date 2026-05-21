@@ -168,14 +168,86 @@ function ScrollRow({ row }: { row: Row }) {
   );
 }
 
+// ─── Score counter (used in PodiumSlot) ─────────────────────────────────────
+
+function ScoreCounter({ score, textClass }: { score: string; textClass: string }) {
+  const [displayed, setDisplayed] = useState(score === "—" ? score : "");
+  const [settled, setSettled] = useState(score === "—");
+
+  useEffect(() => {
+    if (score === "—") { setDisplayed("—"); setSettled(true); return; }
+    const isPoints = score.endsWith(" pts");
+    const isToPar = score === "E" || /^[+-]\d+$/.test(score);
+    function randomFake(): string {
+      if (isPoints) {
+        const base = parseInt(score, 10) || 36;
+        return `${Math.max(1, base + Math.floor(Math.random() * 20) - 10)} pts`;
+      }
+      if (isToPar) {
+        const n = Math.floor(Math.random() * 14) - 7;
+        return n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`;
+      }
+      return String(68 + Math.floor(Math.random() * 27));
+    }
+    const intervals = [60, 70, 80, 100, 130, 160];
+    let step = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    function tick() {
+      if (step < intervals.length) {
+        setDisplayed(randomFake());
+        timer = setTimeout(tick, intervals[step++]);
+      } else {
+        setDisplayed(score);
+        setSettled(true);
+      }
+    }
+    timer = setTimeout(tick, intervals[step++]);
+    return () => clearTimeout(timer);
+  }, [score]);
+
+  return (
+    <motion.span
+      className={`font-extrabold tabular-nums ${textClass}`}
+      animate={settled ? { scale: [1, 1.4, 1] } : {}}
+      transition={settled ? { duration: 0.35, ease: "easeOut" } : {}}
+    >
+      {displayed}
+    </motion.span>
+  );
+}
+
 // ─── Dramatic Podium ─────────────────────────────────────────────────────────
 
 type PodiumPhase = "bubbles" | "tension" | "popping" | "celebrate";
 
 const PODIUM_COLORS = {
-  1: { border: "border-[#f5e6b0]/70", bg: "bg-[#f5e6b0]/15", text: "text-[#f5e6b0]", height: 100, label: "🏆" },
-  2: { border: "border-slate-400/50",  bg: "bg-slate-800/50",  text: "text-slate-200",  height: 70,  label: "2" },
-  3: { border: "border-amber-700/50",  bg: "bg-amber-900/30",  text: "text-amber-300",  height: 50,  label: "3" },
+  1: {
+    border: "border-[#f5e6b0]/70",
+    bg: "bg-[#f5e6b0]/15",
+    text: "text-[#f5e6b0]",
+    height: "140px",
+    label: "1",
+    gradient: "linear-gradient(180deg, #c9a227 0%, #9a7b1a 40%, #6b5112 100%)",
+    ring: "ring-[#f5e6b0]",
+  },
+  2: {
+    border: "border-slate-400/50",
+    bg: "bg-slate-800/50",
+    text: "text-slate-200",
+    height: "100px",
+    label: "2",
+    gradient: "linear-gradient(180deg, #94a3b8 0%, #64748b 40%, #334155 100%)",
+    ring: "ring-slate-300",
+  },
+  3: {
+    border: "border-amber-700/50",
+    bg: "bg-amber-900/30",
+    text: "text-amber-300",
+    height: "75px",
+    label: "3",
+    gradient: "linear-gradient(180deg, #b45309 0%, #92400e 40%, #5c2d0a 100%)",
+    ring: "ring-amber-600",
+  },
 } as const;
 
 function FloatingBubble({
@@ -187,6 +259,9 @@ function FloatingBubble({
   duration,
   isGrowing,
   isPopped,
+  pulsePeak,
+  pulseDelay,
+  sizeClass,
 }: {
   row: Row;
   startX: number;
@@ -196,37 +271,60 @@ function FloatingBubble({
   duration: number;
   isGrowing: boolean;
   isPopped: boolean;
+  pulsePeak: number;
+  pulseDelay: number;
+  sizeClass: string;
 }) {
   const profile = getProfile(row);
 
   if (isPopped && !isGrowing) return null;
 
   return (
-    <motion.div
-      style={{ position: "absolute", left: startX, top: startY, originX: "50%", originY: "50%" }}
-      animate={
-        isGrowing
-          ? { scale: [1, 2.4, 0], opacity: [1, 1, 0] }
-          : {
-              x: [0, driftX, 0, -driftX * 0.7, 0],
-              y: [0, driftY * 0.6, driftY, driftY * 0.3, 0],
-            }
-      }
-      transition={
-        isGrowing
-          ? { duration: 0.85, times: [0, 0.6, 1], ease: "easeIn" }
-          : { duration, repeat: Infinity, ease: "easeInOut" }
-      }
-      className="w-14 h-14 rounded-full border-2 border-emerald-700/50 bg-emerald-900/60 grid place-items-center overflow-hidden shadow-lg"
-    >
-      {profile?.avatar_url ? (
-        <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
-      ) : (
-        <span className="text-[11px] font-bold text-emerald-200">
-          {profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
-        </span>
+    <>
+      <motion.div
+        style={{ position: "absolute", left: startX, top: startY, originX: "50%", originY: "50%" }}
+        animate={
+          isGrowing
+            ? { scale: [1, 4.0, 0], opacity: [1, 1, 0] }
+            : {
+                x: [0, driftX, 0, -driftX * 0.7, 0],
+                y: [0, driftY * 0.6, driftY, driftY * 0.3, 0],
+                scale: [1, pulsePeak, 0.88, pulsePeak * 0.9, 1],
+              }
+        }
+        transition={
+          isGrowing
+            ? { duration: 0.9, times: [0, 0.6, 1], ease: "easeIn" }
+            : { duration, repeat: Infinity, ease: "easeInOut", delay: pulseDelay }
+        }
+        className={`${sizeClass} rounded-full border-2 border-emerald-700/50 bg-emerald-900/60 grid place-items-center overflow-hidden shadow-lg`}
+      >
+        {profile?.avatar_url ? (
+          <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
+        ) : (
+          <span className="text-[11px] font-bold text-emerald-200">
+            {profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
+          </span>
+        )}
+      </motion.div>
+
+      {isGrowing && (
+        <motion.div
+          style={{
+            position: "absolute",
+            left: startX,
+            top: startY,
+            originX: "50%",
+            originY: "50%",
+            pointerEvents: "none",
+          }}
+          initial={{ scale: 1, opacity: 0.9 }}
+          animate={{ scale: 6, opacity: 0 }}
+          transition={{ duration: 0.7, ease: "easeOut" }}
+          className={`${sizeClass} rounded-full border-2 border-emerald-400/60`}
+        />
       )}
-    </motion.div>
+    </>
   );
 }
 
@@ -247,32 +345,65 @@ function PodiumSlot({
 
   return (
     <div className="flex flex-col items-center" style={{ width: "30%" }}>
-      {/* Card above pedestal */}
-      <div className="mb-1 w-full min-h-[72px] flex flex-col items-center justify-end pb-1">
+      {/* Avatar overlaps the top edge of the podium */}
+      <div className="relative z-10 mb-[-28px]">
         <AnimatePresence>
           {isRevealed && row && (
             <motion.div
-              initial={{ opacity: 0, y: 30, scale: 0.75 }}
+              initial={{ opacity: 0, y: -50, scale: 0.3 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ type: "spring", stiffness: 300, damping: 20 }}
-              className="flex flex-col items-center gap-1"
+              transition={{ type: "spring", stiffness: 320, damping: 22 }}
+              className={`ring-2 ${colors.ring} rounded-full shadow-xl`}
             >
               <AvatarCircle profile={profile} size="lg" />
-              <span className={`text-[11px] font-bold text-center leading-tight ${colors.text} max-w-full px-1 truncate`}>
-                {profile?.name ?? "Unknown"}
-              </span>
-              <span className={`text-xs font-extrabold ${colors.text}`}>{score}</span>
             </motion.div>
           )}
         </AnimatePresence>
+        {!isRevealed && <div className="h-16 w-16 opacity-0" />}
       </div>
 
-      {/* Pedestal */}
+      {/* Podium body */}
       <div
-        className={`w-full rounded-t-lg border-t border-x ${colors.border} ${colors.bg} flex items-center justify-center`}
-        style={{ height: colors.height }}
+        className="w-full rounded-t-lg relative overflow-hidden flex flex-col items-center"
+        style={{ background: colors.gradient, height: colors.height }}
       >
-        <span className={`text-2xl font-black ${colors.text} opacity-40`}>{colors.label}</span>
+        {/* Shine overlay */}
+        <div className="absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-white/15 to-transparent pointer-events-none" />
+
+        {/* Name */}
+        <AnimatePresence>
+          {isRevealed && row && (
+            <motion.span
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.4, duration: 0.4 }}
+              className={`absolute inset-x-0 top-8 text-center text-[10px] font-bold leading-tight px-1 truncate ${colors.text}`}
+            >
+              {profile?.name ?? "Unknown"}
+            </motion.span>
+          )}
+        </AnimatePresence>
+
+        {/* Score counter */}
+        <AnimatePresence>
+          {isRevealed && row && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.5, duration: 0.3 }}
+              className="absolute inset-x-0 top-[52px] flex justify-center"
+            >
+              <ScoreCounter score={score} textClass={`text-xs ${colors.text}`} />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Large background position number */}
+        <span
+          className={`absolute bottom-1.5 inset-x-0 text-center text-4xl font-black ${colors.text} opacity-25 select-none`}
+        >
+          {colors.label}
+        </span>
       </div>
     </div>
   );
@@ -311,6 +442,7 @@ function PodiumRevealInner({
     const W = typeof window !== "undefined" ? window.innerWidth : 390;
     const H = typeof window !== "undefined" ? window.innerHeight : 700;
     const safeH = H * 0.55; // keep bubbles in top 55% (above podium)
+    const SIZE_CLASSES = ["w-12 h-12", "w-14 h-14", "w-16 h-16", "w-20 h-20"] as const;
     return rows.map((_, i) => {
       const seed = i * 7.3 + replayKey * 13.1;
       const rand = (n: number) => Math.abs(Math.sin(seed + n) * 10000) % 1;
@@ -320,6 +452,9 @@ function PodiumRevealInner({
         driftX: (rand(3) - 0.5) * 60,
         driftY: (rand(4) - 0.5) * 40,
         duration: 3.5 + rand(5) * 2.5,
+        pulsePeak: 1.15 + rand(6) * 0.45,
+        pulseDelay: rand(7) * 2,
+        sizeClass: SIZE_CLASSES[Math.floor(rand(8) * 4)],
       };
     });
   }, [rows.length, replayKey]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -332,12 +467,12 @@ function PodiumRevealInner({
     setTickerIdx(0);
   }, [replayKey]);
 
-  // Score ticker
+  // Score ticker — cycles ALL rows rapidly to build tension
   useEffect(() => {
-    if (podiumPhase !== "bubbles" || fieldRows.length === 0) return;
-    const t = setInterval(() => setTickerIdx((i) => (i + 1) % Math.max(1, fieldRows.length)), 1200);
+    if (podiumPhase !== "bubbles" || rows.length === 0) return;
+    const t = setInterval(() => setTickerIdx((i) => (i + 1) % Math.max(1, rows.length)), 400);
     return () => clearInterval(t);
-  }, [podiumPhase, fieldRows.length]);
+  }, [podiumPhase, rows.length]);
 
   // Bubbles → tension
   useEffect(() => {
@@ -362,8 +497,8 @@ function PodiumRevealInner({
       return;
     }
     const pos = revealOrder[nextIdx];
-    // Delay: 800ms gap between reveals; 1600ms before 1st place
-    const delay = pos === 1 ? 1600 : nextIdx === 0 ? 0 : 900;
+    // 3rd/2nd gap: 700ms (quick succession); winner: 2000ms (dramatic pause)
+    const delay = pos === 1 ? 2000 : nextIdx === 0 ? 0 : 700;
 
     const t = setTimeout(() => {
       setGrowingPosition(pos);
@@ -385,7 +520,7 @@ function PodiumRevealInner({
   }, [podiumPhase, onComplete]);
 
   const getRowForPosition = (pos: number) => podiumRows.find((r) => r.position === pos);
-  const tickerRow = fieldRows[tickerIdx % Math.max(1, fieldRows.length)];
+  const tickerRow = rows[tickerIdx % Math.max(1, rows.length)];
 
   return (
     <div className="relative w-full h-full overflow-hidden">
@@ -437,6 +572,9 @@ function PodiumRevealInner({
               duration={d.duration}
               isGrowing={isGrowing}
               isPopped={isPopped}
+              pulsePeak={d.pulsePeak}
+              pulseDelay={d.pulseDelay}
+              sizeClass={d.sizeClass}
             />
           );
         })}
