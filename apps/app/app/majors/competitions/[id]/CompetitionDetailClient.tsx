@@ -2152,7 +2152,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
             rows={leaderboard}
             revealStyle={(leaderboardFreeze?.reveal_style as LeaderboardRevealStyle) ?? "animated"}
             revealTopX={leaderboardFreeze?.reveal_top_x ?? null}
-            scoringModel={competition.scoring_model}
+            scoringModel={competition?.scoring_model}
             onDone={() => setShowReveal(false)}
           />
         )}
