@@ -1433,7 +1433,7 @@ export default function CreateCompetitionClient() {
   ];
 
   return (
-    <div className="min-h-[100dvh] pb-[env(safe-area-inset-bottom)] px-4 pt-8 max-w-sm mx-auto flex flex-col">
+    <div className="h-[100dvh] pb-[env(safe-area-inset-bottom)] px-4 pt-8 max-w-sm mx-auto flex flex-col">
       <div className="flex items-center justify-between mb-6">
         <button
           type="button"
@@ -1472,10 +1472,11 @@ export default function CreateCompetitionClient() {
         <AnimatePresence mode="wait">
           <motion.div
             key={step}
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             transition={{ duration: 0.18 }}
+            className="pb-4"
           >
             {steps[step]}
           </motion.div>
