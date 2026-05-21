@@ -97,7 +97,7 @@ export type StandingsContribution = "event_only" | "season" | "both";
 
 export type LeaderboardFreezeScope = "all" | "top_x";
 export type LeaderboardFreezeState = "live" | "frozen" | "revealed";
-export type LeaderboardRevealStyle = "none" | "animated";
+export type LeaderboardRevealStyle = "none" | "animated" | "suspense" | "rapid";
 
 export type LeaderboardFreezeConfig = {
   leaderboard_freeze_last_holes: number | null;
