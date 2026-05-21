@@ -371,6 +371,7 @@ export default function LeaderboardClient() {
           rows={compRows as LeaderboardEntryWithProfile[]}
           revealStyle={freeze.reveal_style}
           revealTopX={freeze.reveal_top_x}
+          scoringModel={scoringModel}
           onDone={() => setShowReveal(false)}
         />
       )}

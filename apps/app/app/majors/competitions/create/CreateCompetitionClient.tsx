@@ -63,7 +63,7 @@ type FormState = {
   freeze_scope: "all" | "top_x";
   freeze_top_x: string;
   freeze_auto_reveal: boolean;
-  reveal_style: "none" | "animated" | "suspense" | "rapid";
+  reveal_style: "none" | "animated" | "suspense" | "rapid" | "podium";
   reveal_top_x: string;
 };
 
@@ -169,16 +169,18 @@ function PointsTableEditor({
 }
 
 const REVEAL_MODES = [
-  { value: "none",     label: "Instant",     desc: "Results appear immediately" },
-  { value: "animated", label: "Classic",     desc: "Sequential reveal, 1.5 s each" },
-  { value: "suspense", label: "Suspense",    desc: "Cards flip one by one — slow & dramatic" },
-  { value: "rapid",    label: "Rapid fire",  desc: "Fast cascade through the field" },
+  { value: "none",     label: "Instant",          desc: "Results appear immediately" },
+  { value: "animated", label: "Classic",           desc: "Sequential reveal, 1.5 s each" },
+  { value: "suspense", label: "Suspense",          desc: "Cards flip one by one — slow & dramatic" },
+  { value: "rapid",    label: "Rapid fire",        desc: "Fast cascade through the field" },
+  { value: "podium",   label: "Dramatic Podium",   desc: "Floating field, podium pop reveal" },
 ] as const;
 
 const PREVIEW_TIMING: Record<string, { countdown: number; interval: number }> = {
   animated: { countdown: 2000, interval: 800 },
   suspense: { countdown: 2500, interval: 1400 },
   rapid:    { countdown: 1000, interval: 300 },
+  podium:   { countdown: 0,    interval: 900 },
 };
 
 const PREVIEW_ROWS = [
@@ -217,7 +219,79 @@ function SuspensePreviewCard({ row, flipped }: { row: typeof PREVIEW_ROWS[0]; fl
   );
 }
 
-function RevealModePreview({ mode }: { mode: "animated" | "suspense" | "rapid" }) {
+const PODIUM_PREVIEW_POSITIONS = [
+  { pos: 2, initials: "SP", color: "border-slate-400/50 bg-slate-800/50", h: 36, label: "2" },
+  { pos: 1, initials: "JS", color: "border-[#f5e6b0]/60 bg-[#f5e6b0]/10", h: 52, label: "🏆" },
+  { pos: 3, initials: "MJ", color: "border-amber-700/50 bg-amber-900/30", h: 26, label: "3" },
+] as const;
+
+function PodiumPreview() {
+  const [popped, setPopped] = useState<number[]>([]);
+
+  useEffect(() => {
+    setPopped([]);
+    const order = Math.random() < 0.5 ? [2, 3, 1] : [3, 2, 1];
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    order.forEach((pos, i) => {
+      timers.push(setTimeout(() => setPopped((p) => [...p, pos]), 800 + i * 900));
+    });
+    timers.push(setTimeout(() => { setPopped([]); }, 800 + 3 * 900 + 1500));
+    return () => timers.forEach(clearTimeout);
+  }, []);
+
+  // Re-loop
+  useEffect(() => {
+    if (popped.length === 0) return;
+  }, [popped]);
+
+  return (
+    <div className="relative w-full" style={{ height: 160 }}>
+      {/* Floating bubbles */}
+      {PODIUM_PREVIEW_POSITIONS.map(({ pos, initials }, i) => {
+        const isPopped = popped.includes(pos);
+        if (isPopped) return null;
+        return (
+          <motion.div
+            key={pos}
+            style={{ position: "absolute", left: `${18 + i * 28}%`, top: `${12 + (i % 2) * 18}%` }}
+            animate={{ y: [0, -8, 0, 8, 0] }}
+            transition={{ duration: 2.5 + i * 0.4, repeat: Infinity, ease: "easeInOut" }}
+            className="w-9 h-9 rounded-full border border-emerald-700/50 bg-emerald-900/60 grid place-items-center text-[9px] font-bold text-emerald-200"
+          >
+            {initials}
+          </motion.div>
+        );
+      })}
+
+      {/* Podium pedestals at bottom */}
+      <div className="absolute bottom-0 left-0 right-0 flex items-end justify-center gap-1 px-6">
+        {PODIUM_PREVIEW_POSITIONS.map(({ pos, initials, color, h, label }) => (
+          <div key={pos} className="flex flex-col items-center" style={{ width: "30%" }}>
+            <div className="mb-0.5 min-h-[32px] flex flex-col items-center justify-end">
+              <AnimatePresence>
+                {popped.includes(pos) && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.6, y: 10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    transition={{ type: "spring", stiffness: 320, damping: 18 }}
+                    className="flex flex-col items-center gap-0.5"
+                  >
+                    <div className="w-7 h-7 rounded-full border border-emerald-700/50 bg-emerald-900/60 grid place-items-center text-[8px] font-bold text-emerald-200">{initials}</div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+            <div className={`w-full rounded-t border-t border-x ${color} flex items-center justify-center`} style={{ height: h }}>
+              <span className="text-[10px] font-black text-emerald-200/30">{label}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RevealModePreview({ mode }: { mode: "animated" | "suspense" | "rapid" | "podium" }) {
   const [phase, setPhase] = useState<"countdown" | "reveal" | "pause">("countdown");
   const [revealedCount, setRevealedCount] = useState(0);
   const [flippedCount, setFlippedCount] = useState(0);
@@ -239,16 +313,16 @@ function RevealModePreview({ mode }: { mode: "animated" | "suspense" | "rapid" }
     return () => clearInterval(t);
   }, [phase, mode]);
 
-  // Countdown → reveal
+  // Countdown → reveal (non-podium only)
   useEffect(() => {
-    if (phase !== "countdown") return;
+    if (mode === "podium" || phase !== "countdown") return;
     const t = setTimeout(() => { setPhase("reveal"); }, countdown);
     return () => clearTimeout(t);
   }, [phase, countdown, mode]);
 
   // Reveal tick
   useEffect(() => {
-    if (phase !== "reveal") return;
+    if (mode === "podium" || phase !== "reveal") return;
     if (revealedCount >= PREVIEW_ROWS.length) {
       const t = setTimeout(() => {
         setPhase("pause");
@@ -263,7 +337,7 @@ function RevealModePreview({ mode }: { mode: "animated" | "suspense" | "rapid" }
     }
     const t = setTimeout(() => setRevealedCount((c) => c + 1), interval);
     return () => clearTimeout(t);
-  }, [phase, revealedCount, interval]);
+  }, [mode, phase, revealedCount, interval]);
 
   // Suspense flip: 1 s after each card appears
   useEffect(() => {
@@ -282,79 +356,86 @@ function RevealModePreview({ mode }: { mode: "animated" | "suspense" | "rapid" }
   return (
     <div className="rounded-xl border border-emerald-900/40 bg-[#051a0d]/80 overflow-hidden" style={{ height: 210 }}>
       <div className="text-[9px] uppercase tracking-wider text-emerald-200/30 px-3 pt-2 pb-1">Preview</div>
-      <div className="flex flex-col items-center justify-center" style={{ height: 178 }}>
-        <AnimatePresence mode="wait">
-          {phase === "countdown" && (
-            <motion.div key="cd" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-center space-y-2">
-              {mode === "suspense" ? (
-                <>
-                  <AnimatePresence mode="wait">
-                    <motion.p key={labelIdx} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} className="text-[#f5e6b0] text-xs font-bold tracking-widest uppercase">
-                      {SUSPENSE_LABELS[labelIdx]}
-                    </motion.p>
-                  </AnimatePresence>
-                  <div className="flex justify-center gap-1.5">
-                    {[0, 1, 2, 3].map((i) => (
-                      <motion.div key={i} className="w-1.5 h-1.5 rounded-full bg-[#f5e6b0]"
-                        animate={{ opacity: [0.15, 1, 0.15], scale: [0.8, 1.2, 0.8] }}
-                        transition={{ duration: 1.6, repeat: Infinity, delay: i * 0.4 }} />
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <p className="text-[#f5e6b0] text-xs font-bold tracking-widest uppercase">
-                    {mode === "rapid" ? "Stand by…" : "Results incoming"}
-                  </p>
-                  <div className="flex justify-center gap-1">
-                    {[0, 1, 2].map((i) => (
-                      <motion.div key={i} className="w-1.5 h-1.5 rounded-full bg-emerald-400"
-                        animate={{ opacity: [0.2, 1, 0.2] }}
-                        transition={{ duration: mode === "rapid" ? 0.5 : 1.0, repeat: Infinity, delay: i * 0.3 }} />
-                    ))}
-                  </div>
-                </>
-              )}
-            </motion.div>
-          )}
+      <div className="flex flex-col items-center justify-center px-3" style={{ height: 178 }}>
 
-          {(phase === "reveal" || phase === "pause") && (
-            <motion.div key="rv" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full px-3 space-y-1.5">
-              <AnimatePresence>
-                {mode === "suspense"
-                  ? visibleRows.map((row, i) => (
-                      <SuspensePreviewCard key={row.pos} row={row} flipped={i < flippedCount} />
-                    ))
-                  : visibleRows.map((row) => {
-                      const isWinner = row.pos === 1;
-                      return (
-                        <motion.div key={row.pos}
-                          initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          transition={springProps}
-                          className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${
-                            isWinner ? "border-[#f5e6b0]/50 bg-[#f5e6b0]/10" : "border-emerald-900/50 bg-[#0b3b21]/70"
-                          }`}
-                        >
-                          <span className="w-5 text-center text-[10px] font-extrabold text-[#f5e6b0]/70">
-                            {isWinner ? "🏆" : row.pos}
-                          </span>
-                          <div className="h-6 w-6 rounded-full bg-emerald-900/60 grid place-items-center text-[9px] font-bold text-emerald-200 shrink-0">
-                            {row.initials}
-                          </div>
-                          <span className={`flex-1 text-[11px] font-semibold truncate ${isWinner ? "text-[#f5e6b0]" : "text-emerald-50"}`}>
-                            {row.name}
-                          </span>
-                          <span className={`text-[10px] font-extrabold shrink-0 ${isWinner ? "text-[#f5e6b0]" : "text-[#f5e6b0]/80"}`}>
-                            {row.score}
-                          </span>
-                        </motion.div>
-                      );
-                    })}
-              </AnimatePresence>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* Podium preview */}
+        {mode === "podium" && <PodiumPreview />}
+
+        {/* All other modes */}
+        {mode !== "podium" && (
+          <AnimatePresence mode="wait">
+            {phase === "countdown" && (
+              <motion.div key="cd" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-center space-y-2">
+                {mode === "suspense" ? (
+                  <>
+                    <AnimatePresence mode="wait">
+                      <motion.p key={labelIdx} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} className="text-[#f5e6b0] text-xs font-bold tracking-widest uppercase">
+                        {SUSPENSE_LABELS[labelIdx]}
+                      </motion.p>
+                    </AnimatePresence>
+                    <div className="flex justify-center gap-1.5">
+                      {[0, 1, 2, 3].map((i) => (
+                        <motion.div key={i} className="w-1.5 h-1.5 rounded-full bg-[#f5e6b0]"
+                          animate={{ opacity: [0.15, 1, 0.15], scale: [0.8, 1.2, 0.8] }}
+                          transition={{ duration: 1.6, repeat: Infinity, delay: i * 0.4 }} />
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-[#f5e6b0] text-xs font-bold tracking-widest uppercase">
+                      {mode === "rapid" ? "Stand by…" : "Results incoming"}
+                    </p>
+                    <div className="flex justify-center gap-1">
+                      {[0, 1, 2].map((i) => (
+                        <motion.div key={i} className="w-1.5 h-1.5 rounded-full bg-emerald-400"
+                          animate={{ opacity: [0.2, 1, 0.2] }}
+                          transition={{ duration: mode === "rapid" ? 0.5 : 1.0, repeat: Infinity, delay: i * 0.3 }} />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </motion.div>
+            )}
+
+            {(phase === "reveal" || phase === "pause") && (
+              <motion.div key="rv" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full space-y-1.5">
+                <AnimatePresence>
+                  {mode === "suspense"
+                    ? visibleRows.map((row, i) => (
+                        <SuspensePreviewCard key={row.pos} row={row} flipped={i < flippedCount} />
+                      ))
+                    : visibleRows.map((row) => {
+                        const isWinner = row.pos === 1;
+                        return (
+                          <motion.div key={row.pos}
+                            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            transition={springProps}
+                            className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${
+                              isWinner ? "border-[#f5e6b0]/50 bg-[#f5e6b0]/10" : "border-emerald-900/50 bg-[#0b3b21]/70"
+                            }`}
+                          >
+                            <span className="w-5 text-center text-[10px] font-extrabold text-[#f5e6b0]/70">
+                              {isWinner ? "🏆" : row.pos}
+                            </span>
+                            <div className="h-6 w-6 rounded-full bg-emerald-900/60 grid place-items-center text-[9px] font-bold text-emerald-200 shrink-0">
+                              {row.initials}
+                            </div>
+                            <span className={`flex-1 text-[11px] font-semibold truncate ${isWinner ? "text-[#f5e6b0]" : "text-emerald-50"}`}>
+                              {row.name}
+                            </span>
+                            <span className={`text-[10px] font-extrabold shrink-0 ${isWinner ? "text-[#f5e6b0]" : "text-[#f5e6b0]/80"}`}>
+                              {row.score}
+                            </span>
+                          </motion.div>
+                        );
+                      })}
+                </AnimatePresence>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        )}
       </div>
     </div>
   );
