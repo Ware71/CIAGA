@@ -369,7 +369,7 @@ export default function LeaderboardClient() {
       {showReveal && freeze && tab === "competition" && (
         <LeaderboardReveal
           rows={compRows as LeaderboardEntryWithProfile[]}
-          revealStyle="animated"
+          revealStyle={freeze.reveal_style}
           revealTopX={freeze.reveal_top_x}
           onDone={() => setShowReveal(false)}
         />

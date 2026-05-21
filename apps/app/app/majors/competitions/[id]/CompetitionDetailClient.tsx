@@ -16,6 +16,7 @@ import type {
   CompetitionWinningWithProfile,
   ProposedWinning,
   CompetitionWaitlistEntry,
+  LeaderboardRevealStyle,
 } from "@/lib/majors/types";
 import { COMP_TYPES, SCORING_MODELS, POINTS_MODELS } from "@/lib/competitions/constants";
 import { HandicapRulesEditor } from "@/components/competitions/HandicapRulesEditor";
@@ -1978,9 +1979,22 @@ export default function CompetitionDetailClient({ competitionId }: { competition
               type="button"
               onClick={handleReveal}
               disabled={revealLoading}
-              className="w-full py-3 mb-2 rounded-full bg-[#f5e6b0] text-[#042713] text-sm font-semibold disabled:opacity-50"
+              className={`w-full py-2 mb-1.5 rounded-full text-xs transition-colors disabled:opacity-30 ${
+                leaderboardFreeze?.freeze_state === "frozen"
+                  ? "border border-emerald-600/35 text-emerald-300/60 hover:text-emerald-100 hover:border-emerald-500/50"
+                  : "text-emerald-200/25 hover:text-emerald-200/50"
+              }`}
             >
-              {revealLoading ? "Revealing…" : leaderboardFreeze?.freeze_state === "frozen" ? "Reveal Results" : "Start Ceremony"}
+              {revealLoading ? "…" : leaderboardFreeze?.freeze_state === "frozen" ? "Reveal Results" : "Start Ceremony"}
+            </button>
+          )}
+          {isAdminOrOwner && leaderboardFreeze?.freeze_state === "revealed" && (
+            <button
+              type="button"
+              onClick={() => setShowReveal(true)}
+              className="w-full py-1 mb-1.5 text-[11px] text-emerald-200/25 hover:text-emerald-200/50 transition-colors"
+            >
+              ↺ Replay ceremony
             </button>
           )}
         <div className="space-y-2">
@@ -2136,7 +2150,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
         {showReveal && (
           <LeaderboardReveal
             rows={leaderboard}
-            revealStyle="animated"
+            revealStyle={(leaderboardFreeze?.reveal_style as LeaderboardRevealStyle) ?? "animated"}
             revealTopX={leaderboardFreeze?.reveal_top_x ?? null}
             onDone={() => setShowReveal(false)}
           />
