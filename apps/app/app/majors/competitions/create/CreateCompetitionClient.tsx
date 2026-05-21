@@ -220,72 +220,151 @@ function SuspensePreviewCard({ row, flipped }: { row: typeof PREVIEW_ROWS[0]; fl
 }
 
 const PODIUM_PREVIEW_POSITIONS = [
-  { pos: 2, initials: "SP", color: "border-slate-400/50 bg-slate-800/50", h: 36, label: "2" },
-  { pos: 1, initials: "JS", color: "border-[#f5e6b0]/60 bg-[#f5e6b0]/10", h: 52, label: "🏆" },
-  { pos: 3, initials: "MJ", color: "border-amber-700/50 bg-amber-900/30", h: 26, label: "3" },
+  {
+    pos: 2 as const, initials: "SP", name: "S. Park",  score: "72",
+    gradient: "linear-gradient(180deg, #94a3b8 0%, #64748b 40%, #334155 100%)",
+    ring: "ring-slate-300", text: "text-slate-200", h: 52, label: "2",
+    bLeft: "16%", bTop: "8%",  bSize: "w-9 h-9",  pulsePeak: 1.25, pulseDur: 3.2,
+  },
+  {
+    pos: 1 as const, initials: "JS", name: "J. Smith", score: "-2",
+    gradient: "linear-gradient(180deg, #c9a227 0%, #9a7b1a 40%, #6b5112 100%)",
+    ring: "ring-[#f5e6b0]", text: "text-[#f5e6b0]", h: 70, label: "1",
+    bLeft: "44%", bTop: "4%",  bSize: "w-11 h-11", pulsePeak: 1.35, pulseDur: 2.7,
+  },
+  {
+    pos: 3 as const, initials: "MJ", name: "M. Jones", score: "+4",
+    gradient: "linear-gradient(180deg, #b45309 0%, #92400e 40%, #5c2d0a 100%)",
+    ring: "ring-amber-600", text: "text-amber-200", h: 38, label: "3",
+    bLeft: "68%", bTop: "18%", bSize: "w-8 h-8",  pulsePeak: 1.2,  pulseDur: 3.8,
+  },
 ] as const;
 
 function PodiumPreview() {
   const [popped, setPopped] = useState<number[]>([]);
+  const [growing, setGrowing] = useState<number | null>(null);
+  const [replayKey, setReplayKey] = useState(0);
 
   useEffect(() => {
     setPopped([]);
-    const order = Math.random() < 0.5 ? [2, 3, 1] : [3, 2, 1];
+    setGrowing(null);
+    const order: number[] = Math.random() < 0.5 ? [2, 3, 1] : [3, 2, 1];
     const timers: ReturnType<typeof setTimeout>[] = [];
-    order.forEach((pos, i) => {
-      timers.push(setTimeout(() => setPopped((p) => [...p, pos]), 800 + i * 900));
-    });
-    timers.push(setTimeout(() => { setPopped([]); }, 800 + 3 * 900 + 1500));
-    return () => timers.forEach(clearTimeout);
-  }, []);
 
-  // Re-loop
-  useEffect(() => {
-    if (popped.length === 0) return;
-  }, [popped]);
+    let t = 600;
+    order.forEach((pos, i) => {
+      if (i > 0) t += pos === 1 ? 1400 : 600;
+      const captured = t;
+      timers.push(setTimeout(() => {
+        setGrowing(pos);
+        timers.push(setTimeout(() => { setPopped((p) => [...p, pos]); setGrowing(null); }, 520));
+      }, captured));
+    });
+
+    timers.push(setTimeout(() => setReplayKey((k) => k + 1), t + 2500));
+    return () => timers.forEach(clearTimeout);
+  }, [replayKey]);
 
   return (
-    <div className="relative w-full" style={{ height: 160 }}>
+    <div className="relative w-full" style={{ height: 200 }}>
       {/* Floating bubbles */}
-      {PODIUM_PREVIEW_POSITIONS.map(({ pos, initials }, i) => {
+      {PODIUM_PREVIEW_POSITIONS.map(({ pos, initials, bLeft, bTop, bSize, pulsePeak, pulseDur }) => {
         const isPopped = popped.includes(pos);
-        if (isPopped) return null;
+        const isGrowing = growing === pos;
+        if (isPopped && !isGrowing) return null;
         return (
-          <motion.div
-            key={pos}
-            style={{ position: "absolute", left: `${18 + i * 28}%`, top: `${12 + (i % 2) * 18}%` }}
-            animate={{ y: [0, -8, 0, 8, 0] }}
-            transition={{ duration: 2.5 + i * 0.4, repeat: Infinity, ease: "easeInOut" }}
-            className="w-9 h-9 rounded-full border border-emerald-700/50 bg-emerald-900/60 grid place-items-center text-[9px] font-bold text-emerald-200"
-          >
-            {initials}
-          </motion.div>
+          <div key={pos}>
+            <motion.div
+              style={{ position: "absolute", left: bLeft, top: bTop, originX: "50%", originY: "50%" }}
+              animate={
+                isGrowing
+                  ? { scale: [1, 3.5, 0], opacity: [1, 1, 0] }
+                  : { scale: [1, pulsePeak, 0.88, pulsePeak * 0.9, 1] }
+              }
+              transition={
+                isGrowing
+                  ? { duration: 0.85, times: [0, 0.6, 1], ease: "easeIn" }
+                  : { duration: pulseDur, repeat: Infinity, ease: "easeInOut" }
+              }
+              className={`${bSize} rounded-full border border-emerald-700/50 bg-emerald-900/60 grid place-items-center text-[9px] font-bold text-emerald-200`}
+            >
+              {initials}
+            </motion.div>
+            {isGrowing && (
+              <motion.div
+                style={{ position: "absolute", left: bLeft, top: bTop, originX: "50%", originY: "50%", pointerEvents: "none" }}
+                initial={{ scale: 1, opacity: 0.8 }}
+                animate={{ scale: 5, opacity: 0 }}
+                transition={{ duration: 0.6, ease: "easeOut" }}
+                className={`${bSize} rounded-full border border-emerald-400/60`}
+              />
+            )}
+          </div>
         );
       })}
 
-      {/* Podium pedestals at bottom */}
-      <div className="absolute bottom-0 left-0 right-0 flex items-end justify-center gap-1 px-6">
-        {PODIUM_PREVIEW_POSITIONS.map(({ pos, initials, color, h, label }) => (
-          <div key={pos} className="flex flex-col items-center" style={{ width: "30%" }}>
-            <div className="mb-0.5 min-h-[32px] flex flex-col items-center justify-end">
-              <AnimatePresence>
-                {popped.includes(pos) && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.6, y: 10 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    transition={{ type: "spring", stiffness: 320, damping: 18 }}
-                    className="flex flex-col items-center gap-0.5"
-                  >
-                    <div className="w-7 h-7 rounded-full border border-emerald-700/50 bg-emerald-900/60 grid place-items-center text-[8px] font-bold text-emerald-200">{initials}</div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+      {/* Podium */}
+      <div className="absolute bottom-0 left-0 right-0 flex items-end justify-center gap-1 px-4">
+        {PODIUM_PREVIEW_POSITIONS.map(({ pos, initials, name, score, gradient, ring, text, h, label }) => {
+          const isRevealed = popped.includes(pos);
+          return (
+            <div key={pos} className="flex flex-col items-center" style={{ width: "30%" }}>
+              {/* Avatar */}
+              <div className="relative z-10 mb-[-10px]">
+                <AnimatePresence>
+                  {isRevealed && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -30, scale: 0.3 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      transition={{ type: "spring", stiffness: 320, damping: 22 }}
+                      className={`ring-1 ${ring} rounded-full shadow-lg`}
+                    >
+                      <div className="w-7 h-7 rounded-full bg-emerald-900/60 grid place-items-center text-[8px] font-bold text-emerald-200">
+                        {initials}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+                {!isRevealed && <div className="w-7 h-7 opacity-0" />}
+              </div>
+
+              {/* Podium body */}
+              <div
+                className="w-full rounded-t relative overflow-hidden"
+                style={{ background: gradient, height: h }}
+              >
+                <div className="absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-white/15 to-transparent pointer-events-none" />
+                <AnimatePresence>
+                  {isRevealed && (
+                    <motion.span
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: 0.4, duration: 0.3 }}
+                      className={`absolute inset-x-0 top-3 text-center text-[8px] font-bold leading-tight px-0.5 truncate ${text}`}
+                    >
+                      {name}
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+                <AnimatePresence>
+                  {isRevealed && (
+                    <motion.span
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: 0.6, duration: 0.3 }}
+                      className={`absolute inset-x-0 top-[22px] text-center text-[9px] font-extrabold ${text}`}
+                    >
+                      {score}
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+                <span className={`absolute bottom-0.5 inset-x-0 text-center text-xl font-black ${text} opacity-20 select-none`}>
+                  {label}
+                </span>
+              </div>
             </div>
-            <div className={`w-full rounded-t border-t border-x ${color} flex items-center justify-center`} style={{ height: h }}>
-              <span className="text-[10px] font-black text-emerald-200/30">{label}</span>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
