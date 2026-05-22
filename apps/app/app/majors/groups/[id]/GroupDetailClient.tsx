@@ -182,6 +182,7 @@ function MemberRow({
 export default function GroupDetailClient({ groupId }: { groupId: string }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("overview");
+  const [compSubTab, setCompSubTab] = useState<"active" | "completed">("active");
   const [group, setGroup] = useState<GroupData | null>(null);
   const [competitions, setCompetitions] = useState<CompetitionWithGroup[]>([]);
   const [standings, setStandings] = useState<GroupStandingWithProfile[]>([]);
@@ -562,10 +563,39 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             + New Competition
           </button>
         )}
-        {competitions.length === 0 && (
-          <div className="text-sm text-emerald-100/60 text-center py-8">No competitions yet.</div>
+
+        {/* Sub-tabs */}
+        <div className="flex gap-1.5">
+          {(["active", "completed"] as const).map((st) => {
+            const count = st === "active" ? upcomingComps.length : completedComps.length;
+            return (
+              <button
+                key={st}
+                type="button"
+                onClick={() => setCompSubTab(st)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                  compSubTab === st
+                    ? "bg-emerald-700 text-white"
+                    : "border border-emerald-900/60 text-emerald-200/70 hover:text-emerald-50"
+                }`}
+              >
+                <span className="capitalize">{st === "active" ? "Active" : "Completed"}</span>
+                <span className={`text-[10px] ${compSubTab === st ? "text-emerald-200" : "text-emerald-200/50"}`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Competition list */}
+        {compSubTab === "active" && upcomingComps.length === 0 && (
+          <div className="text-sm text-emerald-100/60 text-center py-8">No upcoming or live competitions.</div>
         )}
-        {competitions.map((c) => (
+        {compSubTab === "completed" && completedComps.length === 0 && (
+          <div className="text-sm text-emerald-100/60 text-center py-8">No completed competitions yet.</div>
+        )}
+        {(compSubTab === "active" ? upcomingComps : completedComps).map((c) => (
           <button
             key={c.id}
             type="button"

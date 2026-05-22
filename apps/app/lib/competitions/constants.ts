@@ -47,11 +47,11 @@ export const SCORING_MODELS: { value: CompetitionScoringModel; label: string; sh
   { value: "match_result", label: "Match Result", shortLabel: "Match Result" },
 ];
 
-export const POINTS_MODELS: { value: CompetitionPointsModel; label: string; shortLabel: string }[] = [
+export const POINTS_MODELS: { value: CompetitionPointsModel; label: string; shortLabel: string; desc?: string }[] = [
   { value: "none", label: "No points (event result only)", shortLabel: "None" },
   { value: "fedex_style", label: "FedEx-style season points", shortLabel: "FedEx-style" },
-  { value: "position_based", label: "Position-based points", shortLabel: "Position-based" },
-  { value: "custom_table", label: "Custom points table", shortLabel: "Custom table" },
+  { value: "position_based", label: "Position-based points", shortLabel: "Position-based", desc: "Fixed points per finishing position" },
+  { value: "custom_table", label: "Custom points table", shortLabel: "Custom table", desc: "Set your own points for each position" },
 ];
 
 export const STANDINGS_CONTRIBUTIONS = [

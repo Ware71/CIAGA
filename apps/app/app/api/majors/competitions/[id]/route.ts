@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 import { getCompetitionById } from "@/lib/majors/queries";
+import { reconcileCompetitionStatus } from "@/lib/majors/reconcileStatus";
 
 export const runtime = "nodejs";
 
@@ -10,6 +11,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   try {
     await getAuthedProfileOrThrow(req);
     const { id } = await params;
+
+    await reconcileCompetitionStatus(id);
 
     const competition = await getCompetitionById(id);
     if (!competition) return NextResponse.json({ error: "Competition not found" }, { status: 404 });

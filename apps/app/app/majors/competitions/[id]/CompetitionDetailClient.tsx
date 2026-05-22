@@ -1023,6 +1023,9 @@ function CompetitionSetupSheet({
   const [courseId, setCourseId] = useState(competition.course_id ?? "");
   const [courseName, setCourseName] = useState(competition.course?.name ?? "");
   const [showCoursePicker, setShowCoursePicker] = useState(false);
+  const [setupTeeBoxes, setSetupTeeBoxes] = useState<TeeBoxOption[]>([]);
+  const [setupMaleTeeId, setSetupMaleTeeId] = useState("");
+  const [setupFemaleTeeId, setSetupFemaleTeeId] = useState("");
   const [selectedCompType, setSelectedCompType] = useState<string>(compType ?? "stroke");
   const [scoringModel, setScoringModel] = useState<string>(competition.scoring_model ?? "net");
   const [pointsModel, setPointsModel] = useState<string>(competition.points_model ?? "none");
@@ -1033,9 +1036,16 @@ function CompetitionSetupSheet({
   const [handicapMode, setHandicapMode] = useState<string>((handicap.mode as string) ?? "allowance_pct");
   const [handicapPct, setHandicapPct] = useState(handicap.allowance_pct != null ? String(handicap.allowance_pct) : "100");
   const [handicapMax, setHandicapMax] = useState(handicap.max_handicap != null ? String(handicap.max_handicap) : "");
+  const [majorsStatus, setMajorsStatus] = useState<string>(competition.majors_status ?? "upcoming");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!courseId) { setSetupTeeBoxes([]); setSetupMaleTeeId(""); setSetupFemaleTeeId(""); return; }
+    fetch(`/api/courses/tee-boxes?course_id=${courseId}`)
+      .then((r) => r.json())
+      .then((j) => setSetupTeeBoxes(j.tee_boxes ?? []));
+  }, [courseId]);
 
   const handleSave = async () => {
     if (!name.trim()) return;
@@ -1071,10 +1081,37 @@ function CompetitionSetupSheet({
           rules_text: rulesText.trim() || null,
           standings_contribution: standingsContrib,
           tee_time_mode: teeTimeMode,
+          majors_status: majorsStatus,
         }),
       });
       const json = await res.json();
       if (!res.ok) { setError(json.error ?? "Save failed"); return; }
+
+      // If tees were selected, apply to all rounds that share this course
+      if (courseId && (setupMaleTeeId || setupFemaleTeeId)) {
+        const roundsRes = await fetch(`/api/majors/competitions/${competition.id}/rounds`, {
+          headers: { Authorization: `Bearer ${session.accessToken}` },
+        });
+        if (roundsRes.ok) {
+          const rj = await roundsRes.json();
+          const rounds: { id: string; course_id: string | null }[] = rj.rounds ?? [];
+          await Promise.all(
+            rounds
+              .filter((r) => !r.course_id || r.course_id === courseId)
+              .map((r) =>
+                fetch(`/api/majors/competitions/${competition.id}/rounds/${r.id}`, {
+                  method: "PATCH",
+                  headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    ...(setupMaleTeeId ? { default_tee_box_id_male: setupMaleTeeId } : {}),
+                    ...(setupFemaleTeeId ? { default_tee_box_id_female: setupFemaleTeeId } : {}),
+                  }),
+                })
+              )
+          );
+        }
+      }
+
       onSaved({
         ...competition,
         ...json.competition,
@@ -1096,6 +1133,26 @@ function CompetitionSetupSheet({
         <div className="text-sm font-semibold text-emerald-50">Edit Competition Setup</div>
 
         <div className="space-y-4 pb-6">
+          {/* Status */}
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Status</label>
+            <div className="grid grid-cols-4 gap-1">
+              {(["upcoming", "live", "completed", "cancelled"] as const).map((s) => (
+                <button key={s} type="button" onClick={() => setMajorsStatus(s)}
+                  className={`rounded-xl border px-2 py-1.5 text-[10px] text-center capitalize transition-colors ${
+                    majorsStatus === s
+                      ? s === "live" ? "border-amber-600 bg-amber-900/40 text-amber-200"
+                        : s === "completed" ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
+                        : s === "cancelled" ? "border-red-700 bg-red-900/30 text-red-300"
+                        : "border-emerald-500 bg-emerald-900/50 text-emerald-50"
+                      : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"
+                  }`}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Name */}
           <div className="space-y-1">
             <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Name *</label>
@@ -1152,6 +1209,40 @@ function CompetitionSetupSheet({
               onSelect={(id, name) => { setCourseId(id); setCourseName(name ?? ""); setShowCoursePicker(false); }}
             />
           </div>
+
+          {/* Default tee boxes — shown once a course is selected */}
+          {courseId && setupTeeBoxes.length > 0 && (
+            <div className="grid grid-cols-2 gap-1.5">
+              {[
+                {
+                  label: "Men's tee",
+                  value: setupMaleTeeId,
+                  set: setSetupMaleTeeId,
+                  options: setupTeeBoxes.filter((t) => !t.gender || t.gender === "male" || t.gender === "unisex"),
+                },
+                {
+                  label: "Women's tee",
+                  value: setupFemaleTeeId,
+                  set: setSetupFemaleTeeId,
+                  options: setupTeeBoxes.filter((t) => !t.gender || t.gender === "female" || t.gender === "unisex"),
+                },
+              ].map(({ label, value, set, options }) => (
+                <div key={label} className="space-y-1">
+                  <label className="text-[10px] uppercase tracking-wider text-emerald-200/50">{label}</label>
+                  <select
+                    value={value}
+                    onChange={(e) => set(e.target.value)}
+                    className="w-full rounded-xl bg-emerald-900/20 border border-emerald-800/40 px-2 py-1.5 text-[11px] text-emerald-50 focus:outline-none [color-scheme:dark]"
+                  >
+                    <option value="">— optional —</option>
+                    {options.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Format */}
           {!isAggregate && (
@@ -1234,6 +1325,11 @@ function CompetitionSetupSheet({
                 </button>
               ))}
             </div>
+            <p className="text-[10px] text-emerald-200/45 leading-relaxed mt-1">
+              {standingsContrib === "event_only" && "Result stays on this event's leaderboard only — won't affect season standings."}
+              {standingsContrib === "season" && "Feeds into the group's cumulative season standings — no event leaderboard points."}
+              {standingsContrib === "both" && "Counted in both this event's result and the group's season standings."}
+            </p>
           </div>
 
           {/* Tee time mode */}

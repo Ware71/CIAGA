@@ -41,6 +41,7 @@ export async function POST(req: Request) {
     const body = await req.json();
 
     const { name, group_id, description, competition_type, format, course_id,
+      default_tee_male_id, default_tee_female_id,
       competition_date, entry_window_start, entry_window_end, rules_text,
       scoring_model, points_model, points_table, eligibility_rules, handicap_rules,
       num_rounds, round_rules, time_rules, membership_rules, standings_contribution,
@@ -120,6 +121,9 @@ export async function POST(req: Request) {
         round_number: i + 1,
         name: `Round ${i + 1}`,
         status: "scheduled",
+        course_id: course_id ?? null,
+        default_tee_box_id_male: default_tee_male_id ?? null,
+        default_tee_box_id_female: default_tee_female_id ?? null,
       }));
       await supabaseAdmin.from("competition_rounds").insert(roundRows);
     }

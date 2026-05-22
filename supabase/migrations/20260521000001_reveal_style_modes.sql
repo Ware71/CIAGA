@@ -1,7 +1,2 @@
--- Add 'suspense' and 'rapid' as valid values for leaderboard_reveal_style
-ALTER TABLE competitions
-  DROP CONSTRAINT IF EXISTS competitions_leaderboard_reveal_style_check;
-
-ALTER TABLE competitions
-  ADD CONSTRAINT competitions_leaderboard_reveal_style_check
-    CHECK (leaderboard_reveal_style IN ('none', 'animated', 'suspense', 'rapid'));
+-- No-op: superseded by 20260521000002_reveal_style_podium.sql which already adds the
+-- correct constraint including 'podium'. Constraint was applied to staging via the later migration.

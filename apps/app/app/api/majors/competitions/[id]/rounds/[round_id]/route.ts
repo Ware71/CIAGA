@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
+import { reconcileCompetitionStatus } from "@/lib/majors/reconcileStatus";
 
 export const runtime = "nodejs";
 
@@ -59,6 +60,8 @@ export async function PATCH(
 
     if (error) throw error;
     if (!round) return NextResponse.json({ error: "Round not found" }, { status: 404 });
+
+    reconcileCompetitionStatus(id).catch(() => {});
 
     return NextResponse.json({ round });
   } catch (e: any) {

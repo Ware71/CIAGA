@@ -57,6 +57,9 @@ type FormState = {
   handicap_mode: PlayingHandicapMode;
   handicap_allowance_pct: string;
   handicap_max: string;
+  // Default tees (applied to rounds on creation)
+  default_tee_male_id: string;
+  default_tee_female_id: string;
   // Leaderboard freeze / ceremony reveal
   freeze_enabled: boolean;
   freeze_last_holes: string;
@@ -94,6 +97,8 @@ const INITIAL: FormState = {
   handicap_mode: "allowance_pct",
   handicap_allowance_pct: "100",
   handicap_max: "",
+  default_tee_male_id: "",
+  default_tee_female_id: "",
   // Leaderboard freeze / ceremony reveal
   freeze_enabled: false,
   freeze_last_holes: "",
@@ -147,9 +152,9 @@ function PointsTableEditor({
   return (
     <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 p-4 space-y-2">
       <div className="text-[10px] uppercase tracking-wider text-emerald-200/55 font-semibold">Points by Position</div>
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
         {rows.map((pos) => (
-          <div key={pos} className="flex items-center gap-2">
+          <div key={pos} className="flex items-center justify-between py-0.5">
             <span className="text-[11px] text-emerald-200/60 w-8 shrink-0">
               {pos}{pos === 1 ? "st" : pos === 2 ? "nd" : pos === 3 ? "rd" : "th"}
             </span>
@@ -159,7 +164,7 @@ function PointsTableEditor({
               value={pointsTable[String(pos)] ?? ""}
               onChange={(e) => handleChange(pos, e.target.value)}
               placeholder="0"
-              className="flex-1 rounded-lg border border-emerald-900/60 bg-[#042713] px-2 py-1 text-[11px] text-emerald-50 placeholder:text-emerald-100/30 focus:outline-none focus:border-emerald-600 text-right"
+              className="w-16 rounded-lg border border-emerald-900/60 bg-[#042713] px-2 py-1 text-[11px] text-emerald-50 placeholder:text-emerald-100/30 focus:outline-none focus:border-emerald-600 text-right"
             />
           </div>
         ))}
@@ -764,6 +769,7 @@ export default function CreateCompetitionClient() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showCoursePicker, setShowCoursePicker] = useState(false);
+  const [teeBoxes, setTeeBoxes] = useState<{ id: string; name: string; gender: string | null }[]>([]);
 
   const isAggregate = form.competition_category === "aggregate";
   const totalSteps = 4;
@@ -926,6 +932,13 @@ export default function CreateCompetitionClient() {
     })();
   }, [form.group_id]);
 
+  useEffect(() => {
+    if (!form.course_id) { setTeeBoxes([]); return; }
+    fetch(`/api/courses/tee-boxes?course_id=${form.course_id}`)
+      .then((r) => r.json())
+      .then((j) => setTeeBoxes(j.tee_boxes ?? []));
+  }, [form.course_id]);
+
   const update = (field: keyof FormState, value: string | boolean) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
@@ -1003,6 +1016,8 @@ export default function CreateCompetitionClient() {
           competition_type: isAggregate ? "custom" : form.competition_type,
           format: form.format || null,
           course_id: form.course_id || null,
+          default_tee_male_id: form.default_tee_male_id || null,
+          default_tee_female_id: form.default_tee_female_id || null,
           competition_date: form.competition_date || null,
           entry_window_start: form.entry_window_start || null,
           entry_window_end: form.entry_window_end || null,
@@ -1202,7 +1217,7 @@ export default function CreateCompetitionClient() {
             <span className="text-sm text-emerald-50 truncate">{form.course_name}</span>
             <button
               type="button"
-              onClick={() => setForm((prev) => ({ ...prev, course_id: "", course_name: "" }))}
+              onClick={() => setForm((prev) => ({ ...prev, course_id: "", course_name: "", default_tee_male_id: "", default_tee_female_id: "" }))}
               className="ml-3 text-[11px] text-emerald-300/60 hover:text-emerald-200 shrink-0"
             >
               ✕
@@ -1218,6 +1233,38 @@ export default function CreateCompetitionClient() {
           </button>
         )}
       </div>
+
+      {/* Default tee boxes — shown once a course is selected */}
+      {form.course_id && teeBoxes.length > 0 && (
+        <div className="grid grid-cols-2 gap-2">
+          {[
+            {
+              label: "Men's default tee",
+              field: "default_tee_male_id" as const,
+              options: teeBoxes.filter((t) => !t.gender || t.gender === "male" || t.gender === "unisex"),
+            },
+            {
+              label: "Women's default tee",
+              field: "default_tee_female_id" as const,
+              options: teeBoxes.filter((t) => !t.gender || t.gender === "female" || t.gender === "unisex"),
+            },
+          ].map(({ label, field, options }) => (
+            <div key={field} className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider text-emerald-200/65">{label}</label>
+              <select
+                value={form[field]}
+                onChange={(e) => update(field, e.target.value)}
+                className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2 text-[11px] text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
+              >
+                <option value="">— optional —</option>
+                {options.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+          ))}
+        </div>
+      )}
     </div>,
 
     /* ── Step 1: Handicap & Entry ── */
@@ -1321,13 +1368,14 @@ export default function CreateCompetitionClient() {
               key={p.value}
               type="button"
               onClick={() => update("points_model", p.value)}
-              className={`rounded-xl border px-3 py-2 text-sm transition-colors ${
+              className={`rounded-xl border px-3 py-2 text-left transition-colors ${
                 form.points_model === p.value
                   ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
                   : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
               }`}
             >
-              {p.shortLabel}
+              <div className="text-sm font-semibold">{p.shortLabel}</div>
+              {p.desc && <div className="text-[10px] text-emerald-200/50 mt-0.5">{p.desc}</div>}
             </button>
           ))}
         </div>
@@ -1361,6 +1409,11 @@ export default function CreateCompetitionClient() {
             </button>
           ))}
         </div>
+        <p className="text-[10px] text-emerald-200/45 leading-relaxed">
+          {form.standings_contribution === "event_only" && "Result stays on this event's leaderboard only — won't affect season standings."}
+          {form.standings_contribution === "season" && "Feeds into the group's cumulative season standings — no event leaderboard points."}
+          {form.standings_contribution === "both" && "Counted in both this event's result and the group's season standings."}
+        </p>
       </div>
 
       {/* Series — only if group selected */}
