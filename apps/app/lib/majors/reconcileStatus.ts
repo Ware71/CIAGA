@@ -46,10 +46,23 @@ export async function reconcileCompetitionStatus(
   const comp = compResult.data as { majors_status: CompetitionMajorsStatus; competition_date: string | null } | null;
   if (!comp) return;
 
-  if (NON_AUTO_STATUSES.includes(comp.majors_status)) return;
-
   const rounds = (roundsResult.data ?? []) as { status: string }[];
   const teeTimeCount = teeTimesResult.count ?? 0;
+
+  const allRoundsCancelled =
+    rounds.length > 0 && rounds.every((r) => r.status === "cancelled");
+
+  if (allRoundsCancelled) {
+    if (comp.majors_status !== "cancelled") {
+      await supabaseAdmin
+        .from("competitions")
+        .update({ majors_status: "cancelled" })
+        .eq("id", competitionId);
+    }
+    return;
+  }
+
+  if (NON_AUTO_STATUSES.includes(comp.majors_status)) return;
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);

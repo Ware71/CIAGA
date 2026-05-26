@@ -68,6 +68,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (field in body) updates[field] = body[field];
     }
 
+    if (body.majors_status === "cancelled") {
+      await supabaseAdmin
+        .from("competition_rounds")
+        .delete()
+        .eq("competition_id", id)
+        .eq("status", "scheduled");
+
+      await supabaseAdmin
+        .from("competition_rounds")
+        .update({ status: "cancelled" })
+        .eq("competition_id", id)
+        .in("status", ["live", "completed"]);
+    }
+
     const { data, error } = await supabaseAdmin
       .from("competitions")
       .update(updates)

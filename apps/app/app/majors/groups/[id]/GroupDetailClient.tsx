@@ -183,6 +183,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("overview");
   const [compSubTab, setCompSubTab] = useState<"active" | "completed">("active");
+  const [showCancelled, setShowCancelled] = useState(true);
   const [group, setGroup] = useState<GroupData | null>(null);
   const [competitions, setCompetitions] = useState<CompetitionWithGroup[]>([]);
   const [standings, setStandings] = useState<GroupStandingWithProfile[]>([]);
@@ -433,7 +434,13 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
   const isAdminOrOwner = myRole === "owner" || myRole === "admin";
   const upcomingComps = competitions.filter((c) => c.majors_status === "upcoming" || c.majors_status === "live");
-  const completedComps = competitions.filter((c) => c.majors_status === "completed");
+  const completedComps = competitions.filter(
+    (c) => c.majors_status === "completed" || c.majors_status === "cancelled"
+  );
+  const cancelledCount = completedComps.filter((c) => c.majors_status === "cancelled").length;
+  const visibleCompletedComps = showCancelled
+    ? completedComps
+    : completedComps.filter((c) => c.majors_status !== "cancelled");
 
   if (loading) {
     return (
@@ -459,6 +466,8 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       ? "border-amber-800/50 bg-amber-900/20"
       : status === "completed"
       ? "border-emerald-800/40 bg-emerald-900/20"
+      : status === "cancelled"
+      ? "border-red-900/40 bg-red-950/20"
       : "border-emerald-900/70 bg-[#0b3b21]/80";
 
   const compStatusBadge = (status: string) =>
@@ -466,6 +475,8 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       ? "bg-amber-900/50 text-amber-300 border-amber-800/50"
       : status === "completed"
       ? "bg-emerald-900/60 text-emerald-300 border-emerald-800/50"
+      : status === "cancelled"
+      ? "bg-red-950/50 text-red-400/80 border-red-900/50"
       : "bg-emerald-900/40 text-emerald-200/70 border-emerald-900/60";
 
   const roleBadge = (role: string) =>
@@ -588,14 +599,32 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           })}
         </div>
 
+        {/* Cancelled filter chip */}
+        {compSubTab === "completed" && cancelledCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowCancelled((v) => !v)}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
+              showCancelled
+                ? "bg-red-950/40 text-red-400/80 border-red-900/50"
+                : "border-emerald-900/60 text-emerald-200/50 hover:text-emerald-50"
+            }`}
+          >
+            {showCancelled ? "Hide" : "Show"} cancelled
+            <span className="text-[10px]">{cancelledCount}</span>
+          </button>
+        )}
+
         {/* Competition list */}
         {compSubTab === "active" && upcomingComps.length === 0 && (
           <div className="text-sm text-emerald-100/60 text-center py-8">No upcoming or live competitions.</div>
         )}
-        {compSubTab === "completed" && completedComps.length === 0 && (
-          <div className="text-sm text-emerald-100/60 text-center py-8">No completed competitions yet.</div>
+        {compSubTab === "completed" && visibleCompletedComps.length === 0 && (
+          <div className="text-sm text-emerald-100/60 text-center py-8">
+            {completedComps.length > 0 ? "No non-cancelled competitions." : "No completed competitions yet."}
+          </div>
         )}
-        {(compSubTab === "active" ? upcomingComps : completedComps).map((c) => (
+        {(compSubTab === "active" ? upcomingComps : visibleCompletedComps).map((c) => (
           <button
             key={c.id}
             type="button"
