@@ -6,8 +6,8 @@ import { getViewerSession } from "@/lib/auth/viewerSession";
 import type {
   CompetitionSeriesWithEvents,
   SeriesEventTemplate,
-  SeriesYearGroup,
   SeriesSeason,
+  CompetitionWithGroup,
   CompetitionTypeV2,
   CompetitionScoringModel,
   CompetitionPointsModel,
@@ -45,6 +45,25 @@ const CATEGORIES: { value: CompetitionCategory; label: string }[] = [
   { value: "aggregate", label: "Aggregate" },
   { value: "standalone", label: "Standalone" },
 ];
+
+// ─── Local types for enriched series history ─────────────────────────────────
+
+type SeriesViewerStats = {
+  appearances: number;
+  wins: number;
+  seasons_played: number;
+  best_finish: number | null;
+  avg_finish: number | null;
+};
+
+type EnrichedCompetition = {
+  competition: CompetitionWithGroup;
+  event_template: { id: string; name: string; sort_order: number } | null;
+  winner: { profile_id: string; name: string | null; avatar_url: string | null; net_score: number | null } | null;
+  viewer_entry: { position: number | null; net_score: number | null } | null;
+};
+
+type EnrichedYearGroup = { year: number; competitions: EnrichedCompetition[] };
 
 // ─── Edit Series Settings modal ───────────────────────────────────────────────
 
@@ -115,11 +134,13 @@ function SeriesEditModal({
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 pb-[env(safe-area-inset-bottom)]" onClick={onClose}>
       <div
-        className="w-full max-w-sm rounded-t-2xl bg-[#0a2e18] border-t border-x border-emerald-800/60 p-5 space-y-4 max-h-[88vh] overflow-y-auto"
+        className="w-full max-w-sm rounded-t-2xl bg-[#0a2e18] border-t border-x border-emerald-800/60 max-h-[88vh] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="text-sm font-semibold text-emerald-50">Edit Series Settings</div>
-
+        <div className="shrink-0 px-5 pt-5 pb-3">
+          <div className="text-sm font-semibold text-emerald-50">Edit Series Settings</div>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 pb-2 space-y-4">
         <div className="space-y-3">
           <div className="space-y-1">
             <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Series Name *</label>
@@ -266,15 +287,18 @@ function SeriesEditModal({
         </div>
 
         {error && <div className="text-xs text-red-400">{error}</div>}
-        <div className="flex gap-2 pt-1">
-          <button type="button" onClick={onClose}
-            className="flex-1 py-2 rounded-full border border-emerald-700/50 text-sm text-emerald-200 hover:bg-emerald-900/30">
-            Cancel
-          </button>
-          <button type="button" onClick={handleSave} disabled={!name.trim() || saving}
-            className="flex-1 py-2 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-40">
-            {saving ? "Saving…" : "Save"}
-          </button>
+        </div>
+        <div className="shrink-0 px-5 py-4 border-t border-emerald-900/50">
+          <div className="flex gap-2">
+            <button type="button" onClick={onClose}
+              className="flex-1 py-2 rounded-full border border-emerald-700/50 text-sm text-emerald-200 hover:bg-emerald-900/30">
+              Cancel
+            </button>
+            <button type="button" onClick={handleSave} disabled={!name.trim() || saving}
+              className="flex-1 py-2 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-40">
+              {saving ? "Saving…" : "Save"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -343,12 +367,15 @@ function EventTemplateModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4" onClick={onClose}>
       <div
-        className="w-full max-w-sm rounded-2xl bg-[#0a2e18] border border-emerald-800/60 p-5 space-y-4"
+        className="w-full max-w-sm rounded-2xl bg-[#0a2e18] border border-emerald-800/60 max-h-[90vh] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="text-sm font-semibold text-emerald-50">
-          {existing ? "Edit Event" : "Add Event"}
+        <div className="shrink-0 px-5 pt-5 pb-3">
+          <div className="text-sm font-semibold text-emerald-50">
+            {existing ? "Edit Event" : "Add Event"}
+          </div>
         </div>
+        <div className="flex-1 overflow-y-auto px-5 pb-2 space-y-4">
         <div className="space-y-3">
           <div className="space-y-1">
             <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Event Name *</label>
@@ -446,22 +473,25 @@ function EventTemplateModal({
           </div>
         </div>
         {error && <div className="text-xs text-red-400">{error}</div>}
-        <div className="flex gap-2 pt-1">
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex-1 py-2 rounded-full border border-emerald-700/50 text-sm text-emerald-200 hover:bg-emerald-900/30"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={!name.trim() || saving}
-            className="flex-1 py-2 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-40"
-          >
-            {saving ? "Saving…" : "Save"}
-          </button>
+        </div>
+        <div className="shrink-0 px-5 py-4 border-t border-emerald-900/50">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2 rounded-full border border-emerald-700/50 text-sm text-emerald-200 hover:bg-emerald-900/30"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={!name.trim() || saving}
+              className="flex-1 py-2 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-40"
+            >
+              {saving ? "Saving…" : "Save"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -543,11 +573,13 @@ function CreateSeasonModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4" onClick={onClose}>
       <div
-        className="w-full max-w-sm rounded-2xl bg-[#0a2e18] border border-emerald-800/60 p-5 space-y-4 max-h-[88vh] overflow-y-auto"
+        className="w-full max-w-sm rounded-2xl bg-[#0a2e18] border border-emerald-800/60 max-h-[88vh] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="text-sm font-semibold text-emerald-50">Create Season</div>
-
+        <div className="shrink-0 px-5 pt-5 pb-3">
+          <div className="text-sm font-semibold text-emerald-50">Create Season</div>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 pb-2 space-y-4">
         <div className="space-y-1">
           <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Year</label>
           <input
@@ -592,16 +624,19 @@ function CreateSeasonModal({
         </div>
 
         {error && <div className="text-xs text-red-400">{error}</div>}
-        <div className="flex gap-2 pt-1">
-          <button type="button" onClick={onClose}
-            className="flex-1 py-2 rounded-full border border-emerald-700/50 text-sm text-emerald-200 hover:bg-emerald-900/30">
-            Cancel
-          </button>
-          <button type="button" onClick={handleCreate}
-            disabled={creating || !year}
-            className="flex-1 py-2 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-40">
-            {creating ? "Creating…" : `Create ${year} Season`}
-          </button>
+        </div>
+        <div className="shrink-0 px-5 py-4 border-t border-emerald-900/50">
+          <div className="flex gap-2">
+            <button type="button" onClick={onClose}
+              className="flex-1 py-2 rounded-full border border-emerald-700/50 text-sm text-emerald-200 hover:bg-emerald-900/30">
+              Cancel
+            </button>
+            <button type="button" onClick={handleCreate}
+              disabled={creating || !year}
+              className="flex-1 py-2 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-40">
+              {creating ? "Creating…" : `Create ${year} Season`}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -613,10 +648,12 @@ function CreateSeasonModal({
 export default function SeriesDetailClient({ seriesId }: { seriesId: string }) {
   const router = useRouter();
   const [series, setSeries] = useState<CompetitionSeriesWithEvents | null>(null);
-  const [history, setHistory] = useState<SeriesYearGroup[]>([]);
+  const [history, setHistory] = useState<EnrichedYearGroup[]>([]);
+  const [viewerStats, setViewerStats] = useState<SeriesViewerStats | null>(null);
   const [seasons, setSeasons] = useState<SeriesSeason[]>([]);
   const [loading, setLoading] = useState(true);
   const [myRole, setMyRole] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"history" | "events">("history");
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [editingEvent, setEditingEvent] = useState<SeriesEventTemplate | null>(null);
   const [showCreateSeason, setShowCreateSeason] = useState(false);
@@ -660,11 +697,12 @@ export default function SeriesDetailClient({ seriesId }: { seriesId: string }) {
       if (historyRes.ok) {
         const hj = await historyRes.json();
         setHistory(hj.history ?? []);
+        setViewerStats(hj.viewer_stats ?? null);
+      }
 
       if (seasonsRes?.ok) {
         const sj = await seasonsRes.json();
         setSeasons(sj.seasons ?? []);
-      }
       }
     } finally {
       setLoading(false);
@@ -795,181 +833,245 @@ export default function SeriesDetailClient({ seriesId }: { seriesId: string }) {
         </div>
       </div>
 
+      {/* ── Tab navigation ─────────────────────────────────────────────────── */}
+      <div className="flex gap-1 overflow-x-auto px-4 pb-4 max-w-lg mx-auto scrollbar-none">
+        {(["history", "events"] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setActiveTab(t)}
+            className={`shrink-0 px-4 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+              activeTab === t
+                ? "bg-emerald-700 text-white"
+                : "text-emerald-200/60 hover:text-emerald-100"
+            }`}
+          >
+            {t === "history" ? "History" : "Events"}
+          </button>
+        ))}
+      </div>
+
       <div className="px-4 pb-24 max-w-lg mx-auto space-y-6">
 
-        {/* ── Event Templates ─────────────────────────────────────────────── */}
-        <section className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/60 p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="text-xs font-semibold text-emerald-200/70 uppercase tracking-wider">
-              Events in this Series
-            </div>
-            {isAdminOrOwner && (
-              <button
-                type="button"
-                onClick={() => setShowAddEvent(true)}
-                className="text-[11px] font-semibold text-emerald-300 hover:text-emerald-100"
-              >
-                + Add
-              </button>
-            )}
-          </div>
-
-          {eventTemplates.length === 0 ? (
-            <div className="text-sm text-emerald-100/40 py-4 text-center">
-              {isAdminOrOwner
-                ? "No events yet. Add the events that make up this series."
-                : "No events defined for this series yet."}
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {eventTemplates.map((et, idx) => (
-                <div
-                  key={et.id}
-                  className="flex items-center gap-3 rounded-xl border border-emerald-900/50 bg-emerald-950/40 px-3 py-2.5"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-emerald-50">{et.name}</div>
-                    <div className="flex flex-wrap gap-1.5 mt-1">
-                      {et.typical_month != null && (
-                        <span className="text-[10px] text-emerald-200/45 border border-emerald-900/40 rounded-full px-1.5 py-0.5">
-                          {monthNames[et.typical_month - 1]}
-                        </span>
-                      )}
-                      {et.template_competition_type && (
-                        <span className="text-[10px] text-emerald-200/45 border border-emerald-900/40 rounded-full px-1.5 py-0.5 capitalize">
-                          {et.template_competition_type}
-                        </span>
-                      )}
-                      {et.template_scoring_model && (
-                        <span className="text-[10px] text-emerald-200/45 border border-emerald-900/40 rounded-full px-1.5 py-0.5 capitalize">
-                          {et.template_scoring_model}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  {isAdminOrOwner && (
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => handleMoveEvent(et.id, "up")}
-                        disabled={idx === 0}
-                        className="w-6 h-6 flex items-center justify-center rounded text-emerald-300/50 hover:text-emerald-200 disabled:opacity-20"
-                        title="Move up"
-                      >
-                        ↑
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleMoveEvent(et.id, "down")}
-                        disabled={idx === eventTemplates.length - 1}
-                        className="w-6 h-6 flex items-center justify-center rounded text-emerald-300/50 hover:text-emerald-200 disabled:opacity-20"
-                        title="Move down"
-                      >
-                        ↓
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEditingEvent(et)}
-                        className="w-6 h-6 flex items-center justify-center rounded text-emerald-300/50 hover:text-emerald-200"
-                        title="Edit"
-                      >
-                        ✎
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteEvent(et.id)}
-                        disabled={deletingEventId === et.id}
-                        className="w-6 h-6 flex items-center justify-center rounded text-rose-400/50 hover:text-rose-300 disabled:opacity-40"
-                        title="Remove"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  )}
+        {/* ── History tab ─────────────────────────────────────────────────── */}
+        {activeTab === "history" && (
+          <>
+            {/* My Series Record — shown only when viewer has played */}
+            {viewerStats && viewerStats.appearances > 0 && (
+              <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/65 mb-3 font-semibold">
+                  My Series Record
                 </div>
-              ))}
-            </div>
-          )}
-
-          {/* Create season CTA */}
-          {isAdminOrOwner && eventTemplates.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setShowCreateSeason(true)}
-              className="w-full py-2.5 rounded-full bg-emerald-700/90 text-sm font-semibold text-white hover:bg-emerald-600 mt-1"
-            >
-              + Create {new Date().getFullYear()} Season
-            </button>
-          )}
-        </section>
-
-        {/* ── Past Seasons ─────────────────────────────────────────────────── */}
-        <section className="space-y-4">
-          <div className="text-xs font-semibold text-emerald-200/70 uppercase tracking-wider px-1">
-            Past Seasons
-          </div>
-
-          {history.length === 0 ? (
-            <div className="rounded-2xl border border-emerald-900/40 bg-[#0b3b21]/40 p-6 text-sm text-emerald-100/40 text-center">
-              No seasons yet.
-            </div>
-          ) : (
-            history.map((yearGroup) => {
-              const matchedSeason = seasons.find((s) => s.season_year === yearGroup.year);
-              return (
-              <div key={yearGroup.year} className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/60 p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm font-bold text-emerald-200">{yearGroup.year}</div>
-                  {matchedSeason && (
-                    <button
-                      type="button"
-                      onClick={() => router.push(`/majors/seasons/${matchedSeason.id}`)}
-                      className="text-[10px] text-emerald-200/55 hover:text-emerald-200 border border-emerald-900/50 rounded-full px-2 py-0.5 transition-colors"
-                    >
-                      Season →
-                    </button>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  {yearGroup.competitions.map(({ competition, event_template, winner }) => (
-                    <button
-                      key={competition.id}
-                      type="button"
-                      onClick={() => router.push(`/majors/competitions/${competition.id}`)}
-                      className="w-full text-left rounded-xl border border-emerald-900/40 bg-emerald-950/30 px-3 py-2.5 hover:bg-emerald-900/30 transition-colors"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="text-sm font-medium text-emerald-50 truncate">
-                            {event_template?.name ?? competition.name}
-                          </div>
-                          {competition.competition_date && (
-                            <div className="text-[11px] text-emerald-200/45 mt-0.5">
-                              {new Date(competition.competition_date).toLocaleDateString("en-GB", {
-                                day: "numeric", month: "short",
-                              })}
-                            </div>
-                          )}
-                        </div>
-                        <div className="text-right shrink-0">
-                          <StatusPill status={competition.majors_status} />
-                          {winner && competition.majors_status === "completed" && (
-                            <div className="text-[11px] text-emerald-200/55 mt-1">
-                              {winner.name ?? "—"}
-                              {winner.net_score != null && (
-                                <span className="text-emerald-300/60"> · {winner.net_score}</span>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </button>
+                <div className="grid grid-cols-4 gap-2 text-center">
+                  {[
+                    { label: "Played", value: viewerStats.appearances },
+                    { label: "Wins", value: viewerStats.wins },
+                    {
+                      label: "Best Pos.",
+                      value: viewerStats.best_finish != null ? `P${viewerStats.best_finish}` : "—",
+                    },
+                    {
+                      label: "Avg Pos.",
+                      value: viewerStats.avg_finish != null ? viewerStats.avg_finish.toFixed(1) : "—",
+                    },
+                  ].map((stat) => (
+                    <div key={stat.label}>
+                      <div className="text-base font-extrabold text-[#f5e6b0]">{stat.value}</div>
+                      <div className="text-[10px] text-emerald-200/60">{stat.label}</div>
+                    </div>
                   ))}
                 </div>
+                {viewerStats.seasons_played > 0 && (
+                  <div className="mt-3 text-[10px] text-emerald-200/45 text-center">
+                    {viewerStats.seasons_played} {viewerStats.seasons_played === 1 ? "season" : "seasons"} played
+                  </div>
+                )}
               </div>
-            );})
-          )}
-        </section>
+            )}
+
+            {/* Year group history cards */}
+            {history.length === 0 ? (
+              <div className="rounded-2xl border border-emerald-900/40 bg-[#0b3b21]/40 p-6 text-sm text-emerald-100/40 text-center">
+                No history yet.
+              </div>
+            ) : (
+              history.map((yearGroup) => {
+                const matchedSeason = seasons.find((s) => s.season_year === yearGroup.year);
+                return (
+                  <div key={yearGroup.year} className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/60 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm font-bold text-emerald-200">{yearGroup.year}</div>
+                      {matchedSeason && (
+                        <button
+                          type="button"
+                          onClick={() => router.push(`/majors/seasons/${matchedSeason.id}`)}
+                          className="text-[10px] text-emerald-200/55 hover:text-emerald-200 border border-emerald-900/50 rounded-full px-2 py-0.5 transition-colors"
+                        >
+                          Season →
+                        </button>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      {yearGroup.competitions.map(({ competition, event_template, winner, viewer_entry }) => (
+                        <button
+                          key={competition.id}
+                          type="button"
+                          onClick={() => router.push(`/majors/competitions/${competition.id}`)}
+                          className="w-full text-left rounded-xl border border-emerald-900/40 bg-emerald-950/30 px-3 py-2.5 hover:bg-emerald-900/30 transition-colors"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="text-sm font-medium text-emerald-50 truncate">
+                                {event_template?.name ?? competition.name}
+                              </div>
+                              {competition.competition_date && (
+                                <div className="text-[11px] text-emerald-200/45 mt-0.5">
+                                  {new Date(competition.competition_date).toLocaleDateString("en-GB", {
+                                    day: "numeric", month: "short",
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                            <div className="text-right shrink-0">
+                              <StatusPill status={competition.majors_status} />
+                              {winner && competition.majors_status === "completed" && (
+                                <div className="text-[11px] text-emerald-200/55 mt-1">
+                                  {winner.name ?? "—"}
+                                  {winner.net_score != null && (
+                                    <span className="text-emerald-300/60"> · {winner.net_score}</span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          {viewer_entry && (
+                            <div className="flex items-center gap-2 pt-1.5 border-t border-emerald-900/30 mt-1.5">
+                              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-900/40 text-emerald-300 border border-emerald-800/40 shrink-0">
+                                You
+                              </span>
+                              <span className="text-[11px] text-emerald-100/70">
+                                {viewer_entry.position != null ? `P${viewer_entry.position}` : "DNS"}
+                                {viewer_entry.net_score != null && ` · ${viewer_entry.net_score}`}
+                              </span>
+                            </div>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </>
+        )}
+
+        {/* ── Events tab ──────────────────────────────────────────────────── */}
+        {activeTab === "events" && (
+          <section className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/60 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-semibold text-emerald-200/70 uppercase tracking-wider">
+                Events in this Series
+              </div>
+              {isAdminOrOwner && (
+                <button
+                  type="button"
+                  onClick={() => setShowAddEvent(true)}
+                  className="text-[11px] font-semibold text-emerald-300 hover:text-emerald-100"
+                >
+                  + Add
+                </button>
+              )}
+            </div>
+
+            {eventTemplates.length === 0 ? (
+              <div className="text-sm text-emerald-100/40 py-4 text-center">
+                {isAdminOrOwner
+                  ? "No events yet. Add the events that make up this series."
+                  : "No events defined for this series yet."}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {eventTemplates.map((et, idx) => (
+                  <div
+                    key={et.id}
+                    className="flex items-center gap-3 rounded-xl border border-emerald-900/50 bg-emerald-950/40 px-3 py-2.5"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-emerald-50">{et.name}</div>
+                      <div className="flex flex-wrap gap-1.5 mt-1">
+                        {et.typical_month != null && (
+                          <span className="text-[10px] text-emerald-200/45 border border-emerald-900/40 rounded-full px-1.5 py-0.5">
+                            {monthNames[et.typical_month - 1]}
+                          </span>
+                        )}
+                        {et.template_competition_type && (
+                          <span className="text-[10px] text-emerald-200/45 border border-emerald-900/40 rounded-full px-1.5 py-0.5 capitalize">
+                            {et.template_competition_type}
+                          </span>
+                        )}
+                        {et.template_scoring_model && (
+                          <span className="text-[10px] text-emerald-200/45 border border-emerald-900/40 rounded-full px-1.5 py-0.5 capitalize">
+                            {et.template_scoring_model}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {isAdminOrOwner && (
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleMoveEvent(et.id, "up")}
+                          disabled={idx === 0}
+                          className="w-6 h-6 flex items-center justify-center rounded text-emerald-300/50 hover:text-emerald-200 disabled:opacity-20"
+                          title="Move up"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMoveEvent(et.id, "down")}
+                          disabled={idx === eventTemplates.length - 1}
+                          className="w-6 h-6 flex items-center justify-center rounded text-emerald-300/50 hover:text-emerald-200 disabled:opacity-20"
+                          title="Move down"
+                        >
+                          ↓
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingEvent(et)}
+                          className="w-6 h-6 flex items-center justify-center rounded text-emerald-300/50 hover:text-emerald-200"
+                          title="Edit"
+                        >
+                          ✎
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteEvent(et.id)}
+                          disabled={deletingEventId === et.id}
+                          className="w-6 h-6 flex items-center justify-center rounded text-rose-400/50 hover:text-rose-300 disabled:opacity-40"
+                          title="Remove"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Create season CTA */}
+            {isAdminOrOwner && eventTemplates.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowCreateSeason(true)}
+                className="w-full py-2.5 rounded-full bg-emerald-700/90 text-sm font-semibold text-white hover:bg-emerald-600 mt-1"
+              >
+                + Create {new Date().getFullYear()} Season
+              </button>
+            )}
+          </section>
+        )}
       </div>
 
       {/* ── Modals ───────────────────────────────────────────────────────────── */}

@@ -1,16 +1,79 @@
 import { NextResponse } from "next/server";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 import { getSeriesHistory } from "@/lib/majors/queries";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const runtime = "nodejs";
 
 // GET /api/majors/series/[id]/history
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await getAuthedProfileOrThrow(req);
+    const { profileId } = await getAuthedProfileOrThrow(req);
     const { id } = await params;
     const history = await getSeriesHistory(id);
-    return NextResponse.json({ history }, { headers: { "Cache-Control": "no-store" } });
+
+    // Collect all competition IDs across all year groups
+    const compIds: string[] = [];
+    for (const yg of history) {
+      for (const { competition } of yg.competitions) {
+        compIds.push(competition.id);
+      }
+    }
+
+    const viewerMap = new Map<string, { position: number | null; net_score: number | null }>();
+    let viewer_stats: {
+      appearances: number;
+      wins: number;
+      seasons_played: number;
+      best_finish: number | null;
+      avg_finish: number | null;
+    } | null = null;
+
+    if (compIds.length > 0) {
+      const { data: entries } = await supabaseAdmin
+        .from("competition_leaderboard_entries")
+        .select("competition_id, position, net_score")
+        .eq("profile_id", profileId)
+        .in("competition_id", compIds);
+
+      for (const e of (entries ?? []) as any[]) {
+        viewerMap.set(e.competition_id, { position: e.position ?? null, net_score: e.net_score ?? null });
+      }
+
+      if (viewerMap.size > 0) {
+        const positions = Array.from(viewerMap.values())
+          .map((e) => e.position)
+          .filter((p): p is number => p != null);
+
+        const playedYears = new Set<number>();
+        for (const yg of history) {
+          for (const { competition } of yg.competitions) {
+            if (viewerMap.has(competition.id)) playedYears.add(yg.year);
+          }
+        }
+
+        viewer_stats = {
+          appearances: viewerMap.size,
+          wins: positions.filter((p) => p === 1).length,
+          seasons_played: playedYears.size,
+          best_finish: positions.length > 0 ? Math.min(...positions) : null,
+          avg_finish: positions.length > 0 ? positions.reduce((a, b) => a + b, 0) / positions.length : null,
+        };
+      }
+    }
+
+    const annotatedHistory = history.map((yg) => ({
+      ...yg,
+      competitions: yg.competitions.map((c) => ({
+        ...c,
+        viewer_entry: viewerMap.get(c.competition.id) ?? null,
+      })),
+    }));
+
+    return NextResponse.json(
+      { history: annotatedHistory, viewer_stats },
+      { headers: { "Cache-Control": "no-store" } }
+    );
   } catch (e: any) {
     const msg = e?.message ?? "Unknown error";
     const status = String(msg).toLowerCase().includes("auth") ? 401 : 500;
