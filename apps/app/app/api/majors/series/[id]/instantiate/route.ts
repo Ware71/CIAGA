@@ -18,6 +18,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: "Valid year is required" }, { status: 400 });
     }
 
+    // Optional per-event overrides: dates and/or course IDs
+    const eventOverrides: Array<{ template_id: string; competition_date?: string; course_id?: string }> =
+      Array.isArray(body.event_overrides) ? body.event_overrides : [];
+    const overrideMap = new Map<string, { competition_date?: string; course_id?: string }>();
+    for (const ov of eventOverrides) {
+      if (ov.template_id) overrideMap.set(ov.template_id, ov);
+    }
+
     // Fetch series with its event templates
     const { data: series, error: seriesErr } = await supabaseAdmin
       .from("competition_series")
@@ -106,6 +114,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         handicapRules.max_handicap = settings.max_handicap;
       }
 
+      const override = overrideMap.get(et.id);
+
       return {
         name: `${et.name} ${year}`,
         group_id: s.group_id ?? null,
@@ -130,6 +140,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         season_id: (season as any).id,
         competition_structure: "season_event",
         created_by_profile_id: profileId,
+        // Apply optional per-event overrides (date, course)
+        competition_date: override?.competition_date ?? null,
+        course_id: override?.course_id ?? null,
         // _et_id used below to build rules versions — not a real column
         _et_id: et.id,
         _scoring_model: scoringModel,

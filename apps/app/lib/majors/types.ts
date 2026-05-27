@@ -226,6 +226,16 @@ export type EventTemplateHistory = {
   }>;
 };
 
+/** Aggregated career stats for one player at one recurring event template */
+export type EventViewerStats = {
+  appearances: number;
+  wins: number;
+  avg_finish: number | null;
+  best_finish: number | null;
+  avg_net_score: number | null;
+  best_net_score: number | null;
+};
+
 export type GroupHandicapRules = {
   mode: "allowance_pct" | "compare_against_lowest" | "fixed" | "none";
   allowance_pct: number | null;

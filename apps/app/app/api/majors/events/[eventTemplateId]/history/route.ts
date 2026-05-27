@@ -1,18 +1,20 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
+import type { EventViewerStats } from "@/lib/majors/types";
 
 export const runtime = "nodejs";
 
 // GET /api/majors/events/[eventTemplateId]/history
 // Returns precomputed event_history_summaries for a recurring event template.
+// Also returns the viewer's own results per year and aggregated career stats.
 // Falls back to computing from leaderboard entries if no summary rows exist yet.
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ eventTemplateId: string }> }
 ) {
   try {
-    await getAuthedProfileOrThrow(req);
+    const { profileId } = await getAuthedProfileOrThrow(req);
     const { eventTemplateId } = await params;
 
     // Fetch the event template for context
@@ -40,10 +42,21 @@ export async function GET(
 
     if (summariesErr) throw summariesErr;
 
-    // If we have precomputed data, return it
+    // If we have precomputed data, enrich with viewer entries and return
     if (summaries && summaries.length > 0) {
+      const compIds = (summaries as any[])
+        .map((s) => s.competition_id as string)
+        .filter(Boolean);
+
+      const { viewer_stats, viewerMap } = await fetchViewerData(profileId, compIds);
+
+      const annotatedHistory = (summaries as any[]).map((row) => ({
+        ...row,
+        viewer_entry: viewerMap.get(row.competition_id) ?? null,
+      }));
+
       return NextResponse.json(
-        { event_template: template, history: summaries },
+        { event_template: template, history: annotatedHistory, viewer_stats },
         { headers: { "Cache-Control": "no-store" } }
       );
     }
@@ -57,25 +70,23 @@ export async function GET(
 
     if (!comps || comps.length === 0) {
       return NextResponse.json(
-        { event_template: template, history: [] },
+        { event_template: template, history: [], viewer_stats: null },
         { headers: { "Cache-Control": "no-store" } }
       );
     }
 
     const compIds = (comps as any[]).map((c) => c.id as string);
 
-    const [winnersRes, fieldRes] = await Promise.all([
+    const [winnersRes, { viewer_stats, viewerMap }] = await Promise.all([
       supabaseAdmin
         .from("competition_leaderboard_entries")
         .select("competition_id, profile_id, position, net_score, profile:profiles(id, name, avatar_url)")
         .in("competition_id", compIds)
         .in("position", [1, 2]),
-      supabaseAdmin
-        .from("competition_leaderboard_entries")
-        .select("competition_id", { count: "exact" })
-        .in("competition_id", compIds),
+      fetchViewerData(profileId, compIds),
     ]);
 
+    const fieldCountMap = new Map<string, number>();
     const winnersByComp = new Map<string, { winner: any; runner_up: any; winning_score: string | null }>();
     for (const entry of ((winnersRes.data ?? []) as any[])) {
       const e = winnersByComp.get(entry.competition_id) ?? { winner: null, runner_up: null, winning_score: null };
@@ -85,11 +96,7 @@ export async function GET(
       }
       if (entry.position === 2) e.runner_up = entry.profile;
       winnersByComp.set(entry.competition_id, e);
-    }
-
-    const fieldCountMap = new Map<string, number>();
-    for (const row of ((winnersRes.data ?? []) as any[])) {
-      fieldCountMap.set(row.competition_id, (fieldCountMap.get(row.competition_id) ?? 0) + 1);
+      fieldCountMap.set(entry.competition_id, (fieldCountMap.get(entry.competition_id) ?? 0) + 1);
     }
 
     const history = (comps as any[]).map((c) => {
@@ -105,11 +112,12 @@ export async function GET(
         winner: w?.winner ?? null,
         runner_up: w?.runner_up ?? null,
         competition: c,
+        viewer_entry: viewerMap.get(c.id) ?? null,
       };
     });
 
     return NextResponse.json(
-      { event_template: template, history },
+      { event_template: template, history, viewer_stats },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (e: any) {
@@ -117,4 +125,54 @@ export async function GET(
     const status = String(msg).toLowerCase().includes("auth") ? 401 : 500;
     return NextResponse.json({ error: msg }, { status });
   }
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+async function fetchViewerData(
+  profileId: string,
+  compIds: string[]
+): Promise<{
+  viewer_stats: EventViewerStats | null;
+  viewerMap: Map<string, { position: number | null; net_score: number | null }>;
+}> {
+  if (compIds.length === 0) {
+    return { viewer_stats: null, viewerMap: new Map() };
+  }
+
+  const { data: viewerEntries } = await supabaseAdmin
+    .from("competition_leaderboard_entries")
+    .select("competition_id, position, net_score")
+    .eq("profile_id", profileId)
+    .in("competition_id", compIds);
+
+  const viewerMap = new Map<string, { position: number | null; net_score: number | null }>();
+  for (const e of ((viewerEntries ?? []) as any[])) {
+    viewerMap.set(e.competition_id, { position: e.position ?? null, net_score: e.net_score ?? null });
+  }
+
+  const appearances = viewerMap.size;
+  if (appearances === 0) {
+    return { viewer_stats: null, viewerMap };
+  }
+
+  const entries = [...viewerMap.values()];
+  const wins = entries.filter((e) => e.position === 1).length;
+  const positions = entries.map((e) => e.position).filter((p): p is number => p != null);
+  const scores = entries.map((e) => e.net_score).filter((s): s is number => s != null);
+
+  const viewer_stats: EventViewerStats = {
+    appearances,
+    wins,
+    avg_finish: positions.length > 0
+      ? Math.round((positions.reduce((a, b) => a + b, 0) / positions.length) * 10) / 10
+      : null,
+    best_finish: positions.length > 0 ? Math.min(...positions) : null,
+    avg_net_score: scores.length > 0
+      ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10
+      : null,
+    best_net_score: scores.length > 0 ? Math.min(...scores) : null,
+  };
+
+  return { viewer_stats, viewerMap };
 }
