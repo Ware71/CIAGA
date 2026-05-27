@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { finishRound } from "@/lib/rounds/finishRound";
+import { reconcileCompetitionStatus } from "@/lib/majors/reconcileStatus";
 
 export const runtime = "nodejs";
 
@@ -38,37 +39,57 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  if (!rounds?.length) {
-    return NextResponse.json({ ok: true, completed: 0 });
-  }
-
   const results: { round_id: string; status: "ok" | "error"; error?: string }[] = [];
 
-  // Process sequentially — parallel writes risk saturating the Supabase
-  // connection pool when many rounds complete in the same window.
-  for (const row of rounds as {
-    round_id: string;
-    owner_profile_id: string;
-  }[]) {
-    try {
-      await finishRound({
-        roundId: row.round_id,
-        actorProfileId: row.owner_profile_id,
-      });
-      results.push({ round_id: row.round_id, status: "ok" });
-    } catch (e: any) {
-      console.error(
-        `[auto-complete-rounds] failed to finish round ${row.round_id}:`,
-        e?.message
-      );
-      results.push({ round_id: row.round_id, status: "error", error: e?.message });
+  if (rounds?.length) {
+    // Process sequentially — parallel writes risk saturating the Supabase
+    // connection pool when many rounds complete in the same window.
+    for (const row of rounds as {
+      round_id: string;
+      owner_profile_id: string;
+    }[]) {
+      try {
+        await finishRound({
+          roundId: row.round_id,
+          actorProfileId: row.owner_profile_id,
+        });
+        results.push({ round_id: row.round_id, status: "ok" });
+      } catch (e: any) {
+        console.error(
+          `[auto-complete-rounds] failed to finish round ${row.round_id}:`,
+          e?.message
+        );
+        results.push({ round_id: row.round_id, status: "error", error: e?.message });
+      }
     }
+
+    const completed = results.filter((r) => r.status === "ok").length;
+    console.log(
+      `[auto-complete-rounds] processed ${rounds.length} candidate(s), completed ${completed}`
+    );
+  }
+
+  // Sweep stale live competitions whose date has passed.
+  // This always runs (even when no rounds needed finishing) to handle the
+  // day-after scenario: a competition that finished on its competition_date
+  // will have been set to 'live' (daysDiff = 0 during the day). Now that it's
+  // the next morning, reconcile pushes them to 'completed'.
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const { data: staleComps } = await supabaseAdmin
+    .from("competitions")
+    .select("id")
+    .eq("majors_status", "live")
+    .lt("competition_date", today);
+
+  if (staleComps?.length) {
+    for (const comp of staleComps) {
+      await reconcileCompetitionStatus(comp.id).catch(() => {});
+    }
+    console.log(
+      `[auto-complete-rounds] reconciled ${staleComps.length} stale live competition(s)`
+    );
   }
 
   const completed = results.filter((r) => r.status === "ok").length;
-  console.log(
-    `[auto-complete-rounds] processed ${rounds.length} candidate(s), completed ${completed}`
-  );
-
   return NextResponse.json({ ok: true, completed, results });
 }

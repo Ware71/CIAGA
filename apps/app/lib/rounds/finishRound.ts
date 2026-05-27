@@ -2,6 +2,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { emitRoundPlayedFeedItem } from "@/lib/feed/generators/roundPlayed";
 import { emitHoleEventFeedItems } from "@/lib/feed/generators/holeEvents";
 import { emitAchievementFeedItems } from "@/lib/feed/generators/achievements";
+import { tryCompleteCompetitionRound } from "@/lib/majors/tryCompleteCompetitionRound";
 
 /**
  * Marks a round as finished and triggers all downstream effects:
@@ -43,12 +44,21 @@ export async function finishRound({
     // participant scores. Mirrors the manual submit flow.
     const { data: cttRow } = await supabaseAdmin
       .from("competition_tee_times")
-      .select("id")
+      .select("id, competition_id, competition_round_id")
       .eq("round_id", roundId)
       .maybeSingle();
 
     if (cttRow?.id) {
       await autoSubmitCompetitionRound(roundId, cttRow.id);
+
+      // Auto-complete the competition round once all its tee times are done,
+      // then reconcile the parent competition status. Best-effort — must not
+      // block the round finish if this fails.
+      const compRoundId = (cttRow as any).competition_round_id ?? null;
+      const compId = (cttRow as any).competition_id ?? null;
+      if (compRoundId && compId) {
+        await tryCompleteCompetitionRound(compRoundId, compId).catch(() => {});
+      }
     }
   }
 
