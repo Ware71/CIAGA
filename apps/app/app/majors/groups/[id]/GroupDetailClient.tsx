@@ -960,7 +960,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                       onClick={() => router.push(`/majors/series/${s.id}`)}
                       className="text-[11px] text-emerald-300/70 hover:text-emerald-200"
                     >
-                      Manage →
+                      {isAdminOrOwner ? "Manage →" : "View →"}
                     </button>
                   </div>
                 </div>
@@ -1262,7 +1262,8 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   const isMember = !!myRole;
 
   const visibleTabs = TABS.filter((t) => {
-    if (t.id === "settings" || t.id === "series") return isAdminOrOwner;
+    if (t.id === "settings") return isAdminOrOwner;
+    if (t.id === "series") return isMember;
     if (t.id === "finances") return isMember; // all active members can see their own balance
     return true;
   });
