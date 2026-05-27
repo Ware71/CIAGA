@@ -20,6 +20,14 @@ export type LiveGroupStandingEntry = {
   confirmed_position: number | null;
   /** Rank by live_total_points */
   live_position: number | null;
+  /** Total gross strokes across completed competitions */
+  total_gross: number | null;
+  /** Total net strokes across completed competitions */
+  total_net: number | null;
+  /** Average net score relative to par per event (1 decimal) */
+  avg_net_to_par: number | null;
+  /** Average gross score relative to par per event (1 decimal) */
+  avg_gross_to_par: number | null;
 };
 
 export type LiveGroupStandingsResponse = {
@@ -69,27 +77,33 @@ function denseRank(players: Array<{ profileId: string; score: number | null }>, 
 
 // ── Route ────────────────────────────────────────────────────────────────────
 
-// GET /api/majors/groups/[id]/live-standings
+// GET /api/majors/groups/[id]/live-standings?year=YYYY
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     await getAuthedProfileOrThrow(req);
     const { id: groupId } = await params;
 
+    const url = new URL(req.url);
+    const filterYear = url.searchParams.get("year") ? Number(url.searchParams.get("year")) : null;
+
     // ── 1. Fetch live and completed competitions in parallel ──────────────
-    const [liveCompsRes, completedCompsRes] = await Promise.all([
-      supabaseAdmin
-        .from("competitions")
-        .select("id, points_model, points_table, scoring_model, num_rounds")
-        .eq("group_id", groupId)
-        .eq("majors_status", "live")
-        .in("standings_contribution", ["season", "both"]),
-      supabaseAdmin
-        .from("competitions")
-        .select("id")
-        .eq("group_id", groupId)
-        .in("majors_status", ["completed", "official"])
-        .in("standings_contribution", ["season", "both"]),
-    ]);
+    let liveQuery = supabaseAdmin
+      .from("competitions")
+      .select("id, points_model, points_table, scoring_model, num_rounds")
+      .eq("group_id", groupId)
+      .eq("majors_status", "live")
+      .in("standings_contribution", ["season", "both"]);
+    if (filterYear) liveQuery = liveQuery.eq("competition_year", filterYear);
+
+    let completedQuery = supabaseAdmin
+      .from("competitions")
+      .select("id")
+      .eq("group_id", groupId)
+      .in("majors_status", ["completed", "official"])
+      .in("standings_contribution", ["season", "both"]);
+    if (filterYear) completedQuery = completedQuery.eq("competition_year", filterYear);
+
+    const [liveCompsRes, completedCompsRes] = await Promise.all([liveQuery, completedQuery]);
 
     if (liveCompsRes.error) throw liveCompsRes.error;
     if (completedCompsRes.error) throw completedCompsRes.error;
@@ -97,16 +111,24 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const liveComps = liveCompsRes.data ?? [];
     const completedCompIds = (completedCompsRes.data ?? []).map((c) => c.id);
 
-    // ── 2. Confirmed points: aggregate from competition_leaderboard_entries ──
-    const confirmedMap = new Map<
-      string,
-      { confirmed_points: number; events: Set<string>; wins: number }
-    >();
+    // ── 2. Confirmed points + strokes: aggregate from competition_leaderboard_entries ──
+    type ConfirmedAgg = {
+      confirmed_points: number;
+      events: Set<string>;
+      wins: number;
+      total_gross: number;
+      total_net: number;
+      gross_to_par_sum: number;
+      net_to_par_sum: number;
+      stroke_events: number;
+    };
+
+    const confirmedMap = new Map<string, ConfirmedAgg>();
 
     if (completedCompIds.length > 0) {
       const { data: confirmedEntries, error: ceErr } = await supabaseAdmin
         .from("competition_leaderboard_entries")
-        .select("profile_id, points_earned, position, competition_id")
+        .select("profile_id, points_earned, position, competition_id, gross_score, net_score, to_par, course_par")
         .in("competition_id", completedCompIds)
         .not("net_score", "is", null);
 
@@ -114,14 +136,31 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
       for (const entry of confirmedEntries ?? []) {
         if (!entry.profile_id) continue;
-        const existing = confirmedMap.get(entry.profile_id) ?? {
+        const existing: ConfirmedAgg = confirmedMap.get(entry.profile_id) ?? {
           confirmed_points: 0,
           events: new Set<string>(),
           wins: 0,
+          total_gross: 0,
+          total_net: 0,
+          gross_to_par_sum: 0,
+          net_to_par_sum: 0,
+          stroke_events: 0,
         };
         existing.confirmed_points += entry.points_earned ?? 0;
         existing.events.add(entry.competition_id);
         if (entry.position === 1) existing.wins += 1;
+        // Strokes
+        if (entry.net_score != null) {
+          existing.total_net += entry.net_score;
+          existing.net_to_par_sum += entry.to_par ?? 0;
+          existing.stroke_events += 1;
+        }
+        if (entry.gross_score != null) {
+          existing.total_gross += entry.gross_score;
+          if (entry.course_par != null) {
+            existing.gross_to_par_sum += entry.gross_score - entry.course_par;
+          }
+        }
         confirmedMap.set(entry.profile_id, existing);
       }
     }
@@ -171,7 +210,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
       // 3c. Finished rounds in this live competition: read from leaderboard entries
       if (finishedRoundIdsForComp.length > 0) {
-        // Find which profiles played finished rounds in this competition
         const { data: finParticipants, error: fpErr } = await supabaseAdmin
           .from("round_participants")
           .select("profile_id")
@@ -216,7 +254,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         if (scoresRes.error) throw scoresRes.error;
         if (participantsRes.error) throw participantsRes.error;
 
-        // Participant lookup: participant_id → { profileId, courseHcp }
         const participantMap = new Map<string, { profileId: string; courseHcp: number }>();
         for (const p of participantsRes.data ?? []) {
           if (!p.profile_id) continue;
@@ -229,7 +266,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
           participantMap.set(p.id, { profileId: p.profile_id, courseHcp: hcp });
         }
 
-        // Aggregate scores per participant
         const scoreAgg = new Map<string, { gross: number; holes: Set<number> }>();
         for (const s of scoresRes.data ?? []) {
           if (typeof s.strokes !== "number") continue;
@@ -242,7 +278,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         }
 
         for (const [participantId, pInfo] of participantMap) {
-          // Skip players who already have a finished submission in this competition
           if (competitionPlayerScores.has(pInfo.profileId)) continue;
 
           const agg = scoreAgg.get(participantId);
@@ -250,7 +285,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
           const gross = agg?.gross ?? 0;
           const net = gross > 0 ? gross - pInfo.courseHcp : null;
 
-          // If this player appears in multiple live rounds, use the one with more holes
           const existing = competitionPlayerScores.get(pInfo.profileId);
           if (!existing || thru > (existing.holesCompleted ?? 0)) {
             competitionPlayerScores.set(pInfo.profileId, {
@@ -268,7 +302,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       const ranks = denseRank(rankInput, higherBetter);
 
       for (const [profileId, { netScore }] of competitionPlayerScores) {
-        if (netScore == null) continue; // No score yet — no pending points
+        if (netScore == null) continue;
         const position = ranks.get(profileId) ?? null;
         const pts = getPointsForPosition(position, pointsModel, pointsTable);
         if (pts != null) {
@@ -310,7 +344,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       profileId,
       score: confirmedMap.get(profileId)?.confirmed_points ?? 0,
     }));
-    // For confirmed position, rank by confirmed points (higher is better in standings)
     const confirmedRanks = denseRank(confirmedScoreInput, true);
 
     const liveTotalInput = allPlayerIds.map((profileId) => {
@@ -326,6 +359,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       const live_points_pending = livePointsMap.get(profileId) ?? 0;
       const prof = profileMap.get(profileId);
 
+      const avg_net_to_par =
+        conf && conf.stroke_events > 0
+          ? Math.round((conf.net_to_par_sum / conf.stroke_events) * 10) / 10
+          : null;
+      const avg_gross_to_par =
+        conf && conf.stroke_events > 0
+          ? Math.round((conf.gross_to_par_sum / conf.stroke_events) * 10) / 10
+          : null;
+
       return {
         profile_id: profileId,
         profile: {
@@ -340,6 +382,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         wins: conf?.wins ?? 0,
         confirmed_position: confirmedRanks.get(profileId) ?? null,
         live_position: liveRanks.get(profileId) ?? null,
+        total_gross: conf && conf.total_gross > 0 ? conf.total_gross : null,
+        total_net: conf && conf.total_net > 0 ? conf.total_net : null,
+        avg_net_to_par,
+        avg_gross_to_par,
       };
     });
 

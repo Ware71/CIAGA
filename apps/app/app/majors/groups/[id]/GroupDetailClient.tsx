@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 import { supabase } from "@/lib/supabaseClient";
@@ -14,6 +14,7 @@ import type {
   GroupBalanceTransactionWithDetails,
 } from "@/lib/majors/types";
 import type { LiveGroupStandingEntry, LiveGroupStandingsResponse } from "@/app/api/majors/groups/[id]/live-standings/route";
+import type { CompetitionResultsResponse } from "@/app/api/majors/groups/[id]/competition-results/route";
 import { competitionStatusLabel } from "@/lib/majors/labels";
 
 type CompetitionSeriesWithEventCount = CompetitionSeries & {
@@ -24,10 +25,10 @@ type Tab = "overview" | "competitions" | "standings" | "schedule" | "history" | 
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
-  { id: "competitions", label: "Competitions" },
   { id: "standings", label: "Standings" },
-  { id: "members", label: "Members" },
+  { id: "competitions", label: "Competitions" },
   { id: "series", label: "Series" },
+  { id: "members", label: "Members" },
   { id: "finances", label: "Finances" },
   { id: "settings", label: "Settings" },
 ];
@@ -198,6 +199,12 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   const [balanceMembers, setBalanceMembers] = useState<MemberBalanceSummary[]>([]);
   const [myBalance, setMyBalance] = useState<{ balance: number; total_charged: number; total_paid: number; transactions: GroupBalanceTransactionWithDetails[] } | null>(null);
   const [expandedMember, setExpandedMember] = useState<string | null>(null);
+  const [selectedYear, setSelectedYear] = useState<number | "all">(new Date().getFullYear());
+  const [standingsSubTab, setStandingsSubTab] = useState<"points" | "strokes" | "avgpar" | "competitions">("points");
+  const [showNet, setShowNet] = useState(true);
+  const [competitionResults, setCompetitionResults] = useState<CompetitionResultsResponse | null>(null);
+  const yearEffectFirstMount = useRef(true);
+
   const [showCreateSeriesModal, setShowCreateSeriesModal] = useState(false);
   const [newSeriesName, setNewSeriesName] = useState("");
   const [newSeriesDesc, setNewSeriesDesc] = useState("");
@@ -216,12 +223,14 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         setMyProfileId(session.profileId);
         const headers = { Authorization: `Bearer ${session.accessToken}` };
 
-        const [groupRes, compsRes, standingsRes, membersRes, seriesRes] = await Promise.all([
+        const defaultYear = new Date().getFullYear();
+        const [groupRes, compsRes, standingsRes, membersRes, seriesRes, resultsRes] = await Promise.all([
           fetch(`/api/majors/groups/${groupId}`, { headers }),
           fetch(`/api/majors/competitions?group_id=${groupId}`, { headers }),
-          fetch(`/api/majors/groups/${groupId}/live-standings`, { headers }),
+          fetch(`/api/majors/groups/${groupId}/live-standings?year=${defaultYear}`, { headers }),
           fetch(`/api/majors/groups/${groupId}/members`, { headers }),
           fetch(`/api/majors/series?group_id=${groupId}`, { headers }),
+          fetch(`/api/majors/groups/${groupId}/competition-results?year=${defaultYear}`, { headers }),
         ]);
 
         if (cancelled) return;
@@ -248,6 +257,10 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         if (seriesRes.ok) {
           const j = await seriesRes.json();
           setSeries(j.series ?? []);
+        }
+        if (resultsRes.ok) {
+          const j: CompetitionResultsResponse = await resultsRes.json();
+          setCompetitionResults(j);
         }
 
       } finally {
@@ -296,10 +309,16 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     }
   };
 
+  // Keep a ref so realtime callbacks always use the current year without stale closure issues
+  const selectedYearRef = useRef<number | "all">(new Date().getFullYear());
+  useEffect(() => { selectedYearRef.current = selectedYear; }, [selectedYear]);
+
   const refreshLiveStandings = async () => {
     const session = await getViewerSession();
     if (!session) return;
-    const res = await fetch(`/api/majors/groups/${groupId}/live-standings`, {
+    const year = selectedYearRef.current;
+    const yearParam = year === "all" ? "" : `?year=${year}`;
+    const res = await fetch(`/api/majors/groups/${groupId}/live-standings${yearParam}`, {
       headers: { Authorization: `Bearer ${session.accessToken}` },
     });
     if (res.ok) {
@@ -307,6 +326,27 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       setLiveStandingsData(j);
     }
   };
+
+  // Re-fetch standings + competition results when year selector changes
+  useEffect(() => {
+    if (yearEffectFirstMount.current) { yearEffectFirstMount.current = false; return; }
+    let cancelled = false;
+    (async () => {
+      const session = await getViewerSession();
+      if (!session || cancelled) return;
+      const headers = { Authorization: `Bearer ${session.accessToken}` };
+      const yearParam = selectedYear === "all" ? "" : `year=${selectedYear}`;
+      const qs = yearParam ? `?${yearParam}` : "";
+      const [standingsRes, resultsRes] = await Promise.all([
+        fetch(`/api/majors/groups/${groupId}/live-standings${qs}`, { headers }),
+        fetch(`/api/majors/groups/${groupId}/competition-results${qs}`, { headers }),
+      ]);
+      if (cancelled) return;
+      if (standingsRes.ok) setLiveStandingsData(await standingsRes.json());
+      if (resultsRes.ok) setCompetitionResults(await resultsRes.json());
+    })();
+    return () => { cancelled = true; };
+  }, [selectedYear]);
 
   // Realtime: refresh live standings whenever major_group_standings changes
   // (fired by ciaga_compute_group_standings cascade on round finish / competition complete)
@@ -486,6 +526,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   };
 
   const isAdminOrOwner = myRole === "owner" || myRole === "admin";
+  const isMember = !!myRole;
   const upcomingComps = competitions.filter((c) => c.majors_status === "upcoming" || c.majors_status === "live");
   const completedComps = competitions.filter(
     (c) => c.majors_status === "completed" || c.majors_status === "cancelled"
@@ -544,24 +585,87 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
   const tabContent: Record<Tab, React.ReactNode> = {
     overview: (
-      <div className="space-y-4">
+      <div className="space-y-3">
         {group.description && (
           <p className="text-[13px] text-emerald-100/75 leading-relaxed">{group.description}</p>
         )}
 
-        {/* Stats grid */}
-        <div className="grid grid-cols-2 gap-2">
-          {[
-            { label: "Type", value: group.type.replace(/_/g, " ") },
-            { label: "Privacy", value: group.privacy.replace(/_/g, " ") },
-            { label: "Members", value: String(group.member_count) },
-            { label: "Competitions", value: String(competitions.length) },
-          ].map((item) => (
-            <div key={item.label} className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5">
-              <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider mb-0.5">{item.label}</div>
-              <div className="text-sm font-semibold text-emerald-50 capitalize">{item.value}</div>
+        {/* Standings preview — top 3 players */}
+        {(liveStandingsData?.rows?.length ?? 0) > 0 && (
+          <button
+            type="button"
+            onClick={() => setTab("standings")}
+            className="w-full rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/70 px-3 py-3 text-left hover:bg-emerald-900/30 transition-colors"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider">Standings</div>
+              <span className="text-[10px] text-emerald-400/80">View all →</span>
             </div>
-          ))}
+            <div className="space-y-1.5">
+              {(liveStandingsData?.rows ?? []).slice(0, 3).map((s, i) => {
+                const pos = s.live_position ?? s.confirmed_position;
+                return (
+                  <div key={s.profile_id} className="flex items-center gap-2">
+                    <span className={`w-5 text-center text-[11px] font-bold ${i === 0 ? "text-[#f5e6b0]" : i === 1 ? "text-[#c0c0c0]" : "text-[#cd7f32]"}`}>{pos}</span>
+                    <span className="flex-1 text-[12px] font-semibold text-emerald-100 truncate">{s.profile?.name ?? "—"}</span>
+                    <span className="text-[11px] text-emerald-200/60">{s.confirmed_points} pts</span>
+                  </div>
+                );
+              })}
+            </div>
+          </button>
+        )}
+
+        {/* Shortcut cards grid */}
+        <div className="grid grid-cols-2 gap-2">
+          {/* Type — static */}
+          <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5">
+            <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider mb-0.5">Type</div>
+            <div className="text-sm font-semibold text-emerald-50 capitalize">{group.type.replace(/_/g, " ")}</div>
+          </div>
+          {/* Privacy — static */}
+          <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5">
+            <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider mb-0.5">Privacy</div>
+            <div className="text-sm font-semibold text-emerald-50 capitalize">{group.privacy.replace(/_/g, " ")}</div>
+          </div>
+          {/* Members — navigates to members tab */}
+          <button
+            type="button"
+            onClick={() => setTab("members")}
+            className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 text-left hover:bg-emerald-900/30 transition-colors"
+          >
+            <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider mb-0.5">Members</div>
+            <div className="flex items-baseline justify-between">
+              <div className="text-sm font-semibold text-emerald-50">{group.member_count}</div>
+              <span className="text-[10px] text-emerald-400/70">→</span>
+            </div>
+          </button>
+          {/* Competitions — navigates to competitions tab */}
+          <button
+            type="button"
+            onClick={() => setTab("competitions")}
+            className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 text-left hover:bg-emerald-900/30 transition-colors"
+          >
+            <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider mb-0.5">Competitions</div>
+            <div className="flex items-baseline justify-between">
+              <div className="text-sm font-semibold text-emerald-50">{competitions.length}</div>
+              <span className="text-[10px] text-emerald-400/70">→</span>
+            </div>
+          </button>
+          {/* Series — navigates to series tab (members only) */}
+          {isMember && (
+            <button
+              type="button"
+              onClick={() => setTab("series")}
+              className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 text-left hover:bg-emerald-900/30 transition-colors"
+            >
+              <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider mb-0.5">Series</div>
+              <div className="flex items-baseline justify-between">
+                <div className="text-sm font-semibold text-emerald-50">{series.length}</div>
+                <span className="text-[10px] text-emerald-400/70">→</span>
+              </div>
+            </button>
+          )}
         </div>
 
         {/* Season timeline */}
@@ -707,94 +811,307 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     standings: (() => {
       const rows = liveStandingsData?.rows ?? [];
       const hasLive = liveStandingsData?.hasLive ?? false;
+      const currentYear = new Date().getFullYear();
+      const isCurrentYear = selectedYear === currentYear;
+      const showLiveIndicator = hasLive && (selectedYear === "all" || isCurrentYear);
 
-      if (rows.length === 0) {
-        return (
-          <div className="space-y-2">
-            <div className="text-sm text-emerald-100/60 text-center py-8">
-              Standings will appear once competitions are completed.
-            </div>
+      const availableYears = Array.from(
+        new Set(competitions.map((c) => c.competition_year).filter((y): y is number => y != null))
+      ).sort((a, b) => b - a);
+
+      const subTabClass = (id: typeof standingsSubTab) =>
+        `shrink-0 px-3 py-1 rounded-full text-[11px] font-semibold transition-colors ${
+          standingsSubTab === id
+            ? "bg-emerald-700 text-white"
+            : "border border-emerald-900/60 text-emerald-200/60 hover:text-emerald-100"
+        }`;
+
+      const yearChipClass = (y: number | "all") =>
+        `shrink-0 px-2.5 py-0.5 rounded-full text-[11px] font-semibold transition-colors ${
+          selectedYear === y
+            ? "bg-emerald-700 text-white"
+            : "border border-emerald-900/60 text-emerald-200/60 hover:text-emerald-100"
+        }`;
+
+      const avatarEl = (profile: LiveGroupStandingEntry["profile"]) =>
+        profile?.avatar_url ? (
+          <img src={profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
+        ) : (
+          <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
+            {profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
           </div>
         );
-      }
+
+      const formatToPar = (v: number | null) => {
+        if (v == null) return "—";
+        if (v === 0) return "E";
+        return v > 0 ? `+${v.toFixed(1)}` : v.toFixed(1);
+      };
+
+      const ordinal = (n: number) => {
+        const s = ["th", "st", "nd", "rd"];
+        const v = n % 100;
+        return n + (s[(v - 20) % 10] ?? s[v] ?? s[0]);
+      };
+
+      // ── Points sub-tab ───────────────────────────────────────────────────
+      const renderPoints = () => {
+        if (rows.length === 0) {
+          return <div className="text-sm text-emerald-100/60 text-center py-8">No standings for this period.</div>;
+        }
+        return (
+          <div className="space-y-2">
+            {showLiveIndicator && (
+              <div className="flex items-center gap-2 px-1 pb-1">
+                <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
+                <span className="text-[11px] text-amber-300/80 font-medium">Live competition in progress</span>
+              </div>
+            )}
+            {rows.map((s) => {
+              const improved = showLiveIndicator && s.live_position != null && s.confirmed_position != null && s.live_position < s.confirmed_position;
+              const worsened = showLiveIndicator && s.live_position != null && s.confirmed_position != null && s.live_position > s.confirmed_position;
+              const displayPos = showLiveIndicator ? s.live_position : s.confirmed_position;
+              return (
+                <div key={s.profile_id} className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 ${displayPos === 1 ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5" : displayPos === 2 ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5" : displayPos === 3 ? "border-[#cd7f32]/20 bg-[#cd7f32]/5" : "border-emerald-900/50 bg-[#0b3b21]/60"}`}>
+                  <div className="w-3 shrink-0 flex justify-center">
+                    {improved && <span className="text-[10px] leading-none text-emerald-400">▲</span>}
+                    {worsened && <span className="text-[10px] leading-none text-red-400">▼</span>}
+                  </div>
+                  <PositionBadge position={displayPos ?? null} />
+                  {avatarEl(s.profile)}
+                  <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
+                  <div className="text-right shrink-0 space-y-0.5">
+                    <div className="flex items-baseline justify-end gap-1">
+                      <span className="text-xs font-extrabold text-[#f5e6b0]">{s.confirmed_points} pts</span>
+                      {showLiveIndicator && s.live_points_pending > 0 && (
+                        <span className="text-[10px] font-semibold text-amber-400/90">+{s.live_points_pending}</span>
+                      )}
+                    </div>
+                    <div className="flex gap-1 justify-end">
+                      <span className="text-[9px] text-emerald-100/50 bg-emerald-900/40 rounded px-1">{s.events_played} evts</span>
+                      {s.wins > 0 && <span className="text-[9px] text-[#f5e6b0]/70 bg-[#f5e6b0]/10 rounded px-1">{s.wins}W</span>}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      };
+
+      // ── Strokes sub-tab ──────────────────────────────────────────────────
+      const renderStrokes = () => {
+        const field = showNet ? "total_net" : "total_gross";
+        const sorted = [...rows]
+          .filter((r) => r[field] != null)
+          .sort((a, b) => (a[field] as number) - (b[field] as number));
+        if (sorted.length === 0) {
+          return <div className="text-sm text-emerald-100/60 text-center py-8">No stroke data for this period.</div>;
+        }
+        return (
+          <div className="space-y-2">
+            {sorted.map((s, i) => (
+              <div key={s.profile_id} className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 ${i === 0 ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5" : i === 1 ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5" : i === 2 ? "border-[#cd7f32]/20 bg-[#cd7f32]/5" : "border-emerald-900/50 bg-[#0b3b21]/60"}`}>
+                <PositionBadge position={i + 1} />
+                {avatarEl(s.profile)}
+                <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
+                <div className="text-right shrink-0">
+                  <div className="text-xs font-extrabold text-emerald-100">{s[field]}</div>
+                  <div className="text-[9px] text-emerald-100/50">{s.events_played} evts</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      };
+
+      // ── Avg to par sub-tab ───────────────────────────────────────────────
+      const renderAvgPar = () => {
+        const field = showNet ? "avg_net_to_par" : "avg_gross_to_par";
+        const sorted = [...rows]
+          .filter((r) => r[field] != null)
+          .sort((a, b) => (a[field] as number) - (b[field] as number));
+        if (sorted.length === 0) {
+          return <div className="text-sm text-emerald-100/60 text-center py-8">No score data for this period.</div>;
+        }
+        return (
+          <div className="space-y-2">
+            {sorted.map((s, i) => {
+              const val = s[field] as number;
+              const colour = val < 0 ? "text-emerald-400" : val > 0 ? "text-red-400" : "text-emerald-100/80";
+              return (
+                <div key={s.profile_id} className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 ${i === 0 ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5" : i === 1 ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5" : i === 2 ? "border-[#cd7f32]/20 bg-[#cd7f32]/5" : "border-emerald-900/50 bg-[#0b3b21]/60"}`}>
+                  <PositionBadge position={i + 1} />
+                  {avatarEl(s.profile)}
+                  <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
+                  <div className="text-right shrink-0">
+                    <div className={`text-xs font-extrabold ${colour}`}>{formatToPar(val)}</div>
+                    <div className="text-[9px] text-emerald-100/50">{s.events_played} evts</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      };
+
+      // ── Competitions sub-tab ─────────────────────────────────────────────
+      const renderCompetitions = () => {
+        if (!competitionResults) {
+          return <div className="text-sm text-emerald-100/60 text-center py-8">Loading…</div>;
+        }
+
+        if (selectedYear !== "all") {
+          // Year view: list competitions with winner
+          const yearComps = competitionResults.competitions;
+          if (yearComps.length === 0) {
+            return <div className="text-sm text-emerald-100/60 text-center py-8">No competitions for {selectedYear}.</div>;
+          }
+          return (
+            <div className="space-y-2">
+              {yearComps.map((c) => {
+                const isCompleted = ["completed", "official"].includes(c.majors_status);
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => router.push(`/majors/competitions/${c.id}`)}
+                    className="w-full flex items-start justify-between gap-2 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 text-left hover:bg-emerald-900/30 transition-colors"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-[12px] font-semibold text-emerald-100 truncate">{c.name}</div>
+                      {c.series_name && (
+                        <div className="text-[10px] text-emerald-200/50 mt-0.5">{c.series_name}</div>
+                      )}
+                    </div>
+                    <div className="text-right shrink-0">
+                      {isCompleted && c.winner ? (
+                        <>
+                          <div className="text-[11px] font-semibold text-[#f5e6b0]">{c.winner.name}</div>
+                          {c.winner_net_score != null && (
+                            <div className="text-[10px] text-emerald-200/55">{c.winner_net_score} net</div>
+                          )}
+                        </>
+                      ) : isCompleted ? (
+                        <div className="text-[10px] text-emerald-200/50">No result</div>
+                      ) : (
+                        <div className="text-[10px] text-emerald-200/50">
+                          {c.competition_date
+                            ? new Date(c.competition_date).toLocaleDateString([], { month: "short", day: "numeric" })
+                            : "Scheduled"}
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          );
+        }
+
+        // All-time view: per-player records
+        const records = competitionResults.player_records;
+        if (records.length === 0) {
+          return <div className="text-sm text-emerald-100/60 text-center py-8">No competition data yet.</div>;
+        }
+        return (
+          <div className="space-y-2">
+            {records.map((pr) => (
+              <div key={pr.profile_id} className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/70 p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  {pr.profile.avatar_url ? (
+                    <img src={pr.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
+                  ) : (
+                    <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
+                      {pr.profile.name?.slice(0, 2).toUpperCase() ?? "?"}
+                    </div>
+                  )}
+                  <span className="flex-1 text-sm font-semibold text-emerald-100 truncate">{pr.profile.name ?? "Unknown"}</span>
+                  <span className="text-[11px] font-bold text-[#f5e6b0]">
+                    {pr.total_wins} {pr.total_wins === 1 ? "win" : "wins"}
+                  </span>
+                </div>
+                {/* Series records */}
+                {pr.series_records.length > 0 && (
+                  <div className="space-y-1 pl-9">
+                    {pr.series_records.map((sr) => (
+                      <div key={sr.series_id ?? "standalone"} className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] text-emerald-200/70 truncate">{sr.series_name ?? "Series"}</span>
+                        <span className="text-[10px] text-emerald-200/55 shrink-0">
+                          {sr.wins > 0
+                            ? `${sr.wins}× win${sr.wins !== 1 ? "s" : ""}`
+                            : sr.best_finish != null
+                            ? `Best: ${ordinal(sr.best_finish)}`
+                            : "—"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {/* Standalone wins */}
+                {pr.standalone_wins.length > 0 && (
+                  <div className="space-y-1 pl-9">
+                    {pr.standalone_wins.map((w) => (
+                      <div key={w.competition_id} className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] text-emerald-200/70 truncate">{w.name ?? "Competition"}</span>
+                        <span className="text-[10px] text-[#f5e6b0]/70 shrink-0">{w.year ?? ""}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {pr.series_records.length === 0 && pr.standalone_wins.length === 0 && (
+                  <div className="pl-9 text-[11px] text-emerald-200/40">No entries yet</div>
+                )}
+              </div>
+            ))}
+          </div>
+        );
+      };
 
       return (
-        <div className="space-y-2">
-          {/* Live indicator */}
-          {hasLive && (
-            <div className="flex items-center gap-2 px-1 pb-1">
-              <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
-              <span className="text-[11px] text-amber-300/80 font-medium">Live competition in progress</span>
+        <div className="space-y-3">
+          {/* Year selector */}
+          <div className="overflow-x-auto -mx-1 px-1">
+            <div className="flex gap-1.5 w-max">
+              <button type="button" onClick={() => setSelectedYear("all")} className={yearChipClass("all")}>All Time</button>
+              {availableYears.map((y) => (
+                <button key={y} type="button" onClick={() => setSelectedYear(y)} className={yearChipClass(y)}>{y}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Sub-tab bar */}
+          <div className="overflow-x-auto -mx-1 px-1">
+            <div className="flex gap-1.5 w-max">
+              <button type="button" onClick={() => setStandingsSubTab("points")} className={subTabClass("points")}>Points</button>
+              <button type="button" onClick={() => setStandingsSubTab("strokes")} className={subTabClass("strokes")}>Strokes</button>
+              <button type="button" onClick={() => setStandingsSubTab("avgpar")} className={subTabClass("avgpar")}>Avg to Par</button>
+              <button type="button" onClick={() => setStandingsSubTab("competitions")} className={subTabClass("competitions")}>Competitions</button>
+            </div>
+          </div>
+
+          {/* Net/Gross toggle for strokes + avgpar */}
+          {(standingsSubTab === "strokes" || standingsSubTab === "avgpar") && (
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-emerald-200/50 uppercase tracking-wider">Scoring:</span>
+              <button
+                type="button"
+                onClick={() => setShowNet(true)}
+                className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${showNet ? "bg-emerald-700 text-white" : "border border-emerald-900/60 text-emerald-200/60"}`}
+              >Net</button>
+              <button
+                type="button"
+                onClick={() => setShowNet(false)}
+                className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${!showNet ? "bg-emerald-700 text-white" : "border border-emerald-900/60 text-emerald-200/60"}`}
+              >Gross</button>
             </div>
           )}
 
-          {rows.map((s: LiveGroupStandingEntry) => {
-            const improved =
-              hasLive &&
-              s.live_position != null &&
-              s.confirmed_position != null &&
-              s.live_position < s.confirmed_position;
-            const worsened =
-              hasLive &&
-              s.live_position != null &&
-              s.confirmed_position != null &&
-              s.live_position > s.confirmed_position;
-            const displayPos = hasLive ? s.live_position : s.confirmed_position;
-
-            return (
-              <div
-                key={s.profile_id}
-                className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 ${
-                  displayPos === 1
-                    ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5"
-                    : displayPos === 2
-                    ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5"
-                    : displayPos === 3
-                    ? "border-[#cd7f32]/20 bg-[#cd7f32]/5"
-                    : "border-emerald-900/50 bg-[#0b3b21]/60"
-                }`}
-              >
-                {/* Arrow column */}
-                <div className="w-3 shrink-0 flex justify-center">
-                  {improved && <span className="text-[10px] leading-none text-emerald-400">▲</span>}
-                  {worsened && <span className="text-[10px] leading-none text-red-400">▼</span>}
-                </div>
-
-                <PositionBadge position={displayPos ?? null} />
-
-                {s.profile?.avatar_url ? (
-                  <img src={s.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
-                ) : (
-                  <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
-                    {s.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
-                  </div>
-                )}
-
-                <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">
-                  {s.profile?.name ?? "Unknown"}
-                </span>
-
-                <div className="text-right shrink-0 space-y-0.5">
-                  <div className="flex items-baseline justify-end gap-1">
-                    <span className="text-xs font-extrabold text-[#f5e6b0]">{s.confirmed_points} pts</span>
-                    {hasLive && s.live_points_pending > 0 && (
-                      <span className="text-[10px] font-semibold text-amber-400/90">+{s.live_points_pending}</span>
-                    )}
-                  </div>
-                  <div className="flex gap-1 justify-end">
-                    <span className="text-[9px] text-emerald-100/50 bg-emerald-900/40 rounded px-1">
-                      {s.events_played} evts
-                    </span>
-                    {s.wins > 0 && (
-                      <span className="text-[9px] text-[#f5e6b0]/70 bg-[#f5e6b0]/10 rounded px-1">
-                        {s.wins}W
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+          {/* Sub-tab content */}
+          {standingsSubTab === "points" && renderPoints()}
+          {standingsSubTab === "strokes" && renderStrokes()}
+          {standingsSubTab === "avgpar" && renderAvgPar()}
+          {standingsSubTab === "competitions" && renderCompetitions()}
         </div>
       );
     })(),
@@ -1259,12 +1576,9 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     ),
   };
 
-  const isMember = !!myRole;
-
   const visibleTabs = TABS.filter((t) => {
-    if (t.id === "settings") return isAdminOrOwner;
+    if (t.id === "settings" || t.id === "finances") return isAdminOrOwner;
     if (t.id === "series") return isMember;
-    if (t.id === "finances") return isMember; // all active members can see their own balance
     return true;
   });
 
