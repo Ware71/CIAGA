@@ -7,13 +7,13 @@ import { supabase } from "@/lib/supabaseClient";
 import type {
   MajorGroup,
   MajorGroupMembershipWithProfile,
-  GroupStandingWithProfile,
   CompetitionWithGroup,
   CompetitionSeries,
   SeriesEventTemplate,
   MemberBalanceSummary,
   GroupBalanceTransactionWithDetails,
 } from "@/lib/majors/types";
+import type { LiveGroupStandingEntry, LiveGroupStandingsResponse } from "@/app/api/majors/groups/[id]/live-standings/route";
 import { competitionStatusLabel } from "@/lib/majors/labels";
 
 type CompetitionSeriesWithEventCount = CompetitionSeries & {
@@ -186,7 +186,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   const [showCancelled, setShowCancelled] = useState(true);
   const [group, setGroup] = useState<GroupData | null>(null);
   const [competitions, setCompetitions] = useState<CompetitionWithGroup[]>([]);
-  const [standings, setStandings] = useState<GroupStandingWithProfile[]>([]);
+  const [liveStandingsData, setLiveStandingsData] = useState<LiveGroupStandingsResponse | null>(null);
   const [members, setMembers] = useState<MajorGroupMembershipWithProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [myRole, setMyRole] = useState<string | null>(null);
@@ -219,7 +219,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         const [groupRes, compsRes, standingsRes, membersRes, seriesRes] = await Promise.all([
           fetch(`/api/majors/groups/${groupId}`, { headers }),
           fetch(`/api/majors/competitions?group_id=${groupId}`, { headers }),
-          fetch(`/api/majors/leaderboard?group_id=${groupId}`, { headers }),
+          fetch(`/api/majors/groups/${groupId}/live-standings`, { headers }),
           fetch(`/api/majors/groups/${groupId}/members`, { headers }),
           fetch(`/api/majors/series?group_id=${groupId}`, { headers }),
         ]);
@@ -234,8 +234,8 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           setCompetitions(j.competitions ?? []);
         }
         if (standingsRes.ok) {
-          const j = await standingsRes.json();
-          setStandings(j.rows ?? []);
+          const j: LiveGroupStandingsResponse = await standingsRes.json();
+          setLiveStandingsData(j);
         }
         if (membersRes.ok) {
           const j = await membersRes.json();
@@ -296,19 +296,20 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     }
   };
 
-  const refreshStandings = async () => {
+  const refreshLiveStandings = async () => {
     const session = await getViewerSession();
     if (!session) return;
-    const res = await fetch(`/api/majors/leaderboard?group_id=${groupId}`, {
+    const res = await fetch(`/api/majors/groups/${groupId}/live-standings`, {
       headers: { Authorization: `Bearer ${session.accessToken}` },
     });
     if (res.ok) {
-      const j = await res.json();
-      setStandings(j.rows ?? []);
+      const j: LiveGroupStandingsResponse = await res.json();
+      setLiveStandingsData(j);
     }
   };
 
-  // Realtime: season standings
+  // Realtime: refresh live standings whenever major_group_standings changes
+  // (fired by ciaga_compute_group_standings cascade on round finish / competition complete)
   useEffect(() => {
     let cancelled = false;
     const channel = supabase
@@ -318,7 +319,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         schema: "public",
         table: "major_group_standings",
         filter: `group_id=eq.${groupId}`,
-      }, () => { if (!cancelled) refreshStandings(); })
+      }, () => { if (!cancelled) refreshLiveStandings(); })
       .subscribe();
 
     return () => {
@@ -326,6 +327,58 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       supabase.removeChannel(channel);
     };
   }, [groupId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Realtime: per-hole live updates via round_score_events (debounced 800ms)
+  useEffect(() => {
+    const ids = liveStandingsData?.liveRoundIds ?? [];
+    if (!ids.length) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const debouncedRefresh = () => {
+      if (cancelled) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => { if (!cancelled) refreshLiveStandings(); }, 800);
+    };
+    const channels = ids.map((roundId) =>
+      supabase
+        .channel(`live-scores:${groupId}:${roundId}`)
+        .on("postgres_changes", {
+          event: "INSERT",
+          schema: "public",
+          table: "round_score_events",
+          filter: `round_id=eq.${roundId}`,
+        }, debouncedRefresh)
+        .subscribe()
+    );
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      channels.forEach((ch) => supabase.removeChannel(ch));
+    };
+  }, [liveStandingsData?.liveRoundIds?.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Realtime: competition_leaderboard_entries — catches when a round finishes
+  // and ciaga_compute_competition_leaderboard() rewrites entries for a live competition
+  useEffect(() => {
+    const compIds = liveStandingsData?.liveCompetitionIds ?? [];
+    if (!compIds.length) return;
+    let cancelled = false;
+    const channels = compIds.map((compId) =>
+      supabase
+        .channel(`live-leaderboard:${groupId}:${compId}`)
+        .on("postgres_changes", {
+          event: "*",
+          schema: "public",
+          table: "competition_leaderboard_entries",
+          filter: `competition_id=eq.${compId}`,
+        }, () => { if (!cancelled) refreshLiveStandings(); })
+        .subscribe()
+    );
+    return () => {
+      cancelled = true;
+      channels.forEach((ch) => supabase.removeChannel(ch));
+    };
+  }, [liveStandingsData?.liveCompetitionIds?.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleJoin = async () => {
     setJoining(true);
@@ -651,48 +704,100 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       </div>
     ),
 
-    standings: (
-      <div className="space-y-2">
-        {standings.length === 0 && (
-          <div className="text-sm text-emerald-100/60 text-center py-8">
-            Standings will appear once competitions are completed.
-          </div>
-        )}
-        {standings.map((s) => (
-          <div
-            key={s.id}
-            className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 ${
-              s.position === 1
-                ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5"
-                : s.position === 2
-                ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5"
-                : s.position === 3
-                ? "border-[#cd7f32]/20 bg-[#cd7f32]/5"
-                : "border-emerald-900/50 bg-[#0b3b21]/60"
-            }`}
-          >
-            <PositionBadge position={s.position ?? null} />
-            {s.profile?.avatar_url ? (
-              <img src={s.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
-            ) : (
-              <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
-                {s.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
-              </div>
-            )}
-            <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
-            <div className="text-right shrink-0 space-y-0.5">
-              <div className="text-xs font-extrabold text-[#f5e6b0]">{s.season_points} pts</div>
-              <div className="flex gap-1 justify-end">
-                <span className="text-[9px] text-emerald-100/50 bg-emerald-900/40 rounded px-1">{s.events_played} evts</span>
-                {s.wins > 0 && (
-                  <span className="text-[9px] text-[#f5e6b0]/70 bg-[#f5e6b0]/10 rounded px-1">{s.wins}W</span>
-                )}
-              </div>
+    standings: (() => {
+      const rows = liveStandingsData?.rows ?? [];
+      const hasLive = liveStandingsData?.hasLive ?? false;
+
+      if (rows.length === 0) {
+        return (
+          <div className="space-y-2">
+            <div className="text-sm text-emerald-100/60 text-center py-8">
+              Standings will appear once competitions are completed.
             </div>
           </div>
-        ))}
-      </div>
-    ),
+        );
+      }
+
+      return (
+        <div className="space-y-2">
+          {/* Live indicator */}
+          {hasLive && (
+            <div className="flex items-center gap-2 px-1 pb-1">
+              <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
+              <span className="text-[11px] text-amber-300/80 font-medium">Live competition in progress</span>
+            </div>
+          )}
+
+          {rows.map((s: LiveGroupStandingEntry) => {
+            const improved =
+              hasLive &&
+              s.live_position != null &&
+              s.confirmed_position != null &&
+              s.live_position < s.confirmed_position;
+            const worsened =
+              hasLive &&
+              s.live_position != null &&
+              s.confirmed_position != null &&
+              s.live_position > s.confirmed_position;
+            const displayPos = hasLive ? s.live_position : s.confirmed_position;
+
+            return (
+              <div
+                key={s.profile_id}
+                className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 ${
+                  displayPos === 1
+                    ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5"
+                    : displayPos === 2
+                    ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5"
+                    : displayPos === 3
+                    ? "border-[#cd7f32]/20 bg-[#cd7f32]/5"
+                    : "border-emerald-900/50 bg-[#0b3b21]/60"
+                }`}
+              >
+                {/* Arrow column */}
+                <div className="w-3 shrink-0 flex justify-center">
+                  {improved && <span className="text-[10px] leading-none text-emerald-400">▲</span>}
+                  {worsened && <span className="text-[10px] leading-none text-red-400">▼</span>}
+                </div>
+
+                <PositionBadge position={displayPos ?? null} />
+
+                {s.profile?.avatar_url ? (
+                  <img src={s.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
+                ) : (
+                  <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
+                    {s.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
+                  </div>
+                )}
+
+                <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">
+                  {s.profile?.name ?? "Unknown"}
+                </span>
+
+                <div className="text-right shrink-0 space-y-0.5">
+                  <div className="flex items-baseline justify-end gap-1">
+                    <span className="text-xs font-extrabold text-[#f5e6b0]">{s.confirmed_points} pts</span>
+                    {hasLive && s.live_points_pending > 0 && (
+                      <span className="text-[10px] font-semibold text-amber-400/90">+{s.live_points_pending}</span>
+                    )}
+                  </div>
+                  <div className="flex gap-1 justify-end">
+                    <span className="text-[9px] text-emerald-100/50 bg-emerald-900/40 rounded px-1">
+                      {s.events_played} evts
+                    </span>
+                    {s.wins > 0 && (
+                      <span className="text-[9px] text-[#f5e6b0]/70 bg-[#f5e6b0]/10 rounded px-1">
+                        {s.wins}W
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      );
+    })(),
 
     // Keep schedule/history accessible via competitions tab filtering
     schedule: (
