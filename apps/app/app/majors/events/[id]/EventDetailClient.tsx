@@ -19,7 +19,7 @@ import type {
   LeaderboardRevealStyle,
 } from "@/lib/majors/types";
 import { EVENT_TYPES, SCORING_MODELS, POINTS_MODELS } from "@/lib/events/constants";
-import { HandicapRulesEditor } from "@/components/events/HandicapRulesEditor";
+import { HandicapRulesEditor } from "@/components/competitions/HandicapRulesEditor";
 import { CoursePickerModal } from "@/components/rounds/CoursePickerModal";
 import { supabase } from "@/lib/supabaseClient";
 import { LeaderboardReveal } from "@/components/majors/LeaderboardReveal";
