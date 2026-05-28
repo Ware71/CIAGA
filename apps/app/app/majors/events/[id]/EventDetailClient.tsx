@@ -1005,6 +1005,7 @@ function EventSetupSheet({
   const compType = event.event_type;
   const isAggregate = event.event_category === "aggregate";
   const handicap = (event.handicap_rules ?? {}) as Record<string, unknown>;
+  const isScoringLocked = ["completed", "official"].includes(event.majors_status ?? "");
 
   const [name, setName] = useState(event.name ?? "");
   const [description, setDescription] = useState(event.description ?? "");
@@ -1259,10 +1260,14 @@ function EventSetupSheet({
           {/* Scoring model */}
           <div className="space-y-1">
             <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Scoring</label>
+            {isScoringLocked && (
+              <p className="text-[10px] text-amber-400/70">Locked — event is {event.majors_status}. Revert to live to change scoring config.</p>
+            )}
             <div className="grid grid-cols-2 gap-1.5">
               {SCORING_MODELS.map((s) => (
-                <button key={s.value} type="button" onClick={() => setScoringModel(s.value)}
-                  className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${scoringModel === s.value ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
+                <button key={s.value} type="button" onClick={() => !isScoringLocked && setScoringModel(s.value)}
+                  disabled={isScoringLocked}
+                  className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${scoringModel === s.value ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
                   {s.label}
                 </button>
               ))}
@@ -1275,6 +1280,7 @@ function EventSetupSheet({
               <div className="text-[10px] uppercase tracking-wider text-emerald-200/50 font-semibold">Handicap Rules</div>
               <HandicapRulesEditor
                 compact
+                disabled={isScoringLocked}
                 value={{ mode: handicapMode as any, allowance_pct: handicapPct, max_handicap: handicapMax }}
                 onChange={(v) => { setHandicapMode(v.mode); setHandicapPct(v.allowance_pct); setHandicapMax(v.max_handicap); }}
               />
@@ -1286,8 +1292,9 @@ function EventSetupSheet({
             <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Points</label>
             <div className="grid grid-cols-2 gap-1.5">
               {POINTS_MODELS.map((p) => (
-                <button key={p.value} type="button" onClick={() => setPointsModel(p.value)}
-                  className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${pointsModel === p.value ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
+                <button key={p.value} type="button" onClick={() => !isScoringLocked && setPointsModel(p.value)}
+                  disabled={isScoringLocked}
+                  className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${pointsModel === p.value ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
                   {p.label}
                 </button>
               ))}
