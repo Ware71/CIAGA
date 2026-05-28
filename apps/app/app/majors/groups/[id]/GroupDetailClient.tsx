@@ -47,7 +47,7 @@ function DropdownSelector<T extends string>({
   value: T;
   onChange: (v: T) => void;
 }) {
-  const [open, setOpen] = useStateLocal(false);
+  const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -91,9 +91,6 @@ function DropdownSelector<T extends string>({
     </div>
   );
 }
-// useState alias so the generic component can use it without naming conflicts
-const useStateLocal = useState as <T>(init: T) => [T, React.Dispatch<React.SetStateAction<T>>];
-
 type GroupData = MajorGroup & { member_count: number };
 
 function PositionBadge({ position }: { position: number | null }) {
