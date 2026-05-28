@@ -816,7 +816,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       const showLiveIndicator = hasLive && (selectedYear === "all" || isCurrentYear);
 
       const availableYears = Array.from(
-        new Set(competitions.map((c) => c.event_year).filter((y): y is number => y != null))
+        new Set(events.map((e) => e.event_year).filter((y): y is number => y != null))
       ).sort((a, b) => b - a);
 
       const subTabClass = (id: typeof standingsSubTab) =>
