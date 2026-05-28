@@ -32,7 +32,7 @@ export default function AdminMajorsClient() {
   const recomputeLeaderboard = () =>
     run("Recompute leaderboard", async (headers) => {
       if (!competitionId.trim()) { addLog("Error: competition_id required"); return; }
-      const res = await fetch(`/api/majors/competitions/${competitionId.trim()}/leaderboard`, {
+      const res = await fetch(`/api/majors/events/${competitionId.trim()}/leaderboard`, {
         method: "POST",
         headers,
         body: JSON.stringify({ recompute: true }),
@@ -53,7 +53,7 @@ export default function AdminMajorsClient() {
   const updateCompStatus = () =>
     run("Update competition status", async (headers) => {
       if (!competitionId.trim() || !compStatus) { addLog("Error: competition_id and status required"); return; }
-      const res = await fetch(`/api/majors/competitions/${competitionId.trim()}`, {
+      const res = await fetch(`/api/majors/events/${competitionId.trim()}`, {
         method: "PATCH",
         headers,
         body: JSON.stringify({ majors_status: compStatus }),

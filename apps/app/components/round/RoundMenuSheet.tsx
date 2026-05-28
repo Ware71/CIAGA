@@ -146,7 +146,7 @@ export default function RoundMenuSheet(props: {
   teams?: Array<{ id: string; name: string }>;
   allParticipants?: Participant[];
   isTeamFormat?: boolean;
-  competitionId?: string;
+  eventId?: string;
   competitionPointsModel?: string;
   competitionPointsTable?: Record<string, number>;
   groupId?: string;
@@ -171,7 +171,7 @@ export default function RoundMenuSheet(props: {
     teams,
     allParticipants,
     isTeamFormat,
-    competitionId,
+    eventId,
     competitionPointsModel,
     competitionPointsTable,
     groupId,
@@ -181,9 +181,9 @@ export default function RoundMenuSheet(props: {
 
   const showPts = !!competitionPointsModel && competitionPointsModel !== "none";
 
-  const [activeTab, setActiveTab] = useState<LeaderboardTab>(competitionId ? "competition" : "gross");
+  const [activeTab, setActiveTab] = useState<LeaderboardTab>(eventId ? "competition" : "gross");
   // Track whether the user has explicitly clicked a tab (vs auto-selected on init).
-  // Used to auto-switch to "competition" when competitionId arrives after initial render.
+  // Used to auto-switch to "competition" when eventId arrives after initial render.
   const tabUserSelected = useRef(false);
 
   // Competition standings (realtime-synced)
@@ -192,12 +192,12 @@ export default function RoundMenuSheet(props: {
   const [compFreeze, setCompFreeze] = useState<FreezeConfig | null>(null);
 
   async function fetchCompStandings() {
-    if (!competitionId) return;
+    if (!eventId) return;
     setCompLoading(true);
     try {
       const session = await getViewerSession();
       if (!session) { setCompStandings([]); return; }
-      const res = await fetch(`/api/majors/leaderboard?competition_id=${competitionId}`, {
+      const res = await fetch(`/api/majors/leaderboard?event_id=${eventId}`, {
         headers: { Authorization: `Bearer ${session.accessToken}` },
       });
       const data = await res.json();
@@ -277,13 +277,13 @@ export default function RoundMenuSheet(props: {
     }
   }
 
-  // If competitionId arrives after initial render (race condition), auto-switch from
+  // If eventId arrives after initial render (race condition), auto-switch from
   // the default "gross" tab to "competition" so cross-tee-time data shows immediately.
   useEffect(() => {
-    if (competitionId && !tabUserSelected.current && activeTab === "gross") {
+    if (eventId && !tabUserSelected.current && activeTab === "gross") {
       setActiveTab("competition");
     }
-  }, [competitionId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [eventId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleTabChange(tab: LeaderboardTab) {
     tabUserSelected.current = true;
@@ -296,23 +296,23 @@ export default function RoundMenuSheet(props: {
 
   // Realtime: competition leaderboard
   useEffect(() => {
-    if (!competitionId) return;
+    if (!eventId) return;
     fetchCompStandings();
 
     let cancelled = false;
     const channel = supabase
-      .channel(`round-menu:comp:${competitionId}`)
+      .channel(`round-menu:comp:${eventId}`)
       .on("postgres_changes", {
         event: "*",
         schema: "public",
-        table: "competition_leaderboard_entries",
-        filter: `competition_id=eq.${competitionId}`,
+        table: "event_leaderboard_entries",
+        filter: `event_id=eq.${eventId}`,
       }, () => { if (!cancelled) fetchCompStandings(); })
       .on("postgres_changes", {
         event: "UPDATE",
         schema: "public",
-        table: "competitions",
-        filter: `id=eq.${competitionId}`,
+        table: "events",
+        filter: `id=eq.${eventId}`,
       }, (payload) => {
         if (!cancelled && payload.new) {
           const c = payload.new as any;
@@ -328,7 +328,7 @@ export default function RoundMenuSheet(props: {
       cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, [competitionId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [eventId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Realtime: season standings
   useEffect(() => {
@@ -459,12 +459,12 @@ export default function RoundMenuSheet(props: {
   // Available tabs — round tabs, then competition / season if applicable
   const tabs: { key: LeaderboardTab; label: string }[] = [
     { key: "gross", label: "Gross" },
-    ...(!competitionId || isFinished ? [{ key: "net" as LeaderboardTab, label: "Net" }] : []),
+    ...(!eventId || isFinished ? [{ key: "net" as LeaderboardTab, label: "Net" }] : []),
   ];
   for (let i = 0; i < formatDisplays.length; i++) {
-    tabs.push({ key: `format:${i}` as LeaderboardTab, label: competitionId ? "Group" : formatDisplays[i].tabLabel });
+    tabs.push({ key: `format:${i}` as LeaderboardTab, label: eventId ? "Group" : formatDisplays[i].tabLabel });
   }
-  if (competitionId) {
+  if (eventId) {
     tabs.push({ key: "competition", label: "Competition" });
   }
   if (hasSeasonTab) {
@@ -537,7 +537,7 @@ export default function RoundMenuSheet(props: {
                     const rank = idx === 0 ? 1 : sameScore ? null : idx + 1;
                     const effectiveRank = rank ?? idx + 1;
                     // When this is a competition round, use full-field position from compStandings
-                    const compEntry = (competitionId && compStandings && r.profileId)
+                    const compEntry = (eventId && compStandings && r.profileId)
                       ? compStandings.find((s) => s.profile_id === r.profileId)
                       : null;
                     const pts = showPts

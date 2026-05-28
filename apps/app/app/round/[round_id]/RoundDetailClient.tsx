@@ -276,7 +276,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     teams,
     teeSnapshotId,
     holes,
-    competitionTeeTimeId,
+    eventTeeTimeId,
     scoresByKey,
     setScoresByKey,
     holeStatesByKey,
@@ -284,9 +284,9 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     canScore,
   } = useRoundDetail(roundId, initialSnapshot);
 
-  // Resolve competition ID via the reliable FK direction: competition_tee_times.round_id → rounds.id
-  // (rounds.competition_tee_time_id is a back-link set without error handling and may be NULL)
-  const [competitionId, setCompetitionId] = useState<string | null>(null);
+  // Resolve event ID via the reliable FK direction: event_tee_times.round_id → rounds.id
+  // (rounds.event_tee_time_id is a back-link set without error handling and may be NULL)
+  const [eventId, setEventId] = useState<string | null>(null);
   const [competitionPointsModel, setCompetitionPointsModel] = useState<string | undefined>(undefined);
   const [competitionPointsTable, setCompetitionPointsTable] = useState<Record<string, number> | undefined>(undefined);
   const [competitionGroupId, setCompetitionGroupId] = useState<string | undefined>(undefined);
@@ -294,14 +294,14 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
   const [competitionScoringModel, setCompetitionScoringModel] = useState<string | undefined>(undefined);
   useEffect(() => {
     supabase
-      .from("competition_tee_times")
-      .select("competition_id, competition:competitions(points_model, points_table, group_id, season_id, scoring_model)")
+      .from("event_tee_times")
+      .select("event_id, event:events(points_model, points_table, group_id, season_id, scoring_model)")
       .eq("round_id", roundId)
       .maybeSingle()
       .then(({ data }) => {
-        if (data?.competition_id) {
-          setCompetitionId(data.competition_id as string);
-          const comp = (data as any).competition;
+        if (data?.event_id) {
+          setEventId(data.event_id as string);
+          const comp = (data as any).event;
           if (comp) {
             setCompetitionPointsModel(comp.points_model ?? undefined);
             setCompetitionPointsTable(comp.points_table ?? undefined);
@@ -472,11 +472,11 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
 
   // Net tab is hidden during live competition rounds — fall back to gross if it was active
   useEffect(() => {
-    if (scoreView === "net" && competitionId && !isFinished) {
+    if (scoreView === "net" && eventId && !isFinished) {
       setScoreView("gross");
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [competitionId, isFinished]);
+  }, [eventId, isFinished]);
 
   // Displayed score:
   // - not_started (non-acceptable) => null (render blank)
@@ -1222,8 +1222,8 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
               } else if (from === "player") {
                 router.back();
               } else if (from === "competition") {
-                const competitionId = sp.get("competitionId");
-                if (competitionId) router.replace(`/majors/competitions/${competitionId}`);
+                const eventId = sp.get("eventId");
+                if (eventId) router.replace(`/majors/events/${eventId}`);
                 else router.replace("/majors");
               } else if (from === "milestones") {
                 router.push("/stats/milestones");
@@ -1252,7 +1252,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
                         >
                           Gross
                         </button>
-                        {(!competitionId || isFinished) && (
+                        {(!eventId || isFinished) && (
                           <button
                             className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 ${
                               scoreView === "net" ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
@@ -1322,7 +1322,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
                       >
                         Gross
                       </button>
-                      {(!competitionId || isFinished) && (
+                      {(!eventId || isFinished) && (
                         <button
                           className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 ${
                             scoreView === "net" ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
@@ -1454,7 +1454,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
             teams={isSingleBall ? teams : undefined}
             allParticipants={isSingleBall ? participants : undefined}
             isTeamFormat={isSingleBall}
-            competitionId={competitionId ?? undefined}
+            eventId={eventId ?? undefined}
             competitionPointsModel={competitionPointsModel}
             competitionPointsTable={competitionPointsTable}
             groupId={competitionGroupId}

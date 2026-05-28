@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { finishRound } from "@/lib/rounds/finishRound";
-import { reconcileCompetitionStatus } from "@/lib/majors/reconcileStatus";
+import { reconcileEventStatus } from "@/lib/majors/reconcileStatus";
 
 export const runtime = "nodejs";
 
@@ -69,24 +69,24 @@ export async function GET(req: Request) {
     );
   }
 
-  // Sweep stale live competitions whose date has passed.
+  // Sweep stale live events whose date has passed.
   // This always runs (even when no rounds needed finishing) to handle the
-  // day-after scenario: a competition that finished on its competition_date
+  // day-after scenario: an event that finished on its event_date
   // will have been set to 'live' (daysDiff = 0 during the day). Now that it's
   // the next morning, reconcile pushes them to 'completed'.
   const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  const { data: staleComps } = await supabaseAdmin
-    .from("competitions")
+  const { data: staleEvents } = await supabaseAdmin
+    .from("events")
     .select("id")
     .eq("majors_status", "live")
-    .lt("competition_date", today);
+    .lt("event_date", today);
 
-  if (staleComps?.length) {
-    for (const comp of staleComps) {
-      await reconcileCompetitionStatus(comp.id).catch(() => {});
+  if (staleEvents?.length) {
+    for (const evt of staleEvents) {
+      await reconcileEventStatus(evt.id).catch(() => {});
     }
     console.log(
-      `[auto-complete-rounds] reconciled ${staleComps.length} stale live competition(s)`
+      `[auto-complete-rounds] reconciled ${staleEvents.length} stale live event(s)`
     );
   }
 

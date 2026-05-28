@@ -32,9 +32,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const { data: transactions, error } = await supabaseAdmin
       .from("group_balance_transactions")
       .select(`
-        id, profile_id, competition_id, type, amount, note, created_at,
+        id, profile_id, event_id, type, amount, note, created_at,
         profile:profiles!profile_id(id, name),
-        competition:competitions!competition_id(id, name)
+        event:events!event_id(id, name)
       `)
       .eq("group_id", id)
       .order("created_at", { ascending: true });
@@ -54,7 +54,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     for (const tx of transactions ?? []) {
       const pid = (tx as any).profile_id;
       const playerName = (tx as any).profile?.name ?? pid;
-      const competitionName = (tx as any).competition?.name ?? "";
+      const competitionName = (tx as any).event?.name ?? "";
       const amount = (tx as any).amount as number;
 
       rows.push([

@@ -6,8 +6,8 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { AuthUser } from "@/components/ui/auth-user";
 import { getViewerSession } from "@/lib/auth/viewerSession";
-import type { MajorHubSummary, MajorGroup, CompetitionWithGroup } from "@/lib/majors/types";
-import { competitionStatusLabel } from "@/lib/majors/labels";
+import type { MajorHubSummary, MajorGroup, EventWithGroup } from "@/lib/majors/types";
+import { eventStatusLabel } from "@/lib/majors/labels";
 
 type MenuItem = { id: string; label: string };
 
@@ -25,7 +25,7 @@ type MajorsViewProps = {
   vh: number;
 };
 
-function CompetitionCard({ comp }: { comp: CompetitionWithGroup }) {
+function CompetitionCard({ comp }: { comp: EventWithGroup }) {
   const router = useRouter();
   const isLive = comp.majors_status === "live";
   const isCompleted = comp.majors_status === "completed";
@@ -33,7 +33,7 @@ function CompetitionCard({ comp }: { comp: CompetitionWithGroup }) {
   return (
     <button
       type="button"
-      onClick={() => router.push(`/majors/competitions/${comp.id}`)}
+      onClick={() => router.push(`/majors/events/${comp.id}`)}
       className="w-full text-left rounded-2xl border bg-[#0b3b21]/80 p-3.5 space-y-1.5 overflow-hidden relative"
       style={{
         borderColor: isLive ? "rgba(217,119,6,0.35)" : isCompleted ? "rgba(52,211,153,0.25)" : "rgba(6,78,59,0.7)",
@@ -66,12 +66,12 @@ function CompetitionCard({ comp }: { comp: CompetitionWithGroup }) {
                 : "bg-emerald-900/40 text-emerald-200/70 border-emerald-900/60"
             }`}
           >
-            {competitionStatusLabel(comp)}
+            {eventStatusLabel(comp)}
           </span>
         </div>
         <div className="text-[10px] text-emerald-100/60 flex items-center gap-2">
-          {comp.competition_date && (
-            <span>{new Date(comp.competition_date).toLocaleDateString([], { month: "short", day: "numeric" })}</span>
+          {comp.event_date && (
+            <span>{new Date(comp.event_date).toLocaleDateString([], { month: "short", day: "numeric" })}</span>
           )}
           {comp.course && (
             <>
@@ -173,24 +173,24 @@ function MajorsHubPreview({ open }: { open: boolean }) {
         </div>
       )}
 
-      {/* Live competitions */}
-      {hub && hub.active_competitions.length > 0 && (
+      {/* Live events */}
+      {hub && hub.active_events.length > 0 && (
         <div className="space-y-1.5">
           <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/55 flex items-center gap-2">
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400" />
             Live Now
           </div>
-          {hub.active_competitions.slice(0, 2).map((comp) => (
+          {hub.active_events.slice(0, 2).map((comp) => (
             <CompetitionCard key={comp.id} comp={comp} />
           ))}
         </div>
       )}
 
-      {/* Upcoming competitions */}
-      {hub && hub.active_competitions.length === 0 && hub.upcoming_competitions.length > 0 && (
+      {/* Upcoming events */}
+      {hub && hub.active_events.length === 0 && hub.upcoming_events.length > 0 && (
         <div className="space-y-1.5">
           <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/55">Upcoming</div>
-          {hub.upcoming_competitions.slice(0, 2).map((comp) => (
+          {hub.upcoming_events.slice(0, 2).map((comp) => (
             <CompetitionCard key={comp.id} comp={comp} />
           ))}
         </div>
@@ -238,7 +238,7 @@ function MajorsHubPreview({ open }: { open: boolean }) {
       )}
 
       {/* Empty state */}
-      {(!hub || (hub.my_groups.length === 0 && hub.active_competitions.length === 0 && hub.upcoming_competitions.length === 0)) && (
+      {(!hub || (hub.my_groups.length === 0 && hub.active_events.length === 0 && hub.upcoming_events.length === 0)) && (
         <>
           <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4">
             <h2 className="text-sm font-semibold text-emerald-50 mb-1">CIAGA Majors</h2>

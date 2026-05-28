@@ -10,10 +10,10 @@ import { Button } from "@/components/ui/button";
 import { BackButton } from "@/components/ui/BackButton";
 import { Skeleton } from "@/components/ui/skeleton";
 
-type LinkedCompetition = {
+type LinkedEvent = {
   id: string;
   name: string;
-  competition_type: string;
+  event_type: string;
 } | null;
 
 type RoundRow = {
@@ -24,10 +24,10 @@ type RoundRow = {
   created_at: string;
   course_id: string | null;
   scheduled_at: string | null;
-  competition_tee_time_id: string | null;
+  event_tee_time_id: string | null;
   courses?: { name: string | null } | null;
   /** Populated when the round is linked to a Majors tee time */
-  linked_competition?: LinkedCompetition;
+  linked_event?: LinkedEvent;
 };
 
 type ParticipantRow = {
@@ -243,11 +243,11 @@ export default function RoundHomePage() {
         .from("round_participants")
         .select(`id, role, round:rounds!round_id(
           id, name, status, started_at, created_at, course_id, scheduled_at,
-          competition_tee_time_id,
+          event_tee_time_id,
           courses(name),
-          competition_tee_time:competition_tee_times!competition_tee_time_id(
-            competition_id,
-            competitions!competition_id(id, name, competition_type)
+          event_tee_time:event_tee_times!event_tee_time_id(
+            event_id,
+            events!event_id(id, name, event_type)
           )
         )`)
         .eq("profile_id", myProfileId)
@@ -275,10 +275,10 @@ export default function RoundHomePage() {
       .map((r) => {
         const round = r.round as any;
         if (!round) return null;
-        // Flatten the nested competition join into a top-level field
-        const teeTimeJoin = round.competition_tee_time;
-        const linked_competition: LinkedCompetition = teeTimeJoin?.competitions ?? null;
-        return { ...round, linked_competition } as RoundRow;
+        // Flatten the nested event join into a top-level field
+        const teeTimeJoin = round.event_tee_time;
+        const linked_event: LinkedEvent = teeTimeJoin?.events ?? null;
+        return { ...round, linked_event } as RoundRow;
       })
       .filter(Boolean)
       .sort((a, b) => ((b as RoundRow).created_at ?? "").localeCompare((a as RoundRow).created_at ?? "")) as RoundRow[];
@@ -391,13 +391,13 @@ export default function RoundHomePage() {
             {rounds.map((r) => {
               const isDraft = r.status === "draft";
               const isScheduled = r.status === "scheduled";
-              const isMajorsRound = !!r.competition_tee_time_id;
+              const isMajorsRound = !!r.event_tee_time_id;
               // Majors-linked rounds must not be deleted from here
               const isDeletable = (isDraft || isScheduled) && !isMajorsRound;
               const isDeleting = deletingId === r.id;
 
               // Label shown under the round title
-              const competitionType = r.linked_competition?.competition_type ?? null;
+              const competitionType = r.linked_event?.event_type ?? null;
               const competitionLabel = competitionType
                 ? competitionType.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
                 : null;
@@ -416,10 +416,10 @@ export default function RoundHomePage() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="text-sm font-semibold text-emerald-50">
-                        {r.linked_competition?.name ?? r.name ?? r.courses?.name ?? "Round"}
+                        {r.linked_event?.name ?? r.name ?? r.courses?.name ?? "Round"}
                       </div>
                       <div className="text-[11px] text-emerald-100/70">
-                        {(r.courses?.name && (r.linked_competition?.name ?? r.name) ? r.courses?.name : null) ||
+                        {(r.courses?.name && (r.linked_event?.name ?? r.name) ? r.courses?.name : null) ||
                           statusLabel}
                       </div>
                       {r.scheduled_at ? (
@@ -439,7 +439,7 @@ export default function RoundHomePage() {
                         </div>
                       ) : isMajorsRound && isScheduled ? (
                         <Link
-                          href={`/majors/competitions/${r.linked_competition?.id ?? ""}`}
+                          href={`/majors/events/${r.linked_event?.id ?? ""}`}
                           className="mt-1 text-[10px] text-amber-400/80 underline-offset-2 underline"
                           onClick={(e) => e.stopPropagation()}
                         >

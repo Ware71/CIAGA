@@ -1,23 +1,25 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
-import { getCompetitionById } from "@/lib/majors/queries";
-import { reconcileCompetitionStatus } from "@/lib/majors/reconcileStatus";
 
 export const runtime = "nodejs";
 
-// GET /api/majors/competitions/[id]
+// GET /api/majors/competitions/[id] — get competition detail
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     await getAuthedProfileOrThrow(req);
     const { id } = await params;
 
-    await reconcileCompetitionStatus(id);
+    const { data, error } = await supabaseAdmin
+      .from("competitions")
+      .select("*, event_templates:competition_event_templates(*), events(id, name, event_year, majors_status, event_date, competition_event_template_id)")
+      .eq("id", id)
+      .maybeSingle();
 
-    const competition = await getCompetitionById(id);
-    if (!competition) return NextResponse.json({ error: "Competition not found" }, { status: 404 });
+    if (error) throw error;
+    if (!data) return NextResponse.json({ error: "Competition not found" }, { status: 404 });
 
-    return NextResponse.json({ competition }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ competition: data }, { headers: { "Cache-Control": "no-store" } });
   } catch (e: any) {
     const msg = e?.message ?? "Unknown error";
     const status = String(msg).toLowerCase().includes("auth") ? 401 : 500;
@@ -25,64 +27,49 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   }
 }
 
-// PATCH /api/majors/competitions/[id] — update competition (owner/admin of parent group)
+// PATCH /api/majors/competitions/[id] — update competition metadata / template
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { profileId } = await getAuthedProfileOrThrow(req);
     const { id } = await params;
+    const body = await req.json();
 
-    const competition = await getCompetitionById(id);
-    if (!competition) return NextResponse.json({ error: "Competition not found" }, { status: 404 });
+    // Fetch competition to get group_id for auth check
+    const { data: existing } = await supabaseAdmin
+      .from("competitions")
+      .select("group_id")
+      .eq("id", id)
+      .maybeSingle();
 
-    // Check edit permission
-    if (competition.group_id) {
+    if (!existing) return NextResponse.json({ error: "Competition not found" }, { status: 404 });
+
+    const groupId = (existing as any).group_id;
+    if (groupId) {
       const { data: membership } = await supabaseAdmin
         .from("major_group_memberships")
         .select("role")
-        .eq("group_id", competition.group_id)
+        .eq("group_id", groupId)
         .eq("profile_id", profileId)
         .eq("status", "active")
         .maybeSingle();
 
       if (!membership || !["owner", "admin"].includes((membership as any).role)) {
-        return NextResponse.json({ error: "Only group owner or admin can update this competition" }, { status: 403 });
+        return NextResponse.json({ error: "Only group owner or admin can update a competition" }, { status: 403 });
       }
-    } else if (competition.created_by_profile_id !== profileId) {
-      return NextResponse.json({ error: "Only the creator can update this competition" }, { status: 403 });
     }
 
-    const body = await req.json();
-    const allowedFields = ["name", "description", "competition_type", "format", "course_id",
-      "competition_date", "entry_window_start", "entry_window_end", "rules_text",
-      "scoring_model", "points_model", "points_table", "eligibility_rules", "handicap_rules",
-      "num_rounds", "round_rules", "time_rules", "membership_rules", "standings_contribution",
-      "majors_status",
-      // Upgrade additions
-      "allow_self_withdrawal", "tee_time_mode", "waitlist_enabled", "max_entries",
-      "prize_table", "entry_fee_amount", "entry_fee_currency", "entry_fee_notes",
-      // Leaderboard freeze / ceremony reveal config
-      "leaderboard_freeze_last_holes", "leaderboard_freeze_scope", "leaderboard_freeze_top_x",
-      "leaderboard_freeze_auto_reveal", "leaderboard_reveal_style", "leaderboard_reveal_top_x"];
-    const updates: Record<string, unknown> = {};
-    for (const field of allowedFields) {
-      if (field in body) updates[field] = body[field];
+    const allowed = [
+      "name", "description", "recur_annually", "typical_month",
+      "template_event_type", "template_event_category",
+      "template_scoring_model", "template_points_model",
+      "template_rules_text", "template_settings",
+    ];
+    const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    for (const key of allowed) {
+      if (key in body) updates[key] = body[key];
     }
 
-    if (body.majors_status === "cancelled") {
-      await supabaseAdmin
-        .from("competition_rounds")
-        .delete()
-        .eq("competition_id", id)
-        .eq("status", "scheduled");
-
-      await supabaseAdmin
-        .from("competition_rounds")
-        .update({ status: "cancelled" })
-        .eq("competition_id", id)
-        .in("status", ["live", "completed"]);
-    }
-
-    const { data, error } = await supabaseAdmin
+    const { data: competition, error } = await supabaseAdmin
       .from("competitions")
       .update(updates)
       .eq("id", id)
@@ -90,35 +77,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       .single();
 
     if (error) throw error;
-    return NextResponse.json({ competition: data });
-  } catch (e: any) {
-    const msg = e?.message ?? "Unknown error";
-    const status = String(msg).toLowerCase().includes("auth") ? 401 : 500;
-    return NextResponse.json({ error: msg }, { status });
-  }
-}
-
-// DELETE /api/majors/competitions/[id]
-export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
-    const { profileId } = await getAuthedProfileOrThrow(req);
-    const { id } = await params;
-
-    const competition = await getCompetitionById(id);
-    if (!competition) return NextResponse.json({ error: "Competition not found" }, { status: 404 });
-
-    if (competition.created_by_profile_id !== profileId) {
-      return NextResponse.json({ error: "Only the creator can delete this competition" }, { status: 403 });
-    }
-
-    if (competition.majors_status === "live") {
-      return NextResponse.json({ error: "Cannot delete a live competition" }, { status: 400 });
-    }
-
-    const { error } = await supabaseAdmin.from("competitions").delete().eq("id", id);
-    if (error) throw error;
-
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ competition });
   } catch (e: any) {
     const msg = e?.message ?? "Unknown error";
     const status = String(msg).toLowerCase().includes("auth") ? 401 : 500;

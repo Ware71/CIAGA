@@ -93,7 +93,7 @@ export default function ScheduleClient() {
             <button
               key={item.id}
               type="button"
-              onClick={() => router.push(`/majors/competitions/${item.id}`)}
+              onClick={() => router.push(`/majors/events/${item.id}`)}
               className="w-full text-left rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4 space-y-2 hover:border-emerald-700/70 transition-colors"
             >
               {item.group && (
@@ -108,12 +108,12 @@ export default function ScheduleClient() {
                 </span>
               </div>
               <div className="flex items-center gap-3 text-[11px] text-emerald-100/65 flex-wrap">
-                {item.competition_date && (
-                  <span>{new Date(item.competition_date).toLocaleDateString()}</span>
+                {item.event_date && (
+                  <span>{new Date(item.event_date).toLocaleDateString()}</span>
                 )}
                 {item.course && <span>{item.course.name}</span>}
                 {item.format && <span className="capitalize">{item.format}</span>}
-                <span className="capitalize text-emerald-200/50">{item.competition_type.replace("_", " ")}</span>
+                <span className="capitalize text-emerald-200/50">{item.event_type.replace("_", " ")}</span>
               </div>
             </button>
           );

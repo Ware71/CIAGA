@@ -34,7 +34,7 @@ export type LiveGroupStandingsResponse = {
   hasLive: boolean;
   rows: LiveGroupStandingEntry[];
   liveRoundIds: string[];
-  /** IDs of live competitions (for competition_leaderboard_entries subscription) */
+  /** IDs of live events (for event_leaderboard_entries subscription) */
   liveCompetitionIds: string[];
 };
 
@@ -88,20 +88,20 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     // ── 1. Fetch live and completed competitions in parallel ──────────────
     let liveQuery = supabaseAdmin
-      .from("competitions")
+      .from("events")
       .select("id, points_model, points_table, scoring_model, num_rounds")
       .eq("group_id", groupId)
       .eq("majors_status", "live")
       .in("standings_contribution", ["season", "both"]);
-    if (filterYear) liveQuery = liveQuery.eq("competition_year", filterYear);
+    if (filterYear) liveQuery = liveQuery.eq("event_year", filterYear);
 
     let completedQuery = supabaseAdmin
-      .from("competitions")
+      .from("events")
       .select("id")
       .eq("group_id", groupId)
       .in("majors_status", ["completed", "official"])
       .in("standings_contribution", ["season", "both"]);
-    if (filterYear) completedQuery = completedQuery.eq("competition_year", filterYear);
+    if (filterYear) completedQuery = completedQuery.eq("event_year", filterYear);
 
     const [liveCompsRes, completedCompsRes] = await Promise.all([liveQuery, completedQuery]);
 
@@ -111,7 +111,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const liveComps = liveCompsRes.data ?? [];
     const completedCompIds = (completedCompsRes.data ?? []).map((c) => c.id);
 
-    // ── 2. Confirmed points + strokes: aggregate from competition_leaderboard_entries ──
+    // ── 2. Confirmed points + strokes: aggregate from event_leaderboard_entries ──
     type ConfirmedAgg = {
       confirmed_points: number;
       events: Set<string>;
@@ -127,9 +127,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     if (completedCompIds.length > 0) {
       const { data: confirmedEntries, error: ceErr } = await supabaseAdmin
-        .from("competition_leaderboard_entries")
-        .select("profile_id, points_earned, position, competition_id, gross_score, net_score, to_par, course_par")
-        .in("competition_id", completedCompIds)
+        .from("event_leaderboard_entries")
+        .select("profile_id, points_earned, position, event_id, gross_score, net_score, to_par, course_par")
+        .in("event_id", completedCompIds)
         .not("net_score", "is", null);
 
       if (ceErr) throw ceErr;
@@ -147,7 +147,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
           stroke_events: 0,
         };
         existing.confirmed_points += entry.points_earned ?? 0;
-        existing.events.add(entry.competition_id);
+        existing.events.add(entry.event_id);
         if (entry.position === 1) existing.wins += 1;
         // Strokes
         if (entry.net_score != null) {
@@ -177,9 +177,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
       // 3a. Get tee times + round IDs
       const { data: teeTimes, error: ttErr } = await supabaseAdmin
-        .from("competition_tee_times")
+        .from("event_tee_times")
         .select("id, round_id")
-        .eq("competition_id", comp.id);
+        .eq("event_id", comp.id);
       if (ttErr) throw ttErr;
 
       const roundIds = (teeTimes ?? []).map((t) => t.round_id).filter(Boolean) as string[];
@@ -222,9 +222,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
         if (finProfileIds.size > 0) {
           const { data: leaderEntries, error: leErr } = await supabaseAdmin
-            .from("competition_leaderboard_entries")
+            .from("event_leaderboard_entries")
             .select("profile_id, net_score, holes_completed, is_live")
-            .eq("competition_id", comp.id)
+            .eq("event_id", comp.id)
             .eq("is_live", false);
           if (leErr) throw leErr;
 

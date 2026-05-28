@@ -4,21 +4,21 @@ import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 
 export const runtime = "nodejs";
 
-// GET /api/majors/seasons?series_id=xxx — list seasons for a series
+// GET /api/majors/seasons?competition_id=xxx — list seasons for a competition
 export async function GET(req: Request) {
   try {
     await getAuthedProfileOrThrow(req);
     const url = new URL(req.url);
-    const seriesId = url.searchParams.get("series_id");
+    const competitionId = url.searchParams.get("competition_id");
 
-    if (!seriesId) {
-      return NextResponse.json({ error: "series_id is required" }, { status: 400 });
+    if (!competitionId) {
+      return NextResponse.json({ error: "competition_id is required" }, { status: 400 });
     }
 
     const { data, error } = await supabaseAdmin
-      .from("series_seasons")
+      .from("competition_seasons")
       .select("*")
-      .eq("series_id", seriesId)
+      .eq("competition_id", competitionId)
       .order("season_year", { ascending: false });
 
     if (error) throw error;

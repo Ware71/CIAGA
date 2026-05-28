@@ -24,9 +24,9 @@ export async function PATCH(
 
     if (!fixture) return NextResponse.json({ error: "Fixture not found" }, { status: 404 });
 
-    // Auth: must be owner/admin of competition's group
+    // Auth: must be owner/admin of event's group
     const { data: comp } = await supabaseAdmin
-      .from("competitions")
+      .from("events")
       .select("group_id")
       .eq("id", (fixture as any).competition_id)
       .maybeSingle();
@@ -95,8 +95,8 @@ export async function PATCH(
 
     // Emit audit log
     if (updates.result_type) {
-      await supabaseAdmin.from("competition_audit_log").insert({
-        competition_id: (fixture as any).competition_id,
+      await supabaseAdmin.from("event_audit_log").insert({
+        event_id: (fixture as any).competition_id,
         actor_profile_id: profileId,
         action_type: "fixture_result_updated",
         payload: { fixture_id: fixtureId, result_type: updates.result_type },
@@ -104,7 +104,7 @@ export async function PATCH(
 
       // Trigger bracket advancement if applicable
       await supabaseAdmin.rpc("ciaga_advance_matchplay_bracket", {
-        p_competition_id: (fixture as any).competition_id,
+        p_event_id: (fixture as any).competition_id,
       });
     }
 

@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 import type {
-  SeriesSeasonWithSeries,
-  CompetitionWithGroup,
+  CompetitionSeasonWithCompetition,
+  EventWithGroup,
   SeasonStandingsEntryWithProfile,
   SeasonFinancialSummary,
 } from "@/lib/majors/types";
@@ -15,8 +15,8 @@ type Tab = "schedule" | "standings" | "finances";
 export default function SeasonDetailClient({ seasonId }: { seasonId: string }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("schedule");
-  const [season, setSeason] = useState<SeriesSeasonWithSeries | null>(null);
-  const [competitions, setCompetitions] = useState<CompetitionWithGroup[]>([]);
+  const [season, setSeason] = useState<CompetitionSeasonWithCompetition | null>(null);
+  const [competitions, setCompetitions] = useState<EventWithGroup[]>([]);
   const [standings, setStandings] = useState<SeasonStandingsEntryWithProfile[]>([]);
   const [financials, setFinancials] = useState<SeasonFinancialSummary | null>(null);
   const [financialsError, setFinancialsError] = useState<string | null>(null);
@@ -40,8 +40,8 @@ export default function SeasonDetailClient({ seasonId }: { seasonId: string }) {
 
         if (seasonRes.ok) {
           const j = await seasonRes.json();
-          setSeason(j.season as SeriesSeasonWithSeries);
-          setCompetitions(j.competitions ?? []);
+          setSeason(j.season as CompetitionSeasonWithCompetition);
+          setCompetitions(j.events ?? []);
         }
 
         if (standingsRes.ok) {
@@ -117,13 +117,13 @@ export default function SeasonDetailClient({ seasonId }: { seasonId: string }) {
 
       {/* Hero */}
       <div className="px-4 mb-4 space-y-1">
-        {season.series && (
+        {season.competition && (
           <button
             type="button"
-            onClick={() => router.push(`/majors/series/${season.series.id}`)}
+            onClick={() => router.push(`/majors/competitions/${season.competition.id}`)}
             className="inline-flex items-center text-[10px] uppercase tracking-wider text-emerald-200/55 hover:text-emerald-200 border border-emerald-900/50 rounded-full px-2.5 py-1 transition-colors"
           >
-            {season.series.name}
+            {season.competition.name}
           </button>
         )}
         <h1 className="text-xl font-bold text-[#f5e6b0] leading-tight">{season.name}</h1>
@@ -171,7 +171,7 @@ export default function SeasonDetailClient({ seasonId }: { seasonId: string }) {
                 <button
                   key={c.id}
                   type="button"
-                  onClick={() => router.push(`/majors/competitions/${c.id}`)}
+                  onClick={() => router.push(`/majors/events/${c.id}`)}
                   className="w-full text-left rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/80 p-3 space-y-1 hover:border-emerald-700/60 transition-colors"
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -180,9 +180,9 @@ export default function SeasonDetailClient({ seasonId }: { seasonId: string }) {
                       {c.majors_status}
                     </span>
                   </div>
-                  {c.competition_date && (
+                  {c.event_date && (
                     <div className="text-[11px] text-emerald-100/55">
-                      {new Date(c.competition_date).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })}
+                      {new Date(c.event_date).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })}
                     </div>
                   )}
                 </button>

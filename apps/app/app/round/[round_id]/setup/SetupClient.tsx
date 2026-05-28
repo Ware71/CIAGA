@@ -560,7 +560,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
 
       // Competition rounds: when setup is unlocked, non-owners have no business here —
       // the organiser is still configuring. When locked, all participants see the read-only view.
-      if (snap.round?.competition_tee_time_id && !snap.round?.setup_locked) {
+      if (snap.round?.event_tee_time_id && !snap.round?.setup_locked) {
         const viewerId = snap.viewer_profile_id;
         const myRow = (snap.participants ?? []).find((p: any) => p.profile_id === viewerId);
         if (!myRow || myRow.role !== "owner") {
@@ -642,7 +642,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
       }
 
       // Competition rounds: only redirect non-owners when setup is not yet locked.
-      if (snap.round?.competition_tee_time_id && !snap.round?.setup_locked) {
+      if (snap.round?.event_tee_time_id && !snap.round?.setup_locked) {
         const myRow = (snap.participants ?? []).find((p: any) => p.profile_id === viewerProfileId);
         if (!myRow || myRow.role !== "owner") {
           router.replace(`/round/${roundId}`);

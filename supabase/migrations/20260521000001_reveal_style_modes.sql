@@ -1,2 +1,0 @@
--- No-op: superseded by 20260521000002_reveal_style_podium.sql which already adds the
--- correct constraint including 'podium'. Constraint was applied to staging via the later migration.

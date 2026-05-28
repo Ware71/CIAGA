@@ -9,10 +9,10 @@ import type {
   MajorGroupPrivacy,
   MajorGroupJoinMethod,
   GroupScoringPrefs,
-  CompetitionTypeV2,
-  CompetitionScoringModel,
+  EventTypeV2,
+  EventScoringModel,
 } from "@/lib/majors/types";
-import { SCORING_MODELS, POINTS_MODELS, STANDINGS_CONTRIBUTIONS, COMP_TYPES, FORMAT_DEFAULT_SCORING, FORMAT_ALLOWS_SCORING_CHOICE } from "@/lib/competitions/constants";
+import { SCORING_MODELS, POINTS_MODELS, STANDINGS_CONTRIBUTIONS, EVENT_TYPES, FORMAT_DEFAULT_SCORING, FORMAT_ALLOWS_SCORING_CHOICE } from "@/lib/events/constants";
 import { HandicapRulesEditor, type HandicapRules } from "@/components/competitions/HandicapRulesEditor";
 
 const GROUP_TYPES: { value: MajorGroupType; label: string; desc: string }[] = [
@@ -70,8 +70,8 @@ export default function CreateGroupClient() {
   const [error, setError] = useState<string | null>(null);
 
   // Competition defaults state (optional step — can be skipped)
-  const [defaultScoringModel, setDefaultScoringModel] = useState<CompetitionScoringModel | null>(null);
-  const [defaultCompType, setDefaultCompType] = useState<CompetitionTypeV2 | null>(null);
+  const [defaultScoringModel, setDefaultScoringModel] = useState<EventScoringModel | null>(null);
+  const [defaultCompType, setDefaultCompType] = useState<EventTypeV2 | null>(null);
   const [defaultHandicap, setDefaultHandicap] = useState<HandicapRules>(EMPTY_HANDICAP);
   const [defaultPointsModel, setDefaultPointsModel] = useState<string | null>(null);
   const [defaultStandingsContrib, setDefaultStandingsContrib] = useState<string | null>(null);
@@ -259,7 +259,7 @@ export default function CreateGroupClient() {
           <div className="space-y-2">
             <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Default Format</label>
             <div className="grid grid-cols-2 gap-2">
-              {COMP_TYPES.map((t) => (
+              {EVENT_TYPES.map((t) => (
                 <button
                   key={t.value}
                   type="button"

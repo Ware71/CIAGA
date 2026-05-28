@@ -131,6 +131,9 @@ CREATE OR REPLACE TRIGGER trg_round_live_auto_complete
 
 -- ─── 4. Replace the complex cron query with a simple indexed lookup ─────────
 
+-- Drop old signature first (return type changed — CREATE OR REPLACE cannot change it)
+DROP FUNCTION IF EXISTS public.ciaga_get_rounds_for_auto_complete();
+
 CREATE OR REPLACE FUNCTION public.ciaga_get_rounds_for_auto_complete()
 RETURNS TABLE (
   round_id         uuid,

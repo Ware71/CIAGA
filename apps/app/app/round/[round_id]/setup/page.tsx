@@ -30,7 +30,7 @@ export default async function SetupPage({
       }
       // Competition rounds: only the owner may access setup — the organiser
       // has already configured course, format, and tees.
-      if (data.round?.competition_tee_time_id) {
+      if (data.round?.event_tee_time_id) {
         const myRow = (data.participants ?? []).find(
           (p: any) => p.profile_id === viewer.profileId
         );

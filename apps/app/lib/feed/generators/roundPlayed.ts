@@ -26,10 +26,10 @@ export async function emitRoundPlayedFeedItem(params: {
   const { roundId, actorProfileId } = params;
   if (!roundId || !actorProfileId) throw new Error("Missing roundId/actorProfileId");
 
-  // Round lookup (include competition_tee_time_id for freeze lookup)
+  // Round lookup (include event_tee_time_id for freeze lookup)
   const { data: round, error: roundErr } = await supabaseAdmin
     .from("rounds")
-    .select("id, status, finished_at, format_type, competition_tee_time_id")
+    .select("id, status, finished_at, format_type, event_tee_time_id")
     .eq("id", roundId)
     .single();
 
@@ -128,26 +128,26 @@ export async function emitRoundPlayedFeedItem(params: {
     }
   }
 
-  // Look up competition freeze state if this round is part of a competition
+  // Look up event freeze state if this round is part of an event
   let competitionHolesShown: number | null = null;
-  const competitionTeeTimeId = (round as any).competition_tee_time_id as string | null;
-  if (competitionTeeTimeId) {
+  const eventTeeTimeId = (round as any).event_tee_time_id as string | null;
+  if (eventTeeTimeId) {
     try {
       const { data: teeTime } = await supabaseAdmin
-        .from("competition_tee_times")
-        .select("competition_id")
-        .eq("id", competitionTeeTimeId)
+        .from("event_tee_times")
+        .select("event_id")
+        .eq("id", eventTeeTimeId)
         .maybeSingle();
-      const compId = (teeTime as any)?.competition_id as string | null;
-      if (compId) {
-        const { data: comp } = await supabaseAdmin
-          .from("competitions")
+      const evtId = (teeTime as any)?.event_id as string | null;
+      if (evtId) {
+        const { data: evt } = await supabaseAdmin
+          .from("events")
           .select("leaderboard_freeze_state, leaderboard_freeze_last_holes, num_rounds")
-          .eq("id", compId)
+          .eq("id", evtId)
           .maybeSingle();
-        if (comp && (comp as any).leaderboard_freeze_state === "frozen" && (comp as any).leaderboard_freeze_last_holes != null) {
-          const numRounds = (comp as any).num_rounds ?? 1;
-          competitionHolesShown = numRounds * 18 - (comp as any).leaderboard_freeze_last_holes;
+        if (evt && (evt as any).leaderboard_freeze_state === "frozen" && (evt as any).leaderboard_freeze_last_holes != null) {
+          const numRounds = (evt as any).num_rounds ?? 1;
+          competitionHolesShown = numRounds * 18 - (evt as any).leaderboard_freeze_last_holes;
         }
       }
     } catch {

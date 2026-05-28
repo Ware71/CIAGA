@@ -4,25 +4,25 @@ import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 
 export const runtime = "nodejs";
 
-// Refreshes competition leaderboard entries for any live competitions in the season,
+// Refreshes event leaderboard entries for any live events in the season,
 // then recomputes season standings so the result always includes current in-progress scores.
 async function refreshSeasonStandings(seasonId: string) {
-  const { data: liveComps } = await supabaseAdmin
-    .from("competitions")
+  const { data: liveEvents } = await supabaseAdmin
+    .from("events")
     .select("id")
     .eq("season_id", seasonId)
     .eq("majors_status", "live")
     .in("standings_contribution", ["season", "both"]);
 
-  // Refresh each live competition's leaderboard (reads live round_score_events);
+  // Refresh each live event's leaderboard (reads live round_score_events);
   // the DB function already cascades to season standings, but we call it explicitly below too.
   await Promise.all(
-    (liveComps ?? []).map((comp: any) =>
-      supabaseAdmin.rpc("ciaga_compute_competition_leaderboard", { p_competition_id: comp.id })
+    (liveEvents ?? []).map((evt: any) =>
+      supabaseAdmin.rpc("ciaga_compute_event_leaderboard", { p_event_id: evt.id })
     )
   );
 
-  // Explicit season standings recompute ensures seasons with no live competitions
+  // Explicit season standings recompute ensures seasons with no live events
   // (only completed/official) are also aggregated correctly.
   await supabaseAdmin.rpc("ciaga_compute_season_standings", { p_season_id: seasonId });
 }
@@ -66,14 +66,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     // Auth: must be owner/admin of parent group
     const { data: season } = await supabaseAdmin
-      .from("series_seasons")
-      .select("series:competition_series(group_id)")
+      .from("competition_seasons")
+      .select("competition:competitions(group_id)")
       .eq("id", id)
       .maybeSingle();
 
     if (!season) return NextResponse.json({ error: "Season not found" }, { status: 404 });
 
-    const groupId = (season as any).series?.group_id;
+    const groupId = (season as any).competition?.group_id;
     if (groupId) {
       const { data: membership } = await supabaseAdmin
         .from("major_group_memberships")

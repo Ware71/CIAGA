@@ -110,17 +110,17 @@ export default function MajorsProfileClient() {
               </h2>
               {data.recent_results.map((item) => (
                 <button
-                  key={item.competition.id}
+                  key={item.event.id}
                   type="button"
-                  onClick={() => router.push(`/majors/competitions/${item.competition.id}`)}
+                  onClick={() => router.push(`/majors/events/${item.event.id}`)}
                   className="w-full text-left flex items-center justify-between rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-4 py-3 hover:border-emerald-700/50"
                 >
                   <div className="min-w-0">
                     <div className="text-[11px] text-emerald-200/55 truncate">
-                      {item.competition.group?.name ?? ""}
+                      {item.event.group?.name ?? ""}
                     </div>
                     <div className="text-sm font-semibold text-emerald-50 truncate">
-                      {item.competition.name}
+                      {item.event.name}
                     </div>
                   </div>
                   <div className="shrink-0 text-right ml-3">

@@ -28,10 +28,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const { data: transactions, error } = await supabaseAdmin
       .from("group_balance_transactions")
       .select(`
-        id, group_id, profile_id, competition_id, competition_extra_id,
+        id, group_id, profile_id, event_id, event_extra_id,
         type, amount, note, recorded_by, created_at,
         profile:profiles!profile_id(id, name, avatar_url),
-        competition:competitions!competition_id(id, name)
+        event:events!event_id(id, name)
       `)
       .eq("group_id", id)
       .order("created_at", { ascending: false });

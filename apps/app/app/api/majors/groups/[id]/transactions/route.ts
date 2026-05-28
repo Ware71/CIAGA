@@ -25,12 +25,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
 
     const body = await req.json();
-    const { profile_id, type, amount, competition_id, competition_extra_id, note } = body as {
+    const { profile_id, type, amount, event_id, event_extra_id, note } = body as {
       profile_id: string;
       type: "entry_fee" | "extra_charge" | "payment" | "winnings" | "adjustment";
       amount: number;
-      competition_id?: string;
-      competition_extra_id?: string;
+      event_id?: string;
+      event_extra_id?: string;
       note?: string;
     };
 
@@ -49,8 +49,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         profile_id,
         type,
         amount,
-        competition_id: competition_id ?? null,
-        competition_extra_id: competition_extra_id ?? null,
+        event_id: event_id ?? null,
+        event_extra_id: event_extra_id ?? null,
         note: note ?? null,
         recorded_by: profileId,
       })

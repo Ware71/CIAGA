@@ -33,7 +33,7 @@ export async function POST(req: Request) {
     // Confirm round is draft (and not live)
     const { data: round, error: roundErr } = await supabaseAdmin
       .from("rounds")
-      .select("id, status, competition_tee_time_id")
+      .select("id, status, event_tee_time_id")
       .eq("id", body.round_id)
       .single();
 
@@ -44,7 +44,7 @@ export async function POST(req: Request) {
 
     // Rounds linked to a Majors tee time cannot be deleted from here —
     // the player must withdraw via the competition page instead.
-    if (round.competition_tee_time_id) {
+    if (round.event_tee_time_id) {
       return NextResponse.json(
         { error: "This round is part of a Majors competition. To remove it, withdraw from the competition in the Majors section." },
         { status: 403 }

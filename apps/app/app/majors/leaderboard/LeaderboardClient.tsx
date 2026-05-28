@@ -65,7 +65,7 @@ function isLive(row: CompetitionRow): boolean {
 export default function LeaderboardClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const competitionId = searchParams.get("competition_id");
+  const competitionId = searchParams.get("event_id");
   const groupId = searchParams.get("group_id");
 
   const initialTab: Tab = groupId ? "group" : "competition";
@@ -86,7 +86,7 @@ export default function LeaderboardClient() {
     if (!session) return;
     accessTokenRef.current = session.accessToken;
 
-    const param = t === "competition" ? `competition_id=${id}` : `group_id=${id}`;
+    const param = t === "competition" ? `event_id=${id}` : `group_id=${id}`;
     const res = await fetch(`/api/majors/leaderboard?${param}`, {
       headers: { Authorization: `Bearer ${session.accessToken}` },
     });
@@ -126,8 +126,8 @@ export default function LeaderboardClient() {
           {
             event: "*",
             schema: "public",
-            table: "competition_leaderboard_entries",
-            filter: `competition_id=eq.${competitionId}`,
+            table: "event_leaderboard_entries",
+            filter: `event_id=eq.${competitionId}`,
           },
           () => {
             if (!cancelled) fetchLeaderboard(competitionId, "competition");
@@ -139,7 +139,7 @@ export default function LeaderboardClient() {
           {
             event: "UPDATE",
             schema: "public",
-            table: "competitions",
+            table: "events",
             filter: `id=eq.${competitionId}`,
           },
           (payload) => {
@@ -182,7 +182,7 @@ export default function LeaderboardClient() {
     try {
       const session = await getViewerSession();
       if (!session) return;
-      const res = await fetch(`/api/majors/competitions/${competitionId}/freeze-control`, {
+      const res = await fetch(`/api/majors/events/${competitionId}/freeze-control`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

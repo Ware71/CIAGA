@@ -26,8 +26,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const { data: transactions, error } = await supabaseAdmin
       .from("group_balance_transactions")
       .select(`
-        id, competition_id, competition_extra_id, type, amount, note, created_at,
-        competition:competitions!competition_id(id, name)
+        id, event_id, event_extra_id, type, amount, note, created_at,
+        event:events!event_id(id, name)
       `)
       .eq("group_id", id)
       .eq("profile_id", profileId)

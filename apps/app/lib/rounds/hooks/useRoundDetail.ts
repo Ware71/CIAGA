@@ -61,7 +61,7 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
   const [formatConfig, setFormatConfig] = useState<Record<string, any>>({});
   const [sideGames, setSideGames] = useState<SideGame[]>([]);
 
-  const [competitionTeeTimeId, setCompetitionTeeTimeId] = useState<string | null>(null);
+  const [eventTeeTimeId, setEventTeeTimeId] = useState<string | null>(null);
 
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -90,7 +90,7 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
     setFormatType((r.format_type as RoundFormatType) || "strokeplay");
     setFormatConfig((r.format_config as Record<string, any>) || {});
     setSideGames((r.side_games as SideGame[]) || []);
-    setCompetitionTeeTimeId((r.competition_tee_time_id as string) ?? null);
+    setEventTeeTimeId((r.event_tee_time_id as string) ?? null);
 
     // Build extras map from participant_extras
     const extrasMap: Record<string, { playing_handicap_used: number | null; team_id: string | null; handicap_index_direct: number | null }> = {};
@@ -339,7 +339,7 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
     teeSnapshotId,
     holes,
 
-    competitionTeeTimeId,
+    eventTeeTimeId,
 
     scoresByKey,
     setScoresByKey,

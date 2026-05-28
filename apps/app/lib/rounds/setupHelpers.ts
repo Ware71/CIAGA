@@ -20,7 +20,7 @@ export type Round = {
   default_playing_handicap_mode?: PlayingHandicapMode;
   default_playing_handicap_value?: number;
   setup_locked?: boolean;
-  competition_tee_time_id?: string | null;
+  event_tee_time_id?: string | null;
 };
 
 export type ProfileJoin = {

@@ -1,6 +1,6 @@
-import type { CompetitionWithGroup, CompetitionStructure, MajorGroupType } from "./types";
+import type { EventWithGroup, EventStructure, MajorGroupType } from "./types";
 
-const STRUCTURE_LABELS: Partial<Record<CompetitionStructure, string>> = {
+const STRUCTURE_LABELS: Partial<Record<EventStructure, string>> = {
   league_fixture: "League Round",
   knockout_match: "Knockout Match",
   season_event:   "Season Round",
@@ -24,8 +24,8 @@ const GROUP_TYPE_LABELS: Partial<Record<MajorGroupType, string>> = {
  * For upcoming/scheduled/entry states it returns the round type
  * derived from competition_structure and group type.
  */
-export function competitionStatusLabel(
-  comp: Pick<CompetitionWithGroup, "majors_status" | "competition_structure" | "group">
+export function eventStatusLabel(
+  comp: Pick<EventWithGroup, "majors_status" | "event_structure" | "group">
 ): string {
   switch (comp.majors_status) {
     case "live":       return "Live";
@@ -38,7 +38,7 @@ export function competitionStatusLabel(
   }
 
   // For upcoming / entry_open / entry_closed / published — show round type
-  const structureLabel = STRUCTURE_LABELS[comp.competition_structure];
+  const structureLabel = STRUCTURE_LABELS[comp.event_structure];
   if (structureLabel) return structureLabel;
 
   const groupType = comp.group?.type;

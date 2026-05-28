@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
-export type CompetitionMajorsStatus =
+export type EventStatus =
   | "upcoming"
   | "live"
   | "completed"
@@ -13,38 +13,38 @@ export type CompetitionMajorsStatus =
   | "official"
   | "archived";
 
-const NON_AUTO_STATUSES: CompetitionMajorsStatus[] = ["cancelled", "archived"];
+const NON_AUTO_STATUSES: EventStatus[] = ["cancelled", "archived"];
 
 /**
- * Computes and persists the correct majors_status for a competition based on:
- * - competition_date vs today
+ * Computes and persists the correct majors_status for an event based on:
+ * - event_date vs today
  * - round statuses (scheduled / live / completed)
  * - whether any tee times exist
  *
  * Called server-side from GET and round PATCH routes so any user activity
  * triggers a transparent status sync — no client-side logic needed.
  */
-export async function reconcileCompetitionStatus(
-  competitionId: string
+export async function reconcileEventStatus(
+  eventId: string
 ): Promise<void> {
-  const [compResult, roundsResult, teeTimesResult] = await Promise.all([
+  const [eventResult, roundsResult, teeTimesResult] = await Promise.all([
     supabaseAdmin
-      .from("competitions")
-      .select("majors_status, competition_date")
-      .eq("id", competitionId)
+      .from("events")
+      .select("majors_status, event_date")
+      .eq("id", eventId)
       .maybeSingle(),
     supabaseAdmin
-      .from("competition_rounds")
+      .from("event_rounds")
       .select("status")
-      .eq("competition_id", competitionId),
+      .eq("event_id", eventId),
     supabaseAdmin
-      .from("competition_tee_times")
+      .from("event_tee_times")
       .select("id", { count: "exact", head: true })
-      .eq("competition_id", competitionId),
+      .eq("event_id", eventId),
   ]);
 
-  const comp = compResult.data as { majors_status: CompetitionMajorsStatus; competition_date: string | null } | null;
-  if (!comp) return;
+  const evt = eventResult.data as { majors_status: EventStatus; event_date: string | null } | null;
+  if (!evt) return;
 
   const rounds = (roundsResult.data ?? []) as { status: string }[];
   const teeTimeCount = teeTimesResult.count ?? 0;
@@ -53,27 +53,27 @@ export async function reconcileCompetitionStatus(
     rounds.length > 0 && rounds.every((r) => r.status === "cancelled");
 
   if (allRoundsCancelled) {
-    if (comp.majors_status !== "cancelled") {
+    if (evt.majors_status !== "cancelled") {
       await supabaseAdmin
-        .from("competitions")
+        .from("events")
         .update({ majors_status: "cancelled" })
-        .eq("id", competitionId);
+        .eq("id", eventId);
     }
     return;
   }
 
-  if (NON_AUTO_STATUSES.includes(comp.majors_status)) return;
+  if (NON_AUTO_STATUSES.includes(evt.majors_status)) return;
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  let target: CompetitionMajorsStatus | null = null;
+  let target: EventStatus | null = null;
 
-  if (comp.competition_date) {
-    const compDate = new Date(comp.competition_date);
-    compDate.setHours(0, 0, 0, 0);
+  if (evt.event_date) {
+    const evtDate = new Date(evt.event_date);
+    evtDate.setHours(0, 0, 0, 0);
 
-    const daysDiff = (today.getTime() - compDate.getTime()) / (1000 * 60 * 60 * 24);
+    const daysDiff = (today.getTime() - evtDate.getTime()) / (1000 * 60 * 60 * 24);
 
     const allRoundsCompleted =
       rounds.length > 0 && rounds.every((r) => r.status === "completed");
@@ -88,10 +88,10 @@ export async function reconcileCompetitionStatus(
     }
   }
 
-  if (target && target !== comp.majors_status) {
+  if (target && target !== evt.majors_status) {
     await supabaseAdmin
-      .from("competitions")
+      .from("events")
       .update({ majors_status: target })
-      .eq("id", competitionId);
+      .eq("id", eventId);
   }
 }

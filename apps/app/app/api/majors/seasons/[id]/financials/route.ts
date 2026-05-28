@@ -5,30 +5,30 @@ import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 export const runtime = "nodejs";
 
 // GET /api/majors/seasons/[id]/financials
-// Returns a financial summary aggregated across all competitions in the season.
+// Returns a financial summary aggregated across all events in the season.
 // Owner/admin only.
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { profileId } = await getAuthedProfileOrThrow(req);
     const { id: seasonId } = await params;
 
-    // Fetch the season to get its series/group
+    // Fetch the season to get its competition/group
     const { data: season } = await supabaseAdmin
-      .from("series_seasons")
-      .select("id, series_id, season_year, name")
+      .from("competition_seasons")
+      .select("id, competition_id, season_year, name")
       .eq("id", seasonId)
       .maybeSingle();
 
     if (!season) return NextResponse.json({ error: "Season not found" }, { status: 404 });
 
-    // Get the group via the series
-    const { data: series } = await supabaseAdmin
-      .from("competition_series")
+    // Get the group via the competition
+    const { data: competition } = await supabaseAdmin
+      .from("competitions")
       .select("group_id")
-      .eq("id", (season as any).series_id)
+      .eq("id", (season as any).competition_id)
       .maybeSingle();
 
-    const groupId = (series as any)?.group_id;
+    const groupId = (competition as any)?.group_id;
 
     if (groupId) {
       const { data: membership } = await supabaseAdmin
@@ -44,15 +44,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       }
     }
 
-    // Get all competitions in this season
-    const { data: competitions } = await supabaseAdmin
-      .from("competitions")
+    // Get all events in this season
+    const { data: events } = await supabaseAdmin
+      .from("events")
       .select("id, name")
       .eq("season_id", seasonId);
 
-    const competitionIds = (competitions ?? []).map((c: any) => c.id);
+    const eventIds = (events ?? []).map((e: any) => e.id);
 
-    if (competitionIds.length === 0) {
+    if (eventIds.length === 0) {
       return NextResponse.json({
         season_id: seasonId,
         total_entry_fees: 0,
@@ -63,14 +63,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       });
     }
 
-    // Fetch all balance transactions for these competitions
+    // Fetch all balance transactions for these events
     const { data: transactions, error } = await supabaseAdmin
       .from("group_balance_transactions")
       .select(`
         profile_id, type, amount,
         profile:profiles!profile_id(id, name, avatar_url)
       `)
-      .in("competition_id", competitionIds);
+      .in("event_id", eventIds);
 
     if (error) throw error;
 

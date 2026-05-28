@@ -2,12 +2,12 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { emitRoundPlayedFeedItem } from "@/lib/feed/generators/roundPlayed";
 import { emitHoleEventFeedItems } from "@/lib/feed/generators/holeEvents";
 import { emitAchievementFeedItems } from "@/lib/feed/generators/achievements";
-import { tryCompleteCompetitionRound } from "@/lib/majors/tryCompleteCompetitionRound";
+import { tryCompleteEventRound } from "@/lib/majors/tryCompleteEventRound";
 
 /**
  * Marks a round as finished and triggers all downstream effects:
  * - Sets rounds.status = 'finished' and finished_at = now()
- * - Auto-submits scores to competition if the round is linked to a tee time
+ * - Auto-submits scores to event if the round is linked to a tee time
  * - Emits feed items (round played, hole events, achievements)
  *
  * Idempotent: if the round is already finished the DB update is a no-op,
@@ -36,28 +36,28 @@ export async function finishRound({
 
   if (upErr) throw upErr;
 
-  // If roundRow is null the round was already finished. Skip competition
+  // If roundRow is null the round was already finished. Skip event
   // auto-submit (upsert would be safe, but unnecessary). Feed items are
   // always attempted — they are idempotent.
   if (roundRow) {
-    // If this round was created via a competition tee time, auto-submit all
+    // If this round was created via an event tee time, auto-submit all
     // participant scores. Mirrors the manual submit flow.
-    const { data: cttRow } = await supabaseAdmin
-      .from("competition_tee_times")
-      .select("id, competition_id, competition_round_id")
+    const { data: ettRow } = await supabaseAdmin
+      .from("event_tee_times")
+      .select("id, event_id, event_round_id")
       .eq("round_id", roundId)
       .maybeSingle();
 
-    if (cttRow?.id) {
-      await autoSubmitCompetitionRound(roundId, cttRow.id);
+    if (ettRow?.id) {
+      await autoSubmitEventRound(roundId, ettRow.id);
 
-      // Auto-complete the competition round once all its tee times are done,
-      // then reconcile the parent competition status. Best-effort — must not
+      // Auto-complete the event round once all its tee times are done,
+      // then reconcile the parent event status. Best-effort — must not
       // block the round finish if this fails.
-      const compRoundId = (cttRow as any).competition_round_id ?? null;
-      const compId = (cttRow as any).competition_id ?? null;
-      if (compRoundId && compId) {
-        await tryCompleteCompetitionRound(compRoundId, compId).catch(() => {});
+      const eventRoundId = (ettRow as any).event_round_id ?? null;
+      const eventId = (ettRow as any).event_id ?? null;
+      if (eventRoundId && eventId) {
+        await tryCompleteEventRound(eventRoundId, eventId).catch(() => {});
       }
     }
   }
@@ -72,40 +72,40 @@ export async function finishRound({
 }
 
 // ---------------------------------------------------------------------------
-// Internal helpers (moved verbatim from /api/rounds/[round_id]/finish/route.ts)
+// Internal helpers
 // ---------------------------------------------------------------------------
 
-async function autoSubmitCompetitionRound(roundId: string, teeTimeId: string) {
-  // Look up competition and competition round from the tee time
+async function autoSubmitEventRound(roundId: string, teeTimeId: string) {
+  // Look up event and event round from the tee time
   const { data: teeTime } = await supabaseAdmin
-    .from("competition_tee_times")
-    .select("competition_id, competition_round_id")
+    .from("event_tee_times")
+    .select("event_id, event_round_id")
     .eq("id", teeTimeId)
     .maybeSingle();
 
   if (!teeTime) return;
 
-  // Fetch the competition's scoring model so we know whether to require a score
-  const { data: comp } = await supabaseAdmin
-    .from("competitions")
+  // Fetch the event's scoring model so we know whether to require a score
+  const { data: evt } = await supabaseAdmin
+    .from("events")
     .select("scoring_model")
-    .eq("id", (teeTime as any).competition_id)
+    .eq("id", (teeTime as any).event_id)
     .maybeSingle();
-  const isStableford = (comp as any)?.scoring_model === "stableford_points";
+  const isStableford = (evt as any)?.scoring_model === "stableford_points";
 
-  let competitionRoundId: string | null = (teeTime as any).competition_round_id ?? null;
+  let eventRoundId: string | null = (teeTime as any).event_round_id ?? null;
 
-  // For single-round competitions the tee time may not have competition_round_id set yet;
-  // fall back to the first (and only) competition round.
-  if (!competitionRoundId) {
-    const { data: cr } = await supabaseAdmin
-      .from("competition_rounds")
+  // For single-round events the tee time may not have event_round_id set yet;
+  // fall back to the first (and only) event round.
+  if (!eventRoundId) {
+    const { data: er } = await supabaseAdmin
+      .from("event_rounds")
       .select("id")
-      .eq("competition_id", (teeTime as any).competition_id)
+      .eq("event_id", (teeTime as any).event_id)
       .order("round_number", { ascending: true })
       .limit(1)
       .maybeSingle();
-    competitionRoundId = (cr as any)?.id ?? null;
+    eventRoundId = (er as any)?.id ?? null;
   }
 
   // Get all non-guest participants in the round who have profiles
@@ -130,7 +130,7 @@ async function autoSubmitCompetitionRound(roundId: string, teeTimeId: string) {
   );
 
   // Build submission rows — one per participant that has a score.
-  // For stableford competitions the stab_pts CTE computes points from
+  // For stableford events the stab_pts CTE computes points from
   // round_score_events directly; it only needs the submission to exist
   // (accepted = true) and does not use score_used. So we create the
   // submission even when score_used is null to ensure the player appears
@@ -143,8 +143,8 @@ async function autoSubmitCompetitionRound(roundId: string, teeTimeId: string) {
       const scoreUsed = gross != null ? (ch != null ? gross - ch : gross) : null;
 
       return {
-        competition_id: (teeTime as any).competition_id,
-        competition_round_id: competitionRoundId,
+        event_id: (teeTime as any).event_id,
+        event_round_id: eventRoundId,
         round_id: roundId,
         profile_id: p.profile_id,
         score_used: scoreUsed,
@@ -157,11 +157,11 @@ async function autoSubmitCompetitionRound(roundId: string, teeTimeId: string) {
   if (submissions.length === 0) return;
 
   await supabaseAdmin
-    .from("competition_round_submissions")
-    .upsert(submissions, { onConflict: "competition_id,round_id,profile_id" });
+    .from("event_round_submissions")
+    .upsert(submissions, { onConflict: "event_id,round_id,profile_id" });
 
   // Recompute leaderboard
-  await supabaseAdmin.rpc("ciaga_compute_competition_leaderboard", {
-    p_competition_id: (teeTime as any).competition_id,
+  await supabaseAdmin.rpc("ciaga_compute_event_leaderboard", {
+    p_event_id: (teeTime as any).event_id,
   });
 }

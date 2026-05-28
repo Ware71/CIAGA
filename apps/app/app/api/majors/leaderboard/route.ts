@@ -2,11 +2,11 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 import {
-  getCompetitionLeaderboard,
+  getEventLeaderboard,
   getGroupStandings,
-  getCompetitionById,
-  getCompetitionSubmissionMap,
-  getCompetitionPendingParticipants,
+  getEventById,
+  getEventSubmissionMap,
+  getEventPendingParticipants,
 } from "@/lib/majors/queries";
 import type { FrozenLeaderboardEntry } from "@/lib/majors/types";
 
@@ -17,13 +17,13 @@ export async function GET(req: Request) {
     const { profileId } = await getAuthedProfileOrThrow(req);
     const url = new URL(req.url);
 
-    const competitionId = url.searchParams.get("competition_id");
+    const eventId = url.searchParams.get("event_id");
     const groupId = url.searchParams.get("group_id");
 
-    if (competitionId) {
-      const competition = await getCompetitionById(competitionId);
-      if (!competition) {
-        return NextResponse.json({ error: "Competition not found" }, { status: 404 });
+    if (eventId) {
+      const event = await getEventById(eventId);
+      if (!event) {
+        return NextResponse.json({ error: "Event not found" }, { status: 404 });
       }
 
       const {
@@ -34,7 +34,7 @@ export async function GET(req: Request) {
         leaderboard_reveal_style,
         leaderboard_reveal_top_x,
         num_rounds,
-      } = competition as any;
+      } = event as any;
 
       const freezeConfig = {
         freeze_state: leaderboard_freeze_state ?? "live",
@@ -47,16 +47,16 @@ export async function GET(req: Request) {
       };
 
       let myRole: string | null = null;
-      if ((competition as any).group_id) {
+      if ((event as any).group_id) {
         const { data: mem } = await supabaseAdmin
           .from("major_group_memberships")
           .select("role")
-          .eq("group_id", (competition as any).group_id)
+          .eq("group_id", (event as any).group_id)
           .eq("profile_id", profileId)
           .eq("status", "active")
           .maybeSingle();
         myRole = (mem as any)?.role ?? null;
-      } else if ((competition as any).created_by_profile_id === profileId) {
+      } else if ((event as any).created_by_profile_id === profileId) {
         myRole = "owner";
       }
 
@@ -64,25 +64,25 @@ export async function GET(req: Request) {
 
       if (isFrozen) {
         const threshold = freezeConfig.total_holes - (freezeConfig.freeze_last_holes as number);
-        const rows = await getFrozenLeaderboard(competitionId, threshold, freezeConfig, (competition as any).scoring_model ?? "net");
+        const rows = await getFrozenLeaderboard(eventId, threshold, freezeConfig, (event as any).scoring_model ?? "net");
         return NextResponse.json(
           {
             rows,
             freeze: freezeConfig,
             my_role: myRole,
-            scoring_model: (competition as any).scoring_model ?? "net",
+            scoring_model: (event as any).scoring_model ?? "net",
           },
           { headers: { "Cache-Control": "no-store" } }
         );
       }
 
       const [liveRows, submissionMap] = await Promise.all([
-        getCompetitionLeaderboard(competitionId),
-        getCompetitionSubmissionMap(competitionId),
+        getEventLeaderboard(eventId),
+        getEventSubmissionMap(eventId),
       ]);
 
       const scoredIds = new Set(liveRows.map((r) => r.profile_id));
-      const pendingParticipants = await getCompetitionPendingParticipants(competitionId, scoredIds);
+      const pendingParticipants = await getEventPendingParticipants(eventId, scoredIds);
 
       const rows = [
         ...liveRows.map((r) => ({
@@ -103,7 +103,7 @@ export async function GET(req: Request) {
           holes_completed: 0,
           position: null,
           computed_at: null,
-          competition_id: competitionId,
+          event_id: eventId,
           round_id: null,
           tee_time: p.tee_time,
         })),
@@ -114,7 +114,7 @@ export async function GET(req: Request) {
           rows,
           freeze: freezeConfig,
           my_role: myRole,
-          scoring_model: (competition as any).scoring_model ?? "net",
+          scoring_model: (event as any).scoring_model ?? "net",
         },
         { headers: { "Cache-Control": "no-store" } }
       );
@@ -125,7 +125,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ rows }, { headers: { "Cache-Control": "no-store" } });
     }
 
-    return NextResponse.json({ error: "Provide competition_id or group_id" }, { status: 400 });
+    return NextResponse.json({ error: "Provide event_id or group_id" }, { status: 400 });
   } catch (e: any) {
     const msg = e?.message ?? "Unknown error";
     const status = String(msg).toLowerCase().includes("auth") ? 401 : 500;
@@ -134,7 +134,7 @@ export async function GET(req: Request) {
 }
 
 async function getFrozenLeaderboard(
-  competitionId: string,
+  eventId: string,
   threshold: number,
   freezeConfig: {
     freeze_scope: string;
@@ -146,12 +146,12 @@ async function getFrozenLeaderboard(
   // dynamic function only when the snapshot is absent (manual freeze before
   // this migration ran, or a race where the trigger hadn't fired yet).
   const { data: snapshotRows } = await supabaseAdmin
-    .from("competition_player_freeze_snapshots")
+    .from("event_player_freeze_snapshots")
     .select("*")
-    .eq("competition_id", competitionId);
+    .eq("event_id", eventId);
 
   // Always fetch live entries — needed for below-threshold players and top_x scope.
-  const liveRows = await getCompetitionLeaderboard(competitionId);
+  const liveRows = await getEventLeaderboard(eventId);
 
   type RawRow = {
     profile_id: string;
@@ -179,7 +179,7 @@ async function getFrozenLeaderboard(
     // Dynamic fallback: recompute from score events (original behaviour)
     const { data: rpcRows, error } = await supabaseAdmin.rpc(
       "ciaga_get_frozen_leaderboard",
-      { p_competition_id: competitionId, p_threshold_hole: threshold }
+      { p_event_id: eventId, p_threshold_hole: threshold }
     );
     if (error) throw error;
     frozenRows = ((rpcRows ?? []) as any[]).map((r) => ({

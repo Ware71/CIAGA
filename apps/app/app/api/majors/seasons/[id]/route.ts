@@ -4,17 +4,17 @@ import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 
 export const runtime = "nodejs";
 
-// GET /api/majors/seasons/[id] — season detail with competitions
+// GET /api/majors/seasons/[id] — season detail with events
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     await getAuthedProfileOrThrow(req);
     const { id } = await params;
 
     const { data: season, error: seasonErr } = await supabaseAdmin
-      .from("series_seasons")
+      .from("competition_seasons")
       .select(`
         *,
-        series:competition_series(id, name, group_id, series_type)
+        competition:competitions(id, name, group_id, competition_type)
       `)
       .eq("id", id)
       .maybeSingle();
@@ -22,23 +22,23 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     if (seasonErr) throw seasonErr;
     if (!season) return NextResponse.json({ error: "Season not found" }, { status: 404 });
 
-    // Fetch competitions in this season with leaderboard winners
-    const { data: competitions, error: compErr } = await supabaseAdmin
-      .from("competitions")
+    // Fetch events in this season with leaderboard winners
+    const { data: events, error: eventsErr } = await supabaseAdmin
+      .from("events")
       .select(`
-        id, name, competition_date, majors_status, competition_type,
-        scoring_model, series_event_template_id, course_id,
-        leaderboard:competition_leaderboard_entries(
+        id, name, event_date, majors_status, event_type,
+        scoring_model, competition_event_template_id, course_id,
+        leaderboard:event_leaderboard_entries(
           profile_id, position, net_score, gross_score, points_earned
         )
       `)
       .eq("season_id", id)
-      .order("competition_date", { ascending: true });
+      .order("event_date", { ascending: true });
 
-    if (compErr) throw compErr;
+    if (eventsErr) throw eventsErr;
 
     return NextResponse.json(
-      { season, competitions: competitions ?? [] },
+      { season, events: events ?? [] },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (e: any) {
@@ -55,16 +55,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const { id } = await params;
     const body = await req.json();
 
-    // Fetch season to get series → group for auth
+    // Fetch season to get competition → group for auth
     const { data: existing } = await supabaseAdmin
-      .from("series_seasons")
-      .select("series_id, series:competition_series(group_id)")
+      .from("competition_seasons")
+      .select("competition_id, competition:competitions(group_id)")
       .eq("id", id)
       .maybeSingle();
 
     if (!existing) return NextResponse.json({ error: "Season not found" }, { status: 404 });
 
-    const groupId = (existing as any).series?.group_id;
+    const groupId = (existing as any).competition?.group_id;
     if (groupId) {
       const { data: membership } = await supabaseAdmin
         .from("major_group_memberships")
@@ -86,7 +86,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
 
     const { data: season, error } = await supabaseAdmin
-      .from("series_seasons")
+      .from("competition_seasons")
       .update(updates)
       .eq("id", id)
       .select("*")

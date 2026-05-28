@@ -7,27 +7,27 @@ import { supabase } from "@/lib/supabaseClient";
 import type {
   MajorGroup,
   MajorGroupMembershipWithProfile,
-  CompetitionWithGroup,
-  CompetitionSeries,
-  SeriesEventTemplate,
+  EventWithGroup,
+  Competition,
+  CompetitionEventTemplate,
   MemberBalanceSummary,
   GroupBalanceTransactionWithDetails,
 } from "@/lib/majors/types";
 import type { LiveGroupStandingEntry, LiveGroupStandingsResponse } from "@/app/api/majors/groups/[id]/live-standings/route";
-import type { CompetitionResultsResponse } from "@/app/api/majors/groups/[id]/competition-results/route";
-import { competitionStatusLabel } from "@/lib/majors/labels";
+import type { CompetitionResultsResponse } from "@/app/api/majors/groups/[id]/event-results/route";
+import { eventStatusLabel } from "@/lib/majors/labels";
 
-type CompetitionSeriesWithEventCount = CompetitionSeries & {
-  event_templates: Pick<SeriesEventTemplate, "id">[];
+type CompetitionSeriesWithEventCount = Competition & {
+  event_templates: Pick<CompetitionEventTemplate, "id">[];
 };
 
-type Tab = "overview" | "competitions" | "standings" | "schedule" | "history" | "members" | "series" | "settings" | "finances";
+type Tab = "overview" | "events" | "standings" | "schedule" | "history" | "members" | "competitions" | "settings" | "finances";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "standings", label: "Standings" },
+  { id: "events", label: "Events" },
   { id: "competitions", label: "Competitions" },
-  { id: "series", label: "Series" },
   { id: "members", label: "Members" },
   { id: "finances", label: "Finances" },
   { id: "settings", label: "Settings" },
@@ -186,7 +186,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   const [compSubTab, setCompSubTab] = useState<"active" | "completed">("active");
   const [showCancelled, setShowCancelled] = useState(true);
   const [group, setGroup] = useState<GroupData | null>(null);
-  const [competitions, setCompetitions] = useState<CompetitionWithGroup[]>([]);
+  const [events, setEvents] = useState<EventWithGroup[]>([]);
   const [liveStandingsData, setLiveStandingsData] = useState<LiveGroupStandingsResponse | null>(null);
   const [members, setMembers] = useState<MajorGroupMembershipWithProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -195,23 +195,23 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   const [joining, setJoining] = useState(false);
   const [joinedStatus, setJoinedStatus] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
-  const [series, setSeries] = useState<CompetitionSeriesWithEventCount[]>([]);
+  const [competitions, setCompetitions] = useState<CompetitionSeriesWithEventCount[]>([]);
   const [balanceMembers, setBalanceMembers] = useState<MemberBalanceSummary[]>([]);
   const [myBalance, setMyBalance] = useState<{ balance: number; total_charged: number; total_paid: number; transactions: GroupBalanceTransactionWithDetails[] } | null>(null);
   const [expandedMember, setExpandedMember] = useState<string | null>(null);
   const [selectedYear, setSelectedYear] = useState<number | "all">(new Date().getFullYear());
-  const [standingsSubTab, setStandingsSubTab] = useState<"points" | "strokes" | "avgpar" | "competitions">("points");
+  const [standingsSubTab, setStandingsSubTab] = useState<"points" | "strokes" | "avgpar" | "events">("points");
   const [showNet, setShowNet] = useState(true);
   const [competitionResults, setCompetitionResults] = useState<CompetitionResultsResponse | null>(null);
   const yearEffectFirstMount = useRef(true);
 
-  const [showCreateSeriesModal, setShowCreateSeriesModal] = useState(false);
-  const [newSeriesName, setNewSeriesName] = useState("");
-  const [newSeriesDesc, setNewSeriesDesc] = useState("");
-  const [newSeriesMonth, setNewSeriesMonth] = useState("");
-  const [newSeriesHandicapPct, setNewSeriesHandicapPct] = useState("100");
-  const [newSeriesHandicapMax, setNewSeriesHandicapMax] = useState("");
-  const [creatingSeries, setCreatingSeries] = useState(false);
+  const [showCreateCompetitionModal, setShowCreateCompetitionModal] = useState(false);
+  const [newCompetitionName, setNewCompetitionName] = useState("");
+  const [newCompetitionDesc, setNewCompetitionDesc] = useState("");
+  const [newCompetitionMonth, setNewCompetitionMonth] = useState("");
+  const [newCompetitionHandicapPct, setNewCompetitionHandicapPct] = useState("100");
+  const [newCompetitionHandicapMax, setNewCompetitionHandicapMax] = useState("");
+  const [creatingCompetition, setCreatingCompetition] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -224,13 +224,13 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         const headers = { Authorization: `Bearer ${session.accessToken}` };
 
         const defaultYear = new Date().getFullYear();
-        const [groupRes, compsRes, standingsRes, membersRes, seriesRes, resultsRes] = await Promise.all([
+        const [groupRes, compsRes, standingsRes, membersRes, competitionsRes, resultsRes] = await Promise.all([
           fetch(`/api/majors/groups/${groupId}`, { headers }),
-          fetch(`/api/majors/competitions?group_id=${groupId}`, { headers }),
+          fetch(`/api/majors/events?group_id=${groupId}`, { headers }),
           fetch(`/api/majors/groups/${groupId}/live-standings?year=${defaultYear}`, { headers }),
           fetch(`/api/majors/groups/${groupId}/members`, { headers }),
-          fetch(`/api/majors/series?group_id=${groupId}`, { headers }),
-          fetch(`/api/majors/groups/${groupId}/competition-results?year=${defaultYear}`, { headers }),
+          fetch(`/api/majors/competitions?group_id=${groupId}`, { headers }),
+          fetch(`/api/majors/groups/${groupId}/event-results?year=${defaultYear}`, { headers }),
         ]);
 
         if (cancelled) return;
@@ -240,7 +240,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         }
         if (compsRes.ok) {
           const j = await compsRes.json();
-          setCompetitions(j.competitions ?? []);
+          setEvents(j.events ?? []);
         }
         if (standingsRes.ok) {
           const j: LiveGroupStandingsResponse = await standingsRes.json();
@@ -254,9 +254,9 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           setMyRole(own?.role ?? null);
           setJoinedStatus(own?.status ?? null);
         }
-        if (seriesRes.ok) {
-          const j = await seriesRes.json();
-          setSeries(j.series ?? []);
+        if (competitionsRes.ok) {
+          const j = await competitionsRes.json();
+          setCompetitions(j.competitions ?? []);
         }
         if (resultsRes.ok) {
           const j: CompetitionResultsResponse = await resultsRes.json();
@@ -339,7 +339,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       const qs = yearParam ? `?${yearParam}` : "";
       const [standingsRes, resultsRes] = await Promise.all([
         fetch(`/api/majors/groups/${groupId}/live-standings${qs}`, { headers }),
-        fetch(`/api/majors/groups/${groupId}/competition-results${qs}`, { headers }),
+        fetch(`/api/majors/groups/${groupId}/event-results${qs}`, { headers }),
       ]);
       if (cancelled) return;
       if (standingsRes.ok) setLiveStandingsData(await standingsRes.json());
@@ -397,7 +397,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     };
   }, [liveStandingsData?.liveRoundIds?.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Realtime: competition_leaderboard_entries — catches when a round finishes
+  // Realtime: event_leaderboard_entries — catches when a round finishes
   // and ciaga_compute_competition_leaderboard() rewrites entries for a live competition
   useEffect(() => {
     const compIds = liveStandingsData?.liveCompetitionIds ?? [];
@@ -409,8 +409,8 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         .on("postgres_changes", {
           event: "*",
           schema: "public",
-          table: "competition_leaderboard_entries",
-          filter: `competition_id=eq.${compId}`,
+          table: "event_leaderboard_entries",
+          filter: `event_id=eq.${compId}`,
         }, () => { if (!cancelled) refreshLiveStandings(); })
         .subscribe()
     );
@@ -489,46 +489,46 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     }
   };
 
-  const handleCreateSeries = async () => {
-    if (!newSeriesName.trim()) return;
-    setCreatingSeries(true);
+  const handleCreateCompetition = async () => {
+    if (!newCompetitionName.trim()) return;
+    setCreatingCompetition(true);
     try {
       const session = await getViewerSession();
       if (!session) return;
-      const res = await fetch("/api/majors/series", {
+      const res = await fetch("/api/majors/competitions", {
         method: "POST",
         headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           group_id: groupId,
-          name: newSeriesName.trim(),
-          description: newSeriesDesc.trim() || null,
+          name: newCompetitionName.trim(),
+          description: newCompetitionDesc.trim() || null,
           recur_annually: true,
-          typical_month: newSeriesMonth ? parseInt(newSeriesMonth, 10) : null,
+          typical_month: newCompetitionMonth ? parseInt(newCompetitionMonth, 10) : null,
           template_settings: {
-            handicap_allowance_pct: parseInt(newSeriesHandicapPct, 10) || 100,
-            max_handicap: newSeriesHandicapMax ? parseInt(newSeriesHandicapMax, 10) : null,
+            handicap_allowance_pct: parseInt(newCompetitionHandicapPct, 10) || 100,
+            max_handicap: newCompetitionHandicapMax ? parseInt(newCompetitionHandicapMax, 10) : null,
           },
         }),
       });
       if (res.ok) {
         const j = await res.json();
-        setSeries((prev) => [...prev, j.series]);
-        setShowCreateSeriesModal(false);
-        setNewSeriesName("");
-        setNewSeriesDesc("");
-        setNewSeriesMonth("");
-        setNewSeriesHandicapPct("100");
-        setNewSeriesHandicapMax("");
+        setCompetitions((prev) => [...prev, j.competition]);
+        setShowCreateCompetitionModal(false);
+        setNewCompetitionName("");
+        setNewCompetitionDesc("");
+        setNewCompetitionMonth("");
+        setNewCompetitionHandicapPct("100");
+        setNewCompetitionHandicapMax("");
       }
     } finally {
-      setCreatingSeries(false);
+      setCreatingCompetition(false);
     }
   };
 
   const isAdminOrOwner = myRole === "owner" || myRole === "admin";
   const isMember = !!myRole;
-  const upcomingComps = competitions.filter((c) => c.majors_status === "upcoming" || c.majors_status === "live");
-  const completedComps = competitions.filter(
+  const upcomingComps = events.filter((c) => c.majors_status === "upcoming" || c.majors_status === "live");
+  const completedComps = events.filter(
     (c) => c.majors_status === "completed" || c.majors_status === "cancelled"
   );
   const cancelledCount = completedComps.filter((c) => c.majors_status === "cancelled").length;
@@ -640,28 +640,28 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
               <span className="text-[10px] text-emerald-400/70">→</span>
             </div>
           </button>
-          {/* Competitions — navigates to competitions tab */}
+          {/* Events — navigates to events tab */}
           <button
             type="button"
-            onClick={() => setTab("competitions")}
+            onClick={() => setTab("events")}
             className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 text-left hover:bg-emerald-900/30 transition-colors"
           >
-            <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider mb-0.5">Competitions</div>
+            <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider mb-0.5">Events</div>
             <div className="flex items-baseline justify-between">
-              <div className="text-sm font-semibold text-emerald-50">{competitions.length}</div>
+              <div className="text-sm font-semibold text-emerald-50">{events.length}</div>
               <span className="text-[10px] text-emerald-400/70">→</span>
             </div>
           </button>
-          {/* Series — navigates to series tab (members only) */}
+          {/* Competitions — navigates to competitions tab (members only) */}
           {isMember && (
             <button
               type="button"
-              onClick={() => setTab("series")}
+              onClick={() => setTab("competitions")}
               className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 text-left hover:bg-emerald-900/30 transition-colors"
             >
-              <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider mb-0.5">Series</div>
+              <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider mb-0.5">Competitions</div>
               <div className="flex items-baseline justify-between">
-                <div className="text-sm font-semibold text-emerald-50">{series.length}</div>
+                <div className="text-sm font-semibold text-emerald-50">{competitions.length}</div>
                 <span className="text-[10px] text-emerald-400/70">→</span>
               </div>
             </button>
@@ -720,12 +720,12 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       </div>
     ),
 
-    competitions: (
+    events: (
       <div className="space-y-3">
         {isAdminOrOwner && (
           <button
             type="button"
-            onClick={() => router.push(`/majors/competitions/create?group_id=${groupId}`)}
+            onClick={() => router.push(`/majors/events/create?group_id=${groupId}`)}
             className="w-full py-2.5 rounded-full border border-emerald-700/60 text-sm font-semibold text-emerald-200 hover:bg-emerald-900/30"
           >
             + New Competition
@@ -785,17 +785,17 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           <button
             key={c.id}
             type="button"
-            onClick={() => router.push(`/majors/competitions/${c.id}`)}
+            onClick={() => router.push(`/majors/events/${c.id}`)}
             className={`w-full text-left rounded-2xl border p-4 space-y-1 hover:brightness-110 transition-all ${compStatusColour(c.majors_status)}`}
           >
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm font-semibold text-emerald-50 truncate">{c.name}</span>
               <span className={`shrink-0 text-[9px] font-semibold px-2 py-0.5 rounded-full border capitalize ${compStatusBadge(c.majors_status)}`}>
-                {competitionStatusLabel(c)}
+                {eventStatusLabel(c)}
               </span>
             </div>
             <div className="text-[11px] text-emerald-100/60 flex items-center gap-2">
-              {c.competition_date && <span>{new Date(c.competition_date).toLocaleDateString([], { month: "short", day: "numeric" })}</span>}
+              {c.event_date && <span>{new Date(c.event_date).toLocaleDateString([], { month: "short", day: "numeric" })}</span>}
               {c.course && (
                 <>
                   <span className="text-emerald-800">·</span>
@@ -816,7 +816,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       const showLiveIndicator = hasLive && (selectedYear === "all" || isCurrentYear);
 
       const availableYears = Array.from(
-        new Set(competitions.map((c) => c.competition_year).filter((y): y is number => y != null))
+        new Set(competitions.map((c) => c.event_year).filter((y): y is number => y != null))
       ).sort((a, b) => b - a);
 
       const subTabClass = (id: typeof standingsSubTab) =>
@@ -955,7 +955,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         );
       };
 
-      // ── Competitions sub-tab ─────────────────────────────────────────────
+      // ── Events sub-tab ───────────────────────────────────────────────────
       const renderCompetitions = () => {
         if (!competitionResults) {
           return <div className="text-sm text-emerald-100/60 text-center py-8">Loading…</div>;
@@ -963,9 +963,9 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
         if (selectedYear !== "all") {
           // Year view: list competitions with winner
-          const yearComps = competitionResults.competitions;
+          const yearComps = competitionResults.events;
           if (yearComps.length === 0) {
-            return <div className="text-sm text-emerald-100/60 text-center py-8">No competitions for {selectedYear}.</div>;
+            return <div className="text-sm text-emerald-100/60 text-center py-8">No events for {selectedYear}.</div>;
           }
           return (
             <div className="space-y-2">
@@ -975,13 +975,13 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                   <button
                     key={c.id}
                     type="button"
-                    onClick={() => router.push(`/majors/competitions/${c.id}`)}
+                    onClick={() => router.push(`/majors/events/${c.id}`)}
                     className="w-full flex items-start justify-between gap-2 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 text-left hover:bg-emerald-900/30 transition-colors"
                   >
                     <div className="min-w-0">
                       <div className="text-[12px] font-semibold text-emerald-100 truncate">{c.name}</div>
-                      {c.series_name && (
-                        <div className="text-[10px] text-emerald-200/50 mt-0.5">{c.series_name}</div>
+                      {c.competition_name && (
+                        <div className="text-[10px] text-emerald-200/50 mt-0.5">{c.competition_name}</div>
                       )}
                     </div>
                     <div className="text-right shrink-0">
@@ -996,8 +996,8 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                         <div className="text-[10px] text-emerald-200/50">No result</div>
                       ) : (
                         <div className="text-[10px] text-emerald-200/50">
-                          {c.competition_date
-                            ? new Date(c.competition_date).toLocaleDateString([], { month: "short", day: "numeric" })
+                          {c.event_date
+                            ? new Date(c.event_date).toLocaleDateString([], { month: "short", day: "numeric" })
                             : "Scheduled"}
                         </div>
                       )}
@@ -1012,7 +1012,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         // All-time view: per-player records
         const records = competitionResults.player_records;
         if (records.length === 0) {
-          return <div className="text-sm text-emerald-100/60 text-center py-8">No competition data yet.</div>;
+          return <div className="text-sm text-emerald-100/60 text-center py-8">No event data yet.</div>;
         }
         return (
           <div className="space-y-2">
@@ -1031,12 +1031,12 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                     {pr.total_wins} {pr.total_wins === 1 ? "win" : "wins"}
                   </span>
                 </div>
-                {/* Series records */}
-                {pr.series_records.length > 0 && (
+                {/* Competition records */}
+                {pr.competition_records.length > 0 && (
                   <div className="space-y-1 pl-9">
-                    {pr.series_records.map((sr) => (
-                      <div key={sr.series_id ?? "standalone"} className="flex items-center justify-between gap-2">
-                        <span className="text-[11px] text-emerald-200/70 truncate">{sr.series_name ?? "Series"}</span>
+                    {pr.competition_records.map((sr) => (
+                      <div key={sr.competition_id ?? "standalone"} className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] text-emerald-200/70 truncate">{sr.competition_name ?? "Competition"}</span>
                         <span className="text-[10px] text-emerald-200/55 shrink-0">
                           {sr.wins > 0
                             ? `${sr.wins}× win${sr.wins !== 1 ? "s" : ""}`
@@ -1052,14 +1052,14 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                 {pr.standalone_wins.length > 0 && (
                   <div className="space-y-1 pl-9">
                     {pr.standalone_wins.map((w) => (
-                      <div key={w.competition_id} className="flex items-center justify-between gap-2">
+                      <div key={w.event_id} className="flex items-center justify-between gap-2">
                         <span className="text-[11px] text-emerald-200/70 truncate">{w.name ?? "Competition"}</span>
                         <span className="text-[10px] text-[#f5e6b0]/70 shrink-0">{w.year ?? ""}</span>
                       </div>
                     ))}
                   </div>
                 )}
-                {pr.series_records.length === 0 && pr.standalone_wins.length === 0 && (
+                {pr.competition_records.length === 0 && pr.standalone_wins.length === 0 && (
                   <div className="pl-9 text-[11px] text-emerald-200/40">No entries yet</div>
                 )}
               </div>
@@ -1086,7 +1086,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
               <button type="button" onClick={() => setStandingsSubTab("points")} className={subTabClass("points")}>Points</button>
               <button type="button" onClick={() => setStandingsSubTab("strokes")} className={subTabClass("strokes")}>Strokes</button>
               <button type="button" onClick={() => setStandingsSubTab("avgpar")} className={subTabClass("avgpar")}>Avg to Par</button>
-              <button type="button" onClick={() => setStandingsSubTab("competitions")} className={subTabClass("competitions")}>Competitions</button>
+              <button type="button" onClick={() => setStandingsSubTab("events")} className={subTabClass("events")}>Events</button>
             </div>
           </div>
 
@@ -1111,12 +1111,12 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           {standingsSubTab === "points" && renderPoints()}
           {standingsSubTab === "strokes" && renderStrokes()}
           {standingsSubTab === "avgpar" && renderAvgPar()}
-          {standingsSubTab === "competitions" && renderCompetitions()}
+          {standingsSubTab === "events" && renderCompetitions()}
         </div>
       );
     })(),
 
-    // Keep schedule/history accessible via competitions tab filtering
+    // Keep schedule/history accessible via events tab filtering
     schedule: (
       <div className="space-y-3">
         {upcomingComps.length === 0 && (
@@ -1126,12 +1126,12 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           <button
             key={c.id}
             type="button"
-            onClick={() => router.push(`/majors/competitions/${c.id}`)}
+            onClick={() => router.push(`/majors/events/${c.id}`)}
             className={`w-full text-left rounded-2xl border p-4 space-y-1 hover:brightness-110 transition-all ${compStatusColour(c.majors_status)}`}
           >
             <div className="text-sm font-semibold text-emerald-50">{c.name}</div>
             <div className="text-[11px] text-emerald-100/60 flex gap-2">
-              {c.competition_date && <span>{new Date(c.competition_date).toLocaleDateString([], { month: "short", day: "numeric" })}</span>}
+              {c.event_date && <span>{new Date(c.event_date).toLocaleDateString([], { month: "short", day: "numeric" })}</span>}
               {c.course && <span>· {c.course.name}</span>}
             </div>
           </button>
@@ -1148,12 +1148,12 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           <button
             key={c.id}
             type="button"
-            onClick={() => router.push(`/majors/competitions/${c.id}`)}
+            onClick={() => router.push(`/majors/events/${c.id}`)}
             className="w-full text-left rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4 space-y-1 hover:border-emerald-700/70"
           >
             <div className="text-sm font-semibold text-emerald-50">{c.name}</div>
             <div className="text-[11px] text-emerald-100/60">
-              {c.competition_date && new Date(c.competition_date).toLocaleDateString()}
+              {c.event_date && new Date(c.event_date).toLocaleDateString()}
             </div>
           </button>
         ))}
@@ -1234,25 +1234,25 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       </div>
     ),
 
-    series: (
+    competitions: (
       <div className="space-y-3">
         {isAdminOrOwner && (
           <button
             type="button"
-            onClick={() => setShowCreateSeriesModal(true)}
+            onClick={() => setShowCreateCompetitionModal(true)}
             className="w-full py-2.5 rounded-full border border-emerald-700/60 text-sm font-semibold text-emerald-200 hover:bg-emerald-900/30"
           >
-            + Create Series Template
+            + Create Competition Template
           </button>
         )}
-        {series.length === 0 ? (
+        {competitions.length === 0 ? (
           <div className="text-sm text-emerald-100/60 text-center py-8">
             {isAdminOrOwner
-              ? "No series yet. Create a series template to generate competitions each year."
-              : "No series templates for this group."}
+              ? "No competitions yet. Create a competition template to generate events each year."
+              : "No competition templates for this group."}
           </div>
         ) : (
-          series.map((s) => {
+          competitions.map((s) => {
             const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
             const settings = (s.template_settings ?? {}) as Record<string, unknown>;
             const handicapPct = settings.handicap_allowance_pct as number | undefined;
@@ -1274,7 +1274,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                     )}
                     <button
                       type="button"
-                      onClick={() => router.push(`/majors/series/${s.id}`)}
+                      onClick={() => router.push(`/majors/competitions/${s.id}`)}
                       className="text-[11px] text-emerald-300/70 hover:text-emerald-200"
                     >
                       {isAdminOrOwner ? "Manage →" : "View →"}
@@ -1283,7 +1283,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <span className="text-[10px] text-emerald-200/55 border border-emerald-900/50 rounded-full px-2 py-0.5 capitalize">
-                    {s.template_competition_type}
+                    {s.template_event_type}
                   </span>
                   <span className="text-[10px] text-emerald-200/55 border border-emerald-900/50 rounded-full px-2 py-0.5 capitalize">
                     {s.template_scoring_model}
@@ -1314,12 +1314,12 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                     type="button"
                     onClick={() => {
                       if ((s.event_templates?.length ?? 0) > 0) {
-                        // Series has named events — go to series detail to create season
-                        router.push(`/majors/series/${s.id}`);
+                        // Competition has named events — go to competition detail to create season
+                        router.push(`/majors/competitions/${s.id}`);
                       } else {
-                        // Legacy single-event series — create competition directly
+                        // Legacy single-event competition — create event directly
                         router.push(
-                          `/majors/competitions/create?group_id=${groupId}&series_id=${s.id}&year=${new Date().getFullYear()}`
+                          `/majors/events/create?group_id=${groupId}&competition_id=${s.id}&year=${new Date().getFullYear()}`
                         );
                       }
                     }}
@@ -1578,7 +1578,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
   const visibleTabs = TABS.filter((t) => {
     if (t.id === "settings" || t.id === "finances") return isAdminOrOwner;
-    if (t.id === "series") return isMember;
+    if (t.id === "competitions") return isMember;
     return true;
   });
 
@@ -1643,18 +1643,18 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
       <div className="px-4 pb-8">{tabContent[tab]}</div>
 
-      {/* Create Series Modal */}
-      {showCreateSeriesModal && (
+      {/* Create Competition Modal */}
+      {showCreateCompetitionModal && (
         <div className="fixed inset-0 bg-black/70 flex items-end justify-center z-50 pb-[env(safe-area-inset-bottom)]">
           <div className="w-full max-w-sm bg-[#0c2e18] rounded-t-2xl p-6 space-y-4 max-h-[85dvh] overflow-y-auto">
-            <div className="text-sm font-semibold text-emerald-50">New Series Template</div>
+            <div className="text-sm font-semibold text-emerald-50">New Competition Template</div>
             <div className="space-y-3">
               <div className="space-y-1">
-                <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Series Name *</label>
+                <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Competition Name *</label>
                 <input
                   type="text"
-                  value={newSeriesName}
-                  onChange={(e) => setNewSeriesName(e.target.value)}
+                  value={newCompetitionName}
+                  onChange={(e) => setNewCompetitionName(e.target.value)}
                   placeholder="e.g. The Club Masters"
                   className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
                   autoFocus
@@ -1663,8 +1663,8 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
               <div className="space-y-1">
                 <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Description (optional)</label>
                 <textarea
-                  value={newSeriesDesc}
-                  onChange={(e) => setNewSeriesDesc(e.target.value)}
+                  value={newCompetitionDesc}
+                  onChange={(e) => setNewCompetitionDesc(e.target.value)}
                   rows={2}
                   placeholder="Brief description of this recurring competition"
                   className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600 resize-none"
@@ -1673,8 +1673,8 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
               <div className="space-y-1">
                 <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Typical Month (optional)</label>
                 <select
-                  value={newSeriesMonth}
-                  onChange={(e) => setNewSeriesMonth(e.target.value)}
+                  value={newCompetitionMonth}
+                  onChange={(e) => setNewCompetitionMonth(e.target.value)}
                   className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
                 >
                   <option value="">— Select month —</option>
@@ -1689,8 +1689,8 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                   type="number"
                   min={0}
                   max={100}
-                  value={newSeriesHandicapPct}
-                  onChange={(e) => setNewSeriesHandicapPct(e.target.value)}
+                  value={newCompetitionHandicapPct}
+                  onChange={(e) => setNewCompetitionHandicapPct(e.target.value)}
                   className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
                 />
               </div>
@@ -1699,8 +1699,8 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                 <input
                   type="number"
                   min={0}
-                  value={newSeriesHandicapMax}
-                  onChange={(e) => setNewSeriesHandicapMax(e.target.value)}
+                  value={newCompetitionHandicapMax}
+                  onChange={(e) => setNewCompetitionHandicapMax(e.target.value)}
                   placeholder="Leave blank for no limit"
                   className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
                 />
@@ -1709,18 +1709,18 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             <div className="flex gap-3 pt-1">
               <button
                 type="button"
-                onClick={() => { setShowCreateSeriesModal(false); setNewSeriesName(""); setNewSeriesDesc(""); setNewSeriesMonth(""); setNewSeriesHandicapPct("100"); setNewSeriesHandicapMax(""); }}
+                onClick={() => { setShowCreateCompetitionModal(false); setNewCompetitionName(""); setNewCompetitionDesc(""); setNewCompetitionMonth(""); setNewCompetitionHandicapPct("100"); setNewCompetitionHandicapMax(""); }}
                 className="flex-1 py-2.5 rounded-full border border-emerald-800 text-sm text-emerald-200"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                onClick={handleCreateSeries}
-                disabled={!newSeriesName.trim() || creatingSeries}
+                onClick={handleCreateCompetition}
+                disabled={!newCompetitionName.trim() || creatingCompetition}
                 className="flex-1 py-2.5 rounded-full bg-emerald-700 text-sm font-semibold text-white disabled:opacity-40"
               >
-                {creatingSeries ? "Creating…" : "Create"}
+                {creatingCompetition ? "Creating…" : "Create"}
               </button>
             </div>
           </div>

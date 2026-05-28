@@ -41,8 +41,8 @@ export default function HistoryClient() {
 
   // Group by year
   const byYear = items.reduce<Record<string, MajorHistoryItem[]>>((acc, item) => {
-    const year = item.competition.competition_date
-      ? new Date(item.competition.competition_date).getFullYear().toString()
+    const year = item.event.event_date
+      ? new Date(item.event.event_date).getFullYear().toString()
       : "Unknown";
     (acc[year] ??= []).push(item);
     return acc;
@@ -74,13 +74,13 @@ export default function HistoryClient() {
         <section key={year} className="space-y-2">
           <h2 className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/55">{year}</h2>
           {byYear[year].map((item) => {
-            const comp = item.competition;
+            const comp = item.event;
             const entry = item.entry;
             return (
               <button
                 key={comp.id}
                 type="button"
-                onClick={() => router.push(`/majors/competitions/${comp.id}`)}
+                onClick={() => router.push(`/majors/events/${comp.id}`)}
                 className="w-full text-left rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4 hover:border-emerald-700/70 transition-colors"
               >
                 <div className="flex items-start justify-between gap-2">
@@ -90,8 +90,8 @@ export default function HistoryClient() {
                     )}
                     <div className="text-sm font-semibold text-emerald-50 truncate">{comp.name}</div>
                     <div className="text-[11px] text-emerald-100/60 flex gap-2">
-                      {comp.competition_date && (
-                        <span>{new Date(comp.competition_date).toLocaleDateString()}</span>
+                      {comp.event_date && (
+                        <span>{new Date(comp.event_date).toLocaleDateString()}</span>
                       )}
                       {comp.course && <span>{comp.course.name}</span>}
                     </div>

@@ -2,19 +2,18 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import type {
   MajorGroup,
   MajorGroupMembershipWithProfile,
-  CompetitionFull,
-  CompetitionWithGroup,
+  EventWithGroup,
   LeaderboardEntryWithProfile,
   GroupStandingWithProfile,
   MajorHubSummary,
   MajorScheduleItem,
   MajorHistoryItem,
   MajorProfileData,
-  CompetitionSeriesWithEvents,
-  SeriesYearGroup,
+  CompetitionWithEventTemplates,
+  CompetitionYearGroup,
   EventTemplateHistory,
-  SeriesSeason,
-  SeriesSeasonWithSeries,
+  CompetitionSeason,
+  CompetitionSeasonWithCompetition,
   SeasonStandingsEntryWithProfile,
 } from "./types";
 
@@ -80,48 +79,48 @@ export async function getGroupMembers(groupId: string): Promise<MajorGroupMember
   return (data ?? []) as unknown as MajorGroupMembershipWithProfile[];
 }
 
-// ─── Competitions ────────────────────────────────────────────────────────────
+// ─── Events ──────────────────────────────────────────────────────────────────
 
-export async function getCompetitionById(competitionId: string): Promise<CompetitionWithGroup | null> {
+export async function getEventById(eventId: string): Promise<EventWithGroup | null> {
   const { data, error } = await supabaseAdmin
-    .from("competitions")
+    .from("events")
     .select("*, group:major_groups(id, name, type, ciaga_tag), course:courses(id, name)")
-    .eq("id", competitionId)
+    .eq("id", eventId)
     .maybeSingle();
   if (error) throw error;
-  return (data as CompetitionWithGroup) ?? null;
+  return (data as EventWithGroup) ?? null;
 }
 
-export async function getCompetitionsByGroup(
+export async function getEventsByGroup(
   groupId: string
-): Promise<CompetitionWithGroup[]> {
+): Promise<EventWithGroup[]> {
   const { data, error } = await supabaseAdmin
-    .from("competitions")
+    .from("events")
     .select("*, group:major_groups(id, name, type, ciaga_tag), course:courses(id, name)")
     .eq("group_id", groupId)
-    .order("competition_date", { ascending: true });
+    .order("event_date", { ascending: true });
   if (error) throw error;
-  return (data ?? []) as CompetitionWithGroup[];
+  return (data ?? []) as EventWithGroup[];
 }
 
 // ─── Participants & submissions ───────────────────────────────────────────────
 
-export async function getCompetitionParticipants(competitionId: string): Promise<
+export async function getEventParticipants(eventId: string): Promise<
   Array<{ profile_id: string; profile: { id: string; name: string | null; avatar_url: string | null } | null }>
 > {
   const { data, error } = await supabaseAdmin
-    .from("competition_entries")
+    .from("event_entries")
     .select("profile_id, profile:profiles(id, name, avatar_url)")
-    .eq("competition_id", competitionId);
+    .eq("event_id", eventId);
   if (error) throw error;
   return (data ?? []) as any;
 }
 
-export async function getCompetitionSubmissionMap(competitionId: string): Promise<Record<string, string>> {
+export async function getEventSubmissionMap(eventId: string): Promise<Record<string, string>> {
   const { data, error } = await supabaseAdmin
-    .from("competition_round_submissions")
+    .from("event_round_submissions")
     .select("profile_id, round_id")
-    .eq("competition_id", competitionId)
+    .eq("event_id", eventId)
     .eq("accepted", true);
   if (error) throw error;
   const map: Record<string, string> = {};
@@ -133,28 +132,28 @@ export async function getCompetitionSubmissionMap(competitionId: string): Promis
 
 // ─── Leaderboard ─────────────────────────────────────────────────────────────
 
-export async function getCompetitionLeaderboard(
-  competitionId: string
+export async function getEventLeaderboard(
+  eventId: string
 ): Promise<LeaderboardEntryWithProfile[]> {
   const { data, error } = await supabaseAdmin
-    .from("competition_leaderboard_entries")
+    .from("event_leaderboard_entries")
     .select("*, profile:profiles(id, name, avatar_url)")
-    .eq("competition_id", competitionId)
+    .eq("event_id", eventId)
     .order("position", { ascending: true });
   if (error) throw error;
   return (data ?? []) as unknown as LeaderboardEntryWithProfile[];
 }
 
-export async function getCompetitionPendingParticipants(
-  competitionId: string,
+export async function getEventPendingParticipants(
+  eventId: string,
   scoredProfileIds: Set<string>
 ): Promise<Array<{ profile_id: string; name: string | null; avatar_url: string | null; tee_time: string }>> {
-  // Use the reliable FK direction: competition_tee_times.round_id → rounds.id
-  // (rounds.competition_tee_time_id is a back-link set without error handling and may be NULL)
+  // Use the reliable FK direction: event_tee_times.round_id → rounds.id
+  // (rounds.event_tee_time_id is a back-link set without error handling and may be NULL)
   const { data: teeTimes, error: ttErr } = await supabaseAdmin
-    .from("competition_tee_times")
+    .from("event_tee_times")
     .select("id, tee_time, round_id")
-    .eq("competition_id", competitionId);
+    .eq("event_id", eventId);
   if (ttErr) throw ttErr;
 
   const roundIds = (teeTimes ?? []).map((t) => (t as any).round_id).filter(Boolean) as string[];
@@ -218,9 +217,9 @@ export async function getMajorSchedule(
   const limit = filters.limit ?? 30;
 
   let query = supabaseAdmin
-    .from("competitions")
+    .from("events")
     .select("*, group:major_groups(id, name, type, ciaga_tag), course:courses(id, name)")
-    .order("competition_date", { ascending: true })
+    .order("event_date", { ascending: true })
     .limit(limit);
 
   if (filters.status?.length) {
@@ -233,23 +232,23 @@ export async function getMajorSchedule(
   const { data, error } = await query;
   if (error) throw error;
 
-  const competitions = (data ?? []) as CompetitionWithGroup[];
+  const events = (data ?? []) as EventWithGroup[];
 
-  // Fetch which competitions this user has entered
-  const compIds = competitions.map((c) => c.id);
+  // Fetch which events this user has entered
+  const eventIds = events.map((c) => c.id);
   let enteredIds = new Set<string>();
-  if (compIds.length > 0) {
+  if (eventIds.length > 0) {
     const { data: entries } = await supabaseAdmin
-      .from("competition_entries")
-      .select("competition_id")
+      .from("event_entries")
+      .select("event_id")
       .eq("profile_id", profileId)
-      .in("competition_id", compIds);
-    enteredIds = new Set((entries ?? []).map((e: any) => e.competition_id as string));
+      .in("event_id", eventIds);
+    enteredIds = new Set((entries ?? []).map((e: any) => e.event_id as string));
   }
 
   const now = new Date();
 
-  return competitions.map((c) => {
+  return events.map((c) => {
     let entry_status: MajorScheduleItem["entry_status"] = "open";
     if (enteredIds.has(c.id)) {
       entry_status = "entered";
@@ -269,9 +268,9 @@ export async function getMajorHistory(
   cursor?: string,
   limit = 20
 ): Promise<MajorHistoryItem[]> {
-  // Get competitions this user has leaderboard entries for (i.e., submitted a round)
+  // Get events this user has leaderboard entries for (i.e., submitted a round)
   const { data: entries, error: entriesErr } = await supabaseAdmin
-    .from("competition_leaderboard_entries")
+    .from("event_leaderboard_entries")
     .select("*")
     .eq("profile_id", profileId)
     .order("computed_at", { ascending: false })
@@ -280,21 +279,21 @@ export async function getMajorHistory(
 
   if (!entries?.length) return [];
 
-  const compIds = (entries as any[]).map((e) => e.competition_id as string);
+  const eventIds = (entries as any[]).map((e) => e.event_id as string);
 
-  const { data: comps, error: compsErr } = await supabaseAdmin
-    .from("competitions")
+  const { data: evts, error: evtsErr } = await supabaseAdmin
+    .from("events")
     .select("*, group:major_groups(id, name, type, ciaga_tag), course:courses(id, name)")
-    .in("id", compIds)
+    .in("id", eventIds)
     .eq("majors_status", "completed");
-  if (compsErr) throw compsErr;
+  if (evtsErr) throw evtsErr;
 
-  const compMap = new Map(((comps ?? []) as CompetitionWithGroup[]).map((c) => [c.id, c]));
+  const eventMap = new Map(((evts ?? []) as EventWithGroup[]).map((c) => [c.id, c]));
 
   return (entries as any[])
-    .filter((e) => compMap.has(e.competition_id))
+    .filter((e) => eventMap.has(e.event_id))
     .map((e) => ({
-      competition: compMap.get(e.competition_id)!,
+      event: eventMap.get(e.event_id)!,
       entry: {
         position: e.position as number | null,
         net_score: e.net_score as number | null,
@@ -314,7 +313,7 @@ export async function getMajorProfile(profileId: string): Promise<MajorProfileDa
       .eq("id", profileId)
       .maybeSingle(),
     supabaseAdmin
-      .from("competition_leaderboard_entries")
+      .from("event_leaderboard_entries")
       .select("*")
       .eq("profile_id", profileId),
     supabaseAdmin
@@ -359,7 +358,7 @@ export async function getMajorProfile(profileId: string): Promise<MajorProfileDa
   // Recent results (last 5)
   const recentHistory = await getMajorHistory(profileId, undefined, 5);
 
-  // Season summary: sum entries from competitions with competition_date in current year
+  // Season summary: sum entries from events with event_date in current year
   const thisYear = new Date().getFullYear().toString();
   const seasonEntryIds = entries.filter((e) => e.computed_at?.startsWith(thisYear));
   const seasonPoints = seasonEntryIds.reduce((s, e) => s + (e.points_earned ?? 0), 0);
@@ -401,22 +400,22 @@ export async function getMajorHubSummary(profileId: string): Promise<MajorHubSum
 
   const myGroupIds = myGroupRows.map((g) => g.id);
 
-  // Active and upcoming competitions across my groups
-  let activeComps: CompetitionWithGroup[] = [];
-  let upcomingComps: CompetitionWithGroup[] = [];
+  // Active and upcoming events across my groups
+  let activeEvents: EventWithGroup[] = [];
+  let upcomingEvents: EventWithGroup[] = [];
 
   if (myGroupIds.length > 0) {
-    const { data: compData } = await supabaseAdmin
-      .from("competitions")
+    const { data: eventData } = await supabaseAdmin
+      .from("events")
       .select("*, group:major_groups(id, name, type, ciaga_tag), course:courses(id, name)")
       .in("group_id", myGroupIds)
       .in("majors_status", ["live", "upcoming"])
-      .order("competition_date", { ascending: true })
+      .order("event_date", { ascending: true })
       .limit(10);
 
-    const comps = (compData ?? []) as CompetitionWithGroup[];
-    activeComps = comps.filter((c) => c.majors_status === "live");
-    upcomingComps = comps.filter((c) => c.majors_status === "upcoming");
+    const evts = (eventData ?? []) as EventWithGroup[];
+    activeEvents = evts.filter((c) => c.majors_status === "live");
+    upcomingEvents = evts.filter((c) => c.majors_status === "upcoming");
   }
 
   // Season stats from group standings
@@ -450,18 +449,18 @@ export async function getMajorHubSummary(profileId: string): Promise<MajorHubSum
     season_rank: seasonRank,
     events_entered: eventsEntered,
     wins,
-    active_competitions: activeComps,
-    upcoming_competitions: upcomingComps,
+    active_events: activeEvents,
+    upcoming_events: upcomingEvents,
     my_groups: myGroupRows.map((g) => ({ ...g, member_count: 0 })),
     discover_groups: filteredDiscover,
   };
 }
 
-// ─── Competition Series queries ──────────────────────────────────────────────
+// ─── Competitions queries ─────────────────────────────────────────────────────
 
-export async function getSeriesByGroup(groupId: string) {
+export async function getCompetitionsByGroup(groupId: string) {
   const { data, error } = await supabaseAdmin
-    .from("competition_series")
+    .from("competitions")
     .select("*")
     .eq("group_id", groupId)
     .order("name", { ascending: true });
@@ -469,21 +468,21 @@ export async function getSeriesByGroup(groupId: string) {
   return data ?? [];
 }
 
-export async function getSeriesById(seriesId: string) {
+export async function getCompetitionById(competitionId: string) {
   const { data, error } = await supabaseAdmin
-    .from("competition_series")
+    .from("competitions")
     .select("*")
-    .eq("id", seriesId)
+    .eq("id", competitionId)
     .maybeSingle();
   if (error) throw error;
   return data ?? null;
 }
 
-export async function getSeriesWithEvents(seriesId: string): Promise<CompetitionSeriesWithEvents | null> {
+export async function getCompetitionWithEventTemplates(competitionId: string): Promise<CompetitionWithEventTemplates | null> {
   const { data, error } = await supabaseAdmin
-    .from("competition_series")
-    .select("*, event_templates:series_event_templates(*)")
-    .eq("id", seriesId)
+    .from("competitions")
+    .select("*, event_templates:competition_event_templates(*)")
+    .eq("id", competitionId)
     .maybeSingle();
   if (error) throw error;
   if (!data) return null;
@@ -491,33 +490,33 @@ export async function getSeriesWithEvents(seriesId: string): Promise<Competition
   const eventTemplates = (row.event_templates ?? []).sort(
     (a: any, b: any) => a.sort_order - b.sort_order
   );
-  return { ...row, event_templates: eventTemplates } as CompetitionSeriesWithEvents;
+  return { ...row, event_templates: eventTemplates } as CompetitionWithEventTemplates;
 }
 
-export async function getSeriesHistory(seriesId: string): Promise<SeriesYearGroup[]> {
-  // Fetch all competitions in this series with their group/course
-  const { data: comps, error: compsErr } = await supabaseAdmin
-    .from("competitions")
-    .select("*, group:major_groups(id, name, ciaga_tag), course:courses(id, name), event_template:series_event_templates(id, name, sort_order)")
-    .eq("series_id", seriesId)
-    .order("competition_date", { ascending: true });
-  if (compsErr) throw compsErr;
+export async function getCompetitionHistory(competitionId: string): Promise<CompetitionYearGroup[]> {
+  // Fetch all events in this competition with their group/course
+  const { data: evts, error: evtsErr } = await supabaseAdmin
+    .from("events")
+    .select("*, group:major_groups(id, name, ciaga_tag), course:courses(id, name), event_template:competition_event_templates(id, name, sort_order)")
+    .eq("competition_id", competitionId)
+    .order("event_date", { ascending: true });
+  if (evtsErr) throw evtsErr;
 
-  const competitions = (comps ?? []) as any[];
-  if (competitions.length === 0) return [];
+  const events = (evts ?? []) as any[];
+  if (events.length === 0) return [];
 
-  // Fetch P1 leaderboard entries for all these competitions
-  const compIds = competitions.map((c) => c.id as string);
+  // Fetch P1 leaderboard entries for all these events
+  const eventIds = events.map((c) => c.id as string);
   const { data: leaderboard, error: lbErr } = await supabaseAdmin
-    .from("competition_leaderboard_entries")
-    .select("competition_id, profile_id, position, net_score, profile:profiles(id, name, avatar_url)")
-    .in("competition_id", compIds)
+    .from("event_leaderboard_entries")
+    .select("event_id, profile_id, position, net_score, profile:profiles(id, name, avatar_url)")
+    .in("event_id", eventIds)
     .eq("position", 1);
   if (lbErr) throw lbErr;
 
   const winnerMap = new Map<string, any>();
   for (const entry of (leaderboard ?? []) as any[]) {
-    winnerMap.set(entry.competition_id, {
+    winnerMap.set(entry.event_id, {
       profile_id: entry.profile_id,
       name: entry.profile?.name ?? null,
       avatar_url: entry.profile?.avatar_url ?? null,
@@ -526,22 +525,22 @@ export async function getSeriesHistory(seriesId: string): Promise<SeriesYearGrou
   }
 
   // Group by year
-  const yearMap = new Map<number, SeriesYearGroup["competitions"]>();
-  for (const comp of competitions) {
-    const year = (comp.competition_year ?? new Date(comp.competition_date ?? "").getFullYear()) as number;
+  const yearMap = new Map<number, CompetitionYearGroup["events"]>();
+  for (const evt of events) {
+    const year = (evt.event_year ?? new Date(evt.event_date ?? "").getFullYear()) as number;
     if (!yearMap.has(year)) yearMap.set(year, []);
     yearMap.get(year)!.push({
-      competition: comp as CompetitionWithGroup,
-      event_template: comp.event_template ?? null,
-      winner: winnerMap.get(comp.id) ?? null,
+      event: evt as EventWithGroup,
+      event_template: evt.event_template ?? null,
+      winner: winnerMap.get(evt.id) ?? null,
     });
   }
 
   return Array.from(yearMap.entries())
     .sort(([a], [b]) => b - a) // newest first
-    .map(([year, comps]) => ({
+    .map(([year, evts]) => ({
       year,
-      competitions: comps.sort((a, b) => {
+      events: evts.sort((a, b) => {
         const aOrder = a.event_template?.sort_order ?? 999;
         const bOrder = b.event_template?.sort_order ?? 999;
         return aOrder - bOrder;
@@ -549,71 +548,71 @@ export async function getSeriesHistory(seriesId: string): Promise<SeriesYearGrou
     }));
 }
 
-export async function getPlayerSeriesHistory(profileId: string, seriesId: string) {
-  // All competitions in the series
-  const { data: comps, error: compsErr } = await supabaseAdmin
-    .from("competitions")
-    .select("id, name, competition_date, competition_year, majors_status, series_event_template_id, event_template:series_event_templates(id, name, sort_order)")
-    .eq("series_id", seriesId)
-    .order("competition_date", { ascending: false });
-  if (compsErr) throw compsErr;
+export async function getPlayerCompetitionHistory(profileId: string, competitionId: string) {
+  // All events in the competition
+  const { data: evts, error: evtsErr } = await supabaseAdmin
+    .from("events")
+    .select("id, name, event_date, event_year, majors_status, competition_event_template_id, event_template:competition_event_templates(id, name, sort_order)")
+    .eq("competition_id", competitionId)
+    .order("event_date", { ascending: false });
+  if (evtsErr) throw evtsErr;
 
-  const competitions = (comps ?? []) as any[];
-  if (competitions.length === 0) return [];
+  const events = (evts ?? []) as any[];
+  if (events.length === 0) return [];
 
-  const compIds = competitions.map((c) => c.id as string);
+  const eventIds = events.map((c) => c.id as string);
 
   const { data: entries, error: entriesErr } = await supabaseAdmin
-    .from("competition_leaderboard_entries")
-    .select("competition_id, position, net_score, gross_score, points_earned")
+    .from("event_leaderboard_entries")
+    .select("event_id, position, net_score, gross_score, points_earned")
     .eq("profile_id", profileId)
-    .in("competition_id", compIds);
+    .in("event_id", eventIds);
   if (entriesErr) throw entriesErr;
 
   const entryMap = new Map<string, any>();
   for (const e of (entries ?? []) as any[]) {
-    entryMap.set(e.competition_id, e);
+    entryMap.set(e.event_id, e);
   }
 
-  return competitions.map((c) => ({
-    competition: c,
+  return events.map((c) => ({
+    event: c,
     entry: entryMap.get(c.id) ?? null,
   }));
 }
 
 // ─── Seasons ─────────────────────────────────────────────────────────────────
 
-export async function getSeasonsBySeriesId(seriesId: string): Promise<SeriesSeason[]> {
+export async function getSeasonsByCompetitionId(competitionId: string): Promise<CompetitionSeason[]> {
   const { data, error } = await supabaseAdmin
-    .from("series_seasons")
+    .from("competition_seasons")
     .select("*")
-    .eq("series_id", seriesId)
+    .eq("competition_id", competitionId)
     .order("season_year", { ascending: false });
   if (error) throw error;
-  return (data ?? []) as SeriesSeason[];
+  return (data ?? []) as CompetitionSeason[];
 }
 
 export async function getSeasonById(
   seasonId: string
-): Promise<(SeriesSeasonWithSeries & { competitions: CompetitionWithGroup[] }) | null> {
+): Promise<(CompetitionSeasonWithCompetition & { events: EventWithGroup[] }) | null> {
   const { data: seasonData, error: seasonErr } = await supabaseAdmin
-    .from("series_seasons")
-    .select("*, series:competition_series(id, name, group_id, series_type)")
+    .from("competition_seasons")
+    .select("*, competition:competitions(id, name, group_id, competition_type)")
     .eq("id", seasonId)
     .maybeSingle();
   if (seasonErr) throw seasonErr;
   if (!seasonData) return null;
 
-  const { data: comps, error: compsErr } = await supabaseAdmin
-    .from("competitions")
+  const { data: evts, error: evtsErr } = await supabaseAdmin
+    .from("events")
     .select("*, group:major_groups(id, name, type, ciaga_tag), course:courses(id, name)")
     .eq("season_id", seasonId)
-    .order("competition_date", { ascending: true });
-  if (compsErr) throw compsErr;
+    .order("event_date", { ascending: true });
+  if (evtsErr) throw evtsErr;
 
   return {
-    ...(seasonData as unknown as SeriesSeasonWithSeries),
-    competitions: (comps ?? []) as CompetitionWithGroup[],
+    ...(seasonData as unknown as CompetitionSeasonWithCompetition),
+    events: (evts ?? []) as EventWithGroup[],
   };
 }
 
@@ -638,28 +637,28 @@ export async function getEventHistorySummaries(eventTemplateId: string) {
       *,
       winner:profiles!winner_profile_id(id, name, avatar_url),
       runner_up:profiles!runner_up_profile_id(id, name, avatar_url),
-      competition:competitions(id, name, competition_date, majors_status)
+      event:events(id, name, event_date, majors_status)
     `)
-    .eq("series_event_template_id", eventTemplateId)
+    .eq("competition_event_template_id", eventTemplateId)
     .order("season_year", { ascending: false });
   if (error) throw error;
   return data ?? [];
 }
 
-// ─── Profile competition stats ────────────────────────────────────────────────
+// ─── Profile event stats ──────────────────────────────────────────────────────
 
-export async function getProfileCompetitionStats(profileId: string, groupId?: string, seriesId?: string) {
+export async function getProfileEventStats(profileId: string, groupId?: string, competitionId?: string) {
   let query = supabaseAdmin
-    .from("profile_competition_stats")
+    .from("profile_event_stats")
     .select("*")
     .eq("profile_id", profileId);
 
   if (groupId) {
     query = query.eq("group_id", groupId);
-  } else if (seriesId) {
-    query = query.eq("series_id", seriesId);
+  } else if (competitionId) {
+    query = query.eq("competition_id", competitionId);
   } else {
-    query = query.is("group_id", null).is("series_id", null);
+    query = query.is("group_id", null).is("competition_id", null);
   }
 
   const { data } = await query.maybeSingle();
@@ -672,38 +671,38 @@ export async function getEventTemplateHistory(
 ): Promise<EventTemplateHistory | null> {
   // Fetch the event template
   const { data: templateData, error: tmplErr } = await supabaseAdmin
-    .from("series_event_templates")
+    .from("competition_event_templates")
     .select("*")
     .eq("id", eventTemplateId)
     .maybeSingle();
   if (tmplErr) throw tmplErr;
   if (!templateData) return null;
 
-  // Fetch all competitions linked to this event template
-  const { data: comps, error: compsErr } = await supabaseAdmin
-    .from("competitions")
-    .select("id, name, competition_date, competition_year, majors_status")
-    .eq("series_event_template_id", eventTemplateId)
-    .order("competition_date", { ascending: false });
-  if (compsErr) throw compsErr;
+  // Fetch all events linked to this event template
+  const { data: evts, error: evtsErr } = await supabaseAdmin
+    .from("events")
+    .select("id, name, event_date, event_year, majors_status")
+    .eq("competition_event_template_id", eventTemplateId)
+    .order("event_date", { ascending: false });
+  if (evtsErr) throw evtsErr;
 
-  const competitions = (comps ?? []) as any[];
-  if (competitions.length === 0) {
+  const events = (evts ?? []) as any[];
+  if (events.length === 0) {
     return { event_template: templateData as any, results: [] };
   }
 
-  const compIds = competitions.map((c) => c.id as string);
+  const eventIds = events.map((c) => c.id as string);
 
   // Winners (position 1)
   const { data: winners } = await supabaseAdmin
-    .from("competition_leaderboard_entries")
-    .select("competition_id, profile_id, net_score, profile:profiles(id, name)")
-    .in("competition_id", compIds)
+    .from("event_leaderboard_entries")
+    .select("event_id, profile_id, net_score, profile:profiles(id, name)")
+    .in("event_id", eventIds)
     .eq("position", 1);
 
   const winnerMap = new Map<string, any>();
   for (const w of (winners ?? []) as any[]) {
-    winnerMap.set(w.competition_id, {
+    winnerMap.set(w.event_id, {
       profile_id: w.profile_id,
       name: w.profile?.name ?? null,
       net_score: w.net_score,
@@ -714,18 +713,18 @@ export async function getEventTemplateHistory(
   let viewerEntryMap = new Map<string, any>();
   if (viewerProfileId) {
     const { data: viewerEntries } = await supabaseAdmin
-      .from("competition_leaderboard_entries")
-      .select("competition_id, position, net_score, gross_score")
+      .from("event_leaderboard_entries")
+      .select("event_id, position, net_score, gross_score")
       .eq("profile_id", viewerProfileId)
-      .in("competition_id", compIds);
+      .in("event_id", eventIds);
     for (const e of (viewerEntries ?? []) as any[]) {
-      viewerEntryMap.set(e.competition_id, e);
+      viewerEntryMap.set(e.event_id, e);
     }
   }
 
-  const results = competitions.map((c) => ({
-    year: (c.competition_year ?? new Date(c.competition_date ?? "").getFullYear()) as number,
-    competition: c,
+  const results = events.map((c) => ({
+    year: (c.event_year ?? new Date(c.event_date ?? "").getFullYear()) as number,
+    event: c,
     winner: winnerMap.get(c.id) ?? null,
     entry: viewerEntryMap.get(c.id) ?? null,
   }));

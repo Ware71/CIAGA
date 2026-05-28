@@ -2,7 +2,7 @@
 
 // ─── Spec-aligned enum types (Phase 1) ──────────────────────────────────────
 
-export type SeriesType =
+export type CompetitionType =
   | "tour"
   | "major_series"
   | "matchplay_league"
@@ -10,7 +10,7 @@ export type SeriesType =
   | "championship_series"
   | "season";
 
-export type CompetitionStructure =
+export type EventStructure =
   | "standalone"
   | "multi_round"
   | "season_event"
@@ -55,7 +55,7 @@ export type MajorMembershipRole = "owner" | "admin" | "member";
 
 export type MajorMembershipStatus = "active" | "pending" | "invited";
 
-export type CompetitionTypeV2 =
+export type EventTypeV2 =
   | "stroke"
   | "stableford"
   | "matchplay"
@@ -71,15 +71,15 @@ export type CompetitionTypeV2 =
   | "team_best_ball"
   | "team_scramble";
 
-export type CompetitionScoringModel = "gross" | "net" | "stableford_points" | "match_result";
+export type EventScoringModel = "gross" | "net" | "stableford_points" | "match_result";
 
-export type CompetitionPointsModel =
+export type EventPointsModel =
   | "none"
   | "fedex_style"
   | "custom_table"
   | "position_based";
 
-export type CompetitionMajorsStatus =
+export type EventStatus =
   | "upcoming"
   | "live"
   | "completed"
@@ -109,38 +109,38 @@ export type LeaderboardFreezeConfig = {
   leaderboard_reveal_top_x: number | null;
 };
 
-export type CompetitionCategory = "round_based" | "aggregate" | "standalone";
+export type EventCategory = "round_based" | "aggregate" | "standalone";
 
 // ─── Core entities ───────────────────────────────────────────────────────────
 
-export type SeriesEventTemplate = {
+export type CompetitionEventTemplate = {
   id: string;
-  series_id: string;
+  competition_id: string;
   name: string;
   description: string | null;
   sort_order: number;
   typical_month: number | null;
-  /** null = inherit from parent CompetitionSeries */
-  template_competition_type: CompetitionTypeV2 | null;
-  template_scoring_model: CompetitionScoringModel | null;
-  template_points_model: CompetitionPointsModel | null;
+  /** null = inherit from parent Competition */
+  template_event_type: EventTypeV2 | null;
+  template_scoring_model: EventScoringModel | null;
+  template_points_model: EventPointsModel | null;
   template_rules_text: string | null;
   template_settings: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 };
 
-export type CompetitionSeries = {
+export type Competition = {
   id: string;
   group_id: string | null;
   name: string;
   description: string | null;
   recur_annually: boolean;
   typical_month: number | null;
-  template_competition_type: CompetitionTypeV2;
-  template_competition_category: CompetitionCategory;
-  template_scoring_model: CompetitionScoringModel;
-  template_points_model: CompetitionPointsModel;
+  template_event_type: EventTypeV2;
+  template_event_category: EventCategory;
+  template_scoring_model: EventScoringModel;
+  template_points_model: EventPointsModel;
   template_rules_text: string | null;
   template_settings: Record<string, unknown>;
   template_num_rounds: number;
@@ -148,18 +148,18 @@ export type CompetitionSeries = {
   created_at: string;
   updated_at: string;
   // Spec-aligned additions
-  series_type: SeriesType;
+  competition_type: CompetitionType;
   is_active: boolean;
   default_start_month: number | null;
   default_end_month: number | null;
 };
 
-// ── SeriesSeason ─────────────────────────────────────────────
+// ── CompetitionSeason ─────────────────────────────────────────────
 export type SeasonStatus = "draft" | "published" | "live" | "completed" | "archived";
 
-export type SeriesSeason = {
+export type CompetitionSeason = {
   id: string;
-  series_id: string;
+  competition_id: string;
   season_year: number;
   name: string;
   status: SeasonStatus;
@@ -171,18 +171,18 @@ export type SeriesSeason = {
   updated_at: string;
 };
 
-export type SeriesSeasonWithSeries = SeriesSeason & {
-  series: Pick<CompetitionSeries, "id" | "name" | "series_type" | "group_id">;
+export type CompetitionSeasonWithCompetition = CompetitionSeason & {
+  competition: Pick<Competition, "id" | "name" | "competition_type" | "group_id">;
 };
 
-// ── CompetitionRulesVersion ───────────────────────────────────
-export type CompetitionRulesVersion = {
+// ── EventRulesVersion ───────────────────────────────────────────────
+export type EventRulesVersion = {
   id: string;
-  competition_id: string | null;
+  event_id: string | null;
   source_template_id: string | null;
   rules_version: number;
-  competition_format: CompetitionTypeV2;
-  competition_structure: CompetitionStructure;
+  event_format: EventTypeV2;
+  event_structure: EventStructure;
   scoring_basis: ScoringBasis;
   handicap_config: Record<string, unknown>;
   points_config: Record<string, unknown>;
@@ -195,16 +195,16 @@ export type CompetitionRulesVersion = {
   created_by_profile_id: string | null;
 };
 
-export type CompetitionSeriesWithEvents = CompetitionSeries & {
-  event_templates: SeriesEventTemplate[];
+export type CompetitionWithEventTemplates = Competition & {
+  event_templates: CompetitionEventTemplate[];
 };
 
-/** A year's-worth of competition instances within a series, with winner info */
-export type SeriesYearGroup = {
+/** A year's-worth of event instances within a competition, with winner info */
+export type CompetitionYearGroup = {
   year: number;
-  competitions: Array<{
-    competition: CompetitionWithGroup;
-    event_template: Pick<SeriesEventTemplate, "id" | "name" | "sort_order"> | null;
+  events: Array<{
+    event: EventWithGroup;
+    event_template: Pick<CompetitionEventTemplate, "id" | "name" | "sort_order"> | null;
     winner: {
       profile_id: string;
       name: string | null;
@@ -216,10 +216,10 @@ export type SeriesYearGroup = {
 
 /** History for one named event (event template) across all years */
 export type EventTemplateHistory = {
-  event_template: SeriesEventTemplate;
+  event_template: CompetitionEventTemplate;
   results: Array<{
     year: number;
-    competition: Pick<CompetitionFull, "id" | "name" | "competition_date" | "majors_status">;
+    event: Pick<EventFull, "id" | "name" | "event_date" | "majors_status">;
     winner: { profile_id: string; name: string | null; net_score: number | null } | null;
     /** The viewing player's own result in that year, if any */
     entry: { position: number | null; net_score: number | null; gross_score: number | null } | null;
@@ -243,10 +243,10 @@ export type GroupHandicapRules = {
 };
 
 export type GroupScoringPrefs = {
-  scoring_model: CompetitionScoringModel | null;
-  competition_type: CompetitionTypeV2 | null;
+  scoring_model: EventScoringModel | null;
+  competition_type: EventTypeV2 | null;
   handicap_rules: GroupHandicapRules | null;
-  points_model: CompetitionPointsModel | null;
+  points_model: EventPointsModel | null;
   standings_contribution: StandingsContribution | null;
 };
 
@@ -294,26 +294,26 @@ export type PrizeTableEntry = {
   pct: number;
 };
 
-export type CompetitionFull = {
+export type EventFull = {
   id: string;
   name: string;
   description: string | null;
-  // Legacy fields from existing competitions table
+  // Legacy fields from existing events table
   round_id: string | null;
   status: "draft" | "locked" | "finished";
   locked_at: string | null;
   calc_version: string;
   // New Majors fields
   group_id: string | null;
-  competition_type: CompetitionTypeV2;
+  event_type: EventTypeV2;
   format: string | null;
   course_id: string | null;
-  competition_date: string | null;
+  event_date: string | null;
   entry_window_start: string | null;
   entry_window_end: string | null;
   rules_text: string | null;
-  scoring_model: CompetitionScoringModel;
-  points_model: CompetitionPointsModel;
+  scoring_model: EventScoringModel;
+  points_model: EventPointsModel;
   points_table: Record<string, unknown>;
   eligibility_rules: Record<string, unknown>;
   handicap_rules: Record<string, unknown>;
@@ -322,17 +322,17 @@ export type CompetitionFull = {
   time_rules: Record<string, unknown>;
   membership_rules: Record<string, unknown>;
   standings_contribution: StandingsContribution;
-  majors_status: CompetitionMajorsStatus;
+  majors_status: EventStatus;
   created_by_profile_id: string | null;
-  // Series & category fields
-  series_id: string | null;
-  series_event_template_id: string | null;
-  competition_year: number | null;
-  competition_category: CompetitionCategory;
+  // Competition & category fields
+  competition_id: string | null;
+  competition_event_template_id: string | null;
+  event_year: number | null;
+  event_category: EventCategory;
   aggregate_config: Record<string, unknown>;
   // Spec-aligned additions
   season_id: string | null;
-  competition_structure: CompetitionStructure;
+  event_structure: EventStructure;
   scoring_basis: ScoringBasis | null;
   published_rules_version_id: string | null;
   // Upgrade additions
@@ -354,20 +354,20 @@ export type CompetitionFull = {
   leaderboard_reveal_top_x: number | null;
 };
 
-export type CompetitionWithGroup = CompetitionFull & {
+export type EventWithGroup = EventFull & {
   group: Pick<MajorGroup, "id" | "name" | "type" | "ciaga_tag"> | null;
   course: { id: string; name: string } | null;
 };
 
-export type CompetitionWithSeries = CompetitionWithGroup & {
-  series: Pick<CompetitionSeries, "id" | "name"> | null;
+export type EventWithCompetition = EventWithGroup & {
+  competition: Pick<Competition, "id" | "name"> | null;
 };
 
 export type SubmissionStatus = "pending" | "accepted" | "rejected" | "superseded" | "withdrawn" | "dq";
 
-export type CompetitionRoundSubmission = {
+export type EventRoundSubmission = {
   id: string;
-  competition_id: string;
+  event_id: string;
   round_id: string;
   profile_id: string;
   submitted_at: string;
@@ -375,7 +375,7 @@ export type CompetitionRoundSubmission = {
   accepted: boolean;
   rejected_reason: string | null;
   // Spec-aligned additions
-  competition_round_id: string | null;
+  event_round_id: string | null;
   submission_status: SubmissionStatus;
   gross_score: number | null;
   net_score_snapshot: number | null;
@@ -386,9 +386,9 @@ export type CompetitionRoundSubmission = {
   decision_reason: string | null;
 };
 
-export type CompetitionLeaderboardEntry = {
+export type EventLeaderboardEntry = {
   id: string;
-  competition_id: string;
+  event_id: string;
   profile_id: string;
   position: number | null;
   gross_score: number | null;
@@ -404,13 +404,13 @@ export type CompetitionLeaderboardEntry = {
   course_par: number | null;
 };
 
-export type LeaderboardEntryWithProfile = CompetitionLeaderboardEntry & {
+export type LeaderboardEntryWithProfile = EventLeaderboardEntry & {
   profile: {
     id: string;
     name: string | null;
     avatar_url: string | null;
   };
-  // Round ID from submission map (may be present on competition-scoped leaderboard)
+  // Round ID from submission map (may be present on event-scoped leaderboard)
   round_id?: string | null;
 };
 
@@ -467,20 +467,20 @@ export type SeasonStandingsEntryWithProfile = SeasonStandingsEntry & {
   profile: { id: string; name: string | null; avatar_url: string | null };
 };
 
-// ─── Competition rounds ───────────────────────────────────────────────────────
+// ─── Event rounds ───────────────────────────────────────────────────────────
 
-export type CompetitionRoundStatus = "scheduled" | "live" | "completed" | "cancelled";
+export type EventRoundStatus = "scheduled" | "live" | "completed" | "cancelled";
 
-export type CompetitionRound = {
+export type EventRound = {
   id: string;
-  competition_id: string;
+  event_id: string;
   round_number: number;
   name: string;
   scheduled_date: string | null;
   course_id: string | null;
   default_tee_box_id_male: string | null;
   default_tee_box_id_female: string | null;
-  status: CompetitionRoundStatus;
+  status: EventRoundStatus;
   created_at: string;
   course?: { id: string; name: string } | null;
   tee_male?: { id: string; name: string } | null;
@@ -489,7 +489,7 @@ export type CompetitionRound = {
 
 // ─── Audit log ───────────────────────────────────────────────────────────────
 
-export type CompetitionAuditActionType =
+export type EventAuditActionType =
   | "created"
   | "published"
   | "entry_opened"
@@ -501,11 +501,11 @@ export type CompetitionAuditActionType =
   | "status_changed"
   | "fixture_result_updated";
 
-export type CompetitionAuditLog = {
+export type EventAuditLog = {
   id: string;
-  competition_id: string;
+  event_id: string;
   actor_profile_id: string | null;
-  action_type: CompetitionAuditActionType | string;
+  action_type: EventAuditActionType | string;
   payload: Record<string, unknown>;
   created_at: string;
 };
@@ -524,17 +524,17 @@ export type TeeTimeParticipant = {
   };
 };
 
-export type CompetitionTeeTime = {
+export type EventTeeTime = {
   id: string;
-  competition_id: string;
-  competition_round_id: string | null;
+  event_id: string;
+  event_round_id: string | null;
   round_id: string | null;
   tee_time: string;
   group_number: number | null;
   notes: string | null;
   created_by: string;
   created_at: string;
-  competition_round?: {
+  event_round?: {
     id: string;
     round_number: number;
     name: string;
@@ -556,7 +556,7 @@ export type MatchplayStageType =
 
 export type MatchplayStage = {
   id: string;
-  competition_id: string;
+  event_id: string;
   stage_type: MatchplayStageType;
   name: string;
   sort_order: number;
@@ -572,7 +572,7 @@ export type MatchplayResultType =
 
 export type MatchplayFixture = {
   id: string;
-  competition_id: string;
+  event_id: string;
   stage_id: string | null;
   round_number: number | null;
   home_entry_id: string | null;
@@ -593,7 +593,7 @@ export type MatchplayBracketSlotSourceType = "entry" | "winner_of_fixture" | "lo
 
 export type MatchplayBracketSlot = {
   id: string;
-  competition_id: string;
+  event_id: string;
   stage_id: string;
   fixture_id: string;
   slot_number: 1 | 2;
@@ -604,7 +604,7 @@ export type MatchplayBracketSlot = {
 
 export type MatchplayLeagueTableEntry = {
   id: string;
-  competition_id: string;
+  event_id: string;
   stage_id: string | null;
   profile_id: string;
   played: number;
@@ -629,18 +629,18 @@ export type MajorHubSummary = {
   season_rank: number | null;
   events_entered: number;
   wins: number;
-  active_competitions: CompetitionWithGroup[];
-  upcoming_competitions: CompetitionWithGroup[];
+  active_events: EventWithGroup[];
+  upcoming_events: EventWithGroup[];
   my_groups: Array<MajorGroup & { member_count: number }>;
   discover_groups: Array<MajorGroup & { member_count: number }>;
 };
 
-export type MajorScheduleItem = CompetitionWithGroup & {
+export type MajorScheduleItem = EventWithGroup & {
   entry_status: "entered" | "open" | "closed" | "not_eligible";
 };
 
 export type MajorHistoryItem = {
-  competition: CompetitionWithGroup;
+  event: EventWithGroup;
   entry: {
     position: number | null;
     net_score: number | null;
@@ -679,7 +679,7 @@ export type MajorProfileData = {
 
 // ─── Financial types ──────────────────────────────────────────────────────────
 
-// PrizeTableEntry defined above (before CompetitionFull) to avoid forward reference
+// PrizeTableEntry defined above (before EventFull) to avoid forward reference
 
 export type BalanceTransactionType =
   | "entry_fee"
@@ -688,9 +688,9 @@ export type BalanceTransactionType =
   | "winnings"
   | "adjustment";
 
-export type CompetitionExtra = {
+export type EventExtra = {
   id: string;
-  competition_id: string;
+  event_id: string;
   name: string;
   amount: number;
   description: string | null;
@@ -702,8 +702,8 @@ export type GroupBalanceTransaction = {
   id: string;
   group_id: string;
   profile_id: string;
-  competition_id: string | null;
-  competition_extra_id: string | null;
+  event_id: string | null;
+  event_extra_id: string | null;
   type: BalanceTransactionType;
   /** Positive = charged to player, negative = credit to player */
   amount: number;
@@ -713,14 +713,14 @@ export type GroupBalanceTransaction = {
 };
 
 export type GroupBalanceTransactionWithDetails = GroupBalanceTransaction & {
-  competition?: Pick<CompetitionFull, "id" | "name"> | null;
-  extra?: Pick<CompetitionExtra, "id" | "name"> | null;
+  event?: Pick<EventFull, "id" | "name"> | null;
+  extra?: Pick<EventExtra, "id" | "name"> | null;
   recorded_by_profile?: { id: string; name: string | null } | null;
 };
 
-export type CompetitionWinning = {
+export type EventWinning = {
   id: string;
-  competition_id: string;
+  event_id: string;
   profile_id: string;
   position: number | null;
   amount: number;
@@ -729,7 +729,7 @@ export type CompetitionWinning = {
   created_at: string;
 };
 
-export type CompetitionWinningWithProfile = CompetitionWinning & {
+export type EventWinningWithProfile = EventWinning & {
   profile: { id: string; name: string | null; avatar_url: string | null };
 };
 
@@ -756,9 +756,9 @@ export type ProposedWinning = {
 
 export type WaitlistStatus = "waiting" | "offered" | "expired" | "joined";
 
-export type CompetitionWaitlistEntry = {
+export type EventWaitlistEntry = {
   id: string;
-  competition_id: string;
+  event_id: string;
   profile_id: string;
   status: WaitlistStatus;
   offered_at: string | null;
@@ -766,7 +766,7 @@ export type CompetitionWaitlistEntry = {
   created_at: string;
 };
 
-export type CompetitionWaitlistEntryWithProfile = CompetitionWaitlistEntry & {
+export type EventWaitlistEntryWithProfile = EventWaitlistEntry & {
   profile: { id: string; name: string | null; avatar_url: string | null };
 };
 
