@@ -5,17 +5,32 @@ import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 export const runtime = "nodejs";
 
 // POST /api/majors/competitions/[id]/instantiate
-// Creates a competition_seasons row and one event per event template for the given year.
-// Body: { year: number, season_name?: string, standings_model?: string }
+// Creates a competition_seasons row and one event per event template.
+// Body (calendar year): { year: number, season_name?: string, standings_model?: string }
+// Body (custom): { season_type: "custom", start_date: string, end_date: string, season_label?: string, season_name?: string, standings_model?: string }
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { profileId } = await getAuthedProfileOrThrow(req);
     const { id: competitionId } = await params;
     const body = await req.json();
-    const year = Number(body.year);
 
-    if (!year || year < 2000 || year > 2100) {
-      return NextResponse.json({ error: "Valid year is required" }, { status: 400 });
+    const seasonType: "calendar_year" | "custom" = body.season_type === "custom" ? "custom" : "calendar_year";
+    let year: number | null = null;
+    let startDate: string | null = body.start_date ?? null;
+    let endDate: string | null = body.end_date ?? null;
+    let seasonLabel: string | null = body.season_label ?? null;
+
+    if (seasonType === "calendar_year") {
+      year = Number(body.year);
+      if (!year || year < 2000 || year > 2100) {
+        return NextResponse.json({ error: "Valid year is required" }, { status: 400 });
+      }
+    } else {
+      if (!startDate || !endDate) {
+        return NextResponse.json({ error: "start_date and end_date are required for custom seasons" }, { status: 400 });
+      }
+      // Derive year from start_date for event defaults
+      year = new Date(startDate).getFullYear();
     }
 
     // Optional per-event overrides: dates and/or course IDs
@@ -53,19 +68,22 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
     }
 
-    // Check if a season already exists for this competition+year
-    const { data: existingSeason } = await supabaseAdmin
-      .from("competition_seasons")
-      .select("id")
-      .eq("competition_id", competitionId)
-      .eq("season_year", year)
-      .maybeSingle();
+    // For calendar-year seasons, check uniqueness by year
+    if (seasonType === "calendar_year") {
+      const { data: existingSeason } = await supabaseAdmin
+        .from("competition_seasons")
+        .select("id")
+        .eq("competition_id", competitionId)
+        .eq("season_year", year)
+        .eq("season_type", "calendar_year")
+        .maybeSingle();
 
-    if (existingSeason) {
-      return NextResponse.json(
-        { error: `A season for ${year} already exists in this competition` },
-        { status: 409 }
-      );
+      if (existingSeason) {
+        return NextResponse.json(
+          { error: `A season for ${year} already exists in this competition` },
+          { status: 409 }
+        );
+      }
     }
 
     const eventTemplates: any[] = (s.event_templates ?? []).sort(
@@ -80,7 +98,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
 
     // ── 1. Create the competition_seasons row ────────────────────────
-    const seasonName = body.season_name ?? `${s.name} ${year}`;
+    const defaultLabel = seasonType === "calendar_year"
+      ? String(year)
+      : (() => {
+          const sy = new Date(startDate!).getFullYear();
+          const ey = new Date(endDate!).getFullYear();
+          return sy === ey ? `${sy} Season` : `${sy % 100}/${ey % 100} Season`;
+        })();
+    const seasonName = body.season_name ?? `${s.name} ${defaultLabel}`;
     const standingsModel = body.standings_model ?? "season_points";
 
     const { data: season, error: seasonErr } = await supabaseAdmin
@@ -88,9 +113,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .insert({
         competition_id: competitionId,
         season_year: year,
+        season_type: seasonType,
+        season_label: seasonLabel ?? defaultLabel,
         name: seasonName,
         status: "draft",
         standings_model: standingsModel,
+        start_date: startDate,
+        end_date: endDate,
       })
       .select("*")
       .single();

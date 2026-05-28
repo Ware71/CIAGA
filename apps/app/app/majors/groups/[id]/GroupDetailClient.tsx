@@ -15,23 +15,84 @@ import type {
 } from "@/lib/majors/types";
 import type { LiveGroupStandingEntry, LiveGroupStandingsResponse } from "@/app/api/majors/groups/[id]/live-standings/route";
 import type { CompetitionResultsResponse } from "@/app/api/majors/groups/[id]/event-results/route";
+import type { PlayerBreakdownEntry } from "@/app/api/majors/seasons/[id]/player-breakdown/route";
 import { eventStatusLabel } from "@/lib/majors/labels";
 
 type CompetitionSeriesWithEventCount = Competition & {
   event_templates: Pick<CompetitionEventTemplate, "id">[];
+  current_holder: { name: string | null; avatar_url: string | null } | null;
+  latest_season: { id: string; season_label: string; status: string } | null;
 };
 
-type Tab = "overview" | "events" | "standings" | "schedule" | "history" | "members" | "competitions" | "settings" | "finances";
+type Tab = "overview" | "events" | "standings" | "seasons" | "schedule" | "history" | "competitions" | "members" | "finances" | "settings";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "standings", label: "Standings" },
   { id: "events", label: "Events" },
+  { id: "seasons", label: "Seasons" },
   { id: "competitions", label: "Competitions" },
   { id: "members", label: "Members" },
   { id: "finances", label: "Finances" },
   { id: "settings", label: "Settings" },
 ];
+
+// ── Reusable dropdown selector ──────────────────────────────────────────────
+function DropdownSelector<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (v: T) => void;
+}) {
+  const [open, setOpen] = useStateLocal(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const selected = options.find((o) => o.value === value);
+  return (
+    <div ref={ref} className="relative inline-block">
+      <button
+        type="button"
+        onClick={() => setOpen((p) => !p)}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 text-[12px] font-semibold text-emerald-100 hover:bg-emerald-900/40 transition-colors"
+      >
+        {selected?.label ?? value}
+        <span className="text-[9px] text-emerald-400/60">{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 mt-1 z-40 min-w-[140px] rounded-2xl border border-emerald-800/60 bg-[#0c2e18] shadow-lg overflow-hidden">
+          {options.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => { onChange(opt.value); setOpen(false); }}
+              className={`w-full text-left px-4 py-2.5 text-[12px] font-semibold transition-colors ${
+                opt.value === value
+                  ? "bg-emerald-700/50 text-white"
+                  : "text-emerald-100/80 hover:bg-emerald-900/50"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+// useState alias so the generic component can use it without naming conflicts
+const useStateLocal = useState as <T>(init: T) => [T, React.Dispatch<React.SetStateAction<T>>];
 
 type GroupData = MajorGroup & { member_count: number };
 
@@ -199,11 +260,18 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   const [balanceMembers, setBalanceMembers] = useState<MemberBalanceSummary[]>([]);
   const [myBalance, setMyBalance] = useState<{ balance: number; total_charged: number; total_paid: number; transactions: GroupBalanceTransactionWithDetails[] } | null>(null);
   const [expandedMember, setExpandedMember] = useState<string | null>(null);
-  const [selectedYear, setSelectedYear] = useState<number | "all">(new Date().getFullYear());
-  const [standingsSubTab, setStandingsSubTab] = useState<"points" | "strokes" | "avgpar" | "events">("points");
+  const [standingsSubTab, setStandingsSubTab] = useState<"points" | "strokes" | "avgpar">("points");
   const [showNet, setShowNet] = useState(true);
   const [competitionResults, setCompetitionResults] = useState<CompetitionResultsResponse | null>(null);
-  const yearEffectFirstMount = useRef(true);
+  // Seasons tab
+  const [groupSeasons, setGroupSeasons] = useState<any[]>([]);
+  const [selectedSeasonId, setSelectedSeasonId] = useState<string | "all">("all");
+  const [seasonStandings, setSeasonStandings] = useState<any[]>([]);
+  const [seasonStandingsLoading, setSeasonStandingsLoading] = useState(false);
+  // Player detail drawer
+  const [selectedPlayerForDrawer, setSelectedPlayerForDrawer] = useState<{ profileId: string; name: string; avatarUrl: string | null; currentSeasonId: string | null } | null>(null);
+  const [playerBreakdownEntries, setPlayerBreakdownEntries] = useState<PlayerBreakdownEntry[]>([]);
+  const [playerBreakdownLoading, setPlayerBreakdownLoading] = useState(false);
 
   const [showCreateCompetitionModal, setShowCreateCompetitionModal] = useState(false);
   const [newCompetitionName, setNewCompetitionName] = useState("");
@@ -223,14 +291,14 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         setMyProfileId(session.profileId);
         const headers = { Authorization: `Bearer ${session.accessToken}` };
 
-        const defaultYear = new Date().getFullYear();
-        const [groupRes, compsRes, standingsRes, membersRes, competitionsRes, resultsRes] = await Promise.all([
+        const [groupRes, compsRes, standingsRes, membersRes, competitionsRes, seasonsRes, resultsRes] = await Promise.all([
           fetch(`/api/majors/groups/${groupId}`, { headers }),
           fetch(`/api/majors/events?group_id=${groupId}`, { headers }),
-          fetch(`/api/majors/groups/${groupId}/live-standings?year=${defaultYear}`, { headers }),
+          fetch(`/api/majors/groups/${groupId}/live-standings`, { headers }),
           fetch(`/api/majors/groups/${groupId}/members`, { headers }),
           fetch(`/api/majors/competitions?group_id=${groupId}`, { headers }),
-          fetch(`/api/majors/groups/${groupId}/event-results?year=${defaultYear}`, { headers }),
+          fetch(`/api/majors/seasons?group_id=${groupId}`, { headers }),
+          fetch(`/api/majors/groups/${groupId}/event-results`, { headers }),
         ]);
 
         if (cancelled) return;
@@ -257,6 +325,10 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         if (competitionsRes.ok) {
           const j = await competitionsRes.json();
           setCompetitions(j.competitions ?? []);
+        }
+        if (seasonsRes.ok) {
+          const j = await seasonsRes.json();
+          setGroupSeasons(j.seasons ?? []);
         }
         if (resultsRes.ok) {
           const j: CompetitionResultsResponse = await resultsRes.json();
@@ -309,16 +381,10 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     }
   };
 
-  // Keep a ref so realtime callbacks always use the current year without stale closure issues
-  const selectedYearRef = useRef<number | "all">(new Date().getFullYear());
-  useEffect(() => { selectedYearRef.current = selectedYear; }, [selectedYear]);
-
   const refreshLiveStandings = async () => {
     const session = await getViewerSession();
     if (!session) return;
-    const year = selectedYearRef.current;
-    const yearParam = year === "all" ? "" : `?year=${year}`;
-    const res = await fetch(`/api/majors/groups/${groupId}/live-standings${yearParam}`, {
+    const res = await fetch(`/api/majors/groups/${groupId}/live-standings`, {
       headers: { Authorization: `Bearer ${session.accessToken}` },
     });
     if (res.ok) {
@@ -326,27 +392,6 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       setLiveStandingsData(j);
     }
   };
-
-  // Re-fetch standings + competition results when year selector changes
-  useEffect(() => {
-    if (yearEffectFirstMount.current) { yearEffectFirstMount.current = false; return; }
-    let cancelled = false;
-    (async () => {
-      const session = await getViewerSession();
-      if (!session || cancelled) return;
-      const headers = { Authorization: `Bearer ${session.accessToken}` };
-      const yearParam = selectedYear === "all" ? "" : `year=${selectedYear}`;
-      const qs = yearParam ? `?${yearParam}` : "";
-      const [standingsRes, resultsRes] = await Promise.all([
-        fetch(`/api/majors/groups/${groupId}/live-standings${qs}`, { headers }),
-        fetch(`/api/majors/groups/${groupId}/event-results${qs}`, { headers }),
-      ]);
-      if (cancelled) return;
-      if (standingsRes.ok) setLiveStandingsData(await standingsRes.json());
-      if (resultsRes.ok) setCompetitionResults(await resultsRes.json());
-    })();
-    return () => { cancelled = true; };
-  }, [selectedYear]);
 
   // Realtime: refresh live standings whenever major_group_standings changes
   // (fired by ciaga_compute_group_standings cascade on round finish / competition complete)
@@ -583,6 +628,29 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   const pendingMembers = members.filter((m) => m.status === "pending");
   const activeMembers = members.filter((m) => m.status === "active");
 
+  // Load player breakdown when drawer opens
+  useEffect(() => {
+    if (!selectedPlayerForDrawer) { setPlayerBreakdownEntries([]); return; }
+    const { profileId, currentSeasonId } = selectedPlayerForDrawer;
+    if (!currentSeasonId) { setPlayerBreakdownEntries([]); return; }
+    let cancelled = false;
+    setPlayerBreakdownLoading(true);
+    (async () => {
+      const session = await getViewerSession();
+      if (!session || cancelled) return;
+      const res = await fetch(
+        `/api/majors/seasons/${currentSeasonId}/player-breakdown?profile_id=${profileId}`,
+        { headers: { Authorization: `Bearer ${session.accessToken}` } }
+      );
+      if (!cancelled && res.ok) {
+        const j = await res.json();
+        setPlayerBreakdownEntries(j.entries ?? []);
+      }
+      if (!cancelled) setPlayerBreakdownLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [selectedPlayerForDrawer?.profileId, selectedPlayerForDrawer?.currentSeasonId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const tabContent: Record<Tab, React.ReactNode> = {
     overview: (
       <div className="space-y-3">
@@ -590,17 +658,22 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           <p className="text-[13px] text-emerald-100/75 leading-relaxed">{group.description}</p>
         )}
 
-        {/* Standings preview — top 3 players */}
+        {/* Standings preview — current season top 3 */}
         {(liveStandingsData?.rows?.length ?? 0) > 0 && (
           <button
             type="button"
             onClick={() => setTab("standings")}
             className="w-full rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/70 px-3 py-3 text-left hover:bg-emerald-900/30 transition-colors"
           >
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-1">
               <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider">Standings</div>
               <span className="text-[10px] text-emerald-400/80">View all →</span>
             </div>
+            {liveStandingsData?.current_season && (
+              <div className="text-[10px] text-emerald-300/60 mb-2">
+                {liveStandingsData.current_season.season_label}
+              </div>
+            )}
             <div className="space-y-1.5">
               {(liveStandingsData?.rows ?? []).slice(0, 3).map((s, i) => {
                 const pos = s.live_position ?? s.confirmed_position;
@@ -811,27 +884,8 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     standings: (() => {
       const rows = liveStandingsData?.rows ?? [];
       const hasLive = liveStandingsData?.hasLive ?? false;
-      const currentYear = new Date().getFullYear();
-      const isCurrentYear = selectedYear === currentYear;
-      const showLiveIndicator = hasLive && (selectedYear === "all" || isCurrentYear);
-
-      const availableYears = Array.from(
-        new Set(events.map((e) => e.event_year).filter((y): y is number => y != null))
-      ).sort((a, b) => b - a);
-
-      const subTabClass = (id: typeof standingsSubTab) =>
-        `shrink-0 px-3 py-1 rounded-full text-[11px] font-semibold transition-colors ${
-          standingsSubTab === id
-            ? "bg-emerald-700 text-white"
-            : "border border-emerald-900/60 text-emerald-200/60 hover:text-emerald-100"
-        }`;
-
-      const yearChipClass = (y: number | "all") =>
-        `shrink-0 px-2.5 py-0.5 rounded-full text-[11px] font-semibold transition-colors ${
-          selectedYear === y
-            ? "bg-emerald-700 text-white"
-            : "border border-emerald-900/60 text-emerald-200/60 hover:text-emerald-100"
-        }`;
+      const showLiveIndicator = hasLive;
+      const currentSeason = liveStandingsData?.current_season ?? null;
 
       const avatarEl = (profile: LiveGroupStandingEntry["profile"]) =>
         profile?.avatar_url ? (
@@ -872,7 +926,11 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
               const worsened = showLiveIndicator && s.live_position != null && s.confirmed_position != null && s.live_position > s.confirmed_position;
               const displayPos = showLiveIndicator ? s.live_position : s.confirmed_position;
               return (
-                <div key={s.profile_id} className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 ${displayPos === 1 ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5" : displayPos === 2 ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5" : displayPos === 3 ? "border-[#cd7f32]/20 bg-[#cd7f32]/5" : "border-emerald-900/50 bg-[#0b3b21]/60"}`}>
+                <button
+                  key={s.profile_id}
+                  type="button"
+                  onClick={() => setSelectedPlayerForDrawer({ profileId: s.profile_id, name: s.profile?.name ?? "Unknown", avatarUrl: s.profile?.avatar_url ?? null, currentSeasonId: currentSeason?.id ?? null })}
+                  className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${displayPos === 1 ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5" : displayPos === 2 ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5" : displayPos === 3 ? "border-[#cd7f32]/20 bg-[#cd7f32]/5" : "border-emerald-900/50 bg-[#0b3b21]/60"}`}>
                   <div className="w-3 shrink-0 flex justify-center">
                     {improved && <span className="text-[10px] leading-none text-emerald-400">▲</span>}
                     {worsened && <span className="text-[10px] leading-none text-red-400">▼</span>}
@@ -892,7 +950,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                       {s.wins > 0 && <span className="text-[9px] text-[#f5e6b0]/70 bg-[#f5e6b0]/10 rounded px-1">{s.wins}W</span>}
                     </div>
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -911,7 +969,12 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         return (
           <div className="space-y-2">
             {sorted.map((s, i) => (
-              <div key={s.profile_id} className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 ${i === 0 ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5" : i === 1 ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5" : i === 2 ? "border-[#cd7f32]/20 bg-[#cd7f32]/5" : "border-emerald-900/50 bg-[#0b3b21]/60"}`}>
+              <button
+                key={s.profile_id}
+                type="button"
+                onClick={() => setSelectedPlayerForDrawer({ profileId: s.profile_id, name: s.profile?.name ?? "Unknown", avatarUrl: s.profile?.avatar_url ?? null, currentSeasonId: currentSeason?.id ?? null })}
+                className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${i === 0 ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5" : i === 1 ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5" : i === 2 ? "border-[#cd7f32]/20 bg-[#cd7f32]/5" : "border-emerald-900/50 bg-[#0b3b21]/60"}`}
+              >
                 <PositionBadge position={i + 1} />
                 {avatarEl(s.profile)}
                 <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
@@ -919,7 +982,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                   <div className="text-xs font-extrabold text-emerald-100">{s[field]}</div>
                   <div className="text-[9px] text-emerald-100/50">{s.events_played} evts</div>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         );
@@ -940,7 +1003,12 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
               const val = s[field] as number;
               const colour = val < 0 ? "text-emerald-400" : val > 0 ? "text-red-400" : "text-emerald-100/80";
               return (
-                <div key={s.profile_id} className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 ${i === 0 ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5" : i === 1 ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5" : i === 2 ? "border-[#cd7f32]/20 bg-[#cd7f32]/5" : "border-emerald-900/50 bg-[#0b3b21]/60"}`}>
+                <button
+                  key={s.profile_id}
+                  type="button"
+                  onClick={() => setSelectedPlayerForDrawer({ profileId: s.profile_id, name: s.profile?.name ?? "Unknown", avatarUrl: s.profile?.avatar_url ?? null, currentSeasonId: currentSeason?.id ?? null })}
+                  className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${i === 0 ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5" : i === 1 ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5" : i === 2 ? "border-[#cd7f32]/20 bg-[#cd7f32]/5" : "border-emerald-900/50 bg-[#0b3b21]/60"}`}
+                >
                   <PositionBadge position={i + 1} />
                   {avatarEl(s.profile)}
                   <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
@@ -948,146 +1016,40 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                     <div className={`text-xs font-extrabold ${colour}`}>{formatToPar(val)}</div>
                     <div className="text-[9px] text-emerald-100/50">{s.events_played} evts</div>
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
         );
       };
 
-      // ── Events sub-tab ───────────────────────────────────────────────────
-      const renderCompetitions = () => {
-        if (!competitionResults) {
-          return <div className="text-sm text-emerald-100/60 text-center py-8">Loading…</div>;
-        }
-
-        if (selectedYear !== "all") {
-          // Year view: list competitions with winner
-          const yearComps = competitionResults.events;
-          if (yearComps.length === 0) {
-            return <div className="text-sm text-emerald-100/60 text-center py-8">No events for {selectedYear}.</div>;
-          }
-          return (
-            <div className="space-y-2">
-              {yearComps.map((c) => {
-                const isCompleted = ["completed", "official"].includes(c.majors_status);
-                return (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => router.push(`/majors/events/${c.id}`)}
-                    className="w-full flex items-start justify-between gap-2 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 text-left hover:bg-emerald-900/30 transition-colors"
-                  >
-                    <div className="min-w-0">
-                      <div className="text-[12px] font-semibold text-emerald-100 truncate">{c.name}</div>
-                      {c.competition_name && (
-                        <div className="text-[10px] text-emerald-200/50 mt-0.5">{c.competition_name}</div>
-                      )}
-                    </div>
-                    <div className="text-right shrink-0">
-                      {isCompleted && c.winner ? (
-                        <>
-                          <div className="text-[11px] font-semibold text-[#f5e6b0]">{c.winner.name}</div>
-                          {c.winner_net_score != null && (
-                            <div className="text-[10px] text-emerald-200/55">{c.winner_net_score} net</div>
-                          )}
-                        </>
-                      ) : isCompleted ? (
-                        <div className="text-[10px] text-emerald-200/50">No result</div>
-                      ) : (
-                        <div className="text-[10px] text-emerald-200/50">
-                          {c.event_date
-                            ? new Date(c.event_date).toLocaleDateString([], { month: "short", day: "numeric" })
-                            : "Scheduled"}
-                        </div>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          );
-        }
-
-        // All-time view: per-player records
-        const records = competitionResults.player_records;
-        if (records.length === 0) {
-          return <div className="text-sm text-emerald-100/60 text-center py-8">No event data yet.</div>;
-        }
-        return (
-          <div className="space-y-2">
-            {records.map((pr) => (
-              <div key={pr.profile_id} className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/70 p-3 space-y-2">
-                <div className="flex items-center gap-2">
-                  {pr.profile.avatar_url ? (
-                    <img src={pr.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
-                  ) : (
-                    <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
-                      {pr.profile.name?.slice(0, 2).toUpperCase() ?? "?"}
-                    </div>
-                  )}
-                  <span className="flex-1 text-sm font-semibold text-emerald-100 truncate">{pr.profile.name ?? "Unknown"}</span>
-                  <span className="text-[11px] font-bold text-[#f5e6b0]">
-                    {pr.total_wins} {pr.total_wins === 1 ? "win" : "wins"}
-                  </span>
-                </div>
-                {/* Competition records */}
-                {pr.competition_records.length > 0 && (
-                  <div className="space-y-1 pl-9">
-                    {pr.competition_records.map((sr) => (
-                      <div key={sr.competition_id ?? "standalone"} className="flex items-center justify-between gap-2">
-                        <span className="text-[11px] text-emerald-200/70 truncate">{sr.competition_name ?? "Competition"}</span>
-                        <span className="text-[10px] text-emerald-200/55 shrink-0">
-                          {sr.wins > 0
-                            ? `${sr.wins}× win${sr.wins !== 1 ? "s" : ""}`
-                            : sr.best_finish != null
-                            ? `Best: ${ordinal(sr.best_finish)}`
-                            : "—"}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {/* Standalone wins */}
-                {pr.standalone_wins.length > 0 && (
-                  <div className="space-y-1 pl-9">
-                    {pr.standalone_wins.map((w) => (
-                      <div key={w.event_id} className="flex items-center justify-between gap-2">
-                        <span className="text-[11px] text-emerald-200/70 truncate">{w.name ?? "Competition"}</span>
-                        <span className="text-[10px] text-[#f5e6b0]/70 shrink-0">{w.year ?? ""}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {pr.competition_records.length === 0 && pr.standalone_wins.length === 0 && (
-                  <div className="pl-9 text-[11px] text-emerald-200/40">No entries yet</div>
-                )}
-              </div>
-            ))}
-          </div>
-        );
-      };
-
       return (
         <div className="space-y-3">
-          {/* Year selector */}
-          <div className="overflow-x-auto -mx-1 px-1">
-            <div className="flex gap-1.5 w-max">
-              <button type="button" onClick={() => setSelectedYear("all")} className={yearChipClass("all")}>All Time</button>
-              {availableYears.map((y) => (
-                <button key={y} type="button" onClick={() => setSelectedYear(y)} className={yearChipClass(y)}>{y}</button>
-              ))}
-            </div>
-          </div>
-
-          {/* Sub-tab bar */}
-          <div className="overflow-x-auto -mx-1 px-1">
-            <div className="flex gap-1.5 w-max">
-              <button type="button" onClick={() => setStandingsSubTab("points")} className={subTabClass("points")}>Points</button>
-              <button type="button" onClick={() => setStandingsSubTab("strokes")} className={subTabClass("strokes")}>Strokes</button>
-              <button type="button" onClick={() => setStandingsSubTab("avgpar")} className={subTabClass("avgpar")}>Avg to Par</button>
-              <button type="button" onClick={() => setStandingsSubTab("events")} className={subTabClass("events")}>Events</button>
-            </div>
+          {/* Current season label */}
+          <div className="flex items-center justify-between">
+            {currentSeason ? (
+              <div className="text-[11px] text-emerald-300/60">
+                {currentSeason.season_label}
+                {currentSeason.status === "live" && (
+                  <span className="ml-1.5 inline-flex items-center gap-1 text-amber-400/80">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse inline-block" />
+                    Live
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div className="text-[11px] text-emerald-200/40">No active season</div>
+            )}
+            {/* Metric selector dropdown */}
+            <DropdownSelector
+              options={[
+                { value: "points" as const, label: "Points" },
+                { value: "strokes" as const, label: "Strokes" },
+                { value: "avgpar" as const, label: "Avg to Par" },
+              ]}
+              value={standingsSubTab}
+              onChange={setStandingsSubTab}
+            />
           </div>
 
           {/* Net/Gross toggle for strokes + avgpar */}
@@ -1111,7 +1073,6 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           {standingsSubTab === "points" && renderPoints()}
           {standingsSubTab === "strokes" && renderStrokes()}
           {standingsSubTab === "avgpar" && renderAvgPar()}
-          {standingsSubTab === "events" && renderCompetitions()}
         </div>
       );
     })(),
@@ -1234,6 +1195,135 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       </div>
     ),
 
+    seasons: (() => {
+      const seasonOptions: { value: string; label: string }[] = [
+        { value: "all", label: "All Time" },
+        ...groupSeasons.map((s: any) => ({
+          value: s.id as string,
+          label: s.season_label ?? String(s.season_year ?? "Season"),
+        })),
+      ];
+
+      const handleSeasonChange = async (id: string) => {
+        setSelectedSeasonId(id);
+        if (id === "all") { setSeasonStandings([]); return; }
+        setSeasonStandingsLoading(true);
+        try {
+          const session = await getViewerSession();
+          if (!session) return;
+          const res = await fetch(`/api/majors/seasons/${id}/standings`, {
+            headers: { Authorization: `Bearer ${session.accessToken}` },
+          });
+          if (res.ok) {
+            const j = await res.json();
+            setSeasonStandings(j.standings ?? []);
+          }
+        } finally {
+          setSeasonStandingsLoading(false);
+        }
+      };
+
+      const renderAllTime = () => {
+        if (!competitionResults) return <div className="text-sm text-emerald-100/60 text-center py-8">Loading…</div>;
+        const records = competitionResults.player_records;
+        if (records.length === 0) return <div className="text-sm text-emerald-100/60 text-center py-8">No event data yet.</div>;
+        const ordinal = (n: number) => { const s = ["th","st","nd","rd"]; const v = n % 100; return n + (s[(v-20)%10] ?? s[v] ?? s[0]); };
+        return (
+          <div className="space-y-2">
+            {records.map((pr) => (
+              <div key={pr.profile_id} className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/70 p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  {pr.profile.avatar_url ? (
+                    <img src={pr.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
+                  ) : (
+                    <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">{pr.profile.name?.slice(0,2).toUpperCase() ?? "?"}</div>
+                  )}
+                  <span className="flex-1 text-sm font-semibold text-emerald-100 truncate">{pr.profile.name ?? "Unknown"}</span>
+                  <span className="text-[11px] font-bold text-[#f5e6b0]">{pr.total_wins} {pr.total_wins === 1 ? "win" : "wins"}</span>
+                </div>
+                {pr.competition_records.length > 0 && (
+                  <div className="space-y-1 pl-9">
+                    {pr.competition_records.map((sr: any) => (
+                      <div key={sr.competition_id ?? "standalone"} className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] text-emerald-200/70 truncate">{sr.competition_name ?? "Competition"}</span>
+                        <span className="text-[10px] text-emerald-200/55 shrink-0">
+                          {sr.wins > 0 ? `${sr.wins}× win${sr.wins !== 1 ? "s" : ""}` : sr.best_finish != null ? `Best: ${ordinal(sr.best_finish)}` : "—"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {pr.standalone_wins.length > 0 && (
+                  <div className="space-y-1 pl-9">
+                    {pr.standalone_wins.map((w: any) => (
+                      <div key={w.event_id} className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] text-emerald-200/70 truncate">{w.name ?? "Competition"}</span>
+                        <span className="text-[10px] text-[#f5e6b0]/70 shrink-0">{w.year ?? ""}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {pr.competition_records.length === 0 && pr.standalone_wins.length === 0 && (
+                  <div className="pl-9 text-[11px] text-emerald-200/40">No entries yet</div>
+                )}
+              </div>
+            ))}
+          </div>
+        );
+      };
+
+      const renderSeasonStandings = () => {
+        if (seasonStandingsLoading) return <div className="text-sm text-emerald-100/60 text-center py-8">Loading…</div>;
+        if (seasonStandings.length === 0) return <div className="text-sm text-emerald-100/60 text-center py-8">No standings for this season.</div>;
+        const selectedSeason = groupSeasons.find((s: any) => s.id === selectedSeasonId);
+        return (
+          <div className="space-y-2">
+            {selectedSeason && (
+              <button
+                type="button"
+                onClick={() => router.push(`/majors/seasons/${selectedSeasonId}`)}
+                className="w-full text-right text-[11px] text-emerald-400/70 hover:text-emerald-300 pb-1"
+              >
+                View full season →
+              </button>
+            )}
+            {seasonStandings.map((s: any) => (
+              <div key={s.profile_id} className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 ${s.position === 1 ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5" : s.position === 2 ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5" : s.position === 3 ? "border-[#cd7f32]/20 bg-[#cd7f32]/5" : "border-emerald-900/50 bg-[#0b3b21]/60"}`}>
+                <PositionBadge position={s.position} />
+                {s.profile?.avatar_url ? (
+                  <img src={s.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
+                ) : (
+                  <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">{s.profile?.name?.slice(0,2).toUpperCase() ?? "?"}</div>
+                )}
+                <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
+                <div className="text-right shrink-0">
+                  <div className="text-xs font-extrabold text-[#f5e6b0]">{s.season_points} pts</div>
+                  <div className="flex gap-1 justify-end">
+                    <span className="text-[9px] text-emerald-100/50 bg-emerald-900/40 rounded px-1">{s.events_played} evts</span>
+                    {s.wins > 0 && <span className="text-[9px] text-[#f5e6b0]/70 bg-[#f5e6b0]/10 rounded px-1">{s.wins}W</span>}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      };
+
+      return (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider">Season History</div>
+            <DropdownSelector
+              options={seasonOptions as { value: string; label: string }[]}
+              value={selectedSeasonId}
+              onChange={handleSeasonChange}
+            />
+          </div>
+          {selectedSeasonId === "all" ? renderAllTime() : renderSeasonStandings()}
+        </div>
+      );
+    })(),
+
     competitions: (
       <div className="space-y-3">
         {isAdminOrOwner && (
@@ -1253,7 +1343,6 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           </div>
         ) : (
           competitions.map((s) => {
-            const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
             const settings = (s.template_settings ?? {}) as Record<string, unknown>;
             const handicapPct = settings.handicap_allowance_pct as number | undefined;
             const maxHandicap = settings.max_handicap as number | null | undefined;
@@ -1265,6 +1354,23 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                     {s.description && (
                       <div className="text-[11px] text-emerald-100/55 mt-0.5">{s.description}</div>
                     )}
+                    {/* Current holder */}
+                    <div className="flex items-center gap-1.5 mt-1.5">
+                      {s.current_holder ? (
+                        <>
+                          {s.current_holder.avatar_url ? (
+                            <img src={s.current_holder.avatar_url} alt="" className="h-4 w-4 rounded-full object-cover shrink-0" />
+                          ) : (
+                            <div className="h-4 w-4 rounded-full bg-emerald-900/60 grid place-items-center text-[8px] font-bold text-emerald-200 shrink-0">
+                              {s.current_holder.name?.slice(0, 1).toUpperCase() ?? "?"}
+                            </div>
+                          )}
+                          <span className="text-[10px] text-emerald-200/70">Holder: <span className="text-[#f5e6b0]/80 font-semibold">{s.current_holder.name}</span></span>
+                        </>
+                      ) : (
+                        <span className="text-[10px] text-emerald-200/35">No current holder</span>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {s.recur_annually && (
@@ -1288,9 +1394,9 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                   <span className="text-[10px] text-emerald-200/55 border border-emerald-900/50 rounded-full px-2 py-0.5 capitalize">
                     {s.template_scoring_model}
                   </span>
-                  {s.typical_month != null && (
+                  {s.latest_season && (
                     <span className="text-[10px] text-emerald-200/55 border border-emerald-900/50 rounded-full px-2 py-0.5">
-                      Usually {monthNames[(s.typical_month ?? 1) - 1]}
+                      {s.latest_season.season_label}
                     </span>
                   )}
                   {handicapPct != null && handicapPct !== 100 && (
@@ -1314,10 +1420,8 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                     type="button"
                     onClick={() => {
                       if ((s.event_templates?.length ?? 0) > 0) {
-                        // Competition has named events — go to competition detail to create season
                         router.push(`/majors/competitions/${s.id}`);
                       } else {
-                        // Legacy single-event competition — create event directly
                         router.push(
                           `/majors/events/create?group_id=${groupId}&competition_id=${s.id}&year=${new Date().getFullYear()}`
                         );
@@ -1723,6 +1827,79 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                 {creatingCompetition ? "Creating…" : "Create"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Player detail drawer */}
+      {selectedPlayerForDrawer && (
+        <div
+          className="fixed inset-0 z-50 flex items-end"
+          onClick={() => setSelectedPlayerForDrawer(null)}
+        >
+          <div className="absolute inset-0 bg-black/60" />
+          <div
+            className="relative w-full max-w-md mx-auto bg-[#0c2e18] rounded-t-2xl p-5 space-y-4 max-h-[80dvh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              {selectedPlayerForDrawer.avatarUrl ? (
+                <img src={selectedPlayerForDrawer.avatarUrl} alt="" className="h-10 w-10 rounded-full object-cover shrink-0" />
+              ) : (
+                <div className="h-10 w-10 rounded-full bg-emerald-900/60 grid place-items-center text-sm font-bold text-emerald-200 shrink-0">
+                  {selectedPlayerForDrawer.name.slice(0, 2).toUpperCase()}
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-bold text-emerald-50 truncate">{selectedPlayerForDrawer.name}</div>
+                <div className="text-[10px] text-emerald-200/50">
+                  {liveStandingsData?.current_season?.season_label ?? "Current Season"}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedPlayerForDrawer(null)}
+                className="h-7 w-7 grid place-items-center rounded-full border border-emerald-900/60 text-emerald-200/60 hover:text-emerald-100 shrink-0"
+              >
+                ✕
+              </button>
+            </div>
+            {playerBreakdownLoading ? (
+              <div className="text-sm text-emerald-100/60 text-center py-4">Loading…</div>
+            ) : playerBreakdownEntries.length === 0 ? (
+              <div className="text-sm text-emerald-100/60 text-center py-4">No events played this season.</div>
+            ) : (
+              <div className="space-y-2">
+                <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider">Event Breakdown</div>
+                {playerBreakdownEntries.map((e) => (
+                  <div key={e.event_id} className="flex items-center gap-2 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2">
+                    <PositionBadge position={e.position} />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[12px] font-semibold text-emerald-100 truncate">{e.event_name}</div>
+                      {e.event_date && (
+                        <div className="text-[10px] text-emerald-200/50">
+                          {new Date(e.event_date).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })}
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-right shrink-0">
+                      {e.points_earned != null && (
+                        <div className="text-[11px] font-bold text-[#f5e6b0]">{e.points_earned} pts</div>
+                      )}
+                      {e.net_score != null && (
+                        <div className="text-[10px] text-emerald-200/60">{e.net_score} net</div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between pt-1 border-t border-emerald-900/40">
+                  <span className="text-[11px] text-emerald-200/50">{playerBreakdownEntries.length} event{playerBreakdownEntries.length !== 1 ? "s" : ""}</span>
+                  <span className="text-[11px] font-bold text-[#f5e6b0]">
+                    {playerBreakdownEntries.reduce((sum, e) => sum + (e.points_earned ?? 0), 0)} pts total
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

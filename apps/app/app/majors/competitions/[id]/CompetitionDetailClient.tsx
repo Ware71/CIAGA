@@ -503,7 +503,11 @@ function CreateSeasonModal({
   onCreated: () => void;
 }) {
   const currentYear = new Date().getFullYear();
+  const [seasonType, setSeasonType] = useState<"calendar_year" | "custom">("calendar_year");
   const [year, setYear] = useState(currentYear.toString());
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [seasonLabel, setSeasonLabel] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -531,27 +535,44 @@ function CreateSeasonModal({
     setEventDates(updated);
   };
 
+  // Auto-compute label from dates when custom
+  const computedLabel = (() => {
+    if (seasonType === "calendar_year") return year || "";
+    if (!startDate || !endDate) return "";
+    const sy = new Date(startDate).getFullYear();
+    const ey = new Date(endDate).getFullYear();
+    return sy === ey ? `${sy} Season` : `${sy % 100}/${ey % 100} Season`;
+  })();
+
   const handleCreate = async () => {
-    const y = parseInt(year, 10);
-    if (!y) return;
     setCreating(true);
     setError(null);
     try {
       const session = await getViewerSession();
       if (!session) { setError("Not signed in"); return; }
 
-      // Build event_overrides for events that have a date set
-      const event_overrides = eventTemplates
-        .filter((et) => eventDates[et.id])
-        .map((et) => ({ template_id: et.id, event_date: eventDates[et.id] }));
+      let body: Record<string, unknown>;
+      if (seasonType === "calendar_year") {
+        const y = parseInt(year, 10);
+        if (!y) { setError("Valid year is required"); return; }
+        const event_overrides = eventTemplates
+          .filter((et) => eventDates[et.id])
+          .map((et) => ({ template_id: et.id, event_date: eventDates[et.id] }));
+        body = { year: y, ...(event_overrides.length > 0 ? { event_overrides } : {}) };
+      } else {
+        if (!startDate || !endDate) { setError("Start and end dates are required"); return; }
+        body = {
+          season_type: "custom",
+          start_date: startDate,
+          end_date: endDate,
+          season_label: (seasonLabel.trim() || computedLabel) || undefined,
+        };
+      }
 
       const res = await fetch(`/api/majors/competitions/${competitionId}/instantiate`, {
         method: "POST",
         headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          year: y,
-          ...(event_overrides.length > 0 ? { event_overrides } : {}),
-        }),
+        body: JSON.stringify(body),
       });
       const json = await res.json();
       if (!res.ok) { setError(json.error ?? "Failed to create season"); return; }
@@ -560,6 +581,8 @@ function CreateSeasonModal({
       setCreating(false);
     }
   };
+
+  const inputCls = "w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 focus:outline-none";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4" onClick={onClose}>
@@ -571,50 +594,90 @@ function CreateSeasonModal({
           <div className="text-sm font-semibold text-emerald-50">Create Season</div>
         </div>
         <div className="flex-1 overflow-y-auto px-5 pb-2 space-y-4">
-        <div className="space-y-1">
-          <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Year</label>
-          <input
-            type="number"
-            className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 focus:outline-none"
-            value={year}
-            onChange={(e) => handleYearChange(e.target.value)}
-          />
-        </div>
 
-        <div className="space-y-2">
-          <div className="text-[10px] uppercase tracking-wider text-emerald-200/60">
-            Event Dates
-            <span className="normal-case ml-1 text-emerald-200/35">(optional — leave blank to set later)</span>
-          </div>
-          <div className="space-y-2">
-            {eventTemplates.map((et) => (
-              <div
-                key={et.id}
-                className="rounded-xl border border-emerald-900/50 bg-emerald-950/40 px-3 py-2.5 space-y-1.5"
+          {/* Season type toggle */}
+          <div className="flex gap-2">
+            {(["calendar_year", "custom"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setSeasonType(t)}
+                className={`flex-1 py-1.5 rounded-full text-[11px] font-semibold transition-colors ${
+                  seasonType === t ? "bg-emerald-700 text-white" : "border border-emerald-800/50 text-emerald-200/60 hover:text-emerald-100"
+                }`}
               >
-                <div className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                  <span className="text-sm text-emerald-100/80 flex-1 truncate">{et.name}</span>
-                  {et.typical_month && (
-                    <span className="text-[10px] text-emerald-200/40 shrink-0">
-                      ({monthNames[et.typical_month - 1]})
-                    </span>
-                  )}
-                </div>
-                <input
-                  type="date"
-                  className="w-full rounded-lg bg-emerald-900/30 border border-emerald-800/40 px-2 py-1.5 text-xs text-emerald-50 focus:outline-none"
-                  value={eventDates[et.id] ?? ""}
-                  onChange={(e) =>
-                    setEventDates((prev) => ({ ...prev, [et.id]: e.target.value }))
-                  }
-                />
-              </div>
+                {t === "calendar_year" ? "Calendar Year" : "Custom Dates"}
+              </button>
             ))}
           </div>
-        </div>
 
-        {error && <div className="text-xs text-red-400">{error}</div>}
+          {seasonType === "calendar_year" ? (
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Year</label>
+              <input type="number" className={inputCls} value={year} onChange={(e) => handleYearChange(e.target.value)} />
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Start Date</label>
+                <input type="date" className={inputCls} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">End Date</label>
+                <input type="date" className={inputCls} value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">
+                  Season Label
+                  <span className="normal-case ml-1 text-emerald-200/35">(auto: {computedLabel || "—"})</span>
+                </label>
+                <input
+                  type="text"
+                  className={inputCls}
+                  value={seasonLabel}
+                  onChange={(e) => setSeasonLabel(e.target.value)}
+                  placeholder={computedLabel || "e.g. 25/26 Season"}
+                />
+              </div>
+            </div>
+          )}
+
+          {seasonType === "calendar_year" && (
+            <div className="space-y-2">
+              <div className="text-[10px] uppercase tracking-wider text-emerald-200/60">
+                Event Dates
+                <span className="normal-case ml-1 text-emerald-200/35">(optional — leave blank to set later)</span>
+              </div>
+              <div className="space-y-2">
+                {eventTemplates.map((et) => (
+                  <div
+                    key={et.id}
+                    className="rounded-xl border border-emerald-900/50 bg-emerald-950/40 px-3 py-2.5 space-y-1.5"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                      <span className="text-sm text-emerald-100/80 flex-1 truncate">{et.name}</span>
+                      {et.typical_month && (
+                        <span className="text-[10px] text-emerald-200/40 shrink-0">
+                          ({monthNames[et.typical_month - 1]})
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      type="date"
+                      className="w-full rounded-lg bg-emerald-900/30 border border-emerald-800/40 px-2 py-1.5 text-xs text-emerald-50 focus:outline-none"
+                      value={eventDates[et.id] ?? ""}
+                      onChange={(e) =>
+                        setEventDates((prev) => ({ ...prev, [et.id]: e.target.value }))
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {error && <div className="text-xs text-red-400">{error}</div>}
         </div>
         <div className="shrink-0 px-5 py-4 border-t border-emerald-900/50">
           <div className="flex gap-2">
@@ -623,9 +686,9 @@ function CreateSeasonModal({
               Cancel
             </button>
             <button type="button" onClick={handleCreate}
-              disabled={creating || !year}
+              disabled={creating}
               className="flex-1 py-2 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-40">
-              {creating ? "Creating…" : `Create ${year} Season`}
+              {creating ? "Creating…" : `Create Season`}
             </button>
           </div>
         </div>

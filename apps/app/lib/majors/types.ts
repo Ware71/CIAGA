@@ -154,13 +154,23 @@ export type Competition = {
   default_end_month: number | null;
 };
 
+// ── Competition with enriched data ────────────────────────────────
+export type CompetitionWithHolder = Competition & {
+  event_templates: Pick<CompetitionEventTemplate, "id">[];
+  current_holder: { name: string | null; avatar_url: string | null } | null;
+  latest_season: Pick<CompetitionSeason, "id" | "season_label" | "status"> | null;
+};
+
 // ── CompetitionSeason ─────────────────────────────────────────────
 export type SeasonStatus = "draft" | "published" | "live" | "completed" | "archived";
+export type SeasonType = "calendar_year" | "custom";
 
 export type CompetitionSeason = {
   id: string;
   competition_id: string;
-  season_year: number;
+  season_year: number | null;
+  season_type: SeasonType;
+  season_label: string;
   name: string;
   status: SeasonStatus;
   start_date: string | null;

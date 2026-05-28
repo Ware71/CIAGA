@@ -30,12 +30,20 @@ export type LiveGroupStandingEntry = {
   avg_gross_to_par: number | null;
 };
 
+export type CurrentSeasonMeta = {
+  id: string;
+  season_label: string;
+  status: string;
+};
+
 export type LiveGroupStandingsResponse = {
   hasLive: boolean;
   rows: LiveGroupStandingEntry[];
   liveRoundIds: string[];
   /** IDs of live events (for event_leaderboard_entries subscription) */
   liveCompetitionIds: string[];
+  /** The active season for this group (live > published > latest completed) */
+  current_season: CurrentSeasonMeta | null;
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -77,31 +85,59 @@ function denseRank(players: Array<{ profileId: string; score: number | null }>, 
 
 // ── Route ────────────────────────────────────────────────────────────────────
 
-// GET /api/majors/groups/[id]/live-standings?year=YYYY
+// GET /api/majors/groups/[id]/live-standings
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     await getAuthedProfileOrThrow(req);
     const { id: groupId } = await params;
 
-    const url = new URL(req.url);
-    const filterYear = url.searchParams.get("year") ? Number(url.searchParams.get("year")) : null;
+    // ── 0. Determine current season for this group ────────────────────────
+    // Priority: live > published > most recent completed (by end_date/season_year desc)
+    const { data: allSeasons } = await supabaseAdmin
+      .from("competition_seasons")
+      .select("id, season_label, status, end_date, season_year, competition:competitions!inner(group_id)")
+      .eq("competition.group_id", groupId)
+      .in("status", ["live", "published", "completed", "archived"])
+      .order("season_year", { ascending: false })
+      .order("end_date", { ascending: false });
 
-    // ── 1. Fetch live and completed competitions in parallel ──────────────
+    let currentSeason: CurrentSeasonMeta | null = null;
+    if (allSeasons && allSeasons.length > 0) {
+      const priorityOrder: Record<string, number> = { live: 0, published: 1, completed: 2, archived: 3 };
+      const sorted = [...allSeasons as any[]].sort((a, b) => {
+        const pa = priorityOrder[a.status] ?? 99;
+        const pb = priorityOrder[b.status] ?? 99;
+        if (pa !== pb) return pa - pb;
+        // Same priority: prefer later season
+        const ya = a.season_year ?? 0;
+        const yb = b.season_year ?? 0;
+        return yb - ya;
+      });
+      const best = sorted[0];
+      currentSeason = { id: best.id, season_label: best.season_label ?? String(best.season_year ?? ""), status: best.status };
+    }
+
+    // ── 1. Fetch live and completed events — scoped to current season ─────
+    // If we have a current season, filter by season_id; otherwise fall back to group_id
     let liveQuery = supabaseAdmin
       .from("events")
       .select("id, points_model, points_table, scoring_model, num_rounds")
-      .eq("group_id", groupId)
       .eq("majors_status", "live")
       .in("standings_contribution", ["season", "both"]);
-    if (filterYear) liveQuery = liveQuery.eq("event_year", filterYear);
 
     let completedQuery = supabaseAdmin
       .from("events")
       .select("id")
-      .eq("group_id", groupId)
       .in("majors_status", ["completed", "official"])
       .in("standings_contribution", ["season", "both"]);
-    if (filterYear) completedQuery = completedQuery.eq("event_year", filterYear);
+
+    if (currentSeason) {
+      liveQuery = liveQuery.eq("season_id", currentSeason.id);
+      completedQuery = completedQuery.eq("season_id", currentSeason.id);
+    } else {
+      liveQuery = liveQuery.eq("group_id", groupId);
+      completedQuery = completedQuery.eq("group_id", groupId);
+    }
 
     const [liveCompsRes, completedCompsRes] = await Promise.all([liveQuery, completedQuery]);
 
@@ -324,6 +360,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
           rows: [],
           liveRoundIds: allLiveRoundIds,
           liveCompetitionIds: liveComps.map((c) => c.id),
+          current_season: currentSeason,
         } satisfies LiveGroupStandingsResponse,
         { headers: { "Cache-Control": "no-store" } }
       );
@@ -403,6 +440,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         rows,
         liveRoundIds: allLiveRoundIds,
         liveCompetitionIds: liveComps.map((c) => c.id),
+        current_season: currentSeason,
       } satisfies LiveGroupStandingsResponse,
       { headers: { "Cache-Control": "no-store" } }
     );
