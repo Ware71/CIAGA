@@ -30,8 +30,8 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "standings", label: "Standings" },
   { id: "events", label: "Events" },
-  { id: "seasons", label: "Seasons" },
   { id: "competitions", label: "Competitions" },
+  { id: "seasons", label: "Seasons" },
   { id: "members", label: "Members" },
   { id: "finances", label: "Finances" },
   { id: "settings", label: "Settings" },
@@ -265,6 +265,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   const [selectedSeasonId, setSelectedSeasonId] = useState<string | "all">("all");
   const [seasonStandings, setSeasonStandings] = useState<any[]>([]);
   const [seasonStandingsLoading, setSeasonStandingsLoading] = useState(false);
+  const [allTimeView, setAllTimeView] = useState<"outrights" | "points" | "strokes" | "avg">("outrights");
   // Player detail drawer
   const [selectedPlayerForDrawer, setSelectedPlayerForDrawer] = useState<{ profileId: string; name: string; avatarUrl: string | null; currentSeasonId: string | null } | null>(null);
   const [playerBreakdownEntries, setPlayerBreakdownEntries] = useState<PlayerBreakdownEntry[]>([]);
@@ -1203,7 +1204,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
       const handleSeasonChange = async (id: string) => {
         setSelectedSeasonId(id);
-        if (id === "all") { setSeasonStandings([]); return; }
+        if (id === "all") { setSeasonStandings([]); setAllTimeView("outrights"); return; }
         setSeasonStandingsLoading(true);
         try {
           const session = await getViewerSession();
@@ -1220,51 +1221,156 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         }
       };
 
+      const ordinal = (n: number) => { const s = ["th","st","nd","rd"]; const v = n % 100; return n + (s[(v-20)%10] ?? s[v] ?? s[0]); };
+      const fmtTopar = (v: number | null) => v == null ? "—" : (v > 0 ? `+${v}` : `${v}`);
+
       const renderAllTime = () => {
         if (!competitionResults) return <div className="text-sm text-emerald-100/60 text-center py-8">Loading…</div>;
         const records = competitionResults.player_records;
         if (records.length === 0) return <div className="text-sm text-emerald-100/60 text-center py-8">No event data yet.</div>;
-        const ordinal = (n: number) => { const s = ["th","st","nd","rd"]; const v = n % 100; return n + (s[(v-20)%10] ?? s[v] ?? s[0]); };
+
+        const allTimeSubTabs: { id: typeof allTimeView; label: string }[] = [
+          { id: "outrights", label: "Outrights" },
+          { id: "points", label: "Points" },
+          { id: "strokes", label: "Strokes" },
+          { id: "avg", label: "Avg" },
+        ];
+
+        let sorted = [...records];
+        if (allTimeView === "points") sorted = [...records].sort((a, b) => (b as any).career_points - (a as any).career_points);
+        if (allTimeView === "strokes") sorted = [...records].sort((a, b) => ((a as any).career_total_gross_to_par ?? 9999) - ((b as any).career_total_gross_to_par ?? 9999));
+        if (allTimeView === "avg") sorted = [...records].sort((a, b) => ((a as any).career_avg_gross_to_par ?? 999) - ((b as any).career_avg_gross_to_par ?? 999));
+
         return (
-          <div className="space-y-2">
-            {records.map((pr) => (
-              <div key={pr.profile_id} className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/70 p-3 space-y-2">
-                <div className="flex items-center gap-2">
-                  {pr.profile.avatar_url ? (
-                    <img src={pr.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
-                  ) : (
-                    <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">{pr.profile.name?.slice(0,2).toUpperCase() ?? "?"}</div>
-                  )}
-                  <span className="flex-1 text-sm font-semibold text-emerald-100 truncate">{pr.profile.name ?? "Unknown"}</span>
-                  <span className="text-[11px] font-bold text-[#f5e6b0]">{pr.total_wins} {pr.total_wins === 1 ? "win" : "wins"}</span>
-                </div>
-                {pr.competition_records.length > 0 && (
-                  <div className="space-y-1 pl-9">
-                    {pr.competition_records.map((sr: any) => (
-                      <div key={sr.competition_id ?? "standalone"} className="flex items-center justify-between gap-2">
-                        <span className="text-[11px] text-emerald-200/70 truncate">{sr.competition_name ?? "Competition"}</span>
-                        <span className="text-[10px] text-emerald-200/55 shrink-0">
-                          {sr.wins > 0 ? `${sr.wins}× win${sr.wins !== 1 ? "s" : ""}` : sr.best_finish != null ? `Best: ${ordinal(sr.best_finish)}` : "—"}
-                        </span>
+          <div className="space-y-3">
+            {/* Sub-tab strip */}
+            <div className="flex gap-1.5">
+              {allTimeSubTabs.map((st) => (
+                <button
+                  key={st.id}
+                  type="button"
+                  onClick={() => setAllTimeView(st.id)}
+                  className={`px-3 py-1 rounded-full text-[11px] font-semibold transition-colors ${
+                    allTimeView === st.id
+                      ? "bg-emerald-700/80 text-white"
+                      : "border border-emerald-900/50 text-emerald-200/60 hover:text-emerald-100"
+                  }`}
+                >
+                  {st.label}
+                </button>
+              ))}
+            </div>
+
+            {allTimeView === "outrights" && (
+              <div className="space-y-2">
+                {sorted.map((pr) => (
+                  <div key={pr.profile_id} className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/70 p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      {pr.profile.avatar_url ? (
+                        <img src={pr.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
+                      ) : (
+                        <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">{pr.profile.name?.slice(0,2).toUpperCase() ?? "?"}</div>
+                      )}
+                      <span className="flex-1 text-sm font-semibold text-emerald-100 truncate">{pr.profile.name ?? "Unknown"}</span>
+                      <span className="text-[11px] font-bold text-[#f5e6b0]">{pr.total_wins} {pr.total_wins === 1 ? "win" : "wins"}</span>
+                    </div>
+                    {pr.competition_records.length > 0 && (
+                      <div className="space-y-1 pl-9">
+                        {pr.competition_records.map((sr: any) => (
+                          <div key={sr.competition_id ?? "standalone"} className="flex items-center justify-between gap-2">
+                            <span className="text-[11px] text-emerald-200/70 truncate">{sr.competition_name ?? "Competition"}</span>
+                            <span className="text-[10px] text-emerald-200/55 shrink-0">
+                              {sr.wins > 0 ? `${sr.wins}× win${sr.wins !== 1 ? "s" : ""}` : sr.best_finish != null ? `Best: ${ordinal(sr.best_finish)}` : "—"}
+                            </span>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                )}
-                {pr.standalone_wins.length > 0 && (
-                  <div className="space-y-1 pl-9">
-                    {pr.standalone_wins.map((w: any) => (
-                      <div key={w.event_id} className="flex items-center justify-between gap-2">
-                        <span className="text-[11px] text-emerald-200/70 truncate">{w.name ?? "Competition"}</span>
-                        <span className="text-[10px] text-[#f5e6b0]/70 shrink-0">{w.year ?? ""}</span>
+                    )}
+                    {pr.standalone_wins.length > 0 && (
+                      <div className="space-y-1 pl-9">
+                        {pr.standalone_wins.map((w: any) => (
+                          <div key={w.event_id} className="flex items-center justify-between gap-2">
+                            <span className="text-[11px] text-emerald-200/70 truncate">{w.name ?? "Event"}</span>
+                            <span className="text-[10px] text-[#f5e6b0]/70 shrink-0">{w.year ?? ""}</span>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
+                    {pr.competition_records.length === 0 && pr.standalone_wins.length === 0 && (
+                      <div className="pl-9 text-[11px] text-emerald-200/40">No entries yet</div>
+                    )}
                   </div>
-                )}
-                {pr.competition_records.length === 0 && pr.standalone_wins.length === 0 && (
-                  <div className="pl-9 text-[11px] text-emerald-200/40">No entries yet</div>
-                )}
+                ))}
               </div>
-            ))}
+            )}
+
+            {allTimeView === "points" && (
+              <div className="space-y-2">
+                {sorted.map((pr, i) => (
+                  <div key={pr.profile_id} className="flex items-center gap-2 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5">
+                    <span className="text-[11px] font-bold text-emerald-200/40 w-5 text-right shrink-0">{i + 1}</span>
+                    {pr.profile.avatar_url ? (
+                      <img src={pr.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
+                    ) : (
+                      <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">{pr.profile.name?.slice(0,2).toUpperCase() ?? "?"}</div>
+                    )}
+                    <span className="flex-1 text-sm font-semibold text-emerald-100 truncate">{pr.profile.name ?? "Unknown"}</span>
+                    <div className="text-right shrink-0">
+                      <div className="text-xs font-extrabold text-[#f5e6b0]">{(pr as any).career_points} pts</div>
+                      <div className="text-[9px] text-emerald-100/40">{(pr as any).career_events_played} evts</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {allTimeView === "strokes" && (
+              <div className="space-y-2">
+                <div className="flex justify-end gap-4 px-1 pb-0.5">
+                  <span className="text-[10px] text-emerald-200/40 w-12 text-right">Gross</span>
+                  <span className="text-[10px] text-emerald-200/40 w-12 text-right">Net</span>
+                </div>
+                {sorted.map((pr, i) => (
+                  <div key={pr.profile_id} className="flex items-center gap-2 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5">
+                    <span className="text-[11px] font-bold text-emerald-200/40 w-5 text-right shrink-0">{i + 1}</span>
+                    {pr.profile.avatar_url ? (
+                      <img src={pr.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
+                    ) : (
+                      <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">{pr.profile.name?.slice(0,2).toUpperCase() ?? "?"}</div>
+                    )}
+                    <span className="flex-1 text-sm font-semibold text-emerald-100 truncate">{pr.profile.name ?? "Unknown"}</span>
+                    <div className="flex gap-4 shrink-0">
+                      <span className="text-xs font-bold text-emerald-100/80 w-12 text-right">{fmtTopar((pr as any).career_total_gross_to_par)}</span>
+                      <span className="text-xs font-bold text-[#f5e6b0]/80 w-12 text-right">{fmtTopar((pr as any).career_total_net_to_par)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {allTimeView === "avg" && (
+              <div className="space-y-2">
+                <div className="flex justify-end gap-4 px-1 pb-0.5">
+                  <span className="text-[10px] text-emerald-200/40 w-12 text-right">Gross</span>
+                  <span className="text-[10px] text-emerald-200/40 w-12 text-right">Net</span>
+                </div>
+                {sorted.map((pr, i) => (
+                  <div key={pr.profile_id} className="flex items-center gap-2 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5">
+                    <span className="text-[11px] font-bold text-emerald-200/40 w-5 text-right shrink-0">{i + 1}</span>
+                    {pr.profile.avatar_url ? (
+                      <img src={pr.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
+                    ) : (
+                      <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">{pr.profile.name?.slice(0,2).toUpperCase() ?? "?"}</div>
+                    )}
+                    <span className="flex-1 text-sm font-semibold text-emerald-100 truncate">{pr.profile.name ?? "Unknown"}</span>
+                    <div className="flex gap-4 shrink-0">
+                      <span className="text-xs font-bold text-emerald-100/80 w-12 text-right">{fmtTopar((pr as any).career_avg_gross_to_par)}</span>
+                      <span className="text-xs font-bold text-[#f5e6b0]/80 w-12 text-right">{fmtTopar((pr as any).career_avg_net_to_par)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         );
       };
@@ -1679,7 +1785,6 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
   const visibleTabs = TABS.filter((t) => {
     if (t.id === "settings" || t.id === "finances") return isAdminOrOwner;
-    if (t.id === "competitions") return isMember;
     return true;
   });
 

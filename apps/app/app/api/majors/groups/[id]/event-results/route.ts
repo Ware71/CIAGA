@@ -32,6 +32,12 @@ export type PlayerRecord = {
   competition_records: PlayerSeriesRecord[];
   standalone_wins: { event_id: string; name: string | null; year: number | null }[];
   total_wins: number;
+  career_points: number;
+  career_events_played: number;
+  career_total_gross_to_par: number | null;
+  career_total_net_to_par: number | null;
+  career_avg_gross_to_par: number | null;
+  career_avg_net_to_par: number | null;
 };
 
 export type CompetitionResultsResponse = {
@@ -85,12 +91,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       position: number;
       net_score: number | null;
       gross_score: number | null;
+      points_earned: number | null;
+      to_par: number | null;
+      course_par: number | null;
     }[] = [];
 
     if (completedIds.length > 0) {
       const { data: entriesData, error: entriesErr } = await supabaseAdmin
         .from("event_leaderboard_entries")
-        .select("event_id, profile_id, position, net_score, gross_score")
+        .select("event_id, profile_id, position, net_score, gross_score, points_earned, to_par, course_par")
         .in("event_id", completedIds)
         .eq("is_live", false)
         .not("position", "is", null);
@@ -145,6 +154,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     type CompetitionAgg = { wins: number; best_finish: number; comp_count: number };
     const playerMap = new Map<string, Map<string | null, CompetitionAgg>>();
 
+    type CareerAgg = {
+      points: number; events: number;
+      gross_to_par_sum: number; gross_events: number;
+      net_to_par_sum: number; net_events: number;
+    };
+    const careerMap = new Map<string, CareerAgg>();
+
     for (const entry of entries) {
       const evt = evts.find((c) => c.id === entry.event_id);
       const competitionId = evt?.competition_id ?? null;
@@ -159,6 +175,22 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       agg.comp_count += 1;
       if (entry.position === 1) agg.wins += 1;
       if (entry.position < agg.best_finish) agg.best_finish = entry.position;
+
+      // Career stat aggregation
+      if (!careerMap.has(entry.profile_id)) {
+        careerMap.set(entry.profile_id, { points: 0, events: 0, gross_to_par_sum: 0, gross_events: 0, net_to_par_sum: 0, net_events: 0 });
+      }
+      const career = careerMap.get(entry.profile_id)!;
+      career.events += 1;
+      if (entry.points_earned != null) career.points += entry.points_earned;
+      if (entry.gross_score != null && entry.course_par != null) {
+        career.gross_to_par_sum += entry.gross_score - entry.course_par;
+        career.gross_events += 1;
+      }
+      if (entry.to_par != null) {
+        career.net_to_par_sum += entry.to_par;
+        career.net_events += 1;
+      }
     }
 
     // Build a record for every active member (plus anyone with entries)
@@ -201,12 +233,26 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         return (a.best_finish ?? 999) - (b.best_finish ?? 999);
       });
 
+      const career = careerMap.get(profileId);
+      const career_avg_gross_to_par = career && career.gross_events > 0
+        ? Math.round((career.gross_to_par_sum / career.gross_events) * 10) / 10
+        : null;
+      const career_avg_net_to_par = career && career.net_events > 0
+        ? Math.round((career.net_to_par_sum / career.net_events) * 10) / 10
+        : null;
+
       return {
         profile_id: profileId,
         profile: profileMap.get(profileId) ?? { name: null, avatar_url: null },
         competition_records: competitionRecords,
         standalone_wins: standaloneWins,
         total_wins,
+        career_points: career?.points ?? 0,
+        career_events_played: career?.events ?? 0,
+        career_total_gross_to_par: career && career.gross_events > 0 ? career.gross_to_par_sum : null,
+        career_total_net_to_par: career && career.net_events > 0 ? career.net_to_par_sum : null,
+        career_avg_gross_to_par,
+        career_avg_net_to_par,
       };
     });
 
