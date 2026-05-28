@@ -31,8 +31,11 @@ function isCompetitionRow(row: any): row is LeaderboardEntryWithProfile {
   return "computed_at" in row;
 }
 
-function getScore(row: CompetitionRow): number | null {
-  if (isCompetitionRow(row)) return (row as any).format_points ?? row.net_score ?? row.gross_score ?? null;
+function getScore(row: CompetitionRow, scoringModel: string): number | null {
+  if (scoringModel === "stableford_points") {
+    return isCompetitionRow(row) ? ((row as any).format_points ?? null) : null;
+  }
+  if (isCompetitionRow(row)) return row.net_score ?? row.gross_score ?? null;
   return (row as FrozenLeaderboardEntry).net_score ?? (row as FrozenLeaderboardEntry).gross_score ?? null;
 }
 
@@ -276,7 +279,7 @@ export default function LeaderboardClient() {
 
       <div className="space-y-2 pb-8">
         {rows.map((row: any, idx) => {
-          const score = tab === "competition" ? getScore(row) : null;
+          const score = tab === "competition" ? getScore(row, scoringModel) : null;
           const holes = tab === "competition" ? getHoles(row) : null;
           const live = tab === "competition" ? isLive(row) : false;
           const threshold = freeze
@@ -343,7 +346,7 @@ export default function LeaderboardClient() {
                       {formatLeaderboardScore(getToPar(row), score, scoringModel)}
                     </div>
                     {scoringModel === "stableford_points" ? (
-                      <div className="text-[10px] text-emerald-100/50">pts</div>
+                      <div className="text-[10px] text-emerald-100/50">stableford pts</div>
                     ) : (
                       <>
                         <div className="text-[10px] text-emerald-100/50">to par</div>

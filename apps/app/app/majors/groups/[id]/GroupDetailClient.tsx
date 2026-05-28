@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 import { supabase } from "@/lib/supabaseClient";
@@ -18,7 +18,6 @@ import type { CompetitionResultsResponse } from "@/app/api/majors/groups/[id]/ev
 import type { PlayerBreakdownEntry } from "@/app/api/majors/seasons/[id]/player-breakdown/route";
 import type { SeasonStandingEntry } from "@/app/api/majors/seasons/[id]/standings/route";
 import type { GroupScoringPrefs } from "@/lib/majors/types";
-import { LabelWheel } from "@/components/stats/LabelWheel";
 import { eventStatusLabel } from "@/lib/majors/labels";
 
 type CompetitionSeriesWithEventCount = Competition & {
@@ -40,60 +39,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "settings", label: "Settings" },
 ];
 
-// ── Reusable dropdown selector ──────────────────────────────────────────────
-function DropdownSelector<T extends string>({
-  options,
-  value,
-  onChange,
-}: {
-  options: { value: T; label: string }[];
-  value: T;
-  onChange: (v: T) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
-
-  const selected = options.find((o) => o.value === value);
-  return (
-    <div ref={ref} className="relative inline-block">
-      <button
-        type="button"
-        onClick={() => setOpen((p) => !p)}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 text-[12px] font-semibold text-emerald-100 hover:bg-emerald-900/40 transition-colors"
-      >
-        {selected?.label ?? value}
-        <span className="text-[9px] text-emerald-400/60">{open ? "▲" : "▼"}</span>
-      </button>
-      {open && (
-        <div className="absolute top-full left-0 mt-1 z-40 min-w-[140px] rounded-2xl border border-emerald-800/60 bg-[#0c2e18] shadow-lg overflow-hidden">
-          {options.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => { onChange(opt.value); setOpen(false); }}
-              className={`w-full text-left px-4 py-2.5 text-[12px] font-semibold transition-colors ${
-                opt.value === value
-                  ? "bg-emerald-700/50 text-white"
-                  : "text-emerald-100/80 hover:bg-emerald-900/50"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 type GroupData = MajorGroup & { member_count: number };
 
 function PositionBadge({ position }: { position: number | null }) {
@@ -115,6 +61,147 @@ function PositionBadge({ position }: { position: number | null }) {
 
 const TEE_PRESETS = ["White", "Yellow", "Red", "Blue", "Gold", "Black", "Ladies", "Junior"];
 
+function MemberDetailDrawer({
+  member,
+  isAdminOrOwner,
+  myRole,
+  myProfileId,
+  onRoleToggle,
+  onTeePrefSave,
+  onNavigate,
+  onClose,
+}: {
+  member: MajorGroupMembershipWithProfile;
+  isAdminOrOwner: boolean;
+  myRole: string | null;
+  myProfileId: string | null;
+  onRoleToggle: () => void;
+  onTeePrefSave: (tee: string | null) => Promise<void>;
+  onNavigate: () => void;
+  onClose: () => void;
+}) {
+  const [teeValue, setTeeValue] = useState(member.preferred_tee_name ?? "");
+  const [teeSaving, setTeeSaving] = useState(false);
+
+  const roleCls =
+    member.role === "owner"
+      ? "text-[#f5e6b0] border-[#f5e6b0]/30 bg-[#f5e6b0]/10"
+      : member.role === "admin"
+      ? "text-emerald-300 border-emerald-700/50 bg-emerald-900/30"
+      : "text-emerald-200/50 border-emerald-900/50 bg-transparent";
+
+  const handleTeeSave = async () => {
+    setTeeSaving(true);
+    try {
+      await onTeePrefSave(teeValue.trim() || null);
+    } finally {
+      setTeeSaving(false);
+    }
+  };
+
+  const memberSince = member.joined_at
+    ? new Date(member.joined_at).toLocaleDateString([], { month: "short", year: "numeric" })
+    : null;
+  const hcp = (member as any).profile?.handicap_index;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/60" />
+      <div
+        className="relative w-full max-w-sm mx-auto bg-[#071f13] rounded-t-2xl border-t border-emerald-900/70 px-4 pt-5 pb-[env(safe-area-inset-bottom)] space-y-4 max-h-[80dvh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="w-10 h-1 rounded-full bg-emerald-800/60 mx-auto mb-1" />
+
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          {member.profile?.avatar_url ? (
+            <img src={member.profile.avatar_url} alt="" className="h-12 w-12 rounded-full object-cover shrink-0" />
+          ) : (
+            <div className="h-12 w-12 rounded-full bg-emerald-900/60 grid place-items-center text-sm font-bold text-emerald-200 shrink-0">
+              {member.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-bold text-emerald-50 truncate">{member.profile?.name ?? member.profile_id}</div>
+            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+              <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border capitalize ${roleCls}`}>
+                {member.role}
+              </span>
+              {hcp != null && (
+                <span className="text-[10px] text-emerald-200/60">HCP {Number(hcp).toFixed(1)}</span>
+              )}
+              {memberSince && (
+                <span className="text-[10px] text-emerald-200/50">Since {memberSince}</span>
+              )}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-7 w-7 grid place-items-center rounded-full border border-emerald-900/60 text-emerald-200/60 hover:text-emerald-100 shrink-0"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Tee preference */}
+        <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-3 space-y-2">
+          <div className="text-[10px] uppercase tracking-wider text-emerald-200/50">Preferred Tee</div>
+          {isAdminOrOwner ? (
+            <div className="flex items-center gap-2">
+              <select
+                value={teeValue}
+                onChange={(e) => setTeeValue(e.target.value)}
+                className="flex-1 rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
+                disabled={teeSaving}
+              >
+                <option value="">— not set —</option>
+                {TEE_PRESETS.map((t) => <option key={t} value={t}>{t}</option>)}
+                {teeValue && !TEE_PRESETS.includes(teeValue) && (
+                  <option value={teeValue}>{teeValue}</option>
+                )}
+              </select>
+              <button
+                type="button"
+                onClick={handleTeeSave}
+                disabled={teeSaving}
+                className="px-3 py-2 rounded-xl bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50 shrink-0"
+              >
+                {teeSaving ? "…" : "Save"}
+              </button>
+            </div>
+          ) : (
+            <div className="text-sm text-emerald-100/80">
+              {member.preferred_tee_name ?? <span className="text-emerald-100/40">Not set</span>}
+            </div>
+          )}
+        </div>
+
+        {/* Role toggle (owner only) */}
+        {isAdminOrOwner && member.role !== "owner" && member.profile_id !== myProfileId && myRole === "owner" && (
+          <button
+            type="button"
+            onClick={() => { onRoleToggle(); onClose(); }}
+            className="w-full py-2 rounded-full border border-emerald-800/60 text-[11px] text-emerald-300/70 hover:text-emerald-200 hover:border-emerald-700/60"
+          >
+            {member.role === "admin" ? "Remove Admin" : "Make Admin"}
+          </button>
+        )}
+
+        {/* View profile */}
+        <button
+          type="button"
+          onClick={onNavigate}
+          className="w-full py-2.5 rounded-full border border-emerald-700/50 text-sm text-emerald-200 hover:bg-emerald-900/30"
+        >
+          View Profile →
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function MemberRow({
   member,
   isAdminOrOwner,
@@ -132,9 +219,7 @@ function MemberRow({
   onTeePrefSave: (tee: string | null) => Promise<void>;
   onNavigate: () => void;
 }) {
-  const [editingTee, setEditingTee] = useState(false);
-  const [teeValue, setTeeValue] = useState(member.preferred_tee_name ?? "");
-  const [teeSaving, setTeeSaving] = useState(false);
+  const [showDrawer, setShowDrawer] = useState(false);
 
   const roleCls =
     member.role === "owner"
@@ -143,101 +228,58 @@ function MemberRow({
       ? "text-emerald-300 border-emerald-700/50 bg-emerald-900/30"
       : "text-emerald-200/50 border-emerald-900/50 bg-transparent";
 
-  const handleTeeSave = async () => {
-    setTeeSaving(true);
-    try {
-      await onTeePrefSave(teeValue.trim() || null);
-      setEditingTee(false);
-    } finally {
-      setTeeSaving(false);
-    }
-  };
+  const hcp = (member as any).profile?.handicap_index;
+  const memberSince = member.joined_at
+    ? new Date(member.joined_at).toLocaleDateString([], { month: "short", year: "numeric" })
+    : null;
 
   return (
-    <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 space-y-1.5">
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
-          onClick={onNavigate}
-        >
+    <>
+      <button
+        type="button"
+        onClick={() => setShowDrawer(true)}
+        className="w-full rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 text-left hover:brightness-110 transition-all"
+      >
+        <div className="flex items-center gap-3">
           {member.profile?.avatar_url ? (
-            <img src={member.profile.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
+            <img src={member.profile.avatar_url} alt="" className="h-9 w-9 rounded-full object-cover shrink-0" />
           ) : (
-            <div className="h-8 w-8 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
+            <div className="h-9 w-9 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
               {member.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
             </div>
           )}
-          <span className="flex-1 text-sm font-semibold text-emerald-50 truncate text-left">
-            {member.profile?.name ?? member.profile_id}
-          </span>
-        </button>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border capitalize ${roleCls}`}>
+          <div className="flex-1 min-w-0">
+            <span className="block text-sm font-semibold text-emerald-50 truncate">
+              {member.profile?.name ?? member.profile_id}
+            </span>
+            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+              {hcp != null && (
+                <span className="text-[10px] text-emerald-200/55">HCP {Number(hcp).toFixed(1)}</span>
+              )}
+              {memberSince && (
+                <span className="text-[10px] text-emerald-200/40">Since {memberSince}</span>
+              )}
+            </div>
+          </div>
+          <span className={`shrink-0 text-[9px] font-semibold px-2 py-0.5 rounded-full border capitalize ${roleCls}`}>
             {member.role}
           </span>
-          {isAdminOrOwner && member.role !== "owner" && member.profile_id !== myProfileId && myRole === "owner" && (
-            <button
-              type="button"
-              onClick={onRoleToggle}
-              className="text-[9px] text-emerald-200/50 hover:text-emerald-200 transition-colors"
-            >
-              {member.role === "admin" ? "↓" : "↑"}
-            </button>
-          )}
         </div>
-      </div>
+      </button>
 
-      {/* Tee preference — admins can set/edit */}
-      {isAdminOrOwner && (
-        <div className="flex items-center gap-2 pl-11">
-          {!editingTee ? (
-            <>
-              <span className="text-[10px] text-emerald-200/50">Tee pref:</span>
-              <span className="text-[10px] text-emerald-100/80">
-                {member.preferred_tee_name ?? <span className="text-emerald-100/40">not set</span>}
-              </span>
-              <button
-                type="button"
-                onClick={() => { setTeeValue(member.preferred_tee_name ?? ""); setEditingTee(true); }}
-                className="text-[9px] text-emerald-200/40 hover:text-emerald-200/80 underline"
-              >
-                {member.preferred_tee_name ? "change" : "set"}
-              </button>
-            </>
-          ) : (
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <select
-                value={teeValue}
-                onChange={(e) => setTeeValue(e.target.value)}
-                className="rounded border border-emerald-900/70 bg-[#042713] px-2 py-0.5 text-[10px] text-emerald-50 focus:outline-none"
-                disabled={teeSaving}
-              >
-                <option value="">— none —</option>
-                {TEE_PRESETS.map((t) => <option key={t} value={t}>{t}</option>)}
-                {teeValue && !TEE_PRESETS.includes(teeValue) && (
-                  <option value={teeValue}>{teeValue}</option>
-                )}
-              </select>
-              <button
-                onClick={handleTeeSave}
-                disabled={teeSaving}
-                className="px-2 py-0.5 text-[10px] rounded bg-emerald-700 text-white hover:bg-emerald-600 disabled:opacity-50"
-              >
-                {teeSaving ? "..." : "Save"}
-              </button>
-              <button
-                onClick={() => setEditingTee(false)}
-                disabled={teeSaving}
-                className="px-2 py-0.5 text-[10px] rounded border border-emerald-900/70 text-emerald-200 hover:bg-emerald-900/20 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-            </div>
-          )}
-        </div>
+      {showDrawer && (
+        <MemberDetailDrawer
+          member={member}
+          isAdminOrOwner={isAdminOrOwner}
+          myRole={myRole}
+          myProfileId={myProfileId}
+          onRoleToggle={onRoleToggle}
+          onTeePrefSave={onTeePrefSave}
+          onNavigate={onNavigate}
+          onClose={() => setShowDrawer(false)}
+        />
       )}
-    </div>
+    </>
   );
 }
 
@@ -245,7 +287,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("overview");
   const [compSubTab, setCompSubTab] = useState<"active" | "completed">("active");
-  const [showCancelled, setShowCancelled] = useState(true);
+  const [showCancelled, setShowCancelled] = useState(false);
   const [group, setGroup] = useState<GroupData | null>(null);
   const [events, setEvents] = useState<EventWithGroup[]>([]);
   const [liveStandingsData, setLiveStandingsData] = useState<LiveGroupStandingsResponse | null>(null);
@@ -598,10 +640,17 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
   const isAdminOrOwner = myRole === "owner" || myRole === "admin";
   const isMember = !!myRole;
-  const upcomingComps = events.filter((c) => c.majors_status === "upcoming" || c.majors_status === "live");
-  const completedComps = events.filter(
-    (c) => c.majors_status === "completed" || c.majors_status === "cancelled"
-  );
+  const sortByDateDesc = (a: EventWithGroup, b: EventWithGroup) => {
+    const da = a.event_date ?? "";
+    const db = b.event_date ?? "";
+    return db < da ? -1 : db > da ? 1 : 0;
+  };
+  const upcomingComps = events
+    .filter((c) => c.majors_status === "upcoming" || c.majors_status === "live")
+    .sort(sortByDateDesc);
+  const completedComps = events
+    .filter((c) => c.majors_status === "completed" || c.majors_status === "cancelled")
+    .sort(sortByDateDesc);
   const cancelledCount = completedComps.filter((c) => c.majors_status === "cancelled").length;
   const visibleCompletedComps = showCancelled
     ? completedComps
@@ -1028,41 +1077,44 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
       return (
         <div className="space-y-3">
-          {/* Season label + metric wheel */}
-          <div className="flex items-start gap-3">
-            <div className="flex-1 min-w-0 pt-1">
-              {currentSeason ? (
-                <div className="text-[11px] text-emerald-300/60">
-                  {currentSeason.season_label}
-                  {currentSeason.status === "live" && (
-                    <span className="ml-1.5 inline-flex items-center gap-1 text-amber-400/80">
-                      <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse inline-block" />
-                      Live
-                    </span>
-                  )}
-                </div>
-              ) : (
-                <div className="text-[11px] text-emerald-200/40">No active season</div>
-              )}
-              {showLiveIndicator && (
-                <div className="flex items-center gap-2 mt-2">
-                  <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
-                  <span className="text-[11px] text-amber-300/80 font-medium">Live in progress</span>
-                </div>
-              )}
-            </div>
-            <div className="w-32 shrink-0">
-              <div className="text-[9px] text-emerald-200/40 uppercase tracking-wider text-center pb-1">View</div>
-              <LabelWheel
-                options={[
-                  { value: "points", label: "Points" },
-                  { value: "strokes", label: "Strokes" },
-                  { value: "avg", label: "Average" },
-                ]}
-                value={standingsMetric}
-                onChange={(v) => setStandingsMetric(v as typeof standingsMetric)}
-              />
-            </div>
+          {/* Season label */}
+          <div>
+            {currentSeason ? (
+              <div className="text-[11px] text-emerald-300/60">
+                {currentSeason.season_label}
+                {currentSeason.status === "live" && (
+                  <span className="ml-1.5 inline-flex items-center gap-1 text-amber-400/80">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse inline-block" />
+                    Live
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div className="text-[11px] text-emerald-200/40">No active season</div>
+            )}
+            {showLiveIndicator && (
+              <div className="flex items-center gap-2 mt-1">
+                <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
+                <span className="text-[11px] text-amber-300/80 font-medium">Live in progress</span>
+              </div>
+            )}
+          </div>
+          {/* Metric selector */}
+          <div className="flex gap-1.5">
+            {(["points", "strokes", "avg"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setStandingsMetric(m)}
+                className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors capitalize ${
+                  standingsMetric === m
+                    ? "bg-emerald-700 text-white"
+                    : "border border-emerald-900/60 text-emerald-200/70 hover:text-emerald-50"
+                }`}
+              >
+                {m === "avg" ? "Average" : m === "points" ? "Points" : "Strokes"}
+              </button>
+            ))}
           </div>
 
           {/* Net/Gross toggle for strokes + avg */}
@@ -1500,24 +1552,26 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
       return (
         <div className="space-y-4">
-          {/* Two-wheel selector */}
-          <div className="flex gap-3">
-            <div className="flex-1 min-w-0">
-              <div className="text-[9px] text-emerald-200/40 uppercase tracking-wider text-center pb-1">Season</div>
-              <LabelWheel
-                options={seasonWheelOptions}
-                value={selectedSeasonId}
-                onChange={handleSeasonChange}
-              />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-[9px] text-emerald-200/40 uppercase tracking-wider text-center pb-1">View</div>
-              <LabelWheel
-                options={metricWheelOptions}
-                value={seasonMetric}
-                onChange={(v) => setSeasonMetric(v as typeof seasonMetric)}
-              />
-            </div>
+          {/* Season + metric selectors */}
+          <div className="flex gap-2">
+            <select
+              value={selectedSeasonId}
+              onChange={(e) => handleSeasonChange(e.target.value)}
+              className="flex-1 rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
+            >
+              {seasonWheelOptions.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+            <select
+              value={seasonMetric}
+              onChange={(e) => setSeasonMetric(e.target.value as typeof seasonMetric)}
+              className="flex-1 rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
+            >
+              {metricWheelOptions.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
           </div>
           {selectedSeasonId === "all" ? renderAllTime() : renderSeasonView()}
         </div>
@@ -1763,11 +1817,11 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                     });
                     setGroup((prev) => prev ? { ...prev, allow_credit: newVal } as any : prev);
                   }}
-                  className={`relative w-10 h-6 rounded-full transition-colors ${
+                  className={`relative inline-flex items-center w-10 h-6 rounded-full transition-colors ${
                     ((group as any)?.allow_credit ?? true) ? "bg-emerald-600" : "bg-emerald-900/50 border border-emerald-900/70"
                   }`}
                 >
-                  <span className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                  <span className={`absolute left-0 top-1 h-4 w-4 rounded-full bg-white shadow transition-transform ${
                     ((group as any)?.allow_credit ?? true) ? "translate-x-5" : "translate-x-1"
                   }`} />
                 </button>
@@ -2209,12 +2263,15 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                         </div>
                       )}
                     </div>
-                    <div className="text-right shrink-0">
+                    <div className="text-right shrink-0 space-y-0.5">
                       {e.points_earned != null && (
                         <div className="text-[11px] font-bold text-[#f5e6b0]">{e.points_earned} pts</div>
                       )}
+                      {e.gross_score != null && (
+                        <div className="text-[10px] text-emerald-200/55">{e.gross_score} gross</div>
+                      )}
                       {e.net_score != null && (
-                        <div className="text-[10px] text-emerald-200/60">{e.net_score} net</div>
+                        <div className="text-[10px] text-emerald-200/40">{e.net_score} net</div>
                       )}
                     </div>
                   </div>

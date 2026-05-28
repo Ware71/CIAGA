@@ -1810,10 +1810,10 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
     scoringModel === "gross"
       ? row.gross_score
       : scoringModel === "stableford_points"
-      ? (row.format_points ?? row.net_score ?? null)
+      ? (row.format_points ?? null)
       : (row.net_score ?? row.gross_score);
   const scoreLabel =
-    scoringModel === "gross" ? "Gross" : scoringModel === "stableford_points" ? "Pts" : "Net";
+    scoringModel === "gross" ? "Gross" : scoringModel === "stableford_points" ? "Stableford Pts" : "Net";
 
   const visibleTabs = (() => {
     const BASE = getTabsForEvent(event);

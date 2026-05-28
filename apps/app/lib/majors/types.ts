@@ -296,6 +296,8 @@ export type MajorGroupMembershipWithProfile = MajorGroupMembership & {
     id: string;
     name: string | null;
     avatar_url: string | null;
+    gender: string | null;
+    handicap_index: number | null;
   };
 };
 
