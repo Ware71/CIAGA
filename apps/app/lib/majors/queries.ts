@@ -85,11 +85,7 @@ export async function getGroupMembers(groupId: string): Promise<MajorGroupMember
   // Fetch current handicaps and group event participation in parallel
   const [handicapRes, participantRes] = await Promise.all([
     supabaseAdmin.rpc("get_current_handicaps", { ids: profileIds }),
-    supabaseAdmin
-      .from("round_participants")
-      .select("profile_id, rounds!inner(events!inner(group_id))")
-      .in("profile_id", profileIds)
-      .eq("rounds.events.group_id", groupId),
+    supabaseAdmin.rpc("get_group_event_participants", { p_group_id: groupId }),
   ]);
 
   const handicapMap = new Map<string, number>();

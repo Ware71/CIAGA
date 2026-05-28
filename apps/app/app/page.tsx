@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getServerViewer } from "@/lib/supabaseServer";
-import { getHomeSummary, type HomeSummary } from "@/lib/home/getHomeSummary";
+import { getHomeSummary } from "@/lib/home/getHomeSummary";
+import { getMajorHubSummary } from "@/lib/majors/queries";
 import CIAGAStarter from "./CiagaStarter";
 
 export default async function Page() {
@@ -9,7 +10,10 @@ export default async function Page() {
   if (viewerResult.status === "needs_onboarding") redirect("/onboarding/set-password");
   const viewer = viewerResult.viewer;
 
-  const initialData = await getHomeSummary(viewer.profileId);
+  const [initialData, initialMajors] = await Promise.all([
+    getHomeSummary(viewer.profileId),
+    getMajorHubSummary(viewer.profileId),
+  ]);
 
-  return <CIAGAStarter initialData={initialData} />;
+  return <CIAGAStarter initialData={initialData} initialMajors={initialMajors} />;
 }

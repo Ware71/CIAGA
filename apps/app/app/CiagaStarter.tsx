@@ -56,9 +56,10 @@ function EnvelopeIcon(props: { size?: number; className?: string }) {
 
 type Props = {
   initialData?: HomeSummary;
+  initialMajors?: MajorHubSummary | null;
 };
 
-export default function CIAGAStarter({ initialData }: Props) {
+export default function CIAGAStarter({ initialData, initialMajors }: Props) {
   const router = useRouter();
 
   const [open, setOpen] = useState(false);
@@ -91,7 +92,7 @@ export default function CIAGAStarter({ initialData }: Props) {
   const [miniFeed, setMiniFeed] = useState<FeedItemVM[]>(initialData?.mini_feed ?? []);
   const [miniFeedLoading, setMiniFeedLoading] = useState(false);
   const [miniFeedError, setMiniFeedError] = useState<string | null>(null);
-  const [majorsPreload, setMajorsPreload] = useState<MajorHubSummary | null>(null);
+  const [majorsPreload, setMajorsPreload] = useState<MajorHubSummary | null>(initialMajors ?? null);
 
   useEffect(() => {
     const updateViewport = () => {
@@ -131,10 +132,7 @@ export default function CIAGAStarter({ initialData }: Props) {
         }
         if (!cancelled) setMyProfileId(session.profileId);
 
-        const [res, hubRes] = await Promise.all([
-          fetch("/api/home/summary", { headers: { Authorization: `Bearer ${session.accessToken}` } }),
-          fetch("/api/majors/hub", { headers: { Authorization: `Bearer ${session.accessToken}` } }),
-        ]);
+        const res = await fetch("/api/home/summary", { headers: { Authorization: `Bearer ${session.accessToken}` } });
         if (!res.ok || cancelled) return;
         const data = await res.json();
 
@@ -145,11 +143,6 @@ export default function CIAGAStarter({ initialData }: Props) {
           setRoundsPlayed(data.rounds_played ?? null);
           setLastRound(data.last_round ?? null);
           setMiniFeed((data.mini_feed as FeedItemVM[]) ?? []);
-        }
-
-        if (hubRes.ok && !cancelled) {
-          const hubData = await hubRes.json();
-          setMajorsPreload(hubData as MajorHubSummary);
         }
       } catch (e: any) {
         if (!cancelled) {
