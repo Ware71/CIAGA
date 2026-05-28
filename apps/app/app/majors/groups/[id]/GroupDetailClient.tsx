@@ -102,7 +102,6 @@ function MemberDetailDrawer({
   const memberSince = member.joined_at
     ? new Date(member.joined_at).toLocaleDateString([], { month: "short", year: "numeric" })
     : null;
-  const hcp = (member as any).profile?.handicap_index;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end" onClick={onClose}>
@@ -128,9 +127,6 @@ function MemberDetailDrawer({
               <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border capitalize ${roleCls}`}>
                 {member.role}
               </span>
-              {hcp != null && (
-                <span className="text-[10px] text-emerald-200/60">HCP {Number(hcp).toFixed(1)}</span>
-              )}
               {memberSince && (
                 <span className="text-[10px] text-emerald-200/50">Since {memberSince}</span>
               )}
@@ -228,7 +224,6 @@ function MemberRow({
       ? "text-emerald-300 border-emerald-700/50 bg-emerald-900/30"
       : "text-emerald-200/50 border-emerald-900/50 bg-transparent";
 
-  const hcp = (member as any).profile?.handicap_index;
   const memberSince = member.joined_at
     ? new Date(member.joined_at).toLocaleDateString([], { month: "short", year: "numeric" })
     : null;
@@ -253,9 +248,6 @@ function MemberRow({
               {member.profile?.name ?? member.profile_id}
             </span>
             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-              {hcp != null && (
-                <span className="text-[10px] text-emerald-200/55">HCP {Number(hcp).toFixed(1)}</span>
-              )}
               {memberSince && (
                 <span className="text-[10px] text-emerald-200/40">Since {memberSince}</span>
               )}

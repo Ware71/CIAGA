@@ -72,7 +72,7 @@ export async function getDiscoverGroups(
 export async function getGroupMembers(groupId: string): Promise<MajorGroupMembershipWithProfile[]> {
   const { data, error } = await supabaseAdmin
     .from("major_group_memberships")
-    .select("*, profile:profiles(id, name, avatar_url, gender, handicap_index)")
+    .select("*, profile:profiles(id, name, avatar_url, gender)")
     .eq("group_id", groupId)
     .order("joined_at", { ascending: true });
   if (error) throw error;
