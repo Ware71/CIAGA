@@ -462,6 +462,29 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     };
   }, [liveStandingsData?.liveCompetitionIds?.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Load player breakdown when drawer opens
+  useEffect(() => {
+    if (!selectedPlayerForDrawer) { setPlayerBreakdownEntries([]); return; }
+    const { profileId, currentSeasonId } = selectedPlayerForDrawer;
+    if (!currentSeasonId) { setPlayerBreakdownEntries([]); return; }
+    let cancelled = false;
+    setPlayerBreakdownLoading(true);
+    (async () => {
+      const session = await getViewerSession();
+      if (!session || cancelled) return;
+      const res = await fetch(
+        `/api/majors/seasons/${currentSeasonId}/player-breakdown?profile_id=${profileId}`,
+        { headers: { Authorization: `Bearer ${session.accessToken}` } }
+      );
+      if (!cancelled && res.ok) {
+        const j = await res.json();
+        setPlayerBreakdownEntries(j.entries ?? []);
+      }
+      if (!cancelled) setPlayerBreakdownLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [selectedPlayerForDrawer?.profileId, selectedPlayerForDrawer?.currentSeasonId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleJoin = async () => {
     setJoining(true);
     try {
@@ -624,29 +647,6 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
   const pendingMembers = members.filter((m) => m.status === "pending");
   const activeMembers = members.filter((m) => m.status === "active");
-
-  // Load player breakdown when drawer opens
-  useEffect(() => {
-    if (!selectedPlayerForDrawer) { setPlayerBreakdownEntries([]); return; }
-    const { profileId, currentSeasonId } = selectedPlayerForDrawer;
-    if (!currentSeasonId) { setPlayerBreakdownEntries([]); return; }
-    let cancelled = false;
-    setPlayerBreakdownLoading(true);
-    (async () => {
-      const session = await getViewerSession();
-      if (!session || cancelled) return;
-      const res = await fetch(
-        `/api/majors/seasons/${currentSeasonId}/player-breakdown?profile_id=${profileId}`,
-        { headers: { Authorization: `Bearer ${session.accessToken}` } }
-      );
-      if (!cancelled && res.ok) {
-        const j = await res.json();
-        setPlayerBreakdownEntries(j.entries ?? []);
-      }
-      if (!cancelled) setPlayerBreakdownLoading(false);
-    })();
-    return () => { cancelled = true; };
-  }, [selectedPlayerForDrawer?.profileId, selectedPlayerForDrawer?.currentSeasonId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tabContent: Record<Tab, React.ReactNode> = {
     overview: (
