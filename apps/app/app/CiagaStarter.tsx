@@ -16,6 +16,7 @@ import {
 import { formatHI } from "@/lib/rounds/handicapUtils";
 import { MiniFeedTeaserCard } from "@/components/social/MiniFeedTeaser";
 import { MajorsView } from "@/components/home/MajorsView";
+import type { MajorHubSummary } from "@/lib/majors/types";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 
 type MenuItem = { id: string; label: string };
@@ -90,6 +91,7 @@ export default function CIAGAStarter({ initialData }: Props) {
   const [miniFeed, setMiniFeed] = useState<FeedItemVM[]>(initialData?.mini_feed ?? []);
   const [miniFeedLoading, setMiniFeedLoading] = useState(false);
   const [miniFeedError, setMiniFeedError] = useState<string | null>(null);
+  const [majorsPreload, setMajorsPreload] = useState<MajorHubSummary | null>(null);
 
   useEffect(() => {
     const updateViewport = () => {
@@ -129,9 +131,10 @@ export default function CIAGAStarter({ initialData }: Props) {
         }
         if (!cancelled) setMyProfileId(session.profileId);
 
-        const res = await fetch("/api/home/summary", {
-          headers: { Authorization: `Bearer ${session.accessToken}` },
-        });
+        const [res, hubRes] = await Promise.all([
+          fetch("/api/home/summary", { headers: { Authorization: `Bearer ${session.accessToken}` } }),
+          fetch("/api/majors/hub", { headers: { Authorization: `Bearer ${session.accessToken}` } }),
+        ]);
         if (!res.ok || cancelled) return;
         const data = await res.json();
 
@@ -142,6 +145,11 @@ export default function CIAGAStarter({ initialData }: Props) {
           setRoundsPlayed(data.rounds_played ?? null);
           setLastRound(data.last_round ?? null);
           setMiniFeed((data.mini_feed as FeedItemVM[]) ?? []);
+        }
+
+        if (hubRes.ok && !cancelled) {
+          const hubData = await hubRes.json();
+          setMajorsPreload(hubData as MajorHubSummary);
         }
       } catch (e: any) {
         if (!cancelled) {
@@ -485,6 +493,7 @@ export default function CIAGAStarter({ initialData }: Props) {
           handleMajorsSelect={handleMajorsSelect}
           renderRadialMenu={renderRadialMenu}
           vh={vh}
+          initialHub={majorsPreload}
         />
       )}
     </AnimatePresence>

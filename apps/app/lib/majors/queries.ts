@@ -76,7 +76,39 @@ export async function getGroupMembers(groupId: string): Promise<MajorGroupMember
     .eq("group_id", groupId)
     .order("joined_at", { ascending: true });
   if (error) throw error;
-  return (data ?? []) as unknown as MajorGroupMembershipWithProfile[];
+
+  const members = (data ?? []) as unknown as MajorGroupMembershipWithProfile[];
+  if (!members.length) return members;
+
+  const profileIds = members.map((m) => m.profile_id);
+
+  // Fetch current handicaps and group event participation in parallel
+  const [handicapRes, participantRes] = await Promise.all([
+    supabaseAdmin.rpc("get_current_handicaps", { ids: profileIds }),
+    supabaseAdmin
+      .from("round_participants")
+      .select("profile_id, rounds!inner(events!inner(group_id))")
+      .in("profile_id", profileIds)
+      .eq("rounds.events.group_id", groupId),
+  ]);
+
+  const handicapMap = new Map<string, number>();
+  for (const row of (handicapRes.data ?? []) as any[]) {
+    if (row.profile_id && row.handicap_index != null) {
+      handicapMap.set(row.profile_id, row.handicap_index);
+    }
+  }
+
+  const participatedSet = new Set<string>();
+  for (const row of (participantRes.data ?? []) as any[]) {
+    if (row.profile_id) participatedSet.add(row.profile_id);
+  }
+
+  return members.map((m) => ({
+    ...m,
+    handicap_index: handicapMap.get(m.profile_id) ?? null,
+    has_participated: participatedSet.has(m.profile_id),
+  }));
 }
 
 // ─── Events ──────────────────────────────────────────────────────────────────

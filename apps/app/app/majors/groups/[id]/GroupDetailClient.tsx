@@ -19,6 +19,7 @@ import type { PlayerBreakdownEntry } from "@/app/api/majors/seasons/[id]/player-
 import type { SeasonStandingEntry } from "@/app/api/majors/seasons/[id]/standings/route";
 import type { GroupScoringPrefs } from "@/lib/majors/types";
 import { eventStatusLabel } from "@/lib/majors/labels";
+import { formatHI } from "@/lib/rounds/handicapUtils";
 
 type CompetitionSeriesWithEventCount = Competition & {
   event_templates: Pick<CompetitionEventTemplate, "id">[];
@@ -68,6 +69,7 @@ function MemberDetailDrawer({
   myProfileId,
   onRoleToggle,
   onTeePrefSave,
+  onTournamentIndexSave,
   onNavigate,
   onClose,
 }: {
@@ -77,11 +79,16 @@ function MemberDetailDrawer({
   myProfileId: string | null;
   onRoleToggle: () => void;
   onTeePrefSave: (tee: string | null) => Promise<void>;
+  onTournamentIndexSave: (index: number | null) => Promise<void>;
   onNavigate: () => void;
   onClose: () => void;
 }) {
   const [teeValue, setTeeValue] = useState(member.preferred_tee_name ?? "");
   const [teeSaving, setTeeSaving] = useState(false);
+  const [tiValue, setTiValue] = useState(
+    member.tournament_index != null ? String(member.tournament_index) : ""
+  );
+  const [tiSaving, setTiSaving] = useState(false);
 
   const roleCls =
     member.role === "owner"
@@ -99,9 +106,27 @@ function MemberDetailDrawer({
     }
   };
 
+  const handleTiSave = async () => {
+    setTiSaving(true);
+    try {
+      const parsed = tiValue.trim() === "" ? null : parseFloat(tiValue);
+      if (parsed !== null && isNaN(parsed)) return;
+      await onTournamentIndexSave(parsed);
+    } finally {
+      setTiSaving(false);
+    }
+  };
+
   const memberSince = member.joined_at
     ? new Date(member.joined_at).toLocaleDateString([], { month: "short", year: "numeric" })
     : null;
+
+  const displayedHI =
+    member.tournament_index != null
+      ? { value: formatHI(member.tournament_index), label: "Tournament Index", isTournament: true }
+      : member.handicap_index != null
+      ? { value: formatHI(member.handicap_index), label: "Handicap Index", isTournament: false }
+      : null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end" onClick={onClose}>
@@ -127,8 +152,10 @@ function MemberDetailDrawer({
               <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border capitalize ${roleCls}`}>
                 {member.role}
               </span>
-              {memberSince && (
-                <span className="text-[10px] text-emerald-200/50">Since {memberSince}</span>
+              {member.has_participated ? (
+                memberSince && <span className="text-[10px] text-emerald-200/50">Since {memberSince}</span>
+              ) : (
+                <span className="text-[10px] text-emerald-200/40 italic">New member</span>
               )}
             </div>
           </div>
@@ -140,6 +167,47 @@ function MemberDetailDrawer({
             ✕
           </button>
         </div>
+
+        {/* Handicap card */}
+        <div className="w-full rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4 text-center">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">
+            {displayedHI ? displayedHI.label : "Handicap Index"}
+          </div>
+          <div className="mt-1 text-2xl font-semibold text-emerald-50">
+            {displayedHI ? displayedHI.value : "—"}
+          </div>
+          {displayedHI?.isTournament && (
+            <div className="mt-1 text-[10px] text-amber-300/70">Manual adjustment applied</div>
+          )}
+        </div>
+
+        {/* Tournament index override (admin/owner only) */}
+        {isAdminOrOwner && (
+          <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-3 space-y-2">
+            <div className="text-[10px] uppercase tracking-wider text-emerald-200/50">Tournament Index Override</div>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                step="0.1"
+                min="-10"
+                max="54"
+                placeholder="e.g. 14.2 (blank to clear)"
+                value={tiValue}
+                onChange={(e) => setTiValue(e.target.value)}
+                className="flex-1 rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
+                disabled={tiSaving}
+              />
+              <button
+                type="button"
+                onClick={handleTiSave}
+                disabled={tiSaving}
+                className="px-3 py-2 rounded-xl bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50 shrink-0"
+              >
+                {tiSaving ? "…" : "Set"}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Tee preference */}
         <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-3 space-y-2">
@@ -205,6 +273,7 @@ function MemberRow({
   myProfileId,
   onRoleToggle,
   onTeePrefSave,
+  onTournamentIndexSave,
   onNavigate,
 }: {
   member: MajorGroupMembershipWithProfile;
@@ -213,6 +282,7 @@ function MemberRow({
   myProfileId: string | null;
   onRoleToggle: () => void;
   onTeePrefSave: (tee: string | null) => Promise<void>;
+  onTournamentIndexSave: (index: number | null) => Promise<void>;
   onNavigate: () => void;
 }) {
   const [showDrawer, setShowDrawer] = useState(false);
@@ -227,6 +297,13 @@ function MemberRow({
   const memberSince = member.joined_at
     ? new Date(member.joined_at).toLocaleDateString([], { month: "short", year: "numeric" })
     : null;
+
+  const hiDisplay =
+    member.tournament_index != null
+      ? { text: formatHI(member.tournament_index), cls: "text-amber-300/80 border-amber-800/40 bg-amber-900/20", label: "T" }
+      : member.handicap_index != null
+      ? { text: formatHI(member.handicap_index), cls: "text-emerald-200/70 border-emerald-900/50 bg-transparent", label: null }
+      : null;
 
   return (
     <>
@@ -247,15 +324,25 @@ function MemberRow({
             <span className="block text-sm font-semibold text-emerald-50 truncate">
               {member.profile?.name ?? member.profile_id}
             </span>
-            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-              {memberSince && (
-                <span className="text-[10px] text-emerald-200/40">Since {memberSince}</span>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              {member.has_participated ? (
+                memberSince && <span className="text-[10px] text-emerald-200/40">Since {memberSince}</span>
+              ) : (
+                <span className="text-[10px] text-emerald-200/35 italic">New member</span>
               )}
             </div>
           </div>
-          <span className={`shrink-0 text-[9px] font-semibold px-2 py-0.5 rounded-full border capitalize ${roleCls}`}>
-            {member.role}
-          </span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {hiDisplay && (
+              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${hiDisplay.cls}`}>
+                {hiDisplay.label && <span className="mr-0.5 opacity-70">{hiDisplay.label}</span>}
+                {hiDisplay.text}
+              </span>
+            )}
+            <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border capitalize ${roleCls}`}>
+              {member.role}
+            </span>
+          </div>
         </div>
       </button>
 
@@ -267,6 +354,7 @@ function MemberRow({
           myProfileId={myProfileId}
           onRoleToggle={onRoleToggle}
           onTeePrefSave={onTeePrefSave}
+          onTournamentIndexSave={onTournamentIndexSave}
           onNavigate={onNavigate}
           onClose={() => setShowDrawer(false)}
         />
@@ -543,6 +631,17 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     } finally {
       setJoining(false);
     }
+  };
+
+  const handleTournamentIndex = async (profileId: string, index: number | null) => {
+    const session = await getViewerSession();
+    if (!session) return;
+    await fetch(`/api/majors/groups/${groupId}/members`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ profile_id: profileId, tournament_index: index }),
+    });
+    await refreshMembers();
   };
 
   const handleMemberAction = async (memberId: string, updates: { status?: string; role?: string }) => {
@@ -1234,6 +1333,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
               myProfileId={myProfileId}
               onRoleToggle={() => handleMemberAction(m.id, { role: m.role === "admin" ? "member" : "admin" })}
               onTeePrefSave={async (tee) => { await handleMemberAction(m.id, { preferred_tee_name: tee } as any); }}
+              onTournamentIndexSave={async (index) => { await handleTournamentIndex(m.profile_id, index); }}
               onNavigate={() => router.push(`/player/${m.profile_id}`)}
             />
           ))}

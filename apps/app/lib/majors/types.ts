@@ -289,6 +289,9 @@ export type MajorGroupMembership = {
   status: MajorMembershipStatus;
   joined_at: string;
   preferred_tee_name: string | null;
+  tournament_index: number | null;
+  handicap_index: number | null;
+  has_participated: boolean;
 };
 
 export type MajorGroupMembershipWithProfile = MajorGroupMembership & {

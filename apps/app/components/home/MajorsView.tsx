@@ -23,6 +23,7 @@ type MajorsViewProps = {
   handleMajorsSelect: (id: string) => void;
   renderRadialMenu: (items: MenuItem[], onSelect: (id: string) => void) => React.ReactNode;
   vh: number;
+  initialHub?: MajorHubSummary | null;
 };
 
 function CompetitionCard({ comp }: { comp: EventWithGroup }) {
@@ -115,11 +116,17 @@ function GroupCard({ group, onClick }: { group: MajorGroup & { member_count: num
   );
 }
 
-function MajorsHubPreview({ open }: { open: boolean }) {
+function MajorsHubPreview({ open, initialHub }: { open: boolean; initialHub?: MajorHubSummary | null }) {
   const router = useRouter();
-  const [hub, setHub] = useState<MajorHubSummary | null>(null);
+  const [hub, setHub] = useState<MajorHubSummary | null>(initialHub ?? null);
+
+  // Sync if the parent finishes preloading after we already mounted
+  useEffect(() => {
+    if (initialHub) setHub(initialHub);
+  }, [initialHub]);
 
   useEffect(() => {
+    if (initialHub) return;
     let cancelled = false;
     (async () => {
       try {
@@ -137,7 +144,7 @@ function MajorsHubPreview({ open }: { open: boolean }) {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [initialHub]);
 
   return (
     <motion.div
@@ -267,6 +274,7 @@ export function MajorsView({
   handleMajorsSelect,
   renderRadialMenu,
   vh,
+  initialHub,
 }: MajorsViewProps) {
   const majorsHeaderAnchorRef = useRef<HTMLDivElement | null>(null);
   const [majorsClosedY, setMajorsClosedY] = useState<number | null>(null);
@@ -396,7 +404,7 @@ export function MajorsView({
           <div className="mt-2 text-xs tracking-[0.18em] uppercase text-emerald-200/80">Majors</div>
         </motion.div>
 
-        <MajorsHubPreview open={open} />
+        <MajorsHubPreview open={open} initialHub={initialHub} />
       </div>
     </motion.div>
   );

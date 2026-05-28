@@ -63,6 +63,53 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 }
 
+// PATCH /api/majors/groups/[id]/members — set tournament_index for a member
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const { profileId } = await getAuthedProfileOrThrow(req);
+    const { id } = await params;
+
+    const { data: membership } = await supabaseAdmin
+      .from("major_group_memberships")
+      .select("role")
+      .eq("group_id", id)
+      .eq("profile_id", profileId)
+      .eq("status", "active")
+      .maybeSingle();
+
+    if (!membership || !["owner", "admin"].includes((membership as any).role)) {
+      return NextResponse.json({ error: "Only owner or admin can set tournament index" }, { status: 403 });
+    }
+
+    const body = await req.json();
+    if (!body.profile_id) {
+      return NextResponse.json({ error: "profile_id required" }, { status: 400 });
+    }
+
+    const tournamentIndex =
+      body.tournament_index === null || body.tournament_index === undefined
+        ? null
+        : Number(body.tournament_index);
+
+    if (tournamentIndex !== null && isNaN(tournamentIndex)) {
+      return NextResponse.json({ error: "tournament_index must be a number or null" }, { status: 400 });
+    }
+
+    const { error } = await supabaseAdmin
+      .from("major_group_memberships")
+      .update({ tournament_index: tournamentIndex })
+      .eq("group_id", id)
+      .eq("profile_id", body.profile_id);
+
+    if (error) throw error;
+    return NextResponse.json({ ok: true });
+  } catch (e: any) {
+    const msg = e?.message ?? "Unknown error";
+    const status = String(msg).toLowerCase().includes("auth") ? 401 : 500;
+    return NextResponse.json({ error: msg }, { status });
+  }
+}
+
 // DELETE /api/majors/groups/[id]/members?profile_id=xxx — remove a member
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
