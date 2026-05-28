@@ -16,6 +16,9 @@ import type {
 import type { LiveGroupStandingEntry, LiveGroupStandingsResponse } from "@/app/api/majors/groups/[id]/live-standings/route";
 import type { CompetitionResultsResponse } from "@/app/api/majors/groups/[id]/event-results/route";
 import type { PlayerBreakdownEntry } from "@/app/api/majors/seasons/[id]/player-breakdown/route";
+import type { SeasonStandingEntry } from "@/app/api/majors/seasons/[id]/standings/route";
+import type { GroupScoringPrefs } from "@/lib/majors/types";
+import { LabelWheel } from "@/components/stats/LabelWheel";
 import { eventStatusLabel } from "@/lib/majors/labels";
 
 type CompetitionSeriesWithEventCount = Competition & {
@@ -257,15 +260,18 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   const [balanceMembers, setBalanceMembers] = useState<MemberBalanceSummary[]>([]);
   const [myBalance, setMyBalance] = useState<{ balance: number; total_charged: number; total_paid: number; transactions: GroupBalanceTransactionWithDetails[] } | null>(null);
   const [expandedMember, setExpandedMember] = useState<string | null>(null);
-  const [standingsSubTab, setStandingsSubTab] = useState<"points" | "strokes" | "avgpar">("points");
+  const [standingsMetric, setStandingsMetric] = useState<"points" | "strokes" | "avg">("points");
   const [showNet, setShowNet] = useState(true);
   const [competitionResults, setCompetitionResults] = useState<CompetitionResultsResponse | null>(null);
   // Seasons tab
   const [groupSeasons, setGroupSeasons] = useState<any[]>([]);
   const [selectedSeasonId, setSelectedSeasonId] = useState<string | "all">("all");
-  const [seasonStandings, setSeasonStandings] = useState<any[]>([]);
+  const [seasonStandings, setSeasonStandings] = useState<SeasonStandingEntry[]>([]);
   const [seasonStandingsLoading, setSeasonStandingsLoading] = useState(false);
-  const [allTimeView, setAllTimeView] = useState<"outrights" | "points" | "strokes" | "avg">("outrights");
+  const [seasonMetric, setSeasonMetric] = useState<"outrights" | "points" | "strokes" | "avg">("outrights");
+  // League settings
+  const [leagueSettingsForm, setLeagueSettingsForm] = useState<GroupScoringPrefs | null>(null);
+  const [savingLeagueSettings, setSavingLeagueSettings] = useState(false);
   // Player detail drawer
   const [selectedPlayerForDrawer, setSelectedPlayerForDrawer] = useState<{ profileId: string; name: string; avatarUrl: string | null; currentSeasonId: string | null; seasonLabel?: string } | null>(null);
   const [playerBreakdownEntries, setPlayerBreakdownEntries] = useState<PlayerBreakdownEntry[]>([]);
@@ -970,7 +976,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                 key={s.profile_id}
                 type="button"
                 onClick={() => setSelectedPlayerForDrawer({ profileId: s.profile_id, name: s.profile?.name ?? "Unknown", avatarUrl: s.profile?.avatar_url ?? null, currentSeasonId: currentSeason?.id ?? null })}
-                className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${i === 0 ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5" : i === 1 ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5" : i === 2 ? "border-[#cd7f32]/20 bg-[#cd7f32]/5" : "border-emerald-900/50 bg-[#0b3b21]/60"}`}
+                className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${s.confirmed_position === 1 ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5" : s.confirmed_position === 2 ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5" : s.confirmed_position === 3 ? "border-[#cd7f32]/20 bg-[#cd7f32]/5" : "border-emerald-900/50 bg-[#0b3b21]/60"}`}
               >
                 <PositionBadge position={i + 1} />
                 {avatarEl(s.profile)}
@@ -1004,7 +1010,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                   key={s.profile_id}
                   type="button"
                   onClick={() => setSelectedPlayerForDrawer({ profileId: s.profile_id, name: s.profile?.name ?? "Unknown", avatarUrl: s.profile?.avatar_url ?? null, currentSeasonId: currentSeason?.id ?? null })}
-                  className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${i === 0 ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5" : i === 1 ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5" : i === 2 ? "border-[#cd7f32]/20 bg-[#cd7f32]/5" : "border-emerald-900/50 bg-[#0b3b21]/60"}`}
+                  className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${s.confirmed_position === 1 ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5" : s.confirmed_position === 2 ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5" : s.confirmed_position === 3 ? "border-[#cd7f32]/20 bg-[#cd7f32]/5" : "border-emerald-900/50 bg-[#0b3b21]/60"}`}
                 >
                   <PositionBadge position={i + 1} />
                   {avatarEl(s.profile)}
@@ -1022,35 +1028,45 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
       return (
         <div className="space-y-3">
-          {/* Current season label */}
-          <div className="flex items-center justify-between">
-            {currentSeason ? (
-              <div className="text-[11px] text-emerald-300/60">
-                {currentSeason.season_label}
-                {currentSeason.status === "live" && (
-                  <span className="ml-1.5 inline-flex items-center gap-1 text-amber-400/80">
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse inline-block" />
-                    Live
-                  </span>
-                )}
-              </div>
-            ) : (
-              <div className="text-[11px] text-emerald-200/40">No active season</div>
-            )}
-            {/* Metric selector dropdown */}
-            <DropdownSelector
-              options={[
-                { value: "points" as const, label: "Points" },
-                { value: "strokes" as const, label: "Strokes" },
-                { value: "avgpar" as const, label: "Avg to Par" },
-              ]}
-              value={standingsSubTab}
-              onChange={setStandingsSubTab}
-            />
+          {/* Season label + metric wheel */}
+          <div className="flex items-start gap-3">
+            <div className="flex-1 min-w-0 pt-1">
+              {currentSeason ? (
+                <div className="text-[11px] text-emerald-300/60">
+                  {currentSeason.season_label}
+                  {currentSeason.status === "live" && (
+                    <span className="ml-1.5 inline-flex items-center gap-1 text-amber-400/80">
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse inline-block" />
+                      Live
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <div className="text-[11px] text-emerald-200/40">No active season</div>
+              )}
+              {showLiveIndicator && (
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
+                  <span className="text-[11px] text-amber-300/80 font-medium">Live in progress</span>
+                </div>
+              )}
+            </div>
+            <div className="w-32 shrink-0">
+              <div className="text-[9px] text-emerald-200/40 uppercase tracking-wider text-center pb-1">View</div>
+              <LabelWheel
+                options={[
+                  { value: "points", label: "Points" },
+                  { value: "strokes", label: "Strokes" },
+                  { value: "avg", label: "Average" },
+                ]}
+                value={standingsMetric}
+                onChange={(v) => setStandingsMetric(v as typeof standingsMetric)}
+              />
+            </div>
           </div>
 
-          {/* Net/Gross toggle for strokes + avgpar */}
-          {(standingsSubTab === "strokes" || standingsSubTab === "avgpar") && (
+          {/* Net/Gross toggle for strokes + avg */}
+          {(standingsMetric === "strokes" || standingsMetric === "avg") && (
             <div className="flex items-center gap-2">
               <span className="text-[10px] text-emerald-200/50 uppercase tracking-wider">Scoring:</span>
               <button
@@ -1066,10 +1082,10 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             </div>
           )}
 
-          {/* Sub-tab content */}
-          {standingsSubTab === "points" && renderPoints()}
-          {standingsSubTab === "strokes" && renderStrokes()}
-          {standingsSubTab === "avgpar" && renderAvgPar()}
+          {/* Content */}
+          {standingsMetric === "points" && renderPoints()}
+          {standingsMetric === "strokes" && renderStrokes()}
+          {standingsMetric === "avg" && renderAvgPar()}
         </div>
       );
     })(),
@@ -1193,17 +1209,26 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     ),
 
     seasons: (() => {
-      const seasonOptions: { value: string; label: string }[] = [
+      const seasonWheelOptions: { value: string; label: string }[] = [
         { value: "all", label: "All Time" },
-        ...groupSeasons.map((s: any) => ({
-          value: s.id as string,
-          label: s.season_label ?? String(s.season_year ?? "Season"),
-        })),
+        ...[...groupSeasons]
+          .sort((a: any, b: any) => (b.season_year ?? 0) - (a.season_year ?? 0))
+          .map((s: any) => ({
+            value: s.id as string,
+            label: s.season_label ?? String(s.season_year ?? "Season"),
+          })),
+      ];
+
+      const metricWheelOptions: { value: string; label: string }[] = [
+        { value: "outrights", label: "Outrights" },
+        { value: "points", label: "Points" },
+        { value: "strokes", label: "Strokes" },
+        { value: "avg", label: "Average" },
       ];
 
       const handleSeasonChange = async (id: string) => {
         setSelectedSeasonId(id);
-        if (id === "all") { setSeasonStandings([]); setAllTimeView("outrights"); return; }
+        if (id === "all") { setSeasonStandings([]); return; }
         setSeasonStandingsLoading(true);
         try {
           const session = await getViewerSession();
@@ -1223,192 +1248,249 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       const ordinal = (n: number) => { const s = ["th","st","nd","rd"]; const v = n % 100; return n + (s[(v-20)%10] ?? s[v] ?? s[0]); };
       const fmtTopar = (v: number | null) => v == null ? "—" : (v > 0 ? `+${v}` : `${v}`);
 
+      const avatarEl = (profile: { name: string | null; avatar_url: string | null } | null) =>
+        profile?.avatar_url ? (
+          <img src={profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
+        ) : (
+          <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
+            {profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
+          </div>
+        );
+
+      const podiumClass = (pos: number | null) =>
+        pos === 1 ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5"
+        : pos === 2 ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5"
+        : pos === 3 ? "border-[#cd7f32]/20 bg-[#cd7f32]/5"
+        : "border-emerald-900/50 bg-[#0b3b21]/60";
+
+      // ── All-Time views ──────────────────────────────────────────────────────
       const renderAllTime = () => {
         if (!competitionResults) return <div className="text-sm text-emerald-100/60 text-center py-8">Loading…</div>;
         const records = competitionResults.player_records;
         if (records.length === 0) return <div className="text-sm text-emerald-100/60 text-center py-8">No event data yet.</div>;
 
-        const allTimeSubTabs: { id: typeof allTimeView; label: string }[] = [
-          { id: "outrights", label: "Outrights" },
-          { id: "points", label: "Points" },
-          { id: "strokes", label: "Strokes" },
-          { id: "avg", label: "Avg" },
-        ];
-
         let sorted = [...records];
-        if (allTimeView === "points") sorted = [...records].sort((a, b) => (b as any).career_points - (a as any).career_points);
-        if (allTimeView === "strokes") sorted = [...records].sort((a, b) => ((a as any).career_total_gross_to_par ?? 9999) - ((b as any).career_total_gross_to_par ?? 9999));
-        if (allTimeView === "avg") sorted = [...records].sort((a, b) => ((a as any).career_avg_gross_to_par ?? 999) - ((b as any).career_avg_gross_to_par ?? 999));
+        if (seasonMetric === "points") sorted = [...records].sort((a, b) => (b as any).career_points - (a as any).career_points);
+        if (seasonMetric === "strokes") sorted = [...records].sort((a, b) => ((a as any).career_total_gross_to_par ?? 9999) - ((b as any).career_total_gross_to_par ?? 9999));
+        if (seasonMetric === "avg") sorted = [...records].sort((a, b) => ((a as any).career_avg_gross_to_par ?? 999) - ((b as any).career_avg_gross_to_par ?? 999));
 
-        return (
-          <div className="space-y-3">
-            {/* Sub-tab strip */}
-            <div className="flex gap-1.5">
-              {allTimeSubTabs.map((st) => (
-                <button
-                  key={st.id}
-                  type="button"
-                  onClick={() => setAllTimeView(st.id)}
-                  className={`px-3 py-1 rounded-full text-[11px] font-semibold transition-colors ${
-                    allTimeView === st.id
-                      ? "bg-emerald-700/80 text-white"
-                      : "border border-emerald-900/50 text-emerald-200/60 hover:text-emerald-100"
-                  }`}
-                >
-                  {st.label}
-                </button>
-              ))}
+        const openDrawer = (pr: any) => setSelectedPlayerForDrawer({
+          profileId: pr.profile_id,
+          name: pr.profile.name ?? "Unknown",
+          avatarUrl: pr.profile.avatar_url ?? null,
+          currentSeasonId: null,
+          seasonLabel: "All Time",
+        });
+
+        if (seasonMetric === "outrights") return (
+          <div className="space-y-2">
+            {sorted.map((pr) => (
+              <button key={pr.profile_id} type="button" onClick={() => openDrawer(pr)} className="w-full text-left rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/70 p-3 space-y-2 hover:brightness-110 transition-all">
+                <div className="flex items-center gap-2">
+                  {avatarEl(pr.profile)}
+                  <span className="flex-1 text-sm font-semibold text-emerald-100 truncate">{pr.profile.name ?? "Unknown"}</span>
+                  <span className="text-[11px] font-bold text-[#f5e6b0]">{pr.total_wins} {pr.total_wins === 1 ? "win" : "wins"}</span>
+                </div>
+                {pr.competition_records.length > 0 && (
+                  <div className="space-y-1 pl-9">
+                    {pr.competition_records.map((sr: any) => (
+                      <div key={sr.competition_id ?? "standalone"} className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] text-emerald-200/70 truncate">{sr.competition_name ?? "Competition"}</span>
+                        <span className="text-[10px] text-emerald-200/55 shrink-0">
+                          {sr.wins > 0 ? `${sr.wins}× win${sr.wins !== 1 ? "s" : ""}` : sr.best_finish != null ? `Best: ${ordinal(sr.best_finish)}` : "—"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {pr.standalone_wins.length > 0 && (
+                  <div className="space-y-1 pl-9">
+                    {pr.standalone_wins.map((w: any) => (
+                      <div key={w.event_id} className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] text-emerald-200/70 truncate">{w.name ?? "Event"}</span>
+                        <span className="text-[10px] text-[#f5e6b0]/70 shrink-0">{w.year ?? ""}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {pr.competition_records.length === 0 && pr.standalone_wins.length === 0 && (
+                  <div className="pl-9 text-[11px] text-emerald-200/40">No entries yet</div>
+                )}
+              </button>
+            ))}
+          </div>
+        );
+
+        if (seasonMetric === "points") return (
+          <div className="space-y-2">
+            {sorted.map((pr, i) => (
+              <button key={pr.profile_id} type="button" onClick={() => openDrawer(pr)} className="w-full flex items-center gap-2 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 text-left hover:brightness-110 transition-all">
+                <span className="text-[11px] font-bold text-emerald-200/40 w-5 text-right shrink-0">{i + 1}</span>
+                {avatarEl(pr.profile)}
+                <span className="flex-1 text-sm font-semibold text-emerald-100 truncate">{pr.profile.name ?? "Unknown"}</span>
+                <div className="text-right shrink-0">
+                  <div className="text-xs font-extrabold text-[#f5e6b0]">{(pr as any).career_points} pts</div>
+                  <div className="text-[9px] text-emerald-100/40">{(pr as any).career_events_played} evts</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        );
+
+        if (seasonMetric === "strokes") return (
+          <div className="space-y-2">
+            <div className="flex justify-end gap-4 px-1 pb-0.5">
+              <span className="text-[10px] text-emerald-200/40 w-12 text-right">Gross</span>
+              <span className="text-[10px] text-emerald-200/40 w-12 text-right">Net</span>
             </div>
-
-            {allTimeView === "outrights" && (
-              <div className="space-y-2">
-                {sorted.map((pr) => (
-                  <div key={pr.profile_id} className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/70 p-3 space-y-2">
-                    <div className="flex items-center gap-2">
-                      {pr.profile.avatar_url ? (
-                        <img src={pr.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
-                      ) : (
-                        <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">{pr.profile.name?.slice(0,2).toUpperCase() ?? "?"}</div>
-                      )}
-                      <span className="flex-1 text-sm font-semibold text-emerald-100 truncate">{pr.profile.name ?? "Unknown"}</span>
-                      <span className="text-[11px] font-bold text-[#f5e6b0]">{pr.total_wins} {pr.total_wins === 1 ? "win" : "wins"}</span>
-                    </div>
-                    {pr.competition_records.length > 0 && (
-                      <div className="space-y-1 pl-9">
-                        {pr.competition_records.map((sr: any) => (
-                          <div key={sr.competition_id ?? "standalone"} className="flex items-center justify-between gap-2">
-                            <span className="text-[11px] text-emerald-200/70 truncate">{sr.competition_name ?? "Competition"}</span>
-                            <span className="text-[10px] text-emerald-200/55 shrink-0">
-                              {sr.wins > 0 ? `${sr.wins}× win${sr.wins !== 1 ? "s" : ""}` : sr.best_finish != null ? `Best: ${ordinal(sr.best_finish)}` : "—"}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {pr.standalone_wins.length > 0 && (
-                      <div className="space-y-1 pl-9">
-                        {pr.standalone_wins.map((w: any) => (
-                          <div key={w.event_id} className="flex items-center justify-between gap-2">
-                            <span className="text-[11px] text-emerald-200/70 truncate">{w.name ?? "Event"}</span>
-                            <span className="text-[10px] text-[#f5e6b0]/70 shrink-0">{w.year ?? ""}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {pr.competition_records.length === 0 && pr.standalone_wins.length === 0 && (
-                      <div className="pl-9 text-[11px] text-emerald-200/40">No entries yet</div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {allTimeView === "points" && (
-              <div className="space-y-2">
-                {sorted.map((pr, i) => (
-                  <div key={pr.profile_id} className="flex items-center gap-2 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5">
-                    <span className="text-[11px] font-bold text-emerald-200/40 w-5 text-right shrink-0">{i + 1}</span>
-                    {pr.profile.avatar_url ? (
-                      <img src={pr.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
-                    ) : (
-                      <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">{pr.profile.name?.slice(0,2).toUpperCase() ?? "?"}</div>
-                    )}
-                    <span className="flex-1 text-sm font-semibold text-emerald-100 truncate">{pr.profile.name ?? "Unknown"}</span>
-                    <div className="text-right shrink-0">
-                      <div className="text-xs font-extrabold text-[#f5e6b0]">{(pr as any).career_points} pts</div>
-                      <div className="text-[9px] text-emerald-100/40">{(pr as any).career_events_played} evts</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {allTimeView === "strokes" && (
-              <div className="space-y-2">
-                <div className="flex justify-end gap-4 px-1 pb-0.5">
-                  <span className="text-[10px] text-emerald-200/40 w-12 text-right">Gross</span>
-                  <span className="text-[10px] text-emerald-200/40 w-12 text-right">Net</span>
+            {sorted.map((pr, i) => (
+              <button key={pr.profile_id} type="button" onClick={() => openDrawer(pr)} className="w-full flex items-center gap-2 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 text-left hover:brightness-110 transition-all">
+                <span className="text-[11px] font-bold text-emerald-200/40 w-5 text-right shrink-0">{i + 1}</span>
+                {avatarEl(pr.profile)}
+                <span className="flex-1 text-sm font-semibold text-emerald-100 truncate">{pr.profile.name ?? "Unknown"}</span>
+                <div className="flex gap-4 shrink-0">
+                  <span className="text-xs font-bold text-emerald-100/80 w-12 text-right">{fmtTopar((pr as any).career_total_gross_to_par)}</span>
+                  <span className="text-xs font-bold text-[#f5e6b0]/80 w-12 text-right">{fmtTopar((pr as any).career_total_net_to_par)}</span>
                 </div>
-                {sorted.map((pr, i) => (
-                  <div key={pr.profile_id} className="flex items-center gap-2 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5">
-                    <span className="text-[11px] font-bold text-emerald-200/40 w-5 text-right shrink-0">{i + 1}</span>
-                    {pr.profile.avatar_url ? (
-                      <img src={pr.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
-                    ) : (
-                      <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">{pr.profile.name?.slice(0,2).toUpperCase() ?? "?"}</div>
-                    )}
-                    <span className="flex-1 text-sm font-semibold text-emerald-100 truncate">{pr.profile.name ?? "Unknown"}</span>
-                    <div className="flex gap-4 shrink-0">
-                      <span className="text-xs font-bold text-emerald-100/80 w-12 text-right">{fmtTopar((pr as any).career_total_gross_to_par)}</span>
-                      <span className="text-xs font-bold text-[#f5e6b0]/80 w-12 text-right">{fmtTopar((pr as any).career_total_net_to_par)}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+              </button>
+            ))}
+          </div>
+        );
 
-            {allTimeView === "avg" && (
-              <div className="space-y-2">
-                <div className="flex justify-end gap-4 px-1 pb-0.5">
-                  <span className="text-[10px] text-emerald-200/40 w-12 text-right">Gross</span>
-                  <span className="text-[10px] text-emerald-200/40 w-12 text-right">Net</span>
+        // avg
+        return (
+          <div className="space-y-2">
+            <div className="flex justify-end gap-4 px-1 pb-0.5">
+              <span className="text-[10px] text-emerald-200/40 w-12 text-right">Gross</span>
+              <span className="text-[10px] text-emerald-200/40 w-12 text-right">Net</span>
+            </div>
+            {sorted.map((pr, i) => (
+              <button key={pr.profile_id} type="button" onClick={() => openDrawer(pr)} className="w-full flex items-center gap-2 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 text-left hover:brightness-110 transition-all">
+                <span className="text-[11px] font-bold text-emerald-200/40 w-5 text-right shrink-0">{i + 1}</span>
+                {avatarEl(pr.profile)}
+                <span className="flex-1 text-sm font-semibold text-emerald-100 truncate">{pr.profile.name ?? "Unknown"}</span>
+                <div className="flex gap-4 shrink-0">
+                  <span className="text-xs font-bold text-emerald-100/80 w-12 text-right">{fmtTopar((pr as any).career_avg_gross_to_par)}</span>
+                  <span className="text-xs font-bold text-[#f5e6b0]/80 w-12 text-right">{fmtTopar((pr as any).career_avg_net_to_par)}</span>
                 </div>
-                {sorted.map((pr, i) => (
-                  <div key={pr.profile_id} className="flex items-center gap-2 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5">
-                    <span className="text-[11px] font-bold text-emerald-200/40 w-5 text-right shrink-0">{i + 1}</span>
-                    {pr.profile.avatar_url ? (
-                      <img src={pr.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
-                    ) : (
-                      <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">{pr.profile.name?.slice(0,2).toUpperCase() ?? "?"}</div>
-                    )}
-                    <span className="flex-1 text-sm font-semibold text-emerald-100 truncate">{pr.profile.name ?? "Unknown"}</span>
-                    <div className="flex gap-4 shrink-0">
-                      <span className="text-xs font-bold text-emerald-100/80 w-12 text-right">{fmtTopar((pr as any).career_avg_gross_to_par)}</span>
-                      <span className="text-xs font-bold text-[#f5e6b0]/80 w-12 text-right">{fmtTopar((pr as any).career_avg_net_to_par)}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+              </button>
+            ))}
           </div>
         );
       };
 
-      const renderSeasonStandings = () => {
+      // ── Individual season views ─────────────────────────────────────────────
+      const renderSeasonView = () => {
         if (seasonStandingsLoading) return <div className="text-sm text-emerald-100/60 text-center py-8">Loading…</div>;
         if (seasonStandings.length === 0) return <div className="text-sm text-emerald-100/60 text-center py-8">No standings for this season.</div>;
-        const selectedSeason = groupSeasons.find((s: any) => s.id === selectedSeasonId);
+
+        const selectedSeasonObj = groupSeasons.find((s: any) => s.id === selectedSeasonId);
+        const seasonLabel = selectedSeasonObj?.season_label ?? undefined;
+
+        const openDrawer = (s: SeasonStandingEntry) => setSelectedPlayerForDrawer({
+          profileId: s.profile_id,
+          name: s.profile?.name ?? "Unknown",
+          avatarUrl: s.profile?.avatar_url ?? null,
+          currentSeasonId: selectedSeasonId === "all" ? null : selectedSeasonId,
+          seasonLabel,
+        });
+
+        const viewFull = selectedSeasonObj && (
+          <button type="button" onClick={() => router.push(`/majors/seasons/${selectedSeasonId}`)} className="w-full text-right text-[11px] text-emerald-400/70 hover:text-emerald-300 pb-1">
+            View full season →
+          </button>
+        );
+
+        if (seasonMetric === "outrights") {
+          const sorted = [...seasonStandings].sort((a, b) => b.wins - a.wins);
+          return (
+            <div className="space-y-2">
+              {viewFull}
+              {sorted.map((s) => (
+                <button key={s.profile_id} type="button" onClick={() => openDrawer(s)} className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${podiumClass(s.position)}`}>
+                  <PositionBadge position={s.position} />
+                  {avatarEl(s.profile)}
+                  <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
+                  <div className="text-right shrink-0">
+                    <div className="text-xs font-extrabold text-[#f5e6b0]">{s.wins}W</div>
+                    <div className="text-[9px] text-emerald-100/50">{s.events_played} evts</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          );
+        }
+
+        if (seasonMetric === "points") {
+          const sorted = [...seasonStandings].sort((a, b) => b.season_points - a.season_points);
+          return (
+            <div className="space-y-2">
+              {viewFull}
+              {sorted.map((s) => (
+                <button key={s.profile_id} type="button" onClick={() => openDrawer(s)} className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${podiumClass(s.position)}`}>
+                  <PositionBadge position={s.position} />
+                  {avatarEl(s.profile)}
+                  <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
+                  <div className="text-right shrink-0">
+                    <div className="text-xs font-extrabold text-[#f5e6b0]">{s.season_points} pts</div>
+                    <div className="flex gap-1 justify-end">
+                      <span className="text-[9px] text-emerald-100/50 bg-emerald-900/40 rounded px-1">{s.events_played} evts</span>
+                      {s.wins > 0 && <span className="text-[9px] text-[#f5e6b0]/70 bg-[#f5e6b0]/10 rounded px-1">{s.wins}W</span>}
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          );
+        }
+
+        if (seasonMetric === "strokes") {
+          const sorted = [...seasonStandings]
+            .filter((s) => s.total_net != null || s.total_gross != null)
+            .sort((a, b) => (a.total_net ?? a.total_gross ?? 9999) - (b.total_net ?? b.total_gross ?? 9999));
+          if (sorted.length === 0) return <div className="text-sm text-emerald-100/60 text-center py-8">No stroke data for this season.</div>;
+          return (
+            <div className="space-y-2">
+              {viewFull}
+              <div className="flex justify-end gap-4 px-1 pb-0.5">
+                <span className="text-[10px] text-emerald-200/40 w-12 text-right">Gross</span>
+                <span className="text-[10px] text-emerald-200/40 w-12 text-right">Net</span>
+              </div>
+              {sorted.map((s, i) => (
+                <button key={s.profile_id} type="button" onClick={() => openDrawer(s)} className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${podiumClass(s.position)}`}>
+                  <span className="text-[11px] font-bold text-emerald-200/40 w-5 text-right shrink-0">{i + 1}</span>
+                  {avatarEl(s.profile)}
+                  <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
+                  <div className="flex gap-4 shrink-0">
+                    <span className="text-xs font-bold text-emerald-100/80 w-12 text-right">{s.total_gross ?? "—"}</span>
+                    <span className="text-xs font-bold text-[#f5e6b0]/80 w-12 text-right">{s.total_net ?? "—"}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          );
+        }
+
+        // avg
+        const sorted = [...seasonStandings]
+          .filter((s) => s.avg_net_to_par != null || s.avg_gross_to_par != null)
+          .sort((a, b) => (a.avg_net_to_par ?? a.avg_gross_to_par ?? 999) - (b.avg_net_to_par ?? b.avg_gross_to_par ?? 999));
+        if (sorted.length === 0) return <div className="text-sm text-emerald-100/60 text-center py-8">No score data for this season.</div>;
         return (
           <div className="space-y-2">
-            {selectedSeason && (
-              <button
-                type="button"
-                onClick={() => router.push(`/majors/seasons/${selectedSeasonId}`)}
-                className="w-full text-right text-[11px] text-emerald-400/70 hover:text-emerald-300 pb-1"
-              >
-                View full season →
-              </button>
-            )}
-            {seasonStandings.map((s: any) => (
-              <button
-                key={s.profile_id}
-                type="button"
-                onClick={() => setSelectedPlayerForDrawer({ profileId: s.profile_id, name: s.profile?.name ?? "Unknown", avatarUrl: s.profile?.avatar_url ?? null, currentSeasonId: selectedSeasonId, seasonLabel: groupSeasons.find((g: any) => g.id === selectedSeasonId)?.season_label ?? undefined })}
-                className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${s.position === 1 ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5" : s.position === 2 ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5" : s.position === 3 ? "border-[#cd7f32]/20 bg-[#cd7f32]/5" : "border-emerald-900/50 bg-[#0b3b21]/60"}`}
-              >
-                <PositionBadge position={s.position} />
-                {s.profile?.avatar_url ? (
-                  <img src={s.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
-                ) : (
-                  <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">{s.profile?.name?.slice(0,2).toUpperCase() ?? "?"}</div>
-                )}
+            {viewFull}
+            <div className="flex justify-end gap-4 px-1 pb-0.5">
+              <span className="text-[10px] text-emerald-200/40 w-12 text-right">Gross</span>
+              <span className="text-[10px] text-emerald-200/40 w-12 text-right">Net</span>
+            </div>
+            {sorted.map((s, i) => (
+              <button key={s.profile_id} type="button" onClick={() => openDrawer(s)} className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${podiumClass(s.position)}`}>
+                <span className="text-[11px] font-bold text-emerald-200/40 w-5 text-right shrink-0">{i + 1}</span>
+                {avatarEl(s.profile)}
                 <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
-                <div className="text-right shrink-0">
-                  <div className="text-xs font-extrabold text-[#f5e6b0]">{s.season_points} pts</div>
-                  <div className="flex gap-1 justify-end">
-                    <span className="text-[9px] text-emerald-100/50 bg-emerald-900/40 rounded px-1">{s.events_played} evts</span>
-                    {s.wins > 0 && <span className="text-[9px] text-[#f5e6b0]/70 bg-[#f5e6b0]/10 rounded px-1">{s.wins}W</span>}
-                  </div>
+                <div className="flex gap-4 shrink-0">
+                  <span className="text-xs font-bold text-emerald-100/80 w-12 text-right">{fmtTopar(s.avg_gross_to_par)}</span>
+                  <span className="text-xs font-bold text-[#f5e6b0]/80 w-12 text-right">{fmtTopar(s.avg_net_to_par)}</span>
                 </div>
               </button>
             ))}
@@ -1417,16 +1499,27 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       };
 
       return (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider">Season History</div>
-            <DropdownSelector
-              options={seasonOptions as { value: string; label: string }[]}
-              value={selectedSeasonId}
-              onChange={handleSeasonChange}
-            />
+        <div className="space-y-4">
+          {/* Two-wheel selector */}
+          <div className="flex gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="text-[9px] text-emerald-200/40 uppercase tracking-wider text-center pb-1">Season</div>
+              <LabelWheel
+                options={seasonWheelOptions}
+                value={selectedSeasonId}
+                onChange={handleSeasonChange}
+              />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[9px] text-emerald-200/40 uppercase tracking-wider text-center pb-1">View</div>
+              <LabelWheel
+                options={metricWheelOptions}
+                value={seasonMetric}
+                onChange={(v) => setSeasonMetric(v as typeof seasonMetric)}
+              />
+            </div>
           </div>
-          {selectedSeasonId === "all" ? renderAllTime() : renderSeasonStandings()}
+          {selectedSeasonId === "all" ? renderAllTime() : renderSeasonView()}
         </div>
       );
     })(),
@@ -1757,6 +1850,134 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             </label>
           </div>
         </div>
+        {/* League Settings */}
+        <div className="space-y-3">
+          <div className="text-[10px] uppercase tracking-wider text-emerald-200/50">League Settings</div>
+          {(() => {
+            const prefs = leagueSettingsForm ?? group.default_scoring_prefs ?? {};
+            const scoringModel = (prefs as any).scoring_model ?? null;
+            const pointsModel = (prefs as any).points_model ?? null;
+            const allowancePct = (prefs as any).handicap_rules?.allowance_pct ?? null;
+            const maxHandicap = (prefs as any).handicap_rules?.max_handicap ?? null;
+
+            const setPrefs = (patch: Record<string, unknown>) => {
+              const base = leagueSettingsForm ?? (group.default_scoring_prefs as any) ?? {};
+              setLeagueSettingsForm({ ...base, ...patch } as any);
+            };
+
+            return (
+              <div className="space-y-4 rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/60 p-4">
+                {/* Scoring model */}
+                <div className="space-y-1.5">
+                  <div className="text-[10px] text-emerald-200/50">Default Scoring</div>
+                  <div className="flex gap-2">
+                    {(["net", "gross", "stableford_points"] as const).map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setPrefs({ scoring_model: m })}
+                        className={`flex-1 py-1.5 rounded-full text-[11px] font-semibold transition-colors ${scoringModel === m ? "bg-emerald-700 text-white" : "border border-emerald-900/60 text-emerald-200/60 hover:text-emerald-100"}`}
+                      >
+                        {m === "net" ? "Net" : m === "gross" ? "Gross" : "Stableford"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Points model */}
+                <div className="space-y-1.5">
+                  <div className="text-[10px] text-emerald-200/50">Points System</div>
+                  <div className="flex gap-2 flex-wrap">
+                    {([
+                      { v: null, label: "None" },
+                      { v: "fedex_style", label: "Fedex" },
+                      { v: "position_based", label: "Position" },
+                      { v: "custom_table", label: "Custom" },
+                    ] as const).map(({ v, label }) => (
+                      <button
+                        key={label}
+                        type="button"
+                        onClick={() => setPrefs({ points_model: v })}
+                        className={`px-3 py-1.5 rounded-full text-[11px] font-semibold transition-colors ${(pointsModel ?? null) === v ? "bg-emerald-700 text-white" : "border border-emerald-900/60 text-emerald-200/60 hover:text-emerald-100"}`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Handicap allowance */}
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 space-y-1.5">
+                    <div className="text-[10px] text-emerald-200/50">Handicap Allowance</div>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={allowancePct ?? ""}
+                        onChange={(e) => {
+                          const v = e.target.value ? parseInt(e.target.value, 10) : null;
+                          const hr = { ...((prefs as any).handicap_rules ?? {}), mode: "allowance_pct", allowance_pct: v };
+                          setPrefs({ handicap_rules: hr });
+                        }}
+                        placeholder="100"
+                        className="w-16 bg-[#042713] border border-emerald-900/60 rounded-lg px-2 py-1 text-[12px] text-emerald-100 text-center"
+                      />
+                      <span className="text-[11px] text-emerald-200/50">%</span>
+                    </div>
+                  </div>
+                  <div className="flex-1 space-y-1.5">
+                    <div className="text-[10px] text-emerald-200/50">Max Handicap</div>
+                    <input
+                      type="number"
+                      min={0}
+                      value={maxHandicap ?? ""}
+                      onChange={(e) => {
+                        const v = e.target.value ? parseInt(e.target.value, 10) : null;
+                        const hr = { ...((prefs as any).handicap_rules ?? {}), max_handicap: v };
+                        setPrefs({ handicap_rules: hr });
+                      }}
+                      placeholder="No limit"
+                      className="w-full bg-[#042713] border border-emerald-900/60 rounded-lg px-2 py-1 text-[12px] text-emerald-100 text-center"
+                    />
+                  </div>
+                </div>
+
+                <div className="text-[9px] text-emerald-200/30 text-center">Applies to new events only — past seasons unaffected.</div>
+
+                <button
+                  type="button"
+                  disabled={savingLeagueSettings}
+                  onClick={async () => {
+                    if (!leagueSettingsForm) return;
+                    setSavingLeagueSettings(true);
+                    try {
+                      const session = await getViewerSession();
+                      if (!session) return;
+                      const res = await fetch(`/api/majors/groups/${groupId}`, {
+                        method: "PATCH",
+                        headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+                        body: JSON.stringify({ default_scoring_prefs: leagueSettingsForm }),
+                      });
+                      if (res.ok) {
+                        const j = await res.json();
+                        setGroup((g) => g ? { ...g, default_scoring_prefs: j.group.default_scoring_prefs } : g);
+                        setLeagueSettingsForm(null);
+                      }
+                    } finally {
+                      setSavingLeagueSettings(false);
+                    }
+                  }}
+                  className="w-full py-2.5 rounded-full bg-emerald-700 text-sm font-semibold text-white disabled:opacity-40"
+                >
+                  {savingLeagueSettings ? "Saving…" : "Save League Settings"}
+                </button>
+              </div>
+            );
+          })()}
+        </div>
+
         {/* Danger zone — owner only */}
         {myRole === "owner" && (
           <div className="rounded-2xl border border-red-900/40 bg-red-900/10 p-4 space-y-2">

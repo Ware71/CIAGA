@@ -52,7 +52,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const allowedFields = ["name", "description", "privacy", "join_method", "max_members",
       "season_start", "season_end", "image_url", "ciaga_tag",
       // Upgrade additions
-      "allow_credit"];
+      "allow_credit", "default_scoring_prefs"];
     const updates: Record<string, unknown> = {};
     for (const field of allowedFields) {
       if (field in body) updates[field] = body[field];
