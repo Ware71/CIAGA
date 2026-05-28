@@ -47,7 +47,7 @@ function getPointsForPosition(
   return null;
 }
 
-type Tab = "overview" | "leaderboard" | "tee-times" | "rules" | "results" | "fixtures" | "bracket" | "league-table" | "winnings";
+type Tab = "overview" | "leaderboard" | "tee-times" | "rules" | "fixtures" | "bracket" | "league-table" | "winnings";
 
 const STROKE_TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
@@ -55,7 +55,6 @@ const STROKE_TABS: { id: Tab; label: string }[] = [
   { id: "tee-times", label: "Tee Times" },
   { id: "rules", label: "Rules" },
   { id: "winnings", label: "Winnings" },
-  { id: "results", label: "Results" },
 ];
 
 const MATCHPLAY_LEAGUE_TABS: { id: Tab; label: string }[] = [
@@ -63,7 +62,6 @@ const MATCHPLAY_LEAGUE_TABS: { id: Tab; label: string }[] = [
   { id: "fixtures", label: "Fixtures" },
   { id: "league-table", label: "Table" },
   { id: "rules", label: "Rules" },
-  { id: "results", label: "Results" },
 ];
 
 const MATCHPLAY_KNOCKOUT_TABS: { id: Tab; label: string }[] = [
@@ -71,7 +69,6 @@ const MATCHPLAY_KNOCKOUT_TABS: { id: Tab; label: string }[] = [
   { id: "fixtures", label: "Fixtures" },
   { id: "bracket", label: "Bracket" },
   { id: "rules", label: "Rules" },
-  { id: "results", label: "Results" },
 ];
 
 function isMatchplayLeague(type: EventTypeV2 | undefined | null) {
@@ -1820,7 +1817,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
 
   const visibleTabs = (() => {
     const BASE = getTabsForEvent(event);
-    let tabs = event?.majors_status === "completed" ? BASE : BASE.filter((t) => t.id !== "results");
+    let tabs = [...BASE];
     if (event?.majors_status === "cancelled") tabs = tabs.filter((t) => t.id !== "tee-times");
     return tabs;
   })();
@@ -2694,37 +2691,6 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
       </div>
     ),
 
-    results: (
-      <div className="space-y-2">
-        {leaderboard.length === 0 ? (
-          <div className="text-sm text-emerald-100/60 text-center py-8">No final results.</div>
-        ) : (
-          leaderboard.map((row) => (
-            <div
-              key={row.id}
-              className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 ${
-                row.position === 1
-                  ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5"
-                  : row.position === 2
-                  ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5"
-                  : row.position === 3
-                  ? "border-[#cd7f32]/20 bg-[#cd7f32]/5"
-                  : "border-emerald-900/50 bg-[#0b3b21]/60"
-              }`}
-            >
-              <PositionBadge position={row.position ?? null} />
-              <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{row.profile?.name ?? "Unknown"}</span>
-              <div className="text-right shrink-0">
-                <div className="text-xs font-extrabold text-[#f5e6b0]">{displayScore(row) ?? "—"}</div>
-                {row.points_earned != null && row.points_earned > 0 && (
-                  <div className="text-[10px] text-amber-300/70">+{row.points_earned} pts</div>
-                )}
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-    ),
   };
 
   if (loading) {

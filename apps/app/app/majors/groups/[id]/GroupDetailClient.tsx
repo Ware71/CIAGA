@@ -267,7 +267,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   const [seasonStandingsLoading, setSeasonStandingsLoading] = useState(false);
   const [allTimeView, setAllTimeView] = useState<"outrights" | "points" | "strokes" | "avg">("outrights");
   // Player detail drawer
-  const [selectedPlayerForDrawer, setSelectedPlayerForDrawer] = useState<{ profileId: string; name: string; avatarUrl: string | null; currentSeasonId: string | null } | null>(null);
+  const [selectedPlayerForDrawer, setSelectedPlayerForDrawer] = useState<{ profileId: string; name: string; avatarUrl: string | null; currentSeasonId: string | null; seasonLabel?: string } | null>(null);
   const [playerBreakdownEntries, setPlayerBreakdownEntries] = useState<PlayerBreakdownEntry[]>([]);
   const [playerBreakdownLoading, setPlayerBreakdownLoading] = useState(false);
 
@@ -467,16 +467,15 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   useEffect(() => {
     if (!selectedPlayerForDrawer) { setPlayerBreakdownEntries([]); return; }
     const { profileId, currentSeasonId } = selectedPlayerForDrawer;
-    if (!currentSeasonId) { setPlayerBreakdownEntries([]); return; }
     let cancelled = false;
     setPlayerBreakdownLoading(true);
     (async () => {
       const session = await getViewerSession();
       if (!session || cancelled) return;
-      const res = await fetch(
-        `/api/majors/seasons/${currentSeasonId}/player-breakdown?profile_id=${profileId}`,
-        { headers: { Authorization: `Bearer ${session.accessToken}` } }
-      );
+      const url = currentSeasonId
+        ? `/api/majors/seasons/${currentSeasonId}/player-breakdown?profile_id=${profileId}`
+        : `/api/majors/groups/${groupId}/player-breakdown?profile_id=${profileId}`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${session.accessToken}` } });
       if (!cancelled && res.ok) {
         const j = await res.json();
         setPlayerBreakdownEntries(j.entries ?? []);
@@ -1391,7 +1390,12 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
               </button>
             )}
             {seasonStandings.map((s: any) => (
-              <div key={s.profile_id} className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 ${s.position === 1 ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5" : s.position === 2 ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5" : s.position === 3 ? "border-[#cd7f32]/20 bg-[#cd7f32]/5" : "border-emerald-900/50 bg-[#0b3b21]/60"}`}>
+              <button
+                key={s.profile_id}
+                type="button"
+                onClick={() => setSelectedPlayerForDrawer({ profileId: s.profile_id, name: s.profile?.name ?? "Unknown", avatarUrl: s.profile?.avatar_url ?? null, currentSeasonId: selectedSeasonId, seasonLabel: groupSeasons.find((g: any) => g.id === selectedSeasonId)?.season_label ?? undefined })}
+                className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${s.position === 1 ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5" : s.position === 2 ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5" : s.position === 3 ? "border-[#cd7f32]/20 bg-[#cd7f32]/5" : "border-emerald-900/50 bg-[#0b3b21]/60"}`}
+              >
                 <PositionBadge position={s.position} />
                 {s.profile?.avatar_url ? (
                   <img src={s.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
@@ -1406,7 +1410,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                     {s.wins > 0 && <span className="text-[9px] text-[#f5e6b0]/70 bg-[#f5e6b0]/10 rounded px-1">{s.wins}W</span>}
                   </div>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         );
@@ -1955,7 +1959,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-bold text-emerald-50 truncate">{selectedPlayerForDrawer.name}</div>
                 <div className="text-[10px] text-emerald-200/50">
-                  {liveStandingsData?.current_season?.season_label ?? "Current Season"}
+                  {selectedPlayerForDrawer.seasonLabel ?? liveStandingsData?.current_season?.season_label ?? "Current Season"}
                 </div>
               </div>
               <button
