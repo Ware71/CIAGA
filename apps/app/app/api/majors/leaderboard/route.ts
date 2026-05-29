@@ -189,6 +189,7 @@ async function getFrozenLeaderboard(
       gross_score: r.gross_score,
       net_score: r.net_score,
       to_par: r.to_par ?? null,
+      format_points: r.format_points ?? null,
       holes_shown: r.holes_shown,
       actual_holes_completed: r.actual_holes_completed ?? null,
       is_live: r.is_live,
