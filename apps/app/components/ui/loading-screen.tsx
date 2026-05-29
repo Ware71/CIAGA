@@ -37,7 +37,7 @@ export function LoadingScreen({ isReady }: Props) {
       if (!logo || !bg) return;
 
       // grow into shot
-      await animate(logo, { scale: [0.15, 1], opacity: [0, 1] }, { duration: 0.45, ease: "easeOut" });
+      await animate(logo, { scale: [0.15, 1] }, { duration: 0.45, ease: "easeOut" });
       if (cancelled) return;
 
       // pulse twice
@@ -70,7 +70,7 @@ export function LoadingScreen({ isReady }: Props) {
     <div className="fixed inset-0 z-[100]">
       <div ref={bgRef} className="absolute inset-0 bg-[#040d06]" />
       <div className="absolute inset-0 flex items-center justify-center">
-        <div ref={logoRef} style={{ opacity: 0 }}>
+        <div ref={logoRef} style={{ transform: "scale(0.15)" }}>
           <Image
             src="/ciaga-logo.png"
             alt="CIAGA"
