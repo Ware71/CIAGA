@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useCallback, useLayoutEffect, useEffect } from "react";
+import { createPortal } from "react-dom";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -350,13 +351,15 @@ function GroupStatRow({ stat }: { stat: MajorGroupSeasonStats }) {
 }
 
 function SeasonStatsDrawer({ hub, onClose }: { hub: MajorHubSummary; onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 z-50" onClick={onClose}>
+  const content = (
+    <div className="fixed inset-0 z-[200]" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60" />
       <div
-        className="absolute left-0 right-0 bottom-0 rounded-t-3xl border-t border-emerald-900/70 bg-[#061f12] max-h-[85dvh] overflow-y-auto"
+        className="absolute left-0 right-0 bottom-0 rounded-t-3xl border-t border-emerald-900/70 bg-[#061f12] max-h-[85dvh] overflow-y-auto overscroll-contain"
         style={{ paddingBottom: "env(safe-area-inset-bottom, 16px)" }}
         onClick={(e) => e.stopPropagation()}
+        onTouchMove={(e) => e.stopPropagation()}
+        onWheel={(e) => e.stopPropagation()}
       >
         <div className="w-10 h-1 rounded-full bg-emerald-800/60 mx-auto mt-3 mb-1" />
         <div className="flex items-center justify-between px-4 py-3">
@@ -387,6 +390,7 @@ function SeasonStatsDrawer({ hub, onClose }: { hub: MajorHubSummary; onClose: ()
       </div>
     </div>
   );
+  return createPortal(content, document.body);
 }
 
 export function MajorsView({
