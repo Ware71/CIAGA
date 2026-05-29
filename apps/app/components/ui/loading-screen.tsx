@@ -6,9 +6,10 @@ import { animate } from "framer-motion";
 
 interface Props {
   isReady: boolean;
+  onDone?: () => void;
 }
 
-export function LoadingScreen({ isReady }: Props) {
+export function LoadingScreen({ isReady, onDone }: Props) {
   const [done, setDone] = useState(false);
   const isReadyRef = useRef(isReady);
   const logoRef = useRef<HTMLDivElement>(null);
@@ -63,6 +64,7 @@ export function LoadingScreen({ isReady }: Props) {
       if (!cancelled) {
         sessionStorage.setItem("splash_shown", "1");
         setDone(true);
+        onDone?.();
       }
     };
 

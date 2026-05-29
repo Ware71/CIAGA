@@ -9,21 +9,18 @@ import { AuthUser } from "@/components/ui/auth-user";
 import type { FeedItemVM } from "@/lib/feed/types";
 import type { HomeSummary } from "@/lib/home/getHomeSummary";
 
-import {
-  clamp,
-  formatSigned,
-} from "@/lib/feed/feedItemUtils";
+import { clamp, formatSigned } from "@/lib/feed/feedItemUtils";
 import { formatHI } from "@/lib/rounds/handicapUtils";
 import { MiniFeedTeaserCard } from "@/components/social/MiniFeedTeaser";
 import { MajorsView } from "@/components/home/MajorsView";
 import type { MajorHubSummary } from "@/lib/majors/types";
 import { getViewerSession } from "@/lib/auth/viewerSession";
-import { LoadingScreen } from "@/components/ui/loading-screen";
+import { popHomeCache } from "@/lib/home/homeDataCache";
 
 type MenuItem = { id: string; label: string };
 
 const homeMenuItemsBase: MenuItem[] = [
-  { id: "round", label: "New Round" }, // label will be overridden dynamically
+  { id: "round", label: "New Round" },
   { id: "history", label: "Round History" },
   { id: "stats", label: "Stats" },
   { id: "social", label: "Social" },
@@ -60,30 +57,25 @@ type Props = {
   initialMajors?: MajorHubSummary | null;
 };
 
-export default function CIAGAStarter({ initialData, initialMajors }: Props) {
+export default function HomeClient({ initialData, initialMajors }: Props) {
   const router = useRouter();
+
+  // Pop splash-prefetched data (available on first mount after splash, null thereafter)
+  const [cachedSummary] = useState<HomeSummary | null>(() => popHomeCache());
+  const seed = initialData ?? cachedSummary;
 
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<ViewMode>("home");
-  const [showSplash] = useState(
-    () => typeof window === "undefined" || sessionStorage.getItem("splash_shown") !== "1"
-  );
-  const [authReady, setAuthReady] = useState(false);
 
-  // viewport-driven layout values
   const [vw, setVw] = useState(390);
   const [vh, setVh] = useState(844);
 
-  // ✅ Live round detection (for "Resume Round")
-  const [liveRoundId, setLiveRoundId] = useState<string | null>(initialData?.live_round_id ?? null);
-
-  // ✅ Profile id (used for handicap + last round)
+  const [liveRoundId, setLiveRoundId] = useState<string | null>(seed?.live_round_id ?? null);
   const [myProfileId, setMyProfileId] = useState<string | null>(null);
 
-  // ✅ Subtle home summary
-  const [handicapIndex, setHandicapIndex] = useState<number | null>(initialData?.handicap?.current ?? null);
-  const [handicapDelta30, setHandicapDelta30] = useState<number>(initialData?.handicap?.delta_30d ?? 0);
-  const [roundsPlayed, setRoundsPlayed] = useState<number | null>(initialData?.rounds_played ?? null);
+  const [handicapIndex, setHandicapIndex] = useState<number | null>(seed?.handicap?.current ?? null);
+  const [handicapDelta30, setHandicapDelta30] = useState<number>(seed?.handicap?.delta_30d ?? 0);
+  const [roundsPlayed, setRoundsPlayed] = useState<number | null>(seed?.rounds_played ?? null);
 
   const [lastRound, setLastRound] = useState<{
     course: string | null;
@@ -92,35 +84,13 @@ export default function CIAGAStarter({ initialData, initialMajors }: Props) {
     net: number | null;
     diff: number | null;
     played_at: string | null;
-  } | null>(initialData?.last_round ?? null);
+  } | null>(seed?.last_round ?? null);
 
-  const [miniFeed, setMiniFeed] = useState<FeedItemVM[]>(initialData?.mini_feed ?? []);
+  const [miniFeed, setMiniFeed] = useState<FeedItemVM[]>(seed?.mini_feed ?? []);
   const [miniFeedLoading, setMiniFeedLoading] = useState(false);
   const [miniFeedError, setMiniFeedError] = useState<string | null>(null);
   const [majorsPreload, setMajorsPreload] = useState<MajorHubSummary | null>(initialMajors ?? null);
   const [retryKey, setRetryKey] = useState(0);
-
-  useEffect(() => {
-    if (!showSplash) return;
-    let cancelled = false;
-    let onlineCleanup: (() => void) | null = null;
-    const minDelay = new Promise<void>((r) => setTimeout(r, 2200));
-    const authDone = getViewerSession().then(() => {});
-    Promise.all([minDelay, authDone]).then(() => {
-      if (cancelled) return;
-      if (navigator.onLine) {
-        setAuthReady(true);
-      } else {
-        const handler = () => { if (!cancelled) setAuthReady(true); };
-        window.addEventListener("online", handler, { once: true });
-        onlineCleanup = () => window.removeEventListener("online", handler);
-      }
-    });
-    return () => {
-      cancelled = true;
-      onlineCleanup?.();
-    };
-  }, []);
 
   useEffect(() => {
     const updateViewport = () => {
@@ -144,16 +114,18 @@ export default function CIAGAStarter({ initialData, initialMajors }: Props) {
     };
   }, []);
 
-  // ✅ Consolidated home data fetch (skipped when server-provided initialData exists)
+  // Home data fetch — skipped when SSR or splash already provided data
   useEffect(() => {
-    if (initialData) return; // Already hydrated from server component
+    if (initialData ?? cachedSummary) return;
 
     let cancelled = false;
     let onlineRetryCleanup: (() => void) | null = null;
 
     const scheduleRetry = () => {
       if (onlineRetryCleanup) return;
-      const handler = () => { if (!cancelled) setRetryKey((k) => k + 1); };
+      const handler = () => {
+        if (!cancelled) setRetryKey((k) => k + 1);
+      };
       window.addEventListener("online", handler, { once: true });
       onlineRetryCleanup = () => window.removeEventListener("online", handler);
     };
@@ -169,9 +141,14 @@ export default function CIAGAStarter({ initialData, initialMajors }: Props) {
         }
         if (!cancelled) setMyProfileId(session.profileId);
 
-        const res = await fetch("/api/home/summary", { headers: { Authorization: `Bearer ${session.accessToken}` } });
+        const res = await fetch("/api/home/summary", {
+          headers: { Authorization: `Bearer ${session.accessToken}` },
+        });
         if (cancelled) return;
-        if (!res.ok) { scheduleRetry(); return; }
+        if (!res.ok) {
+          scheduleRetry();
+          return;
+        }
         const data = await res.json();
 
         if (!cancelled) {
@@ -196,7 +173,8 @@ export default function CIAGAStarter({ initialData, initialMajors }: Props) {
       cancelled = true;
       onlineRetryCleanup?.();
     };
-  }, [initialData, retryKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [retryKey]);
 
   const homeMenuItems: MenuItem[] = useMemo(() => {
     return homeMenuItemsBase.map((it) =>
@@ -219,56 +197,25 @@ export default function CIAGAStarter({ initialData, initialMajors }: Props) {
   const handleHomeSelect = (id: string) => {
     setOpen(false);
 
-    if (id === "courses") {
-      router.push("/courses");
-      return;
-    }
-
+    if (id === "courses") { router.push("/courses"); return; }
     if (id === "round") {
       if (liveRoundId) router.push(`/round/${liveRoundId}`);
       else router.push("/round");
       return;
     }
-
-    if (id === "history") {
-      router.push("/history");
-      return;
-    }
-
-    if (id === "stats") {
-      router.push("/stats");
-      return;
-    }
-
-    if (id === "social") {
-      router.push("/social");
-      return;
-    }
+    if (id === "history") { router.push("/history"); return; }
+    if (id === "stats") { router.push("/stats"); return; }
+    if (id === "social") { router.push("/social"); return; }
   };
 
   const handleMajorsSelect = (id: string) => {
     setOpen(false);
 
-    if (id === "majors-hub") {
-      router.push("/majors");
-      return;
-    }
-    if (id === "schedule") {
-      router.push("/majors/schedule");
-      return;
-    }
-    if (id === "leaderboard") {
-      router.push("/majors/leaderboard");
-      return;
-    }
-    if (id === "history") {
-      router.push("/majors/history");
-      return;
-    }
-    if (id === "profile") {
-      router.push("/majors/profile");
-      return;
-    }
+    if (id === "majors-hub") { router.push("/majors"); return; }
+    if (id === "schedule") { router.push("/majors/schedule"); return; }
+    if (id === "leaderboard") { router.push("/majors/leaderboard"); return; }
+    if (id === "history") { router.push("/majors/history"); return; }
+    if (id === "profile") { router.push("/majors/profile"); return; }
   };
 
   const wheelRadius = clamp(Math.min(vw, vh) * 0.38, 115, 170);
@@ -321,15 +268,12 @@ export default function CIAGAStarter({ initialData, initialMajors }: Props) {
     </AnimatePresence>
   );
 
-  // Exactly 5 teaser cards; no scrolling needed.
-  const MINI_CARD_H = 44; // teaser height approx
-  const MINI_GAP = 8; // space-y-2
+  const MINI_CARD_H = 44;
+  const MINI_GAP = 8;
   const miniFeedMaxH = MINI_CARD_H * 5 + MINI_GAP * 4;
 
   return (
-    <>
-      {showSplash && <LoadingScreen isReady={authReady} />}
-      <AnimatePresence initial={false} mode="wait">
+    <AnimatePresence initial={false} mode="wait">
       {view === "home" ? (
         <motion.div
           key="home"
@@ -366,7 +310,6 @@ export default function CIAGAStarter({ initialData, initialMajors }: Props) {
               </div>
             </div>
 
-            {/* Envelope + avatar */}
             <div className="flex items-center gap-4">
               <button
                 type="button"
@@ -482,7 +425,9 @@ export default function CIAGAStarter({ initialData, initialMajors }: Props) {
               {miniFeedLoading ? (
                 <div className="text-sm font-semibold text-emerald-100/70">Loading…</div>
               ) : miniFeed.length ? (
-                miniFeed.map((it) => <MiniFeedTeaserCard key={it.id} item={it} onOpen={() => router.push("/social")} />)
+                miniFeed.map((it) => (
+                  <MiniFeedTeaserCard key={it.id} item={it} onOpen={() => router.push("/social")} />
+                ))
               ) : miniFeedError ? (
                 <div className="text-sm font-semibold text-red-200/90">{miniFeedError}</div>
               ) : (
@@ -533,7 +478,6 @@ export default function CIAGAStarter({ initialData, initialMajors }: Props) {
           initialHub={majorsPreload}
         />
       )}
-      </AnimatePresence>
-    </>
+    </AnimatePresence>
   );
 }
