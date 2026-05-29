@@ -56,7 +56,10 @@ export function LoadingScreen({ isReady }: Props) {
       animate(logo, { scale: 0.12, opacity: 0 }, { duration: 0.45, ease: "easeIn" });
       await animate(bg, { opacity: 0 }, { duration: 0.35, delay: 0.15 });
 
-      if (!cancelled) setDone(true);
+      if (!cancelled) {
+        sessionStorage.setItem("splash_shown", "1");
+        setDone(true);
+      }
     };
 
     run();

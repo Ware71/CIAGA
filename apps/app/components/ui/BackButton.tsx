@@ -15,7 +15,7 @@ export function BackButton({ onClick, disabled, className }: BackButtonProps) {
     <Button
       variant="ghost"
       size="sm"
-      className={cn("px-2 text-emerald-100 hover:bg-emerald-900/30 shrink-0", className)}
+      className={cn("px-2 text-emerald-100 hover:bg-emerald-900/30 shrink-0 min-w-[64px] justify-center", className)}
       disabled={disabled || navigating}
       onClick={() => {
         setNavigating(true);

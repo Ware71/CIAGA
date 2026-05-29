@@ -65,6 +65,9 @@ export default function CIAGAStarter({ initialData, initialMajors }: Props) {
 
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<ViewMode>("home");
+  const [showSplash] = useState(
+    () => typeof window === "undefined" || sessionStorage.getItem("splash_shown") !== "1"
+  );
   const [authReady, setAuthReady] = useState(false);
 
   // viewport-driven layout values
@@ -97,6 +100,7 @@ export default function CIAGAStarter({ initialData, initialMajors }: Props) {
   const [majorsPreload, setMajorsPreload] = useState<MajorHubSummary | null>(initialMajors ?? null);
 
   useEffect(() => {
+    if (!showSplash) return;
     const minDelay = new Promise<void>((r) => setTimeout(r, 2200));
     const authDone = getViewerSession().then(() => {});
     Promise.all([minDelay, authDone]).then(() => setAuthReady(true));
@@ -294,7 +298,7 @@ export default function CIAGAStarter({ initialData, initialMajors }: Props) {
 
   return (
     <>
-      <LoadingScreen isReady={authReady} />
+      {showSplash && <LoadingScreen isReady={authReady} />}
       <AnimatePresence initial={false} mode="wait">
       {view === "home" ? (
         <motion.div
