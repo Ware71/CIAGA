@@ -98,12 +98,28 @@ export default function CIAGAStarter({ initialData, initialMajors }: Props) {
   const [miniFeedLoading, setMiniFeedLoading] = useState(false);
   const [miniFeedError, setMiniFeedError] = useState<string | null>(null);
   const [majorsPreload, setMajorsPreload] = useState<MajorHubSummary | null>(initialMajors ?? null);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     if (!showSplash) return;
+    let cancelled = false;
+    let onlineCleanup: (() => void) | null = null;
     const minDelay = new Promise<void>((r) => setTimeout(r, 2200));
     const authDone = getViewerSession().then(() => {});
-    Promise.all([minDelay, authDone]).then(() => setAuthReady(true));
+    Promise.all([minDelay, authDone]).then(() => {
+      if (cancelled) return;
+      if (navigator.onLine) {
+        setAuthReady(true);
+      } else {
+        const handler = () => { if (!cancelled) setAuthReady(true); };
+        window.addEventListener("online", handler, { once: true });
+        onlineCleanup = () => window.removeEventListener("online", handler);
+      }
+    });
+    return () => {
+      cancelled = true;
+      onlineCleanup?.();
+    };
   }, []);
 
   useEffect(() => {
@@ -133,9 +149,18 @@ export default function CIAGAStarter({ initialData, initialMajors }: Props) {
     if (initialData) return; // Already hydrated from server component
 
     let cancelled = false;
+    let onlineRetryCleanup: (() => void) | null = null;
+
+    const scheduleRetry = () => {
+      if (onlineRetryCleanup) return;
+      const handler = () => { if (!cancelled) setRetryKey((k) => k + 1); };
+      window.addEventListener("online", handler, { once: true });
+      onlineRetryCleanup = () => window.removeEventListener("online", handler);
+    };
 
     (async () => {
       setMiniFeedLoading(true);
+      setMiniFeedError(null);
       try {
         const session = await getViewerSession();
         if (!session || cancelled) {
@@ -145,7 +170,8 @@ export default function CIAGAStarter({ initialData, initialMajors }: Props) {
         if (!cancelled) setMyProfileId(session.profileId);
 
         const res = await fetch("/api/home/summary", { headers: { Authorization: `Bearer ${session.accessToken}` } });
-        if (!res.ok || cancelled) return;
+        if (cancelled) return;
+        if (!res.ok) { scheduleRetry(); return; }
         const data = await res.json();
 
         if (!cancelled) {
@@ -159,14 +185,18 @@ export default function CIAGAStarter({ initialData, initialMajors }: Props) {
       } catch (e: any) {
         if (!cancelled) {
           setMiniFeedError(e?.message ?? "Failed to load");
+          scheduleRetry();
         }
       } finally {
         if (!cancelled) setMiniFeedLoading(false);
       }
     })();
 
-    return () => { cancelled = true; };
-  }, [initialData]);
+    return () => {
+      cancelled = true;
+      onlineRetryCleanup?.();
+    };
+  }, [initialData, retryKey]);
 
   const homeMenuItems: MenuItem[] = useMemo(() => {
     return homeMenuItemsBase.map((it) =>

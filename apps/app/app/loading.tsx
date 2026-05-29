@@ -17,7 +17,7 @@ export default function Loading() {
         alt="CIAGA"
         width={176}
         height={176}
-        style={{ transform: "scale(0.15)", borderRadius: "50%" }}
+        style={{ transform: "scale(0.35)", borderRadius: "50%" }}
       />
     </div>
   );

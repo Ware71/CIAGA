@@ -37,7 +37,7 @@ export function LoadingScreen({ isReady }: Props) {
       if (!logo || !bg) return;
 
       // grow into shot
-      await animate(logo, { scale: [0.15, 1] }, { duration: 0.45, ease: "easeOut" });
+      await animate(logo, { scale: [0.35, 1] }, { duration: 0.45, ease: "easeOut" });
       if (cancelled) return;
 
       // pulse twice
@@ -48,8 +48,12 @@ export function LoadingScreen({ isReady }: Props) {
       await animate(logo, { rotate: 360 }, { duration: 0.65, ease: "easeInOut" });
       if (cancelled) return;
 
+      // spin slowly while waiting for connection / auth
+      const waitSpin = animate(logo, { rotate: [360, 720] }, { duration: 2.5, ease: "linear", repeat: Infinity, repeatType: "loop" });
+
       // hold until auth is ready
       await waitUntilReady();
+      waitSpin.stop();
       if (cancelled) return;
 
       // shrink and fade out logo, then fade background
@@ -73,7 +77,7 @@ export function LoadingScreen({ isReady }: Props) {
     <div className="fixed inset-0 z-[100]">
       <div ref={bgRef} className="absolute inset-0 bg-[#040d06]" />
       <div className="absolute inset-0 flex items-center justify-center">
-        <div ref={logoRef} style={{ transform: "scale(0.15)" }}>
+        <div ref={logoRef} style={{ transform: "scale(0.35)" }}>
           <Image
             src="/ciaga-logo.png"
             alt="CIAGA"
