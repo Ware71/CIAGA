@@ -385,6 +385,10 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   const [standingsMetric, setStandingsMetric] = useState<"points" | "strokes" | "avg">("points");
   const [sortField, setSortField] = useState<"net" | "gross">("net");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  // Standings tab – historical season view
+  const [standingsSeasonId, setStandingsSeasonId] = useState<string | "current">("current");
+  const [standingsHistoricalData, setStandingsHistoricalData] = useState<SeasonStandingEntry[]>([]);
+  const [standingsHistoricalLoading, setStandingsHistoricalLoading] = useState(false);
   const [competitionResults, setCompetitionResults] = useState<CompetitionResultsResponse | null>(null);
   // Seasons tab
   const [groupSeasons, setGroupSeasons] = useState<any[]>([]);
@@ -411,6 +415,25 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       {sortField === field && <span className="text-[9px]">{sortDir === "asc" ? "↑" : "↓"}</span>}
     </button>
   );
+
+  const handleStandingsSeasonChange = async (id: string) => {
+    setStandingsSeasonId(id);
+    if (id === "current") { setStandingsHistoricalData([]); return; }
+    setStandingsHistoricalLoading(true);
+    try {
+      const session = await getViewerSession();
+      if (!session) return;
+      const res = await fetch(`/api/majors/seasons/${id}/standings`, {
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+      });
+      if (res.ok) {
+        const j = await res.json();
+        setStandingsHistoricalData(j.standings ?? []);
+      }
+    } finally {
+      setStandingsHistoricalLoading(false);
+    }
+  };
 
   const [showCreateCompetitionModal, setShowCreateCompetitionModal] = useState(false);
   const [newCompetitionName, setNewCompetitionName] = useState("");
@@ -1038,12 +1061,75 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     ),
 
     standings: (() => {
-      const rows = liveStandingsData?.rows ?? [];
+      const liveRows = liveStandingsData?.rows ?? [];
       const hasLive = liveStandingsData?.hasLive ?? false;
-      const showLiveIndicator = hasLive;
       const currentSeason = liveStandingsData?.current_season ?? null;
+      const isHistorical = standingsSeasonId !== "current";
+      const showLiveIndicator = hasLive && !isHistorical;
+      const selectedSeasonObj = isHistorical ? groupSeasons.find((s: any) => s.id === standingsSeasonId) : null;
 
-      const avatarEl = (profile: LiveGroupStandingEntry["profile"]) =>
+      const standingsSeasonOptions: { value: string; label: string }[] = [
+        {
+          value: "current",
+          label: currentSeason
+            ? currentSeason.season_label + (currentSeason.status === "live" ? " · Live" : "")
+            : "Current Season",
+        },
+        ...[...groupSeasons]
+          .filter((s: any) => s.id !== currentSeason?.id)
+          .sort((a: any, b: any) => (b.season_year ?? 0) - (a.season_year ?? 0))
+          .map((s: any) => ({ value: s.id as string, label: s.season_label ?? String(s.season_year ?? "Season") })),
+      ];
+
+      // Unified row shape so all sub-tab renderers work identically for live and historical data
+      type NRow = {
+        profile_id: string;
+        profile: { name: string | null; avatar_url: string | null } | null;
+        official_position: number | null;
+        display_points: number;
+        live_points_pending: number;
+        events_played: number;
+        wins: number;
+        total_gross: number | null;
+        total_net: number | null;
+        avg_gross_to_par: number | null;
+        avg_net_to_par: number | null;
+      };
+
+      const nRows: NRow[] = isHistorical
+        ? standingsHistoricalData.map((s) => ({
+            profile_id: s.profile_id,
+            profile: s.profile,
+            official_position: s.position,
+            display_points: s.season_points,
+            live_points_pending: 0,
+            events_played: s.events_played,
+            wins: s.wins,
+            total_gross: s.total_gross,
+            total_net: s.total_net,
+            avg_gross_to_par: s.avg_gross_to_par,
+            avg_net_to_par: s.avg_net_to_par,
+          }))
+        : liveRows.map((s) => ({
+            profile_id: s.profile_id,
+            profile: s.profile,
+            official_position: showLiveIndicator
+              ? (s.live_position ?? s.confirmed_position)
+              : s.confirmed_position,
+            display_points: s.confirmed_points,
+            live_points_pending: showLiveIndicator ? s.live_points_pending : 0,
+            events_played: s.events_played,
+            wins: s.wins,
+            total_gross: s.total_gross,
+            total_net: s.total_net,
+            avg_gross_to_par: s.avg_gross_to_par,
+            avg_net_to_par: s.avg_net_to_par,
+          }));
+
+      const drawerSeasonId = isHistorical ? standingsSeasonId : (currentSeason?.id ?? null);
+      const drawerSeasonLabel = isHistorical ? (selectedSeasonObj?.season_label ?? undefined) : undefined;
+
+      const avatarEl = (profile: { name: string | null; avatar_url: string | null } | null) =>
         profile?.avatar_url ? (
           <img src={profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
         ) : (
@@ -1058,15 +1144,15 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         return v > 0 ? `+${v.toFixed(1)}` : v.toFixed(1);
       };
 
-      const ordinal = (n: number) => {
-        const s = ["th", "st", "nd", "rd"];
-        const v = n % 100;
-        return n + (s[(v - 20) % 10] ?? s[v] ?? s[0]);
-      };
+      const podiumClass = (pos: number | null) =>
+        pos === 1 ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5"
+        : pos === 2 ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5"
+        : pos === 3 ? "border-[#cd7f32]/20 bg-[#cd7f32]/5"
+        : "border-emerald-900/50 bg-[#0b3b21]/60";
 
       // ── Points sub-tab ───────────────────────────────────────────────────
       const renderPoints = () => {
-        if (rows.length === 0) {
+        if (nRows.length === 0) {
           return <div className="text-sm text-emerald-100/60 text-center py-8">No standings for this period.</div>;
         }
         return (
@@ -1077,27 +1163,27 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                 <span className="text-[11px] text-amber-300/80 font-medium">Live competition in progress</span>
               </div>
             )}
-            {rows.map((s) => {
-              const improved = showLiveIndicator && s.live_position != null && s.confirmed_position != null && s.live_position < s.confirmed_position;
-              const worsened = showLiveIndicator && s.live_position != null && s.confirmed_position != null && s.live_position > s.confirmed_position;
-              const displayPos = showLiveIndicator ? s.live_position : s.confirmed_position;
+            {nRows.map((s) => {
+              const liveRow = !isHistorical ? liveRows.find((r) => r.profile_id === s.profile_id) : null;
+              const improved = showLiveIndicator && liveRow && liveRow.live_position != null && liveRow.confirmed_position != null && liveRow.live_position < liveRow.confirmed_position;
+              const worsened = showLiveIndicator && liveRow && liveRow.live_position != null && liveRow.confirmed_position != null && liveRow.live_position > liveRow.confirmed_position;
               return (
                 <button
                   key={s.profile_id}
                   type="button"
-                  onClick={() => setSelectedPlayerForDrawer({ profileId: s.profile_id, name: s.profile?.name ?? "Unknown", avatarUrl: s.profile?.avatar_url ?? null, currentSeasonId: currentSeason?.id ?? null })}
-                  className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${displayPos === 1 ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5" : displayPos === 2 ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5" : displayPos === 3 ? "border-[#cd7f32]/20 bg-[#cd7f32]/5" : "border-emerald-900/50 bg-[#0b3b21]/60"}`}>
+                  onClick={() => setSelectedPlayerForDrawer({ profileId: s.profile_id, name: s.profile?.name ?? "Unknown", avatarUrl: s.profile?.avatar_url ?? null, currentSeasonId: drawerSeasonId, seasonLabel: drawerSeasonLabel })}
+                  className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${podiumClass(s.official_position)}`}>
                   <div className="w-3 shrink-0 flex justify-center">
                     {improved && <span className="text-[10px] leading-none text-emerald-400">▲</span>}
                     {worsened && <span className="text-[10px] leading-none text-red-400">▼</span>}
                   </div>
-                  <PositionBadge position={displayPos ?? null} />
+                  <PositionBadge position={s.official_position} />
                   {avatarEl(s.profile)}
                   <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
                   <div className="text-right shrink-0 space-y-0.5">
                     <div className="flex items-baseline justify-end gap-1">
-                      <span className="text-xs font-extrabold text-[#f5e6b0]">{s.confirmed_points} pts</span>
-                      {showLiveIndicator && s.live_points_pending > 0 && (
+                      <span className="text-xs font-extrabold text-[#f5e6b0]">{s.display_points} pts</span>
+                      {s.live_points_pending > 0 && (
                         <span className="text-[10px] font-semibold text-amber-400/90">+{s.live_points_pending}</span>
                       )}
                     </div>
@@ -1117,7 +1203,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       const renderStrokes = () => {
         const primaryField = sortField === "net" ? "total_net" : "total_gross";
         const dir = sortDir === "asc" ? 1 : -1;
-        const sorted = [...rows]
+        const sorted = [...nRows]
           .filter((r) => r.total_net != null || r.total_gross != null)
           .sort((a, b) => dir * ((a[primaryField] as number ?? 9999) - (b[primaryField] as number ?? 9999)));
         if (sorted.length === 0) {
@@ -1129,14 +1215,14 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
               {sortHeader("Gross", "gross")}
               {sortHeader("Net", "net")}
             </div>
-            {sorted.map((s, i) => (
+            {sorted.map((s) => (
               <button
                 key={s.profile_id}
                 type="button"
-                onClick={() => setSelectedPlayerForDrawer({ profileId: s.profile_id, name: s.profile?.name ?? "Unknown", avatarUrl: s.profile?.avatar_url ?? null, currentSeasonId: currentSeason?.id ?? null })}
-                className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${s.confirmed_position === 1 ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5" : s.confirmed_position === 2 ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5" : s.confirmed_position === 3 ? "border-[#cd7f32]/20 bg-[#cd7f32]/5" : "border-emerald-900/50 bg-[#0b3b21]/60"}`}
+                onClick={() => setSelectedPlayerForDrawer({ profileId: s.profile_id, name: s.profile?.name ?? "Unknown", avatarUrl: s.profile?.avatar_url ?? null, currentSeasonId: drawerSeasonId, seasonLabel: drawerSeasonLabel })}
+                className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${podiumClass(s.official_position)}`}
               >
-                <PositionBadge position={i + 1} />
+                <PositionBadge position={s.official_position} />
                 {avatarEl(s.profile)}
                 <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
                 <div className="flex gap-4 shrink-0">
@@ -1153,7 +1239,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       const renderAvgPar = () => {
         const primaryField = sortField === "net" ? "avg_net_to_par" : "avg_gross_to_par";
         const dir = sortDir === "asc" ? 1 : -1;
-        const sorted = [...rows]
+        const sorted = [...nRows]
           .filter((r) => r.avg_net_to_par != null || r.avg_gross_to_par != null)
           .sort((a, b) => dir * ((a[primaryField] as number ?? 999) - (b[primaryField] as number ?? 999)));
         if (sorted.length === 0) {
@@ -1165,14 +1251,14 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
               {sortHeader("Gross", "gross")}
               {sortHeader("Net", "net")}
             </div>
-            {sorted.map((s, i) => (
+            {sorted.map((s) => (
               <button
                 key={s.profile_id}
                 type="button"
-                onClick={() => setSelectedPlayerForDrawer({ profileId: s.profile_id, name: s.profile?.name ?? "Unknown", avatarUrl: s.profile?.avatar_url ?? null, currentSeasonId: currentSeason?.id ?? null })}
-                className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${s.confirmed_position === 1 ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5" : s.confirmed_position === 2 ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5" : s.confirmed_position === 3 ? "border-[#cd7f32]/20 bg-[#cd7f32]/5" : "border-emerald-900/50 bg-[#0b3b21]/60"}`}
+                onClick={() => setSelectedPlayerForDrawer({ profileId: s.profile_id, name: s.profile?.name ?? "Unknown", avatarUrl: s.profile?.avatar_url ?? null, currentSeasonId: drawerSeasonId, seasonLabel: drawerSeasonLabel })}
+                className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${podiumClass(s.official_position)}`}
               >
-                <PositionBadge position={i + 1} />
+                <PositionBadge position={s.official_position} />
                 {avatarEl(s.profile)}
                 <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
                 <div className="flex gap-4 shrink-0">
@@ -1187,28 +1273,23 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
       return (
         <div className="space-y-3">
-          {/* Season label */}
-          <div>
-            {currentSeason ? (
-              <div className="text-[11px] text-emerald-300/60">
-                {currentSeason.season_label}
-                {currentSeason.status === "live" && (
-                  <span className="ml-1.5 inline-flex items-center gap-1 text-amber-400/80">
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse inline-block" />
-                    Live
-                  </span>
-                )}
-              </div>
-            ) : (
-              <div className="text-[11px] text-emerald-200/40">No active season</div>
-            )}
-            {showLiveIndicator && (
-              <div className="flex items-center gap-2 mt-1">
-                <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
-                <span className="text-[11px] text-amber-300/80 font-medium">Live in progress</span>
-              </div>
-            )}
-          </div>
+          {/* Season selector */}
+          <select
+            value={standingsSeasonId}
+            onChange={(e) => handleStandingsSeasonChange(e.target.value)}
+            className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-2 py-1.5 text-[11px] text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
+          >
+            {standingsSeasonOptions.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+          {/* Live indicator */}
+          {showLiveIndicator && (
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
+              <span className="text-[11px] text-amber-300/80 font-medium">Live in progress</span>
+            </div>
+          )}
           {/* Metric selector */}
           <div className="flex gap-1.5">
             {(["points", "strokes", "avg"] as const).map((m) => (
@@ -1228,9 +1309,15 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           </div>
 
           {/* Content */}
-          {standingsMetric === "points" && renderPoints()}
-          {standingsMetric === "strokes" && renderStrokes()}
-          {standingsMetric === "avg" && renderAvgPar()}
+          {standingsHistoricalLoading ? (
+            <div className="text-sm text-emerald-100/60 text-center py-8">Loading…</div>
+          ) : (
+            <>
+              {standingsMetric === "points" && renderPoints()}
+              {standingsMetric === "strokes" && renderStrokes()}
+              {standingsMetric === "avg" && renderAvgPar()}
+            </>
+          )}
         </div>
       );
     })(),
