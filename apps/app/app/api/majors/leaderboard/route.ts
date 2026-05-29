@@ -158,6 +158,7 @@ async function getFrozenLeaderboard(
     gross_score: number | null;
     net_score: number | null;
     to_par: number | null;
+    format_points: number | null;
     holes_shown: number;
     actual_holes_completed: number | null;
     is_live: boolean;
@@ -171,6 +172,7 @@ async function getFrozenLeaderboard(
       gross_score: r.gross_score,
       net_score: r.net_score,
       to_par: r.to_par ?? null,
+      format_points: r.format_points ?? null,
       holes_shown: r.holes_shown,
       actual_holes_completed: r.actual_holes_completed ?? null,
       is_live: r.is_live,
@@ -203,6 +205,7 @@ async function getFrozenLeaderboard(
       gross_score: r.gross_score ?? null,
       net_score: r.net_score ?? null,
       to_par: (r as any).to_par ?? null,
+      format_points: (r as any).format_points ?? null,
       holes_shown: r.holes_completed ?? 0,
       actual_holes_completed: r.holes_completed ?? null,
       is_live: r.is_live ?? false,
@@ -218,16 +221,15 @@ async function getFrozenLeaderboard(
     .in("id", profileIds);
   const profileMap = Object.fromEntries((profiles ?? []).map((p: any) => [p.id, p]));
 
-  // Sort by displayed score and assign positions
-  const higherBetter = scoringModel === "stableford_points";
+  // Sort by net_score ASC (lower is better for all formats — stableford uses
+  // net-stroke equivalent so the same direction applies).
   combined.sort((a, b) => {
     const aScore = a.net_score ?? a.gross_score;
     const bScore = b.net_score ?? b.gross_score;
     if (aScore == null && bScore == null) return 0;
     if (aScore == null) return 1;
     if (bScore == null) return -1;
-    // Secondary: more holes completed ranks higher
-    const scoreDiff = higherBetter ? bScore - aScore : aScore - bScore;
+    const scoreDiff = aScore - bScore;
     if (scoreDiff !== 0) return scoreDiff;
     return (b.holes_shown ?? 0) - (a.holes_shown ?? 0);
   });
@@ -237,6 +239,7 @@ async function getFrozenLeaderboard(
     gross_score: r.gross_score,
     net_score: r.net_score,
     to_par: r.to_par ?? null,
+    format_points: r.format_points ?? null,
     holes_shown: r.holes_shown,
     actual_holes_completed: r.actual_holes_completed ?? undefined,
     is_live: r.is_live,
@@ -256,6 +259,8 @@ async function getFrozenLeaderboard(
             ...row,
             gross_score: live.gross_score ?? null,
             net_score: live.net_score ?? null,
+            to_par: (live as any).to_par ?? null,
+            format_points: (live as any).format_points ?? null,
             holes_shown: live.holes_completed ?? 0,
             actual_holes_completed: live.holes_completed ?? undefined,
             is_live: live.is_live ?? false,

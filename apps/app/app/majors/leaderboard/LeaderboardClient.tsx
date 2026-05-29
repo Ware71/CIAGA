@@ -32,9 +32,6 @@ function isCompetitionRow(row: any): row is LeaderboardEntryWithProfile {
 }
 
 function getScore(row: CompetitionRow, scoringModel: string): number | null {
-  if (scoringModel === "stableford_points") {
-    return isCompetitionRow(row) ? ((row as any).format_points ?? null) : null;
-  }
   if (isCompetitionRow(row)) return row.net_score ?? row.gross_score ?? null;
   return (row as FrozenLeaderboardEntry).net_score ?? (row as FrozenLeaderboardEntry).gross_score ?? null;
 }
@@ -45,12 +42,8 @@ function getToPar(row: CompetitionRow): number | null {
 
 function formatLeaderboardScore(
   toPar: number | null,
-  rawScore: number | null,
-  scoringModel: string
+  rawScore: number | null
 ): string {
-  if (scoringModel === "stableford_points") {
-    return rawScore != null ? String(rawScore) : "—";
-  }
   if (toPar != null) return toPar === 0 ? "E" : toPar > 0 ? `+${toPar}` : String(toPar);
   return rawScore != null ? String(rawScore) : "—";
 }
@@ -341,21 +334,31 @@ export default function LeaderboardClient() {
               </button>
               <div className="text-right shrink-0">
                 {tab === "competition" ? (
-                  <>
-                    <div className="text-xs font-extrabold text-[#f5e6b0]">
-                      {formatLeaderboardScore(getToPar(row), score, scoringModel)}
-                    </div>
-                    {scoringModel === "stableford_points" ? (
-                      <div className="text-[10px] text-emerald-100/50">stableford pts</div>
-                    ) : (
-                      <>
-                        <div className="text-[10px] text-emerald-100/50">to par</div>
-                        {(row as any).gross_score != null && (
-                          <div className="text-[10px] text-emerald-100/40">{(row as any).gross_score} gross</div>
-                        )}
-                      </>
-                    )}
-                  </>
+                  scoringModel === "stableford_points" ? (
+                    <>
+                      <div className="text-xs font-extrabold text-[#f5e6b0]">
+                        {(row as any).format_points != null ? `${(row as any).format_points} pts` : "—"}
+                      </div>
+                      {getToPar(row) != null && (
+                        <div className="text-[10px] text-emerald-100/50">
+                          {getToPar(row) === 0 ? "E" : getToPar(row)! > 0 ? `+${getToPar(row)}` : String(getToPar(row))}
+                        </div>
+                      )}
+                      {(row as any).gross_score != null && (
+                        <div className="text-[10px] text-emerald-100/40">{(row as any).gross_score} gross</div>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-xs font-extrabold text-[#f5e6b0]">
+                        {formatLeaderboardScore(getToPar(row), score)}
+                      </div>
+                      <div className="text-[10px] text-emerald-100/50">to par</div>
+                      {(row as any).gross_score != null && (
+                        <div className="text-[10px] text-emerald-100/40">{(row as any).gross_score} gross</div>
+                      )}
+                    </>
+                  )
                 ) : (
                   <>
                     <div className="text-xs font-extrabold text-[#f5e6b0]">{row.season_points ?? 0} pts</div>

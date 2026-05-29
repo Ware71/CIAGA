@@ -206,7 +206,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const allLiveRoundIds: string[] = [];
 
     for (const comp of liveComps) {
-      const higherBetter = (comp.scoring_model as string | null) === "stableford_points";
+      const higherBetter = false; // net_score is always lower-is-better (stableford uses net-equivalent)
       const numRounds = (comp as any).num_rounds ?? 1;
       const pointsModel = (comp.points_model as string | null) ?? "none";
       const pointsTable = (comp.points_table as Record<string, number> | null) ?? null;

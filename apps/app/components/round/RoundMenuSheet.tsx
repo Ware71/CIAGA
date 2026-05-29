@@ -672,17 +672,29 @@ export default function RoundMenuSheet(props: {
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
                           <div className="text-right">
-                            <div className="text-[15px] font-extrabold tabular-nums text-[#f5e6b0]">
-                              {scoringModel === "stableford_points"
-                                ? (s.format_points ?? s.net_score ?? "—")
-                                : s.to_par != null
-                                ? formatToPar(s.to_par)
-                                : (s.net_score ?? s.gross_score ?? "—")}
-                            </div>
-                            {scoringModel !== "stableford_points" && s.to_par != null && s.gross_score != null && (
-                              <div className="text-[9px] text-emerald-100/50">
-                                ({s.gross_score} gross)
-                              </div>
+                            {scoringModel === "stableford_points" ? (
+                              <>
+                                <div className="text-[15px] font-extrabold tabular-nums text-[#f5e6b0]">
+                                  {s.format_points != null ? `${s.format_points} pts` : "—"}
+                                </div>
+                                {s.to_par != null && (
+                                  <div className="text-[9px] text-emerald-100/50">
+                                    {s.to_par === 0 ? "E" : s.to_par > 0 ? `+${s.to_par}` : String(s.to_par)}
+                                  </div>
+                                )}
+                                {s.gross_score != null && (
+                                  <div className="text-[9px] text-emerald-100/50">({s.gross_score} gross)</div>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                <div className="text-[15px] font-extrabold tabular-nums text-[#f5e6b0]">
+                                  {s.to_par != null ? formatToPar(s.to_par) : (s.net_score ?? s.gross_score ?? "—")}
+                                </div>
+                                {s.to_par != null && s.gross_score != null && (
+                                  <div className="text-[9px] text-emerald-100/50">({s.gross_score} gross)</div>
+                                )}
+                              </>
                             )}
                           </div>
                         </div>
