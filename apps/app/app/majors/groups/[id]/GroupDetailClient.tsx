@@ -217,7 +217,7 @@ function MemberDetailDrawer({
               <select
                 value={teeValue}
                 onChange={(e) => setTeeValue(e.target.value)}
-                className="flex-1 rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
+                className="flex-1 rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-2 py-1.5 text-[11px] text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
                 disabled={teeSaving}
               >
                 <option value="">— not set —</option>
@@ -383,7 +383,8 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   const [myBalance, setMyBalance] = useState<{ balance: number; total_charged: number; total_paid: number; transactions: GroupBalanceTransactionWithDetails[] } | null>(null);
   const [expandedMember, setExpandedMember] = useState<string | null>(null);
   const [standingsMetric, setStandingsMetric] = useState<"points" | "strokes" | "avg">("points");
-  const [showNet, setShowNet] = useState(true);
+  const [sortField, setSortField] = useState<"net" | "gross">("net");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [competitionResults, setCompetitionResults] = useState<CompetitionResultsResponse | null>(null);
   // Seasons tab
   const [groupSeasons, setGroupSeasons] = useState<any[]>([]);
@@ -398,6 +399,18 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   const [selectedPlayerForDrawer, setSelectedPlayerForDrawer] = useState<{ profileId: string; name: string; avatarUrl: string | null; currentSeasonId: string | null; seasonLabel?: string } | null>(null);
   const [playerBreakdownEntries, setPlayerBreakdownEntries] = useState<PlayerBreakdownEntry[]>([]);
   const [playerBreakdownLoading, setPlayerBreakdownLoading] = useState(false);
+
+  const handleSort = (field: "net" | "gross") => {
+    if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortField(field); setSortDir("asc"); }
+  };
+  const sortHeader = (label: string, field: "net" | "gross") => (
+    <button type="button" onClick={() => handleSort(field)}
+      className={`text-[10px] w-12 text-right flex items-center justify-end gap-0.5 ${sortField === field ? "text-emerald-200/70" : "text-emerald-200/30"}`}>
+      {label}
+      {sortField === field && <span className="text-[9px]">{sortDir === "asc" ? "↑" : "↓"}</span>}
+    </button>
+  );
 
   const [showCreateCompetitionModal, setShowCreateCompetitionModal] = useState(false);
   const [newCompetitionName, setNewCompetitionName] = useState("");
@@ -1102,15 +1115,20 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
       // ── Strokes sub-tab ──────────────────────────────────────────────────
       const renderStrokes = () => {
-        const field = showNet ? "total_net" : "total_gross";
+        const primaryField = sortField === "net" ? "total_net" : "total_gross";
+        const dir = sortDir === "asc" ? 1 : -1;
         const sorted = [...rows]
-          .filter((r) => r[field] != null)
-          .sort((a, b) => (a[field] as number) - (b[field] as number));
+          .filter((r) => r.total_net != null || r.total_gross != null)
+          .sort((a, b) => dir * ((a[primaryField] as number ?? 9999) - (b[primaryField] as number ?? 9999)));
         if (sorted.length === 0) {
           return <div className="text-sm text-emerald-100/60 text-center py-8">No stroke data for this period.</div>;
         }
         return (
           <div className="space-y-2">
+            <div className="flex justify-end gap-4 px-1 pb-0.5">
+              {sortHeader("Gross", "gross")}
+              {sortHeader("Net", "net")}
+            </div>
             {sorted.map((s, i) => (
               <button
                 key={s.profile_id}
@@ -1121,9 +1139,9 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                 <PositionBadge position={i + 1} />
                 {avatarEl(s.profile)}
                 <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
-                <div className="text-right shrink-0">
-                  <div className="text-xs font-extrabold text-emerald-100">{s[field]}</div>
-                  <div className="text-[9px] text-emerald-100/50">{s.events_played} evts</div>
+                <div className="flex gap-4 shrink-0">
+                  <span className="text-xs font-bold text-emerald-100/80 w-12 text-right">{s.total_gross ?? "—"}</span>
+                  <span className="text-xs font-bold text-[#f5e6b0]/80 w-12 text-right">{s.total_net ?? "—"}</span>
                 </div>
               </button>
             ))}
@@ -1133,35 +1151,36 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
       // ── Avg to par sub-tab ───────────────────────────────────────────────
       const renderAvgPar = () => {
-        const field = showNet ? "avg_net_to_par" : "avg_gross_to_par";
+        const primaryField = sortField === "net" ? "avg_net_to_par" : "avg_gross_to_par";
+        const dir = sortDir === "asc" ? 1 : -1;
         const sorted = [...rows]
-          .filter((r) => r[field] != null)
-          .sort((a, b) => (a[field] as number) - (b[field] as number));
+          .filter((r) => r.avg_net_to_par != null || r.avg_gross_to_par != null)
+          .sort((a, b) => dir * ((a[primaryField] as number ?? 999) - (b[primaryField] as number ?? 999)));
         if (sorted.length === 0) {
           return <div className="text-sm text-emerald-100/60 text-center py-8">No score data for this period.</div>;
         }
         return (
           <div className="space-y-2">
-            {sorted.map((s, i) => {
-              const val = s[field] as number;
-              const colour = val < 0 ? "text-emerald-400" : val > 0 ? "text-red-400" : "text-emerald-100/80";
-              return (
-                <button
-                  key={s.profile_id}
-                  type="button"
-                  onClick={() => setSelectedPlayerForDrawer({ profileId: s.profile_id, name: s.profile?.name ?? "Unknown", avatarUrl: s.profile?.avatar_url ?? null, currentSeasonId: currentSeason?.id ?? null })}
-                  className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${s.confirmed_position === 1 ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5" : s.confirmed_position === 2 ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5" : s.confirmed_position === 3 ? "border-[#cd7f32]/20 bg-[#cd7f32]/5" : "border-emerald-900/50 bg-[#0b3b21]/60"}`}
-                >
-                  <PositionBadge position={i + 1} />
-                  {avatarEl(s.profile)}
-                  <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
-                  <div className="text-right shrink-0">
-                    <div className={`text-xs font-extrabold ${colour}`}>{formatToPar(val)}</div>
-                    <div className="text-[9px] text-emerald-100/50">{s.events_played} evts</div>
-                  </div>
-                </button>
-              );
-            })}
+            <div className="flex justify-end gap-4 px-1 pb-0.5">
+              {sortHeader("Gross", "gross")}
+              {sortHeader("Net", "net")}
+            </div>
+            {sorted.map((s, i) => (
+              <button
+                key={s.profile_id}
+                type="button"
+                onClick={() => setSelectedPlayerForDrawer({ profileId: s.profile_id, name: s.profile?.name ?? "Unknown", avatarUrl: s.profile?.avatar_url ?? null, currentSeasonId: currentSeason?.id ?? null })}
+                className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${s.confirmed_position === 1 ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5" : s.confirmed_position === 2 ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5" : s.confirmed_position === 3 ? "border-[#cd7f32]/20 bg-[#cd7f32]/5" : "border-emerald-900/50 bg-[#0b3b21]/60"}`}
+              >
+                <PositionBadge position={i + 1} />
+                {avatarEl(s.profile)}
+                <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
+                <div className="flex gap-4 shrink-0">
+                  <span className={`text-xs font-bold w-12 text-right ${s.avg_gross_to_par != null && s.avg_gross_to_par < 0 ? "text-emerald-400" : s.avg_gross_to_par != null && s.avg_gross_to_par > 0 ? "text-red-400" : "text-emerald-100/80"}`}>{formatToPar(s.avg_gross_to_par ?? null)}</span>
+                  <span className={`text-xs font-bold w-12 text-right ${s.avg_net_to_par != null && s.avg_net_to_par < 0 ? "text-emerald-400" : s.avg_net_to_par != null && s.avg_net_to_par > 0 ? "text-red-400" : "text-emerald-100/80"}`}>{formatToPar(s.avg_net_to_par ?? null)}</span>
+                </div>
+              </button>
+            ))}
           </div>
         );
       };
@@ -1207,23 +1226,6 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
               </button>
             ))}
           </div>
-
-          {/* Net/Gross toggle for strokes + avg */}
-          {(standingsMetric === "strokes" || standingsMetric === "avg") && (
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] text-emerald-200/50 uppercase tracking-wider">Scoring:</span>
-              <button
-                type="button"
-                onClick={() => setShowNet(true)}
-                className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${showNet ? "bg-emerald-700 text-white" : "border border-emerald-900/60 text-emerald-200/60"}`}
-              >Net</button>
-              <button
-                type="button"
-                onClick={() => setShowNet(false)}
-                className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${!showNet ? "bg-emerald-700 text-white" : "border border-emerald-900/60 text-emerald-200/60"}`}
-              >Gross</button>
-            </div>
-          )}
 
           {/* Content */}
           {standingsMetric === "points" && renderPoints()}
@@ -1413,11 +1415,6 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         const records = competitionResults.player_records;
         if (records.length === 0) return <div className="text-sm text-emerald-100/60 text-center py-8">No event data yet.</div>;
 
-        let sorted = [...records];
-        if (seasonMetric === "points") sorted = [...records].sort((a, b) => (b as any).career_points - (a as any).career_points);
-        if (seasonMetric === "strokes") sorted = [...records].sort((a, b) => ((a as any).career_total_gross_to_par ?? 9999) - ((b as any).career_total_gross_to_par ?? 9999));
-        if (seasonMetric === "avg") sorted = [...records].sort((a, b) => ((a as any).career_avg_gross_to_par ?? 999) - ((b as any).career_avg_gross_to_par ?? 999));
-
         const openDrawer = (pr: any) => setSelectedPlayerForDrawer({
           profileId: pr.profile_id,
           name: pr.profile.name ?? "Unknown",
@@ -1426,101 +1423,118 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           seasonLabel: "All Time",
         });
 
-        if (seasonMetric === "outrights") return (
-          <div className="space-y-2">
-            {sorted.map((pr) => (
-              <button key={pr.profile_id} type="button" onClick={() => openDrawer(pr)} className="w-full text-left rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/70 p-3 space-y-2 hover:brightness-110 transition-all">
-                <div className="flex items-center gap-2">
+        if (seasonMetric === "outrights") {
+          const sorted = [...records].sort((a, b) => (b as any).total_wins - (a as any).total_wins);
+          return (
+            <div className="space-y-2">
+              {sorted.map((pr, i) => (
+                <button key={pr.profile_id} type="button" onClick={() => openDrawer(pr)} className={`w-full text-left rounded-2xl border p-3 space-y-2 hover:brightness-110 transition-all ${podiumClass(i < 3 ? i + 1 : null)}`}>
+                  <div className="flex items-center gap-2">
+                    <PositionBadge position={i + 1} />
+                    {avatarEl(pr.profile)}
+                    <span className="flex-1 text-sm font-semibold text-emerald-100 truncate">{pr.profile.name ?? "Unknown"}</span>
+                    <span className="text-[11px] font-bold text-[#f5e6b0]">{pr.total_wins} {pr.total_wins === 1 ? "win" : "wins"}</span>
+                  </div>
+                  {pr.competition_records.length > 0 && (
+                    <div className="space-y-1 pl-9">
+                      {pr.competition_records.map((sr: any) => (
+                        <div key={sr.competition_id ?? "standalone"} className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] text-emerald-200/70 truncate">{sr.competition_name ?? "Competition"}</span>
+                          <span className="text-[10px] text-emerald-200/55 shrink-0">
+                            {sr.wins > 0 ? `${sr.wins}× win${sr.wins !== 1 ? "s" : ""}` : sr.best_finish != null ? `Best: ${ordinal(sr.best_finish)}` : "—"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {pr.standalone_wins.length > 0 && (
+                    <div className="space-y-1 pl-9">
+                      {pr.standalone_wins.map((w: any) => (
+                        <div key={w.event_id} className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] text-emerald-200/70 truncate">{w.name ?? "Event"}</span>
+                          <span className="text-[10px] text-[#f5e6b0]/70 shrink-0">{w.year ?? ""}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {pr.competition_records.length === 0 && pr.standalone_wins.length === 0 && (
+                    <div className="pl-9 text-[11px] text-emerald-200/40">No entries yet</div>
+                  )}
+                </button>
+              ))}
+            </div>
+          );
+        }
+
+        if (seasonMetric === "points") {
+          const sorted = [...records].sort((a, b) => (b as any).career_points - (a as any).career_points);
+          return (
+            <div className="space-y-2">
+              {sorted.map((pr, i) => (
+                <button key={pr.profile_id} type="button" onClick={() => openDrawer(pr)} className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${podiumClass(i < 3 ? i + 1 : null)}`}>
+                  <PositionBadge position={i + 1} />
                   {avatarEl(pr.profile)}
                   <span className="flex-1 text-sm font-semibold text-emerald-100 truncate">{pr.profile.name ?? "Unknown"}</span>
-                  <span className="text-[11px] font-bold text-[#f5e6b0]">{pr.total_wins} {pr.total_wins === 1 ? "win" : "wins"}</span>
-                </div>
-                {pr.competition_records.length > 0 && (
-                  <div className="space-y-1 pl-9">
-                    {pr.competition_records.map((sr: any) => (
-                      <div key={sr.competition_id ?? "standalone"} className="flex items-center justify-between gap-2">
-                        <span className="text-[11px] text-emerald-200/70 truncate">{sr.competition_name ?? "Competition"}</span>
-                        <span className="text-[10px] text-emerald-200/55 shrink-0">
-                          {sr.wins > 0 ? `${sr.wins}× win${sr.wins !== 1 ? "s" : ""}` : sr.best_finish != null ? `Best: ${ordinal(sr.best_finish)}` : "—"}
-                        </span>
-                      </div>
-                    ))}
+                  <div className="text-right shrink-0">
+                    <div className="text-xs font-extrabold text-[#f5e6b0]">{(pr as any).career_points} pts</div>
+                    <div className="text-[9px] text-emerald-100/40">{(pr as any).career_events_played} evts</div>
                   </div>
-                )}
-                {pr.standalone_wins.length > 0 && (
-                  <div className="space-y-1 pl-9">
-                    {pr.standalone_wins.map((w: any) => (
-                      <div key={w.event_id} className="flex items-center justify-between gap-2">
-                        <span className="text-[11px] text-emerald-200/70 truncate">{w.name ?? "Event"}</span>
-                        <span className="text-[10px] text-[#f5e6b0]/70 shrink-0">{w.year ?? ""}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {pr.competition_records.length === 0 && pr.standalone_wins.length === 0 && (
-                  <div className="pl-9 text-[11px] text-emerald-200/40">No entries yet</div>
-                )}
-              </button>
-            ))}
-          </div>
-        );
-
-        if (seasonMetric === "points") return (
-          <div className="space-y-2">
-            {sorted.map((pr, i) => (
-              <button key={pr.profile_id} type="button" onClick={() => openDrawer(pr)} className="w-full flex items-center gap-2 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 text-left hover:brightness-110 transition-all">
-                <span className="text-[11px] font-bold text-emerald-200/40 w-5 text-right shrink-0">{i + 1}</span>
-                {avatarEl(pr.profile)}
-                <span className="flex-1 text-sm font-semibold text-emerald-100 truncate">{pr.profile.name ?? "Unknown"}</span>
-                <div className="text-right shrink-0">
-                  <div className="text-xs font-extrabold text-[#f5e6b0]">{(pr as any).career_points} pts</div>
-                  <div className="text-[9px] text-emerald-100/40">{(pr as any).career_events_played} evts</div>
-                </div>
-              </button>
-            ))}
-          </div>
-        );
-
-        if (seasonMetric === "strokes") return (
-          <div className="space-y-2">
-            <div className="flex justify-end gap-4 px-1 pb-0.5">
-              <span className="text-[10px] text-emerald-200/40 w-12 text-right">Gross</span>
-              <span className="text-[10px] text-emerald-200/40 w-12 text-right">Net</span>
+                </button>
+              ))}
             </div>
-            {sorted.map((pr, i) => (
-              <button key={pr.profile_id} type="button" onClick={() => openDrawer(pr)} className="w-full flex items-center gap-2 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 text-left hover:brightness-110 transition-all">
-                <span className="text-[11px] font-bold text-emerald-200/40 w-5 text-right shrink-0">{i + 1}</span>
-                {avatarEl(pr.profile)}
-                <span className="flex-1 text-sm font-semibold text-emerald-100 truncate">{pr.profile.name ?? "Unknown"}</span>
-                <div className="flex gap-4 shrink-0">
-                  <span className="text-xs font-bold text-emerald-100/80 w-12 text-right">{fmtTopar((pr as any).career_total_gross_to_par)}</span>
-                  <span className="text-xs font-bold text-[#f5e6b0]/80 w-12 text-right">{fmtTopar((pr as any).career_total_net_to_par)}</span>
-                </div>
-              </button>
-            ))}
-          </div>
-        );
+          );
+        }
+
+        if (seasonMetric === "strokes") {
+          const atField = sortField === "net" ? "career_total_net_to_par" : "career_total_gross_to_par";
+          const atDir = sortDir === "asc" ? 1 : -1;
+          const sorted = [...records].sort((a, b) => atDir * (((a as any)[atField] ?? 9999) - ((b as any)[atField] ?? 9999)));
+          return (
+            <div className="space-y-2">
+              <div className="flex justify-end gap-4 px-1 pb-0.5">
+                {sortHeader("Gross", "gross")}
+                {sortHeader("Net", "net")}
+              </div>
+              {sorted.map((pr, i) => (
+                <button key={pr.profile_id} type="button" onClick={() => openDrawer(pr)} className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${podiumClass(i < 3 ? i + 1 : null)}`}>
+                  <PositionBadge position={i + 1} />
+                  {avatarEl(pr.profile)}
+                  <span className="flex-1 text-sm font-semibold text-emerald-100 truncate">{pr.profile.name ?? "Unknown"}</span>
+                  <div className="flex gap-4 shrink-0">
+                    <span className="text-xs font-bold text-emerald-100/80 w-12 text-right">{fmtTopar((pr as any).career_total_gross_to_par)}</span>
+                    <span className="text-xs font-bold text-[#f5e6b0]/80 w-12 text-right">{fmtTopar((pr as any).career_total_net_to_par)}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          );
+        }
 
         // avg
-        return (
-          <div className="space-y-2">
-            <div className="flex justify-end gap-4 px-1 pb-0.5">
-              <span className="text-[10px] text-emerald-200/40 w-12 text-right">Gross</span>
-              <span className="text-[10px] text-emerald-200/40 w-12 text-right">Net</span>
+        {
+          const atField = sortField === "net" ? "career_avg_net_to_par" : "career_avg_gross_to_par";
+          const atDir = sortDir === "asc" ? 1 : -1;
+          const sorted = [...records].sort((a, b) => atDir * (((a as any)[atField] ?? 999) - ((b as any)[atField] ?? 999)));
+          return (
+            <div className="space-y-2">
+              <div className="flex justify-end gap-4 px-1 pb-0.5">
+                {sortHeader("Gross", "gross")}
+                {sortHeader("Net", "net")}
+              </div>
+              {sorted.map((pr, i) => (
+                <button key={pr.profile_id} type="button" onClick={() => openDrawer(pr)} className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${podiumClass(i < 3 ? i + 1 : null)}`}>
+                  <PositionBadge position={i + 1} />
+                  {avatarEl(pr.profile)}
+                  <span className="flex-1 text-sm font-semibold text-emerald-100 truncate">{pr.profile.name ?? "Unknown"}</span>
+                  <div className="flex gap-4 shrink-0">
+                    <span className="text-xs font-bold text-emerald-100/80 w-12 text-right">{fmtTopar((pr as any).career_avg_gross_to_par)}</span>
+                    <span className="text-xs font-bold text-[#f5e6b0]/80 w-12 text-right">{fmtTopar((pr as any).career_avg_net_to_par)}</span>
+                  </div>
+                </button>
+              ))}
             </div>
-            {sorted.map((pr, i) => (
-              <button key={pr.profile_id} type="button" onClick={() => openDrawer(pr)} className="w-full flex items-center gap-2 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 text-left hover:brightness-110 transition-all">
-                <span className="text-[11px] font-bold text-emerald-200/40 w-5 text-right shrink-0">{i + 1}</span>
-                {avatarEl(pr.profile)}
-                <span className="flex-1 text-sm font-semibold text-emerald-100 truncate">{pr.profile.name ?? "Unknown"}</span>
-                <div className="flex gap-4 shrink-0">
-                  <span className="text-xs font-bold text-emerald-100/80 w-12 text-right">{fmtTopar((pr as any).career_avg_gross_to_par)}</span>
-                  <span className="text-xs font-bold text-[#f5e6b0]/80 w-12 text-right">{fmtTopar((pr as any).career_avg_net_to_par)}</span>
-                </div>
-              </button>
-            ))}
-          </div>
-        );
+          );
+        }
       };
 
       // ── Individual season views ─────────────────────────────────────────────
@@ -1589,20 +1603,22 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         }
 
         if (seasonMetric === "strokes") {
+          const seaStrokesField = sortField === "net" ? "total_net" : "total_gross";
+          const seaDir = sortDir === "asc" ? 1 : -1;
           const sorted = [...seasonStandings]
             .filter((s) => s.total_net != null || s.total_gross != null)
-            .sort((a, b) => (a.total_net ?? a.total_gross ?? 9999) - (b.total_net ?? b.total_gross ?? 9999));
+            .sort((a, b) => seaDir * ((a[seaStrokesField] as number ?? 9999) - (b[seaStrokesField] as number ?? 9999)));
           if (sorted.length === 0) return <div className="text-sm text-emerald-100/60 text-center py-8">No stroke data for this season.</div>;
           return (
             <div className="space-y-2">
               {viewFull}
               <div className="flex justify-end gap-4 px-1 pb-0.5">
-                <span className="text-[10px] text-emerald-200/40 w-12 text-right">Gross</span>
-                <span className="text-[10px] text-emerald-200/40 w-12 text-right">Net</span>
+                {sortHeader("Gross", "gross")}
+                {sortHeader("Net", "net")}
               </div>
-              {sorted.map((s, i) => (
+              {sorted.map((s) => (
                 <button key={s.profile_id} type="button" onClick={() => openDrawer(s)} className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${podiumClass(s.position)}`}>
-                  <span className="text-[11px] font-bold text-emerald-200/40 w-5 text-right shrink-0">{i + 1}</span>
+                  <PositionBadge position={s.position} />
                   {avatarEl(s.profile)}
                   <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
                   <div className="flex gap-4 shrink-0">
@@ -1616,30 +1632,34 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         }
 
         // avg
-        const sorted = [...seasonStandings]
-          .filter((s) => s.avg_net_to_par != null || s.avg_gross_to_par != null)
-          .sort((a, b) => (a.avg_net_to_par ?? a.avg_gross_to_par ?? 999) - (b.avg_net_to_par ?? b.avg_gross_to_par ?? 999));
-        if (sorted.length === 0) return <div className="text-sm text-emerald-100/60 text-center py-8">No score data for this season.</div>;
-        return (
-          <div className="space-y-2">
-            {viewFull}
-            <div className="flex justify-end gap-4 px-1 pb-0.5">
-              <span className="text-[10px] text-emerald-200/40 w-12 text-right">Gross</span>
-              <span className="text-[10px] text-emerald-200/40 w-12 text-right">Net</span>
+        {
+          const seaAvgField = sortField === "net" ? "avg_net_to_par" : "avg_gross_to_par";
+          const seaDir = sortDir === "asc" ? 1 : -1;
+          const sorted = [...seasonStandings]
+            .filter((s) => s.avg_net_to_par != null || s.avg_gross_to_par != null)
+            .sort((a, b) => seaDir * ((a[seaAvgField] as number ?? 999) - (b[seaAvgField] as number ?? 999)));
+          if (sorted.length === 0) return <div className="text-sm text-emerald-100/60 text-center py-8">No score data for this season.</div>;
+          return (
+            <div className="space-y-2">
+              {viewFull}
+              <div className="flex justify-end gap-4 px-1 pb-0.5">
+                {sortHeader("Gross", "gross")}
+                {sortHeader("Net", "net")}
+              </div>
+              {sorted.map((s) => (
+                <button key={s.profile_id} type="button" onClick={() => openDrawer(s)} className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${podiumClass(s.position)}`}>
+                  <PositionBadge position={s.position} />
+                  {avatarEl(s.profile)}
+                  <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
+                  <div className="flex gap-4 shrink-0">
+                    <span className="text-xs font-bold text-emerald-100/80 w-12 text-right">{fmtTopar(s.avg_gross_to_par)}</span>
+                    <span className="text-xs font-bold text-[#f5e6b0]/80 w-12 text-right">{fmtTopar(s.avg_net_to_par)}</span>
+                  </div>
+                </button>
+              ))}
             </div>
-            {sorted.map((s, i) => (
-              <button key={s.profile_id} type="button" onClick={() => openDrawer(s)} className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${podiumClass(s.position)}`}>
-                <span className="text-[11px] font-bold text-emerald-200/40 w-5 text-right shrink-0">{i + 1}</span>
-                {avatarEl(s.profile)}
-                <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
-                <div className="flex gap-4 shrink-0">
-                  <span className="text-xs font-bold text-emerald-100/80 w-12 text-right">{fmtTopar(s.avg_gross_to_par)}</span>
-                  <span className="text-xs font-bold text-[#f5e6b0]/80 w-12 text-right">{fmtTopar(s.avg_net_to_par)}</span>
-                </div>
-              </button>
-            ))}
-          </div>
-        );
+          );
+        }
       };
 
       return (
@@ -1649,7 +1669,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             <select
               value={selectedSeasonId}
               onChange={(e) => handleSeasonChange(e.target.value)}
-              className="flex-1 rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
+              className="flex-1 rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-2 py-1.5 text-[11px] text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
             >
               {seasonWheelOptions.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
@@ -1658,7 +1678,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             <select
               value={seasonMetric}
               onChange={(e) => setSeasonMetric(e.target.value as typeof seasonMetric)}
-              className="flex-1 rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
+              className="flex-1 rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-2 py-1.5 text-[11px] text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
             >
               {metricWheelOptions.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
