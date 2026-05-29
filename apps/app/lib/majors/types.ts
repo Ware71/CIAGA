@@ -639,11 +639,28 @@ export type MatchplayLeagueTableEntryWithProfile = MatchplayLeagueTableEntry & {
 
 // ─── API response shapes ──────────────────────────────────────────────────────
 
-export type MajorHubSummary = {
+export type MajorGroupSeasonStats = {
+  group_id: string;
+  group_name: string;
+  group_image_url: string | null;
+  events: number;
+  rounds_played: number;
+  wins: number;
+  earnings: number;
   season_points: number;
   season_rank: number | null;
-  events_entered: number;
-  wins: number;
+};
+
+export type MajorHubSummary = {
+  season_events: number;
+  season_rounds_played: number;
+  season_wins: number;
+  season_earnings: number;
+  alltime_events: number;
+  alltime_rounds_played: number;
+  alltime_wins: number;
+  alltime_earnings: number;
+  group_stats: MajorGroupSeasonStats[];
   active_events: EventWithGroup[];
   upcoming_events: EventWithGroup[];
   my_groups: Array<MajorGroup & { member_count: number }>;

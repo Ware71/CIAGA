@@ -446,37 +446,104 @@ export async function getMajorHubSummary(profileId: string): Promise<MajorHubSum
     upcomingEvents = evts.filter((c) => c.majors_status === "upcoming");
   }
 
-  // Season stats from group standings
-  let seasonPoints = 0;
-  let seasonRank: number | null = null;
-  let eventsEntered = 0;
-  let wins = 0;
-
+  // Build event→group map for user's groups
+  const eventIdToGroupId = new Map<string, string>();
   if (myGroupIds.length > 0) {
-    const { data: standings } = await supabaseAdmin
-      .from("major_group_standings")
-      .select("season_points, wins, events_played, position")
-      .eq("profile_id", profileId)
+    const { data: groupEvents } = await supabaseAdmin
+      .from("events")
+      .select("id, group_id")
       .in("group_id", myGroupIds);
-
-    const rows = (standings ?? []) as any[];
-    seasonPoints = rows.reduce((s, r) => s + (r.season_points ?? 0), 0);
-    wins = rows.reduce((s, r) => s + (r.wins ?? 0), 0);
-    eventsEntered = rows.reduce((s, r) => s + (r.events_played ?? 0), 0);
-    // Use best rank across groups
-    const ranks = rows.map((r) => r.position as number | null).filter((p): p is number => p != null);
-    if (ranks.length > 0) seasonRank = Math.min(...ranks);
+    for (const e of groupEvents ?? []) {
+      eventIdToGroupId.set(e.id as string, e.group_id as string);
+    }
   }
+  const groupEventIds = [...eventIdToGroupId.keys()];
+
+  // Fetch all data in parallel
+  const [standingsRes, lbRes, winRes, allLbRes, allWinRes] = await Promise.all([
+    myGroupIds.length > 0
+      ? supabaseAdmin
+          .from("major_group_standings")
+          .select("group_id, season_points, wins, events_played, position")
+          .eq("profile_id", profileId)
+          .in("group_id", myGroupIds)
+      : Promise.resolve({ data: [] }),
+    groupEventIds.length > 0
+      ? supabaseAdmin
+          .from("event_leaderboard_entries")
+          .select("event_id, rounds_submitted")
+          .eq("profile_id", profileId)
+          .in("event_id", groupEventIds)
+      : Promise.resolve({ data: [] }),
+    groupEventIds.length > 0
+      ? supabaseAdmin
+          .from("event_winnings")
+          .select("event_id, amount")
+          .eq("profile_id", profileId)
+          .in("event_id", groupEventIds)
+      : Promise.resolve({ data: [] }),
+    supabaseAdmin
+      .from("event_leaderboard_entries")
+      .select("event_id, rounds_submitted, position")
+      .eq("profile_id", profileId),
+    supabaseAdmin
+      .from("event_winnings")
+      .select("amount")
+      .eq("profile_id", profileId),
+  ]);
+
+  const standings = (standingsRes.data ?? []) as any[];
+  const lbRows = (lbRes.data ?? []) as any[];
+  const winRows = (winRes.data ?? []) as any[];
+  const allLbRows = (allLbRes.data ?? []) as any[];
+  const allWinRows = (allWinRes.data ?? []) as any[];
+
+  // Build per-group stats
+  const standingsMap = new Map<string, any>(standings.map((s: any) => [s.group_id, s]));
+
+  const group_stats = myGroupRows
+    .map((g) => {
+      const standing = standingsMap.get(g.id);
+      const gLbRows = lbRows.filter((r: any) => eventIdToGroupId.get(r.event_id) === g.id);
+      const gWinRows = winRows.filter((r: any) => eventIdToGroupId.get(r.event_id) === g.id);
+      return {
+        group_id: g.id,
+        group_name: g.name,
+        group_image_url: (g as any).image_url ?? null,
+        events: standing?.events_played ?? 0,
+        rounds_played: gLbRows.reduce((s: number, r: any) => s + (r.rounds_submitted ?? 0), 0),
+        wins: standing?.wins ?? 0,
+        earnings: gWinRows.reduce((s: number, r: any) => s + (r.amount ?? 0), 0),
+        season_points: standing?.season_points ?? 0,
+        season_rank: standing?.position ?? null,
+      };
+    })
+    .sort((a, b) => b.events - a.events);
+
+  const season_events = group_stats.reduce((s, g) => s + g.events, 0);
+  const season_rounds_played = group_stats.reduce((s, g) => s + g.rounds_played, 0);
+  const season_wins = group_stats.reduce((s, g) => s + g.wins, 0);
+  const season_earnings = group_stats.reduce((s, g) => s + g.earnings, 0);
+
+  const alltime_events = new Set(allLbRows.map((r: any) => r.event_id)).size;
+  const alltime_rounds_played = allLbRows.reduce((s: number, r: any) => s + (r.rounds_submitted ?? 0), 0);
+  const alltime_wins = allLbRows.filter((r: any) => r.position === 1).length;
+  const alltime_earnings = allWinRows.reduce((s: number, r: any) => s + (r.amount ?? 0), 0);
 
   // Filter discover groups to exclude already-joined ones
   const joinedGroupIds = new Set(myGroupIds);
   const filteredDiscover = discoverGroups.filter((g) => !joinedGroupIds.has(g.id));
 
   return {
-    season_points: seasonPoints,
-    season_rank: seasonRank,
-    events_entered: eventsEntered,
-    wins,
+    season_events,
+    season_rounds_played,
+    season_wins,
+    season_earnings,
+    alltime_events,
+    alltime_rounds_played,
+    alltime_wins,
+    alltime_earnings,
+    group_stats,
     active_events: activeEvents,
     upcoming_events: upcomingEvents,
     my_groups: myGroupRows.map((g) => ({ ...g, member_count: 0 })),

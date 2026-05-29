@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { AuthUser } from "@/components/ui/auth-user";
 import { getViewerSession } from "@/lib/auth/viewerSession";
-import type { MajorHubSummary, MajorGroup, EventWithGroup } from "@/lib/majors/types";
+import type { MajorHubSummary, MajorGroupSeasonStats, MajorGroup, EventWithGroup } from "@/lib/majors/types";
 import { eventStatusLabel } from "@/lib/majors/labels";
 
 type MenuItem = { id: string; label: string };
@@ -119,6 +119,7 @@ function GroupCard({ group, onClick }: { group: MajorGroup & { member_count: num
 function MajorsHubPreview({ open, initialHub }: { open: boolean; initialHub?: MajorHubSummary | null }) {
   const router = useRouter();
   const [hub, setHub] = useState<MajorHubSummary | null>(initialHub ?? null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   // Sync if the parent finishes preloading after we already mounted
   useEffect(() => {
@@ -162,22 +163,32 @@ function MajorsHubPreview({ open, initialHub }: { open: boolean; initialHub?: Ma
     >
       {/* Season snapshot */}
       {hub && (
-        <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4">
-          <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/65 mb-3">Season</div>
-          <div className="grid grid-cols-4 gap-2 text-center">
-            {[
-              { label: "Points", value: hub.season_points },
-              { label: "Rank", value: hub.season_rank ?? "—" },
-              { label: "Events", value: hub.events_entered },
-              { label: "Wins", value: hub.wins },
-            ].map((stat) => (
-              <div key={stat.label}>
-                <div className="text-xl font-extrabold text-[#f5e6b0] leading-none">{stat.value}</div>
-                <div className="text-[10px] text-emerald-200/55 mt-1">{stat.label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <>
+          <button
+            type="button"
+            onClick={() => setDrawerOpen(true)}
+            className="w-full text-left rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4 active:opacity-80 transition-opacity"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/65">Season</div>
+              <div className="text-emerald-400/60 text-xs">›</div>
+            </div>
+            <div className="grid grid-cols-4 gap-2 text-center">
+              {[
+                { label: "Events", value: hub.season_events },
+                { label: "Rounds", value: hub.season_rounds_played },
+                { label: "Wins", value: hub.season_wins },
+                { label: "Earnings", value: hub.season_earnings === 0 ? "—" : `£${hub.season_earnings.toFixed(0)}` },
+              ].map((stat) => (
+                <div key={stat.label}>
+                  <div className="text-xl font-extrabold text-[#f5e6b0] leading-none">{stat.value}</div>
+                  <div className="text-[10px] text-emerald-200/55 mt-1">{stat.label}</div>
+                </div>
+              ))}
+            </div>
+          </button>
+          {drawerOpen && <SeasonStatsDrawer hub={hub} onClose={() => setDrawerOpen(false)} />}
+        </>
       )}
 
       {/* Live events */}
@@ -263,6 +274,118 @@ function MajorsHubPreview({ open, initialHub }: { open: boolean; initialHub?: Ma
         </>
       )}
     </motion.div>
+  );
+}
+
+function AllTimeVsSeasonSection({ hub }: { hub: MajorHubSummary }) {
+  const fmt = (n: number) => (n === 0 ? "—" : `£${n.toFixed(2)}`);
+  const rows = [
+    { label: "Events",   season: hub.season_events,        alltime: hub.alltime_events,        isCurrency: false },
+    { label: "Rounds",   season: hub.season_rounds_played,  alltime: hub.alltime_rounds_played,  isCurrency: false },
+    { label: "Wins",     season: hub.season_wins,           alltime: hub.alltime_wins,           isCurrency: false },
+    { label: "Earnings", season: hub.season_earnings,       alltime: hub.alltime_earnings,       isCurrency: true  },
+  ];
+  return (
+    <div className="mx-4 rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/60 overflow-hidden">
+      <div className="grid grid-cols-3 text-[10px] uppercase tracking-[0.14em] text-emerald-200/50 px-3 pt-3 pb-1">
+        <div />
+        <div className="text-center text-emerald-300/80 font-semibold">Season</div>
+        <div className="text-center">All Time</div>
+      </div>
+      {rows.map((row) => (
+        <div key={row.label} className="grid grid-cols-3 px-3 py-2 border-t border-emerald-900/40">
+          <div className="text-[11px] text-emerald-200/60 self-center">{row.label}</div>
+          <div className="text-center text-sm font-bold text-[#f5e6b0]">
+            {row.isCurrency ? fmt(row.season) : (row.season || "—")}
+          </div>
+          <div className="text-center text-sm font-semibold text-emerald-100/80">
+            {row.isCurrency ? fmt(row.alltime) : (row.alltime || "—")}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GroupStatRow({ stat }: { stat: MajorGroupSeasonStats }) {
+  const fmt = (n: number) => (n === 0 ? "—" : `£${n.toFixed(2)}`);
+  const stats = [
+    { label: "Events",   value: stat.events || "—" },
+    { label: "Rounds",   value: stat.rounds_played || "—" },
+    { label: "Wins",     value: stat.wins || "—" },
+    { label: "Earnings", value: fmt(stat.earnings) },
+    { label: "Points",   value: stat.season_points || "—" },
+  ];
+  return (
+    <div className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/60 p-3 space-y-2.5">
+      <div className="flex items-center gap-2">
+        {stat.group_image_url ? (
+          <img
+            src={stat.group_image_url}
+            alt={stat.group_name}
+            className="h-6 w-6 rounded-full object-cover border border-emerald-700/40 shrink-0"
+          />
+        ) : (
+          <div className="h-6 w-6 rounded-full bg-gradient-to-br from-emerald-800 to-emerald-950 flex items-center justify-center text-[9px] font-bold text-emerald-200 shrink-0">
+            {stat.group_name.slice(0, 2).toUpperCase()}
+          </div>
+        )}
+        <span className="text-xs font-semibold text-emerald-50 truncate">{stat.group_name}</span>
+        {stat.season_rank != null && (
+          <span className="ml-auto shrink-0 text-[9px] text-emerald-300/60 border border-emerald-800/50 rounded-full px-1.5 py-0.5">
+            #{stat.season_rank}
+          </span>
+        )}
+      </div>
+      <div className="grid grid-cols-3 gap-x-2 gap-y-2 text-center">
+        {stats.map((s) => (
+          <div key={s.label}>
+            <div className="text-sm font-bold text-emerald-50">{s.value}</div>
+            <div className="text-[9px] text-emerald-200/50 mt-0.5">{s.label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SeasonStatsDrawer({ hub, onClose }: { hub: MajorHubSummary; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/60" />
+      <div
+        className="absolute left-0 right-0 bottom-0 rounded-t-3xl border-t border-emerald-900/70 bg-[#061f12] max-h-[85dvh] overflow-y-auto"
+        style={{ paddingBottom: "env(safe-area-inset-bottom, 16px)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="w-10 h-1 rounded-full bg-emerald-800/60 mx-auto mt-3 mb-1" />
+        <div className="flex items-center justify-between px-4 py-3">
+          <div className="text-sm font-semibold text-emerald-50">Your Stats</div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-emerald-200/60 hover:text-emerald-100 text-lg leading-none"
+          >
+            ✕
+          </button>
+        </div>
+
+        <AllTimeVsSeasonSection hub={hub} />
+
+        <div className="mx-4 border-t border-emerald-900/50 my-3" />
+
+        <div className="px-4 pb-4 space-y-2">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/55 mb-2">
+            By Group · Season
+          </div>
+          {hub.group_stats.length === 0 ? (
+            <div className="text-xs text-emerald-200/40 text-center py-4">Join a group to see per-group stats</div>
+          ) : (
+            hub.group_stats.map((g) => <GroupStatRow key={g.group_id} stat={g} />)
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
