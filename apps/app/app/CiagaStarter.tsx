@@ -18,6 +18,7 @@ import { MiniFeedTeaserCard } from "@/components/social/MiniFeedTeaser";
 import { MajorsView } from "@/components/home/MajorsView";
 import type { MajorHubSummary } from "@/lib/majors/types";
 import { getViewerSession } from "@/lib/auth/viewerSession";
+import { LoadingScreen } from "@/components/ui/loading-screen";
 
 type MenuItem = { id: string; label: string };
 
@@ -64,6 +65,7 @@ export default function CIAGAStarter({ initialData, initialMajors }: Props) {
 
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<ViewMode>("home");
+  const [authReady, setAuthReady] = useState(false);
 
   // viewport-driven layout values
   const [vw, setVw] = useState(390);
@@ -93,6 +95,12 @@ export default function CIAGAStarter({ initialData, initialMajors }: Props) {
   const [miniFeedLoading, setMiniFeedLoading] = useState(false);
   const [miniFeedError, setMiniFeedError] = useState<string | null>(null);
   const [majorsPreload, setMajorsPreload] = useState<MajorHubSummary | null>(initialMajors ?? null);
+
+  useEffect(() => {
+    const minDelay = new Promise<void>((r) => setTimeout(r, 2200));
+    const authDone = getViewerSession().then(() => {});
+    Promise.all([minDelay, authDone]).then(() => setAuthReady(true));
+  }, []);
 
   useEffect(() => {
     const updateViewport = () => {
@@ -285,7 +293,9 @@ export default function CIAGAStarter({ initialData, initialMajors }: Props) {
   const miniFeedMaxH = MINI_CARD_H * 5 + MINI_GAP * 4;
 
   return (
-    <AnimatePresence initial={false} mode="wait">
+    <>
+      <LoadingScreen isReady={authReady} />
+      <AnimatePresence initial={false} mode="wait">
       {view === "home" ? (
         <motion.div
           key="home"
@@ -489,6 +499,7 @@ export default function CIAGAStarter({ initialData, initialMajors }: Props) {
           initialHub={majorsPreload}
         />
       )}
-    </AnimatePresence>
+      </AnimatePresence>
+    </>
   );
 }
