@@ -16,6 +16,7 @@ import { MajorsView } from "@/components/home/MajorsView";
 import type { MajorHubSummary } from "@/lib/majors/types";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 import { LoadingScreen } from "@/components/ui/loading-screen";
+import { getCachedHomeData, setCachedHomeData } from "@/lib/home/homeDataCache";
 
 type MenuItem = { id: string; label: string };
 
@@ -65,6 +66,7 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
   // Show splash on first visit; skip on back navigation (splash_shown persists in sessionStorage).
   // useLayoutEffect runs before paint so returning users never see the overlay flash.
   const [showSplash, setShowSplash] = useState(true);
+  const [dataReady, setDataReady] = useState(false);
   useLayoutEffect(() => {
     if (sessionStorage.getItem("splash_shown") === "1") setShowSplash(false);
   }, []);
@@ -119,9 +121,27 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
     };
   }, []);
 
-  // Home data fetch — skipped when SSR or splash already provided data
+  // Home data fetch — uses module cache on back navigation, fetches fresh otherwise
   useEffect(() => {
     if (initialData) return;
+
+    const applyData = (data: HomeSummary) => {
+      setLiveRoundId(data.live_round_id ?? null);
+      setHandicapIndex(data.handicap?.current ?? null);
+      setHandicapDelta30(data.handicap?.delta_30d ?? 0);
+      setRoundsPlayed(data.rounds_played ?? null);
+      setLastRound(data.last_round ?? null);
+      setMiniFeed((data.mini_feed as FeedItemVM[]) ?? []);
+    };
+
+    // Serve cached data instantly on back navigation (no network, no loading state)
+    const cached = getCachedHomeData();
+    if (cached) {
+      applyData(cached);
+      setDataReady(true);
+      setMiniFeedLoading(false);
+      return;
+    }
 
     let cancelled = false;
     let onlineRetryCleanup: (() => void) | null = null;
@@ -151,22 +171,21 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
         });
         if (cancelled) return;
         if (!res.ok) {
+          setDataReady(true);
           scheduleRetry();
           return;
         }
-        const data = await res.json();
+        const data = await res.json() as HomeSummary;
 
         if (!cancelled) {
-          setLiveRoundId(data.live_round_id ?? null);
-          setHandicapIndex(data.handicap?.current ?? null);
-          setHandicapDelta30(data.handicap?.delta_30d ?? 0);
-          setRoundsPlayed(data.rounds_played ?? null);
-          setLastRound(data.last_round ?? null);
-          setMiniFeed((data.mini_feed as FeedItemVM[]) ?? []);
+          setCachedHomeData(data);
+          applyData(data);
+          setDataReady(true);
         }
       } catch (e: any) {
         if (!cancelled) {
           setMiniFeedError(e?.message ?? "Failed to load");
+          setDataReady(true);
           scheduleRetry();
         }
       } finally {
@@ -279,7 +298,15 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
 
   return (
     <>
-      {showSplash && <LoadingScreen isReady={true} onDone={() => setShowSplash(false)} />}
+      {showSplash && (
+        <LoadingScreen
+          isReady={dataReady}
+          onDone={() => {
+            setShowSplash(false);
+            window.dispatchEvent(new CustomEvent("splash:done"));
+          }}
+        />
+      )}
     <AnimatePresence initial={false} mode="wait">
       {view === "home" ? (
         <motion.div

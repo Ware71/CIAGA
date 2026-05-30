@@ -4,7 +4,7 @@ export default function Loading() {
       style={{
         position: "fixed",
         inset: 0,
-        zIndex: 10000,
+        zIndex: 100,
         backgroundColor: "#040d06",
         display: "flex",
         alignItems: "center",
