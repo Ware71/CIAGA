@@ -9,6 +9,9 @@ interface Props {
   onDone?: () => void;
 }
 
+// Duration (ms) of the CSS grow animation in loading.tsx — must stay in sync.
+const GROW_MS = 450;
+
 export function LoadingScreen({ isReady, onDone }: Props) {
   const [done, setDone] = useState(false);
   const isReadyRef = useRef(isReady);
@@ -22,6 +25,14 @@ export function LoadingScreen({ isReady, onDone }: Props) {
   useEffect(() => {
     let cancelled = false;
 
+    // How far along is the CSS grow animation that loading.tsx started?
+    // performance.now() is ms since navigation — same clock the CSS animation uses.
+    const elapsed = performance.now();
+    const growDone = elapsed >= GROW_MS;
+    // Interpolate to match the CSS animation's current position so there's no jump.
+    const startScale = growDone ? 1 : 0.35 + (elapsed / GROW_MS) * 0.65;
+    const remainingGrow = growDone ? 0 : (GROW_MS - elapsed) / 1000;
+
     const waitUntilReady = () =>
       new Promise<void>((resolve) => {
         if (isReadyRef.current) { resolve(); return; }
@@ -32,40 +43,55 @@ export function LoadingScreen({ isReady, onDone }: Props) {
         requestAnimationFrame(check);
       });
 
-    const run = async () => {
-      const logo = logoRef.current;
-      const bg = bgRef.current;
-      if (!logo || !bg) return;
-
-      // grow into shot
-      await animate(logo, { scale: [0.35, 1] }, { duration: 0.45, ease: "easeOut" });
-      if (cancelled) return;
-
-      // pulse twice
-      await animate(logo, { scale: [1, 1.12, 1, 1.08, 1] }, { duration: 0.95, ease: "easeInOut" });
-      if (cancelled) return;
-
-      // spin
-      await animate(logo, { rotate: 360 }, { duration: 0.65, ease: "easeInOut" });
-      if (cancelled) return;
-
-      // spin slowly while waiting for connection / auth
-      const waitSpin = animate(logo, { rotate: [360, 720] }, { duration: 2.5, ease: "linear", repeat: Infinity, repeatType: "loop" });
-
-      // hold until auth is ready
-      await waitUntilReady();
-      waitSpin.stop();
-      if (cancelled) return;
-
-      // shrink and fade out logo, then fade background
-      animate(logo, { scale: 0.12, opacity: 0 }, { duration: 0.45, ease: "easeIn" });
-      await animate(bg, { opacity: 0 }, { duration: 0.35, delay: 0.15 });
-
+    const doExit = async () => {
+      animate(logoRef.current!, { scale: 0.12, opacity: 0 }, { duration: 0.45, ease: "easeIn" });
+      await animate(bgRef.current!, { opacity: 0 }, { duration: 0.35, delay: 0.15 });
       if (!cancelled) {
         sessionStorage.setItem("splash_shown", "1");
         setDone(true);
         onDone?.();
       }
+    };
+
+    const run = async () => {
+      const logo = logoRef.current;
+      const bg = bgRef.current;
+      if (!logo || !bg) return;
+
+      // Finish the grow phase — either skip it (already done by CSS) or complete the remainder.
+      if (remainingGrow > 0) {
+        await animate(logo, { scale: [startScale, 1] }, { duration: remainingGrow, ease: "easeOut" });
+        if (cancelled) return;
+      }
+
+      // Early exit: data arrived during the grow phase.
+      if (isReadyRef.current) { await doExit(); return; }
+
+      // Pulse twice.
+      await animate(logo, { scale: [1, 1.12, 1, 1.08, 1] }, { duration: 0.95, ease: "easeInOut" });
+      if (cancelled) return;
+
+      // Early exit: data arrived during pulse.
+      if (isReadyRef.current) { await doExit(); return; }
+
+      // Spin 360°.
+      await animate(logo, { rotate: 360 }, { duration: 0.65, ease: "easeInOut" });
+      if (cancelled) return;
+
+      // Early exit: data arrived during spin.
+      if (isReadyRef.current) { await doExit(); return; }
+
+      // Hold in a slow spin until auth/data is ready.
+      const waitSpin = animate(
+        logo,
+        { rotate: [360, 720] },
+        { duration: 2.5, ease: "linear", repeat: Infinity, repeatType: "loop" },
+      );
+      await waitUntilReady();
+      waitSpin.stop();
+      if (cancelled) return;
+
+      await doExit();
     };
 
     run();
@@ -75,11 +101,17 @@ export function LoadingScreen({ isReady, onDone }: Props) {
 
   if (done) return null;
 
+  // Derive the initial scale synchronously so the first render matches the CSS animation position.
+  const initialScale =
+    typeof performance !== "undefined" && performance.now() >= GROW_MS
+      ? 1
+      : 0.35 + (Math.min(performance.now(), GROW_MS) / GROW_MS) * 0.65;
+
   return (
     <div className="fixed inset-0 z-[10000]">
       <div ref={bgRef} className="absolute inset-0 bg-[#040d06]" />
       <div className="absolute inset-0 flex items-center justify-center">
-        <div ref={logoRef} style={{ transform: "scale(0.35)" }}>
+        <div ref={logoRef} style={{ transform: `scale(${initialScale})` }}>
           <Image
             src="/ciaga-logo.png"
             alt="CIAGA"
