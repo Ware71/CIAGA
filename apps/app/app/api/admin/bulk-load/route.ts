@@ -37,7 +37,6 @@ export async function POST(req: Request) {
   try {
     const admin = getSupabaseAdmin();
 
-    // ✅ Verify user via Bearer token (no auth-helpers)
     const authHeader = req.headers.get("authorization") || "";
     const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
     if (!token) return NextResponse.json({ error: "Missing Authorization token" }, { status: 401 });
@@ -49,7 +48,6 @@ export async function POST(req: Request) {
 
     const authUserId = userRes.user.id;
 
-    // ✅ Admin check
     const { data: myProfile, error: pErr } = await admin
       .from("profiles")
       .select("id,is_admin")
@@ -59,10 +57,11 @@ export async function POST(req: Request) {
     if (pErr) throw new Error(pErr.message);
     if (!myProfile?.is_admin) return NextResponse.json({ error: "Admin only" }, { status: 403 });
 
-    // ✅ Parse multipart form
     const form = await req.formData();
     const file = form.get("file") as File | null;
     if (!file) return NextResponse.json({ error: "Missing file" }, { status: 400 });
+
+    const isPreview = form.get("preview") === "true";
 
     const csvText = await file.text();
     const parsed = Papa.parse<Row>(csvText, { header: true, skipEmptyLines: true });
@@ -77,7 +76,68 @@ export async function POST(req: Request) {
     const rows = (parsed.data || []).filter(Boolean);
     if (!rows.length) return NextResponse.json({ error: "No rows found" }, { status: 400 });
 
-    // ✅ Group by round_key
+    // ── PREVIEW MODE ──────────────────────────────────────────────────────────
+    if (isPreview) {
+      const uniqueCourseIds = Array.from(new Set(rows.map((r) => r.course_id).filter(Boolean)));
+      const uniqueTeeBoxIds = Array.from(new Set(rows.map((r) => r.tee_box_id).filter(Boolean)));
+      const uniqueEmails = Array.from(
+        new Set(
+          rows
+            .map((r) => r.player_email?.toLowerCase())
+            .filter((e): e is string => Boolean(e))
+        )
+      );
+
+      const [coursesRes, teeBoxesRes, profilesRes] = await Promise.all([
+        uniqueCourseIds.length
+          ? admin.from("courses").select("id,name").in("id", uniqueCourseIds)
+          : Promise.resolve({ data: [], error: null }),
+        uniqueTeeBoxIds.length
+          ? admin.from("course_tee_boxes").select("id").in("id", uniqueTeeBoxIds)
+          : Promise.resolve({ data: [], error: null }),
+        uniqueEmails.length
+          ? admin.from("profiles").select("email").in("email", uniqueEmails)
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+
+      if (coursesRes.error) throw new Error(coursesRes.error.message);
+      if (teeBoxesRes.error) throw new Error(teeBoxesRes.error.message);
+      if (profilesRes.error) throw new Error(profilesRes.error.message);
+
+      const validCourseIds = new Set((coursesRes.data ?? []).map((c) => c.id));
+      const validTeeBoxIds = new Set((teeBoxesRes.data ?? []).map((t) => t.id));
+      const resolvedEmails = new Set((profilesRes.data ?? []).map((p) => p.email?.toLowerCase()));
+
+      const courseNames: Record<string, string> = {};
+      for (const c of coursesRes.data ?? []) {
+        courseNames[c.id] = c.name;
+      }
+
+      const invalid_course_ids = uniqueCourseIds.filter((id) => !validCourseIds.has(id));
+      const invalid_tee_box_ids = uniqueTeeBoxIds.filter((id) => !validTeeBoxIds.has(id));
+      const unresolved_emails = uniqueEmails.filter((e) => !resolvedEmails.has(e));
+
+      const roundKeys = new Set(rows.map((r) => r.round_key).filter(Boolean));
+      const playerKeys = new Set(
+        rows.map((r) => r.profile_id || r.player_email?.toLowerCase() || `guest:${r.display_name || ""}`)
+      );
+
+      return NextResponse.json({
+        ok: true,
+        preview: {
+          rows: rows.length,
+          rounds: roundKeys.size,
+          participants_est: playerKeys.size,
+          score_events_est: rows.length,
+          invalid_course_ids,
+          invalid_tee_box_ids,
+          unresolved_emails,
+          course_names: courseNames,
+        },
+      });
+    }
+
+    // ── IMPORT MODE ───────────────────────────────────────────────────────────
     const byRound = new Map<string, Row[]>();
     for (const r of rows) {
       const k = must(r.round_key, "Missing round_key");
@@ -107,7 +167,6 @@ export async function POST(req: Request) {
       const status = first.status || "live";
       const visibility = first.visibility || "private";
 
-      // 1) Course lookup (for snapshot)
       const { data: course, error: cErr } = await admin
         .from("courses")
         .select("id,name,city,country,lat,lng")
@@ -116,7 +175,6 @@ export async function POST(req: Request) {
 
       if (cErr || !course) throw new Error(`Round ${roundKey}: course lookup failed: ${cErr?.message}`);
 
-      // 2) Create round
       const { data: round, error: rErr } = await admin
         .from("rounds")
         .insert({
@@ -134,7 +192,6 @@ export async function POST(req: Request) {
       if (rErr || !round) throw new Error(`Round ${roundKey}: create round failed: ${rErr?.message}`);
       summary.rounds_created += 1;
 
-      // 3) Create course snapshot
       const { data: courseSnap, error: csErr } = await admin
         .from("round_course_snapshots")
         .insert({
@@ -152,7 +209,6 @@ export async function POST(req: Request) {
       if (csErr || !courseSnap)
         throw new Error(`Round ${roundKey}: create course snapshot failed: ${csErr?.message}`);
 
-      // 4) Tee snapshots + hole snapshots (supports multiple tee boxes)
       const teeBoxIds = Array.from(
         new Set(rRows.map((x) => must(x.tee_box_id, `Round ${roundKey}: missing tee_box_id`)))
       );
@@ -216,7 +272,6 @@ export async function POST(req: Request) {
         if (hsErr) throw new Error(`Round ${roundKey}: create hole snapshots failed: ${hsErr.message}`);
       }
 
-      // 5) Participants
       function playerKey(r: Row) {
         if (r.profile_id) return `profile:${r.profile_id}`;
         if (r.player_email) return `email:${r.player_email.toLowerCase()}`;
@@ -238,7 +293,6 @@ export async function POST(req: Request) {
 
         let profileId: string | null = pr.profile_id || null;
 
-        // Resolve by email if provided
         if (!profileId && pr.player_email) {
           const email = pr.player_email.toLowerCase();
           const { data: prof, error: pe } = await admin
@@ -281,7 +335,6 @@ export async function POST(req: Request) {
         participantIdByPlayerKey.set(pKey, part.id);
       }
 
-      // 6) Score events (1 row = 1 hole score)
       const scoreEvents = rRows.map((rr) => {
         const pId = must(
           participantIdByPlayerKey.get(playerKey(rr)),
