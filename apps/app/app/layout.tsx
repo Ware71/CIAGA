@@ -74,10 +74,6 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <head>
-        <link rel="preload" as="image" href="/ciaga-logo.png" fetchPriority="high" />
-        <style>{`html,body{background:#042713}`}</style>
-      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-[#042713] text-slate-100`}
       >
