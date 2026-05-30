@@ -1,5 +1,5 @@
-import SplashPage from "./SplashPage";
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <SplashPage />;
+  redirect("/home");
 }

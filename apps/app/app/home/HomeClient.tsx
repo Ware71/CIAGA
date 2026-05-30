@@ -15,7 +15,6 @@ import { MiniFeedTeaserCard } from "@/components/social/MiniFeedTeaser";
 import { MajorsView } from "@/components/home/MajorsView";
 import type { MajorHubSummary } from "@/lib/majors/types";
 import { getViewerSession } from "@/lib/auth/viewerSession";
-import { popHomeCache } from "@/lib/home/homeDataCache";
 
 type MenuItem = { id: string; label: string };
 
@@ -60,9 +59,7 @@ type Props = {
 export default function HomeClient({ initialData, initialMajors }: Props) {
   const router = useRouter();
 
-  // Pop splash-prefetched data (available on first mount after splash, null thereafter)
-  const [cachedSummary] = useState<HomeSummary | null>(() => popHomeCache());
-  const seed = initialData ?? cachedSummary;
+  const seed = initialData;
 
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<ViewMode>("home");
@@ -116,7 +113,7 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
 
   // Home data fetch — skipped when SSR or splash already provided data
   useEffect(() => {
-    if (initialData ?? cachedSummary) return;
+    if (initialData) return;
 
     let cancelled = false;
     let onlineRetryCleanup: (() => void) | null = null;
