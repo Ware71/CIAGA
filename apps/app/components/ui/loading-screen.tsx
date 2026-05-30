@@ -76,7 +76,7 @@ export function LoadingScreen({ isReady, onDone }: Props) {
   if (done) return null;
 
   return (
-    <div className="fixed inset-0 z-[100]">
+    <div className="fixed inset-0 z-[10000]">
       <div ref={bgRef} className="absolute inset-0 bg-[#040d06]" />
       <div className="absolute inset-0 flex items-center justify-center">
         <div ref={logoRef} style={{ transform: "scale(0.35)" }}>

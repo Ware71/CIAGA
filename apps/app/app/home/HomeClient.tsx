@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useLayoutEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { AuthUser } from "@/components/ui/auth-user";
@@ -62,9 +62,10 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
 
   const seed = initialData;
 
-  // Show splash on first visit; skip on back navigation (splash_shown persists in sessionStorage)
+  // Show splash on first visit; skip on back navigation (splash_shown persists in sessionStorage).
+  // useLayoutEffect runs before paint so returning users never see the overlay flash.
   const [showSplash, setShowSplash] = useState(true);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (sessionStorage.getItem("splash_shown") === "1") setShowSplash(false);
   }, []);
 
