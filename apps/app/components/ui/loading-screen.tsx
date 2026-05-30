@@ -43,9 +43,10 @@ export function LoadingScreen({ isReady, onDone }: Props) {
         requestAnimationFrame(check);
       });
 
-    const doExit = async () => {
-      animate(logoRef.current!, { scale: 0.12, opacity: 0 }, { duration: 0.45, ease: "easeIn" });
-      await animate(bgRef.current!, { opacity: 0 }, { duration: 0.35, delay: 0.15 });
+    // Accept captured refs as params to avoid unsafe ! assertions on potentially-stale ref values.
+    const doExit = async (logo: HTMLElement, bg: HTMLElement) => {
+      animate(logo, { scale: 0.12, opacity: 0 }, { duration: 0.45, ease: "easeIn" });
+      await animate(bg, { opacity: 0 }, { duration: 0.35, delay: 0.15 });
       if (!cancelled) {
         sessionStorage.setItem("splash_shown", "1");
         setDone(true);
@@ -58,28 +59,32 @@ export function LoadingScreen({ isReady, onDone }: Props) {
       const bg = bgRef.current;
       if (!logo || !bg) return;
 
-      // Finish the grow phase — either skip it (already done by CSS) or complete the remainder.
+      // Snap the logo to the interpolated CSS animation position immediately (before first paint
+      // of this component). The render always uses scale(0.35) for SSR safety; we correct it here.
+      logo.style.transform = `scale(${startScale})`;
+
+      // Finish the grow phase — either skip it (CSS already done) or complete the remainder.
       if (remainingGrow > 0) {
         await animate(logo, { scale: [startScale, 1] }, { duration: remainingGrow, ease: "easeOut" });
         if (cancelled) return;
       }
 
       // Early exit: data arrived during the grow phase.
-      if (isReadyRef.current) { await doExit(); return; }
+      if (isReadyRef.current) { await doExit(logo, bg); return; }
 
       // Pulse twice.
       await animate(logo, { scale: [1, 1.12, 1, 1.08, 1] }, { duration: 0.95, ease: "easeInOut" });
       if (cancelled) return;
 
       // Early exit: data arrived during pulse.
-      if (isReadyRef.current) { await doExit(); return; }
+      if (isReadyRef.current) { await doExit(logo, bg); return; }
 
       // Spin 360°.
       await animate(logo, { rotate: 360 }, { duration: 0.65, ease: "easeInOut" });
       if (cancelled) return;
 
       // Early exit: data arrived during spin.
-      if (isReadyRef.current) { await doExit(); return; }
+      if (isReadyRef.current) { await doExit(logo, bg); return; }
 
       // Hold in a slow spin until auth/data is ready.
       const waitSpin = animate(
@@ -91,7 +96,7 @@ export function LoadingScreen({ isReady, onDone }: Props) {
       waitSpin.stop();
       if (cancelled) return;
 
-      await doExit();
+      await doExit(logo, bg);
     };
 
     run();
@@ -101,17 +106,13 @@ export function LoadingScreen({ isReady, onDone }: Props) {
 
   if (done) return null;
 
-  // Derive the initial scale synchronously so the first render matches the CSS animation position.
-  const initialScale =
-    typeof performance !== "undefined" && performance.now() >= GROW_MS
-      ? 1
-      : 0.35 + (Math.min(performance.now(), GROW_MS) / GROW_MS) * 0.65;
-
   return (
     <div className="fixed inset-0 z-[10000]">
       <div ref={bgRef} className="absolute inset-0 bg-[#040d06]" />
       <div className="absolute inset-0 flex items-center justify-center">
-        <div ref={logoRef} style={{ transform: `scale(${initialScale})` }}>
+        {/* scale(0.35) is the SSR-safe initial value; the effect corrects it to the interpolated
+            CSS animation position before the first animation frame runs. */}
+        <div ref={logoRef} style={{ transform: "scale(0.35)" }}>
           <Image
             src="/ciaga-logo.png"
             alt="CIAGA"
