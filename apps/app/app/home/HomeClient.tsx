@@ -15,6 +15,7 @@ import { MiniFeedTeaserCard } from "@/components/social/MiniFeedTeaser";
 import { MajorsView } from "@/components/home/MajorsView";
 import type { MajorHubSummary } from "@/lib/majors/types";
 import { getViewerSession } from "@/lib/auth/viewerSession";
+import { LoadingScreen } from "@/components/ui/loading-screen";
 
 type MenuItem = { id: string; label: string };
 
@@ -60,6 +61,12 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
   const router = useRouter();
 
   const seed = initialData;
+
+  // Show splash on first visit; skip on back navigation (splash_shown persists in sessionStorage)
+  const [showSplash, setShowSplash] = useState(true);
+  useEffect(() => {
+    if (sessionStorage.getItem("splash_shown") === "1") setShowSplash(false);
+  }, []);
 
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<ViewMode>("home");
@@ -270,6 +277,8 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
   const miniFeedMaxH = MINI_CARD_H * 5 + MINI_GAP * 4;
 
   return (
+    <>
+      {showSplash && <LoadingScreen isReady={true} onDone={() => setShowSplash(false)} />}
     <AnimatePresence initial={false} mode="wait">
       {view === "home" ? (
         <motion.div
@@ -476,5 +485,6 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
         />
       )}
     </AnimatePresence>
+    </>
   );
 }
