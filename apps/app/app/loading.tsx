@@ -19,7 +19,7 @@ export default function Loading() {
           position: "fixed",
           inset: 0,
           zIndex: 10000,
-          backgroundColor: "#040d06",
+          backgroundColor: "#042713",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",

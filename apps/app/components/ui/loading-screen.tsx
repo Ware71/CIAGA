@@ -108,7 +108,7 @@ export function LoadingScreen({ isReady, onDone }: Props) {
 
   return (
     <div className="fixed inset-0 z-[10000]">
-      <div ref={bgRef} className="absolute inset-0 bg-[#040d06]" />
+      <div ref={bgRef} className="absolute inset-0 bg-[#042713]" />
       <div className="absolute inset-0 flex items-center justify-center">
         {/* scale(0.35) is the SSR-safe initial value; the effect corrects it to the interpolated
             CSS animation position before the first animation frame runs. */}
