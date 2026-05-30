@@ -137,7 +137,8 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
     // Serve cached data instantly on back navigation (no network, no loading state)
     const cached = getCachedHomeData();
     if (cached) {
-      applyData(cached);
+      applyData(cached.home);
+      setMajorsPreload(cached.majors);
       setDataReady(true);
       setMiniFeedLoading(false);
       return;
@@ -166,20 +167,25 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
         }
         if (!cancelled) setMyProfileId(session.profileId);
 
-        const res = await fetch("/api/home/summary", {
-          headers: { Authorization: `Bearer ${session.accessToken}` },
-        });
+        const [homeRes, majorsRes] = await Promise.all([
+          fetch("/api/home/summary", { headers: { Authorization: `Bearer ${session.accessToken}` } }),
+          fetch("/api/majors/hub", { headers: { Authorization: `Bearer ${session.accessToken}` } }),
+        ]);
         if (cancelled) return;
-        if (!res.ok) {
+        if (!homeRes.ok) {
           setDataReady(true);
           scheduleRetry();
           return;
         }
-        const data = await res.json() as HomeSummary;
+        const [homeData, majorsData] = await Promise.all([
+          homeRes.json() as Promise<HomeSummary>,
+          majorsRes.ok ? majorsRes.json() as Promise<MajorHubSummary> : Promise.resolve(null),
+        ]);
 
         if (!cancelled) {
-          setCachedHomeData(data);
-          applyData(data);
+          setCachedHomeData(homeData, majorsData);
+          applyData(homeData);
+          setMajorsPreload(majorsData);
           setDataReady(true);
         }
       } catch (e: any) {
