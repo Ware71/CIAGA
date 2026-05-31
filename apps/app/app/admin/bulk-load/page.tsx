@@ -25,16 +25,19 @@ type ImportSummary = {
   round_keys: Array<{ round_key: string; round_id: string }>;
 };
 
-const TEMPLATE_CSV = `round_key,course_id,played_at,tee_box_id,hole_number,strokes,profile_id,player_email,is_guest,display_name,handicap_index,role,round_name,status,visibility
-round_001,<course-uuid>,2024-06-15,<tee-box-uuid>,1,4,<profile-uuid>,,,,10.2,player,Saturday Medal,finished,private
-round_001,<course-uuid>,2024-06-15,<tee-box-uuid>,2,3,<profile-uuid>,,,,10.2,player,Saturday Medal,finished,private`;
-
-function downloadTemplate() {
-  const blob = new Blob([TEMPLATE_CSV], { type: "text/csv" });
+async function downloadExcelTemplate(token: string) {
+  const res = await fetch("/api/admin/bulk-load/template", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    throw new Error(json?.error || "Failed to generate template");
+  }
+  const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "bulk-rounds-template.csv";
+  a.download = "bulk-rounds-template.xlsx";
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -92,6 +95,8 @@ export default function AdminBulkLoadPage() {
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
   const [loading, setLoading] = useState(false);
+  const [templateLoading, setTemplateLoading] = useState(false);
+  const [templateError, setTemplateError] = useState<string | null>(null);
   const [showRoundKeys, setShowRoundKeys] = useState(false);
 
   function reset() {
@@ -189,6 +194,19 @@ export default function AdminBulkLoadPage() {
 
   const canUpload = !!file && !loading && errors.length === 0 && !!preview && !importSummary;
 
+  async function onDownloadTemplate() {
+    setTemplateError(null);
+    setTemplateLoading(true);
+    try {
+      const token = await getAccessToken();
+      await downloadExcelTemplate(token);
+    } catch (e: any) {
+      setTemplateError(e?.message || String(e));
+    } finally {
+      setTemplateLoading(false);
+    }
+  }
+
   return (
     <div className="p-4 max-w-3xl mx-auto space-y-6">
       <h1 className="text-xl font-semibold">Admin: Bulk Load Rounds (CSV)</h1>
@@ -250,9 +268,23 @@ export default function AdminBulkLoadPage() {
               </tbody>
             </table>
           </div>
-          <Button variant="outline" size="sm" onClick={downloadTemplate}>
-            Download template CSV
-          </Button>
+          <div className="space-y-1">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onDownloadTemplate}
+              disabled={templateLoading}
+            >
+              {templateLoading ? "Generating…" : "Download Excel Template (.xlsx)"}
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              Requires Excel 365 or Excel 2019+ for XLOOKUP formulas. Type course/tee/player
+              names in the helper columns — IDs resolve automatically. Save as CSV to upload.
+            </p>
+            {templateError && (
+              <p className="text-xs text-destructive">{templateError}</p>
+            )}
+          </div>
         </div>
       </details>
 
