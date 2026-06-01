@@ -213,61 +213,10 @@ export default function AdminBulkLoadPage() {
 
       {/* CSV Format Guide */}
       <details className="rounded border p-3 text-sm">
-        <summary className="cursor-pointer font-medium">CSV Format Guide</summary>
-        <div className="mt-3 space-y-3">
-          <div>
-            <div className="font-medium mb-1">Required columns</div>
-            <table className="w-full text-xs border-collapse">
-              <thead>
-                <tr className="bg-muted">
-                  <th className="border px-2 py-1 text-left">Column</th>
-                  <th className="border px-2 py-1 text-left">Description</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[
-                  ["round_key", "Unique key grouping all rows into one round (e.g. round_001)"],
-                  ["course_id", "UUID of the course from the courses table"],
-                  ["played_at", "ISO date the round was played (e.g. 2024-06-15)"],
-                  ["tee_box_id", "UUID of the tee box from course_tee_boxes"],
-                  ["hole_number", "Integer 1–18"],
-                  ["strokes", "Integer 0–30"],
-                  ["profile_id / player_email / is_guest", "At least one required to identify the player"],
-                ].map(([col, desc]) => (
-                  <tr key={col}>
-                    <td className="border px-2 py-1 font-mono">{col}</td>
-                    <td className="border px-2 py-1">{desc}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div>
-            <div className="font-medium mb-1">Optional columns</div>
-            <table className="w-full text-xs border-collapse">
-              <thead>
-                <tr className="bg-muted">
-                  <th className="border px-2 py-1 text-left">Column</th>
-                  <th className="border px-2 py-1 text-left">Description</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[
-                  ["round_name", "Display name for the round (defaults to round_key)"],
-                  ["display_name", "Player display name override"],
-                  ["handicap_index", "Player handicap index at time of round"],
-                  ["role", "owner | scorer | player (default: player)"],
-                  ["status", "draft | live | finished (default: live)"],
-                  ["visibility", "private | link | public (default: private)"],
-                ].map(([col, desc]) => (
-                  <tr key={col}>
-                    <td className="border px-2 py-1 font-mono">{col}</td>
-                    <td className="border px-2 py-1">{desc}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <summary className="cursor-pointer font-medium">CSV Format Guide &amp; Excel Template</summary>
+        <div className="mt-3 space-y-4">
+
+          {/* Template download */}
           <div className="space-y-1">
             <Button
               variant="outline"
@@ -278,12 +227,120 @@ export default function AdminBulkLoadPage() {
               {templateLoading ? "Generating…" : "Download Excel Template (.xlsx)"}
             </Button>
             <p className="text-xs text-muted-foreground">
-              Requires Excel 365 or Excel 2019+ for XLOOKUP formulas. Type course/tee/player
-              names in the helper columns — IDs resolve automatically. Save as CSV to upload.
+              Requires Excel 365 or Excel 2019+. The template includes a Guide sheet with full instructions.
+              Fill the coloured columns, then save as CSV (UTF-8) before uploading here.
             </p>
             {templateError && (
               <p className="text-xs text-destructive">{templateError}</p>
             )}
+          </div>
+
+          {/* Colour legend */}
+          <div>
+            <div className="font-medium mb-1">Column colour legend</div>
+            <div className="flex flex-col gap-1 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: "#92D050" }} />
+                <span><strong>Green</strong> — you must fill these in (mandatory)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: "#FFC000" }} />
+                <span><strong>Amber</strong> — optional, leave blank to use the default</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: "#FF6B6B" }} />
+                <span><strong>Red</strong> — auto-filled by formula, do not type in these cells</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Required columns */}
+          <div>
+            <div className="font-medium mb-1">Required columns <span className="text-xs font-normal text-muted-foreground">(green in template)</span></div>
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="bg-muted">
+                  <th className="border px-2 py-1 text-left">Column</th>
+                  <th className="border px-2 py-1 text-left">Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  ["Player Name or Email", "Full name or email matching a registered profile"],
+                  ["Course Name", "Exact course name — auto-resolves course_id via XLOOKUP"],
+                  ["Tee Name", "Tee colour/name for the course — auto-resolves tee_box_id"],
+                  ["Hole Number", "Integer 1–18"],
+                  ["Strokes", "Integer 0–30"],
+                  ["round_key", "Unique code grouping all rows into one round (e.g. round_001)"],
+                  ["played_at", "Date in YYYY-MM-DD format (e.g. 2024-06-15)"],
+                ].map(([col, desc]) => (
+                  <tr key={col}>
+                    <td className="border px-2 py-1 font-mono">{col}</td>
+                    <td className="border px-2 py-1">{desc}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Optional columns */}
+          <div>
+            <div className="font-medium mb-1">Optional columns <span className="text-xs font-normal text-muted-foreground">(amber in template)</span></div>
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="bg-muted">
+                  <th className="border px-2 py-1 text-left">Column</th>
+                  <th className="border px-2 py-1 text-left">Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  ["handicap_index", "Player handicap index at time of round"],
+                  ["role", "player | scorer | owner (default: player)"],
+                  ["status", "draft | live | finished (default: finished)"],
+                  ["visibility", "private | link | public (default: private)"],
+                ].map(([col, desc]) => (
+                  <tr key={col}>
+                    <td className="border px-2 py-1 font-mono">{col}</td>
+                    <td className="border px-2 py-1">{desc}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Auto-formula columns */}
+          <div>
+            <div className="font-medium mb-1">Auto-formula columns <span className="text-xs font-normal text-muted-foreground">(red in template — do not edit)</span></div>
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="bg-muted">
+                  <th className="border px-2 py-1 text-left">Column</th>
+                  <th className="border px-2 py-1 text-left">Resolved from</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  ["profile_id", "Player Name or Email (XLOOKUP against registered profiles)"],
+                  ["display_name", "Player Name or Email (XLOOKUP)"],
+                  ["course_id", "Course Name (XLOOKUP against courses)"],
+                  ["round_name", "Course Name + played_at (auto-generated label)"],
+                  ["tee_box_id", "Course Name + Tee Name (composite XLOOKUP)"],
+                ].map(([col, desc]) => (
+                  <tr key={col}>
+                    <td className="border px-2 py-1 font-mono">{col}</td>
+                    <td className="border px-2 py-1">{desc}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Tips */}
+          <div className="text-xs text-muted-foreground space-y-1 border-t pt-2">
+            <p><strong>Tip:</strong> All 18 holes × all players in one round share the same <code>round_key</code>.</p>
+            <p><strong>Tip:</strong> If a red formula cell is blank, the name/email in the green column doesn&apos;t match the database — check spelling.</p>
+            <p><strong>Tip:</strong> The lookup data in the template is from the same environment the import writes to.</p>
           </div>
         </div>
       </details>
