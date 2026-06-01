@@ -46,7 +46,6 @@ export async function POST(req: Request) {
     }
 
     const participantIds = participants.map((p) => p.id);
-    const roundIds = [...new Set(participants.map((p) => p.round_id as string))];
 
     // Build lookups
     const participantById = Object.fromEntries(participants.map((p) => [p.id, p]));
@@ -59,17 +58,22 @@ export async function POST(req: Request) {
 
     if (hrrErr) throw new Error(hrrErr.message);
 
+    const hrrRoundIds = [...new Set((hrrRows ?? []).map((r) => r.round_id as string))];
     const teeSnapshotIds = [...new Set((hrrRows ?? []).map((r) => r.tee_snapshot_id as string).filter(Boolean))];
 
     // ── 3. Fetch round_course_snapshots ───────────────────────────────────────
-    const { data: courseSnapshots, error: csErr } = await admin
-      .from("round_course_snapshots")
-      .select("round_id, course_name")
-      .in("round_id", roundIds);
+    const courseByRoundId: Record<string, string> = {};
+    if (hrrRoundIds.length) {
+      const { data: courseSnapshots, error: csErr } = await admin
+        .from("round_course_snapshots")
+        .select("round_id, course_name")
+        .in("round_id", hrrRoundIds);
 
-    if (csErr) throw new Error(csErr.message);
-
-    const courseByRoundId = Object.fromEntries((courseSnapshots ?? []).map((s) => [s.round_id, s.course_name]));
+      if (csErr) throw new Error(csErr.message);
+      for (const s of courseSnapshots ?? []) {
+        courseByRoundId[s.round_id] = s.course_name;
+      }
+    }
 
     // ── 4. Fetch round_tee_snapshots ──────────────────────────────────────────
     const teeBySnapshotId: Record<string, { name: string; rating: number | null; slope: number | null }> = {};
@@ -86,10 +90,15 @@ export async function POST(req: Request) {
     }
 
     // ── 5. Fetch raw scores and sum per (round_id, participant_id) ─────────────
+    // Filter by participant_id (not round_id) to target only the selected players'
+    // scores, avoiding a result set that includes all other participants in those
+    // rounds. Explicit high limit prevents silent PostgREST row-cap truncation.
     const { data: scoreRows, error: scoreErr } = await admin
       .from("round_current_scores")
       .select("round_id, participant_id, strokes")
-      .in("round_id", roundIds);
+      .in("participant_id", participantIds)
+      .not("strokes", "is", null)
+      .limit(100000);
 
     if (scoreErr) throw new Error(scoreErr.message);
 
