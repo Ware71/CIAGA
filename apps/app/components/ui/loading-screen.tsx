@@ -80,7 +80,7 @@ export function LoadingScreen({ isReady, onDone }: Props) {
       if (isReadyRef.current) { await doExit(logo, bg); return; }
 
       // Spin 360°.
-      await animate(logo, { rotate: 360 }, { duration: 0.65, ease: "easeInOut" });
+      await animate(logo, { rotate: 360 }, { duration: 0.65, ease: "easeIn" });
       if (cancelled) return;
 
       // Early exit: data arrived during spin.
