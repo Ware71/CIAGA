@@ -76,16 +76,16 @@ export async function POST(req: Request) {
     }
 
     // ── 4. Fetch round_tee_snapshots ──────────────────────────────────────────
-    const teeBySnapshotId: Record<string, { name: string; rating: number | null; slope: number | null }> = {};
+    const teeBySnapshotId: Record<string, { name: string; rating: number | null; slope: number | null; par: number | null }> = {};
     if (teeSnapshotIds.length) {
       const { data: teeSnapshots, error: tsErr } = await admin
         .from("round_tee_snapshots")
-        .select("id, name, rating, slope")
+        .select("id, name, rating, slope, par_total")
         .in("id", teeSnapshotIds);
 
       if (tsErr) throw new Error(tsErr.message);
       for (const t of teeSnapshots ?? []) {
-        teeBySnapshotId[t.id] = { name: t.name, rating: t.rating, slope: t.slope };
+        teeBySnapshotId[t.id] = { name: t.name, rating: t.rating, slope: t.slope, par: t.par_total };
       }
     }
 
@@ -123,6 +123,7 @@ export async function POST(req: Request) {
       ags: string;
       hiUsed: string;
       courseHcp: string;
+      par: string;
     };
 
     const rows: Row[] = [];
@@ -152,6 +153,7 @@ export async function POST(req: Request) {
         ags: hrr.adjusted_gross_score != null ? String(hrr.adjusted_gross_score) : "",
         hiUsed: hrr.handicap_index_used != null ? String(hrr.handicap_index_used) : "",
         courseHcp: hrr.course_handicap_used != null ? String(hrr.course_handicap_used) : "",
+        par: tee?.par != null ? String(tee.par) : "",
       });
     }
 
@@ -168,9 +170,9 @@ export async function POST(req: Request) {
       return v;
     }
 
-    const header = "Player Name,Date Played,Course,Tee,Total Strokes,Course Rating,Slope,Score Differential,Adjusted Gross Score,Handicap Index,Course Handicap";
+    const header = "Player Name,Date Played,Course,Tee,Total Strokes,Course Rating,Slope,Score Differential,Adjusted Gross Score,Handicap Index,Course Handicap,Par";
     const lines = rows.map((r) =>
-      [r.playerName, r.playedAt, r.course, r.tee, r.totalStrokes, r.rating, r.slope, r.scoreDiff, r.ags, r.hiUsed, r.courseHcp]
+      [r.playerName, r.playedAt, r.course, r.tee, r.totalStrokes, r.rating, r.slope, r.scoreDiff, r.ags, r.hiUsed, r.courseHcp, r.par]
         .map(csvCell)
         .join(",")
     );
