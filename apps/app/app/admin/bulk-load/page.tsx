@@ -269,8 +269,8 @@ export default function AdminBulkLoadPage() {
                   ["Player Name or Email", "Full name or email matching a registered profile"],
                   ["Course Name", "Exact course name — auto-resolves course_id via XLOOKUP"],
                   ["Tee Name", "Tee colour/name for the course — auto-resolves tee_box_id"],
-                  ["Hole Number", "Integer 1–18"],
-                  ["Strokes", "Integer 0–30"],
+                  ["hole_number", "Integer 1–18"],
+                  ["strokes", "Integer 0–30"],
                   ["round_key", "Unique code grouping all rows into one round (e.g. round_001)"],
                   ["played_at", "Date in YYYY-MM-DD format (e.g. 2024-06-15)"],
                 ].map(([col, desc]) => (

@@ -18,8 +18,8 @@ const IMPORT_COLS = [
   { header: "Player Name or Email", width: 26, fill: GREEN_FILL },  // A
   { header: "Course Name",          width: 28, fill: GREEN_FILL },  // B
   { header: "Tee Name",             width: 14, fill: GREEN_FILL },  // C
-  { header: "Hole Number",          width: 13, fill: GREEN_FILL },  // D
-  { header: "Strokes",              width:  9, fill: GREEN_FILL },  // E
+  { header: "hole_number",          width: 13, fill: GREEN_FILL },  // D
+  { header: "strokes",              width:  9, fill: GREEN_FILL },  // E
   { header: "round_key",            width: 15, fill: GREEN_FILL },  // F
   { header: "played_at",            width: 13, fill: GREEN_FILL },  // G
   { header: "handicap_index",       width: 16, fill: AMBER_FILL }, // H
@@ -189,8 +189,8 @@ function buildGuideSheet(wb: ExcelJS.Workbook) {
     ["Player Name or Email", "Full player name or email — must match a registered profile",       "John Smith",     "Green"],
     ["Course Name",           "Exact course name as it appears in the system (case-sensitive)",    "Wentworth West", "Green"],
     ["Tee Name",              "Tee colour/name as it appears for that course (case-sensitive)",    "White",          "Green"],
-    ["Hole Number",           "Hole number 1 through 18",                                         "1",              "Green"],
-    ["Strokes",               "Shots taken on this hole (integer 0–30)",                          "4",              "Green"],
+    ["hole_number",           "Hole number 1 through 18",                                         "1",              "Green"],
+    ["strokes",               "Shots taken on this hole (integer 0–30)",                          "4",              "Green"],
     ["round_key",             "Unique code grouping all rows into one round — you choose it",      "round_001",      "Green"],
     ["played_at",             "Date the round was played, in YYYY-MM-DD format",                  "2024-06-15",     "Green"],
     ["handicap_index",        "Player handicap at time of play (optional numeric)",               "12.4",           "Amber"],
