@@ -90,13 +90,9 @@ export default function RoundHistoryList({
                 const netText = typeof net === "number" ? `Net: ${net}` : "";
 
                 const sd = scoreDiffByRoundId[r.id];
-                const sdText = typeof sd === "number" ? `Score Diff: ${sd.toFixed(1)}` : "SD \u2014";
-
                 const hiForRound = hiUsedByRoundId[r.id];
                 const isExceptional =
                   typeof hiForRound === "number" && typeof sd === "number" && sd <= hiForRound - 7;
-
-                const hiText2 = typeof hiForRound === "number" ? `Index: ${formatHI(hiForRound)}` : "\u2014";
 
                 const isCounting = countingSet?.has(r.id) ?? false;
                 const isCutoff = cutoffRoundId === r.id;
@@ -121,18 +117,16 @@ export default function RoundHistoryList({
                         </div>
                       </div>
 
-                      <div className="shrink-0 grid grid-cols-2 gap-2 items-center">
+                      <div className="shrink-0 grid grid-cols-2 gap-1 items-center">
                         <div className="text-right">
                           <div className="text-[12px] font-extrabold tabular-nums text-emerald-50 leading-none">
-                            {hiText2}
+                            {typeof hiForRound === "number" ? `HI ${formatHI(hiForRound)}` : "—"}
                           </div>
-                          <div className="mt-1 text-[9px] uppercase tracking-[0.14em] text-emerald-100/60">
-                            <span className="inline-flex items-center gap-1 justify-end">
-                              {sdText}
+                          <div className="mt-0.5 text-[9px] tabular-nums text-emerald-100/60">
+                            <span className="inline-flex items-center gap-0.5 justify-end">
+                              {typeof sd === "number" ? `SD ${sd.toFixed(1)}` : ""}
                               {isExceptional && (
-                                <span className="text-[#f5e6b0]/80" title="Exceptional round">
-                                  ✨
-                                </span>
+                                <span className="text-[#f5e6b0]/80" title="Exceptional round">&#10024;</span>
                               )}
                             </span>
                           </div>
@@ -142,7 +136,7 @@ export default function RoundHistoryList({
                           <div className="text-[14px] font-extrabold tabular-nums text-[#f5e6b0] leading-none">
                             {scoreText}
                           </div>
-                          <div className="mt-1 text-[9px] text-emerald-100/60">{netText || "\u00A0"}</div>
+                          <div className="mt-0.5 text-[9px] text-emerald-100/60">{netText || " "}</div>
                         </div>
                       </div>
                     </div>

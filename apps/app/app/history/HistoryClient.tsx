@@ -1,4 +1,4 @@
-﻿// /app/history/HistoryClient.tsx
+// /app/history/HistoryClient.tsx
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -56,9 +56,9 @@ function parseDateMs(iso: string | null) {
 }
 
 function shortDate(iso: string | null) {
-  if (!iso) return "â€”";
+  if (!iso) return "—";
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "â€”";
+  if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" });
 }
 
@@ -84,7 +84,7 @@ function toNumberMaybe(v: unknown): number | null {
   return null;
 }
 
-// âœ… WHS "used differentials" count table (same as player page)
+// WHS "used differentials" count table
 function usedDifferentialsCount(n: number) {
   if (n <= 0) return 0;
   if (n <= 2) return 0;
@@ -104,7 +104,6 @@ export default function RoundsHistoryPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // âœ… public: /history?profile=<uuid>
   const profileFromQuery = (searchParams.get("profile") || "").trim() || null;
 
   const [loading, setLoading] = useState(true);
@@ -116,7 +115,6 @@ export default function RoundsHistoryPage() {
   const [teeNameByRoundId, setTeeNameByRoundId] = useState<Record<string, string>>({});
   const [myTotalByRoundId, setMyTotalByRoundId] = useState<Record<string, number>>({});
 
-  // handicap extras (for display)
   const [agsByRoundId, setAgsByRoundId] = useState<Record<string, number>>({});
   const [netByRoundId, setNetByRoundId] = useState<Record<string, number>>({});
   const [scoreDiffByRoundId, setScoreDiffByRoundId] = useState<Record<string, number>>({});
@@ -125,11 +123,9 @@ export default function RoundsHistoryPage() {
 
   const [error, setError] = useState<string | null>(null);
 
-  // Pagination state
   const [loadedCount, setLoadedCount] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  // Refs for data needed by loadMore without triggering re-renders
   const allRoundsRef = useRef<RoundRow[]>([]);
   const pidMapRef = useRef<Record<string, string>>({});
   const teeSnapIdByRoundRef = useRef<Record<string, string>>({});
@@ -137,7 +133,6 @@ export default function RoundsHistoryPage() {
   const courseHcpByPidRef = useRef<Record<string, number>>({});
   const loadedCountRef = useRef(0);
 
-  // Public-safe profile fetcher for the header title
   const fetchProfilePublic = async (id: string) => {
     const { data, error: e } = await supabase.rpc("get_profiles_public", { ids: [id] });
     if (e) throw e;
@@ -168,10 +163,10 @@ export default function RoundsHistoryPage() {
         teeSnaps.push(...((tees ?? []) as TeeSnap[]));
       }
       const byId: Record<string, string> = {};
-      for (const t of teeSnaps) byId[t.id] = t.name?.trim() || "â€”";
+      for (const t of teeSnaps) byId[t.id] = t.name?.trim() || "—";
       for (const r of slice) {
         const tid = teeSnapIdByRound[r.id];
-        if (tid) teeNameMap[r.id] = byId[tid] ?? "â€”";
+        if (tid) teeNameMap[r.id] = byId[tid] ?? "—";
       }
     }
 
@@ -263,7 +258,6 @@ export default function RoundsHistoryPage() {
       }
     }
 
-    // Finalise totals and net scores for this slice
     const totalByRound: Record<string, number> = {};
     for (const r of slice) {
       const participantId = pidMap[r.id];
@@ -281,7 +275,6 @@ export default function RoundsHistoryPage() {
       if (gross != null && ch != null) netMap[r.id] = gross - ch;
     }
 
-    // Merge results into existing state dicts
     setTeeNameByRoundId((prev) => ({ ...prev, ...teeNameMap }));
     setMyTotalByRoundId((prev) => ({ ...prev, ...totalByRound }));
     setNetByRoundId((prev) => ({ ...prev, ...netMap }));
@@ -336,7 +329,6 @@ export default function RoundsHistoryPage() {
 
         if (!cancelled) setProfileId(pid);
 
-        // Header profile row (public-safe)
         try {
           const p = await fetchProfilePublic(pid);
           if (!cancelled) setProfileRow(p);
@@ -344,7 +336,7 @@ export default function RoundsHistoryPage() {
           if (!cancelled) setProfileRow(null);
         }
 
-        // 1) Load all participant rows + round info (fast join â€” gives us ALL round metadata)
+        // 1) All participant rows + round info
         const { data, error: qErr } = await supabase
           .from("round_participants")
           .select(
@@ -391,7 +383,6 @@ export default function RoundsHistoryPage() {
 
         if (cancelled) return;
 
-        // Store everything in refs so loadMore can access them
         allRoundsRef.current = extracted;
         pidMapRef.current = pidMap;
         teeSnapIdByRoundRef.current = teeSnapIdByRound;
@@ -399,9 +390,7 @@ export default function RoundsHistoryPage() {
         setRounds(extracted);
         setParticipantIdByRoundId(pidMap);
 
-        // 2) Load handicap_round_results for ALL participants upfront.
-        //    This drives the counting-set decoration and provides agsMap / courseHcpByPid
-        //    needed by loadSupplemental for every page.
+        // 2) handicap_round_results for ALL participants upfront (drives counting-set decoration)
         const participantIds = Array.from(new Set(Object.values(pidMap).filter(Boolean)));
         const agsMap: Record<string, number> = {};
         const sdMap: Record<string, number> = {};
@@ -439,11 +428,10 @@ export default function RoundsHistoryPage() {
           setHiUsedByRoundId(hiUsedMap);
         }
 
-        // Store in refs for loadSupplemental
         agsMapRef.current = agsMap;
         courseHcpByPidRef.current = courseHcpByPid;
 
-        // 3) Handicap index history â€” needed for "HI after" display on all visible rounds
+        // 3) Full handicap index history for "HI after" tooltip
         const { data: hist, error: hErr2 } = await supabase
           .from("handicap_index_history")
           .select("as_of_date, handicap_index")
@@ -488,7 +476,7 @@ export default function RoundsHistoryPage() {
 
         if (!cancelled) setHiAfterByRoundId(hiAfterMap);
 
-        // 4) Load supplemental data (tee names, scores, WHS penalties) for first page only
+        // 4) Supplemental data for first page only (tee names, scores, WHS penalties)
         if (!cancelled && extracted.length) {
           const firstSlice = extracted.slice(0, PAGE_SIZE);
           await loadSupplemental(firstSlice);
@@ -514,7 +502,7 @@ export default function RoundsHistoryPage() {
     return () => { cancelled = true; };
   }, [profileFromQuery, loadSupplemental]);
 
-  // âœ… Counting / cutoff â€” uses ALL rounds + ALL score diffs (both loaded upfront)
+  // Counting / cutoff uses ALL rounds + ALL score diffs (loaded upfront)
   const scoringRoundsNewestFirst = useMemo(() => {
     return rounds
       .map((r) => {
@@ -538,7 +526,7 @@ export default function RoundsHistoryPage() {
     return window20[window20.length - 1].roundId;
   }, [window20]);
 
-  // Full counts (from all rounds + all score diffs loaded upfront) â€” used for tab labels
+  // Full counts from all rounds (for tab labels)
   const acceptableRounds = useMemo(
     () => rounds.filter((r) => typeof scoreDiffByRoundId[r.id] === "number"),
     [rounds, scoreDiffByRoundId]
@@ -548,7 +536,7 @@ export default function RoundsHistoryPage() {
     [rounds, scoreDiffByRoundId]
   );
 
-  // Displayed rounds (only loaded pages) â€” used for card rendering
+  // Displayed rounds = loaded pages only
   const displayedRounds = useMemo(() => rounds.slice(0, loadedCount), [rounds, loadedCount]);
 
   const displayedAcceptableGrouped = useMemo(() => {
@@ -579,24 +567,21 @@ export default function RoundsHistoryPage() {
     const course = one(r.courses)?.name ?? "Unknown course";
     const played = shortDate(r.started_at ?? r.created_at);
     const titleText = r.name?.trim() ? r.name.trim() : course;
-    const teeName = teeNameByRoundId[r.id] ?? "â€”";
+    const teeName = teeNameByRoundId[r.id] ?? "—";
 
     const href = { pathname: `/round/${r.id}`, query: { from: "history" } } as const;
 
     const ags = agsByRoundId[r.id];
     const total = myTotalByRoundId[r.id];
     const displayScore = total ?? ags;
-    const scoreText = typeof displayScore === "number" ? String(displayScore) : "â€”";
+    const scoreText = typeof displayScore === "number" ? String(displayScore) : "—";
 
     const net = netByRoundId[r.id];
     const netText = typeof net === "number" ? `Net: ${net}` : "";
 
     const sd = scoreDiffByRoundId[r.id];
-    const sdText = typeof sd === "number" ? `Score Diff: ${sd.toFixed(1)}` : "SD â€”";
-
     const hiUsed = hiUsedByRoundId[r.id];
     const hiAfter = hiAfterByRoundId[r.id];
-    const hiText = typeof hiUsed === "number" ? `Index: ${formatHI(hiUsed)}` : "â€”";
 
     const isExceptional =
       typeof hiUsed === "number" && typeof sd === "number" && sd <= hiUsed - 7;
@@ -627,18 +612,16 @@ export default function RoundsHistoryPage() {
             </div>
           </div>
 
-          <div className="shrink-0 grid grid-cols-2 gap-2 items-center">
+          <div className="shrink-0 grid grid-cols-2 gap-1 items-center">
             <div className="text-right">
               <div className="text-[12px] font-extrabold tabular-nums text-emerald-50 leading-none">
-                {hiText}
+                {typeof hiUsed === "number" ? `HI ${formatHI(hiUsed)}` : "—"}
               </div>
-              <div className="mt-1 text-[9px] uppercase tracking-[0.14em] text-emerald-100/60">
-                <span className="inline-flex items-center gap-1 justify-end">
-                  {sdText}
+              <div className="mt-0.5 text-[9px] tabular-nums text-emerald-100/60">
+                <span className="inline-flex items-center gap-0.5 justify-end">
+                  {typeof sd === "number" ? `SD ${sd.toFixed(1)}` : ""}
                   {isExceptional && (
-                    <span className="text-[#f5e6b0]/80" title="Exceptional round">
-                      âœ¨
-                    </span>
+                    <span className="text-[#f5e6b0]/80" title="Exceptional round">&#10024;</span>
                   )}
                 </span>
               </div>
@@ -648,7 +631,7 @@ export default function RoundsHistoryPage() {
               <div className="text-[14px] font-extrabold tabular-nums text-[#f5e6b0] leading-none">
                 {scoreText}
               </div>
-              <div className="mt-1 text-[9px] text-emerald-100/60">{netText || " "}</div>
+              <div className="mt-0.5 text-[9px] text-emerald-100/60">{netText || " "}</div>
             </div>
           </div>
         </div>
@@ -657,18 +640,16 @@ export default function RoundsHistoryPage() {
   }
 
   const title = useMemo(() => {
-    const who = profileRow?.name || profileRow?.email || (profileFromQuery ? "Player" : "You");
     if (loading) return "Round history";
     if (error) return "Round history";
-    return rounds.length ? `${who} Â· Round history (${rounds.length})` : `${who} Â· Round history`;
-  }, [loading, error, rounds.length, profileRow, profileFromQuery]);
+    return rounds.length ? `Round history (${rounds.length})` : "Round history";
+  }, [loading, error, rounds.length]);
 
   const hasMore = loadedCount < rounds.length;
 
   return (
     <div className="h-screen bg-[#042713] text-slate-100 px-1.5 sm:px-2 pt-4">
       <div className="mx-auto w-full max-w-3xl h-full flex flex-col">
-        {/* âœ… Sticky Header */}
         <header className="sticky top-0 z-20 bg-[#042713] pb-3">
           <div className="flex items-center justify-between gap-2 px-1">
             <BackButton onClick={() => router.replace("/")} />
@@ -686,11 +667,10 @@ export default function RoundsHistoryPage() {
           </div>
         </header>
 
-        {/* âœ… Only this area scrolls */}
         <div className="flex-1 overflow-y-auto overscroll-y-contain pb-[env(safe-area-inset-bottom)]">
           {loading && (
             <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">
-              Loadingâ€¦
+              Loading…
             </div>
           )}
 
@@ -776,7 +756,7 @@ export default function RoundsHistoryPage() {
                         disabled={loadingMore}
                         className="w-full rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 py-3 text-[12px] text-emerald-100/70 hover:bg-emerald-900/20 transition-colors disabled:opacity-50"
                       >
-                        {loadingMore ? "Loadingâ€¦" : `Load more Â· ${rounds.length - loadedCount} remaining`}
+                        {loadingMore ? "Loading…" : `Load more · ${rounds.length - loadedCount} remaining`}
                       </button>
                     )}
                   </div>
@@ -810,7 +790,7 @@ export default function RoundsHistoryPage() {
                         disabled={loadingMore}
                         className="w-full rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 py-3 text-[12px] text-emerald-100/70 hover:bg-emerald-900/20 transition-colors disabled:opacity-50"
                       >
-                        {loadingMore ? "Loadingâ€¦" : `Load more Â· ${rounds.length - loadedCount} remaining`}
+                        {loadingMore ? "Loading…" : `Load more · ${rounds.length - loadedCount} remaining`}
                       </button>
                     )}
                   </div>
