@@ -120,6 +120,7 @@ export async function POST(req: Request) {
       rating: string;
       slope: string;
       scoreDiff: string;
+      ags: string;
     };
 
     const rows: Row[] = [];
@@ -146,6 +147,7 @@ export async function POST(req: Request) {
         rating: tee?.rating != null ? String(tee.rating) : "",
         slope: tee?.slope != null ? String(tee.slope) : "",
         scoreDiff: hrr.score_differential != null ? String(hrr.score_differential) : "",
+        ags: hrr.adjusted_gross_score != null ? String(hrr.adjusted_gross_score) : "",
       });
     }
 
@@ -162,9 +164,9 @@ export async function POST(req: Request) {
       return v;
     }
 
-    const header = "Player Name,Date Played,Course,Tee,Total Strokes,Course Rating,Slope,Score Differential";
+    const header = "Player Name,Date Played,Course,Tee,Total Strokes,Course Rating,Slope,Score Differential,Adjusted Gross Score";
     const lines = rows.map((r) =>
-      [r.playerName, r.playedAt, r.course, r.tee, r.totalStrokes, r.rating, r.slope, r.scoreDiff]
+      [r.playerName, r.playedAt, r.course, r.tee, r.totalStrokes, r.rating, r.slope, r.scoreDiff, r.ags]
         .map(csvCell)
         .join(",")
     );
