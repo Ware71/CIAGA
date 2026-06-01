@@ -53,7 +53,7 @@ export async function POST(req: Request) {
     // ── 2. Fetch handicap_round_results ───────────────────────────────────────
     const { data: hrrRows, error: hrrErr } = await admin
       .from("handicap_round_results")
-      .select("round_id, participant_id, played_at, score_differential, tee_snapshot_id, adjusted_gross_score")
+      .select("round_id, participant_id, played_at, score_differential, tee_snapshot_id, adjusted_gross_score, handicap_index_used, course_handicap_used")
       .in("participant_id", participantIds);
 
     if (hrrErr) throw new Error(hrrErr.message);
@@ -121,6 +121,8 @@ export async function POST(req: Request) {
       slope: string;
       scoreDiff: string;
       ags: string;
+      hiUsed: string;
+      courseHcp: string;
     };
 
     const rows: Row[] = [];
@@ -148,6 +150,8 @@ export async function POST(req: Request) {
         slope: tee?.slope != null ? String(tee.slope) : "",
         scoreDiff: hrr.score_differential != null ? String(hrr.score_differential) : "",
         ags: hrr.adjusted_gross_score != null ? String(hrr.adjusted_gross_score) : "",
+        hiUsed: hrr.handicap_index_used != null ? String(hrr.handicap_index_used) : "",
+        courseHcp: hrr.course_handicap_used != null ? String(hrr.course_handicap_used) : "",
       });
     }
 
@@ -164,9 +168,9 @@ export async function POST(req: Request) {
       return v;
     }
 
-    const header = "Player Name,Date Played,Course,Tee,Total Strokes,Course Rating,Slope,Score Differential,Adjusted Gross Score";
+    const header = "Player Name,Date Played,Course,Tee,Total Strokes,Course Rating,Slope,Score Differential,Adjusted Gross Score,Handicap Index,Course Handicap";
     const lines = rows.map((r) =>
-      [r.playerName, r.playedAt, r.course, r.tee, r.totalStrokes, r.rating, r.slope, r.scoreDiff, r.ags]
+      [r.playerName, r.playedAt, r.course, r.tee, r.totalStrokes, r.rating, r.slope, r.scoreDiff, r.ags, r.hiUsed, r.courseHcp]
         .map(csvCell)
         .join(",")
     );
