@@ -113,20 +113,20 @@ export default function RoundHistoryList({
                       .filter(Boolean)
                       .join(" ")}
                   >
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0">
-                        <div className="text-[12px] font-semibold text-emerald-50 truncate">{titleText}</div>
-                        <div className="text-[10px] text-emerald-100/70 truncate">
+                        <div className="text-[11px] font-semibold text-emerald-50 truncate">{titleText}</div>
+                        <div className="text-[9px] text-emerald-100/70 truncate">
                           {teeName} &middot; {played}
                         </div>
                       </div>
 
-                      <div className="shrink-0 grid grid-cols-2 gap-4 items-center">
+                      <div className="shrink-0 grid grid-cols-2 gap-2 items-center">
                         <div className="text-right">
-                          <div className="text-[14px] font-extrabold tabular-nums text-emerald-50 leading-none">
+                          <div className="text-[12px] font-extrabold tabular-nums text-emerald-50 leading-none">
                             {hiText2}
                           </div>
-                          <div className="mt-1 text-[10px] uppercase tracking-[0.14em] text-emerald-100/60">
+                          <div className="mt-1 text-[9px] uppercase tracking-[0.14em] text-emerald-100/60">
                             <span className="inline-flex items-center gap-1 justify-end">
                               {sdText}
                               {isExceptional && (
@@ -139,10 +139,10 @@ export default function RoundHistoryList({
                         </div>
 
                         <div className="text-right">
-                          <div className="text-[16px] font-extrabold tabular-nums text-[#f5e6b0] leading-none">
+                          <div className="text-[14px] font-extrabold tabular-nums text-[#f5e6b0] leading-none">
                             {scoreText}
                           </div>
-                          <div className="mt-1 text-[10px] text-emerald-100/60">{netText || "\u00A0"}</div>
+                          <div className="mt-1 text-[9px] text-emerald-100/60">{netText || "\u00A0"}</div>
                         </div>
                       </div>
                     </div>

@@ -1,4 +1,4 @@
-// /app/history/HistoryClient.tsx
+﻿// /app/history/HistoryClient.tsx
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -56,9 +56,9 @@ function parseDateMs(iso: string | null) {
 }
 
 function shortDate(iso: string | null) {
-  if (!iso) return "—";
+  if (!iso) return "â€”";
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
+  if (Number.isNaN(d.getTime())) return "â€”";
   return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" });
 }
 
@@ -84,7 +84,7 @@ function toNumberMaybe(v: unknown): number | null {
   return null;
 }
 
-// ✅ WHS "used differentials" count table (same as player page)
+// âœ… WHS "used differentials" count table (same as player page)
 function usedDifferentialsCount(n: number) {
   if (n <= 0) return 0;
   if (n <= 2) return 0;
@@ -104,7 +104,7 @@ export default function RoundsHistoryPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // ✅ public: /history?profile=<uuid>
+  // âœ… public: /history?profile=<uuid>
   const profileFromQuery = (searchParams.get("profile") || "").trim() || null;
 
   const [loading, setLoading] = useState(true);
@@ -168,10 +168,10 @@ export default function RoundsHistoryPage() {
         teeSnaps.push(...((tees ?? []) as TeeSnap[]));
       }
       const byId: Record<string, string> = {};
-      for (const t of teeSnaps) byId[t.id] = t.name?.trim() || "—";
+      for (const t of teeSnaps) byId[t.id] = t.name?.trim() || "â€”";
       for (const r of slice) {
         const tid = teeSnapIdByRound[r.id];
-        if (tid) teeNameMap[r.id] = byId[tid] ?? "—";
+        if (tid) teeNameMap[r.id] = byId[tid] ?? "â€”";
       }
     }
 
@@ -344,7 +344,7 @@ export default function RoundsHistoryPage() {
           if (!cancelled) setProfileRow(null);
         }
 
-        // 1) Load all participant rows + round info (fast join — gives us ALL round metadata)
+        // 1) Load all participant rows + round info (fast join â€” gives us ALL round metadata)
         const { data, error: qErr } = await supabase
           .from("round_participants")
           .select(
@@ -443,7 +443,7 @@ export default function RoundsHistoryPage() {
         agsMapRef.current = agsMap;
         courseHcpByPidRef.current = courseHcpByPid;
 
-        // 3) Handicap index history — needed for "HI after" display on all visible rounds
+        // 3) Handicap index history â€” needed for "HI after" display on all visible rounds
         const { data: hist, error: hErr2 } = await supabase
           .from("handicap_index_history")
           .select("as_of_date, handicap_index")
@@ -514,7 +514,7 @@ export default function RoundsHistoryPage() {
     return () => { cancelled = true; };
   }, [profileFromQuery, loadSupplemental]);
 
-  // ✅ Counting / cutoff — uses ALL rounds + ALL score diffs (both loaded upfront)
+  // âœ… Counting / cutoff â€” uses ALL rounds + ALL score diffs (both loaded upfront)
   const scoringRoundsNewestFirst = useMemo(() => {
     return rounds
       .map((r) => {
@@ -538,7 +538,7 @@ export default function RoundsHistoryPage() {
     return window20[window20.length - 1].roundId;
   }, [window20]);
 
-  // Full counts (from all rounds + all score diffs loaded upfront) — used for tab labels
+  // Full counts (from all rounds + all score diffs loaded upfront) â€” used for tab labels
   const acceptableRounds = useMemo(
     () => rounds.filter((r) => typeof scoreDiffByRoundId[r.id] === "number"),
     [rounds, scoreDiffByRoundId]
@@ -548,7 +548,7 @@ export default function RoundsHistoryPage() {
     [rounds, scoreDiffByRoundId]
   );
 
-  // Displayed rounds (only loaded pages) — used for card rendering
+  // Displayed rounds (only loaded pages) â€” used for card rendering
   const displayedRounds = useMemo(() => rounds.slice(0, loadedCount), [rounds, loadedCount]);
 
   const displayedAcceptableGrouped = useMemo(() => {
@@ -579,24 +579,24 @@ export default function RoundsHistoryPage() {
     const course = one(r.courses)?.name ?? "Unknown course";
     const played = shortDate(r.started_at ?? r.created_at);
     const titleText = r.name?.trim() ? r.name.trim() : course;
-    const teeName = teeNameByRoundId[r.id] ?? "—";
+    const teeName = teeNameByRoundId[r.id] ?? "â€”";
 
     const href = { pathname: `/round/${r.id}`, query: { from: "history" } } as const;
 
     const ags = agsByRoundId[r.id];
     const total = myTotalByRoundId[r.id];
     const displayScore = total ?? ags;
-    const scoreText = typeof displayScore === "number" ? String(displayScore) : "—";
+    const scoreText = typeof displayScore === "number" ? String(displayScore) : "â€”";
 
     const net = netByRoundId[r.id];
     const netText = typeof net === "number" ? `Net: ${net}` : "";
 
     const sd = scoreDiffByRoundId[r.id];
-    const sdText = typeof sd === "number" ? `Score Diff: ${sd.toFixed(1)}` : "SD —";
+    const sdText = typeof sd === "number" ? `Score Diff: ${sd.toFixed(1)}` : "SD â€”";
 
     const hiUsed = hiUsedByRoundId[r.id];
     const hiAfter = hiAfterByRoundId[r.id];
-    const hiText = typeof hiUsed === "number" ? `Index: ${formatHI(hiUsed)}` : "—";
+    const hiText = typeof hiUsed === "number" ? `Index: ${formatHI(hiUsed)}` : "â€”";
 
     const isExceptional =
       typeof hiUsed === "number" && typeof sd === "number" && sd <= hiUsed - 7;
@@ -617,27 +617,27 @@ export default function RoundsHistoryPage() {
           .join(" ")}
         title={typeof hiAfter === "number" ? `HI after: ${formatHI(hiAfter)}` : undefined}
       >
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
-            <div className="text-[12px] sm:text-[13px] font-semibold text-emerald-50 truncate">
+            <div className="text-[11px] sm:text-[12px] font-semibold text-emerald-50 truncate">
               {titleText}
             </div>
-            <div className="text-[10px] sm:text-[11px] text-emerald-100/70 truncate">
+            <div className="text-[9px] sm:text-[10px] text-emerald-100/70 truncate">
               {teeName} &middot; {played}
             </div>
           </div>
 
-          <div className="shrink-0 grid grid-cols-2 gap-4 items-center">
+          <div className="shrink-0 grid grid-cols-2 gap-2 items-center">
             <div className="text-right">
-              <div className="text-[14px] font-extrabold tabular-nums text-emerald-50 leading-none">
+              <div className="text-[12px] font-extrabold tabular-nums text-emerald-50 leading-none">
                 {hiText}
               </div>
-              <div className="mt-1 text-[10px] uppercase tracking-[0.14em] text-emerald-100/60">
+              <div className="mt-1 text-[9px] uppercase tracking-[0.14em] text-emerald-100/60">
                 <span className="inline-flex items-center gap-1 justify-end">
                   {sdText}
                   {isExceptional && (
                     <span className="text-[#f5e6b0]/80" title="Exceptional round">
-                      ✨
+                      âœ¨
                     </span>
                   )}
                 </span>
@@ -645,10 +645,10 @@ export default function RoundsHistoryPage() {
             </div>
 
             <div className="text-right">
-              <div className="text-[16px] font-extrabold tabular-nums text-[#f5e6b0] leading-none">
+              <div className="text-[14px] font-extrabold tabular-nums text-[#f5e6b0] leading-none">
                 {scoreText}
               </div>
-              <div className="mt-1 text-[10px] text-emerald-100/60">{netText || " "}</div>
+              <div className="mt-1 text-[9px] text-emerald-100/60">{netText || " "}</div>
             </div>
           </div>
         </div>
@@ -660,7 +660,7 @@ export default function RoundsHistoryPage() {
     const who = profileRow?.name || profileRow?.email || (profileFromQuery ? "Player" : "You");
     if (loading) return "Round history";
     if (error) return "Round history";
-    return rounds.length ? `${who} · Round history (${rounds.length})` : `${who} · Round history`;
+    return rounds.length ? `${who} Â· Round history (${rounds.length})` : `${who} Â· Round history`;
   }, [loading, error, rounds.length, profileRow, profileFromQuery]);
 
   const hasMore = loadedCount < rounds.length;
@@ -668,7 +668,7 @@ export default function RoundsHistoryPage() {
   return (
     <div className="h-screen bg-[#042713] text-slate-100 px-1.5 sm:px-2 pt-4">
       <div className="mx-auto w-full max-w-3xl h-full flex flex-col">
-        {/* ✅ Sticky Header */}
+        {/* âœ… Sticky Header */}
         <header className="sticky top-0 z-20 bg-[#042713] pb-3">
           <div className="flex items-center justify-between gap-2 px-1">
             <BackButton onClick={() => router.replace("/")} />
@@ -686,11 +686,11 @@ export default function RoundsHistoryPage() {
           </div>
         </header>
 
-        {/* ✅ Only this area scrolls */}
+        {/* âœ… Only this area scrolls */}
         <div className="flex-1 overflow-y-auto overscroll-y-contain pb-[env(safe-area-inset-bottom)]">
           {loading && (
             <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">
-              Loading…
+              Loadingâ€¦
             </div>
           )}
 
@@ -776,7 +776,7 @@ export default function RoundsHistoryPage() {
                         disabled={loadingMore}
                         className="w-full rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 py-3 text-[12px] text-emerald-100/70 hover:bg-emerald-900/20 transition-colors disabled:opacity-50"
                       >
-                        {loadingMore ? "Loading…" : `Load more · ${rounds.length - loadedCount} remaining`}
+                        {loadingMore ? "Loadingâ€¦" : `Load more Â· ${rounds.length - loadedCount} remaining`}
                       </button>
                     )}
                   </div>
@@ -810,7 +810,7 @@ export default function RoundsHistoryPage() {
                         disabled={loadingMore}
                         className="w-full rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 py-3 text-[12px] text-emerald-100/70 hover:bg-emerald-900/20 transition-colors disabled:opacity-50"
                       >
-                        {loadingMore ? "Loading…" : `Load more · ${rounds.length - loadedCount} remaining`}
+                        {loadingMore ? "Loadingâ€¦" : `Load more Â· ${rounds.length - loadedCount} remaining`}
                       </button>
                     )}
                   </div>
