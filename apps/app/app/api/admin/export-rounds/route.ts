@@ -53,7 +53,7 @@ export async function POST(req: Request) {
     // ── 2. Fetch handicap_round_results ───────────────────────────────────────
     const { data: hrrRows, error: hrrErr } = await admin
       .from("handicap_round_results")
-      .select("round_id, participant_id, played_at, score_differential, tee_snapshot_id")
+      .select("round_id, participant_id, played_at, score_differential, tee_snapshot_id, adjusted_gross_score")
       .in("participant_id", participantIds);
 
     if (hrrErr) throw new Error(hrrErr.message);
@@ -89,24 +89,25 @@ export async function POST(req: Request) {
       }
     }
 
-    // ── 5. Fetch raw scores and sum per (round_id, participant_id) ─────────────
-    // Filter by participant_id (not round_id) to target only the selected players'
-    // scores, avoiding a result set that includes all other participants in those
-    // rounds. Explicit high limit prevents silent PostgREST row-cap truncation.
+    // ── 5. Fetch raw scores and sum per participant_id ────────────────────────
+    // Each round_participants.id is unique per player per round, so keying by
+    // participant_id alone (matching the history page pattern) avoids any
+    // round_id discrepancy between round_score_events and handicap_round_results.
+    // Explicit high limit prevents silent PostgREST row-cap truncation.
     const { data: scoreRows, error: scoreErr } = await admin
       .from("round_current_scores")
-      .select("round_id, participant_id, strokes")
+      .select("participant_id, strokes")
       .in("participant_id", participantIds)
       .not("strokes", "is", null)
       .limit(100000);
 
     if (scoreErr) throw new Error(scoreErr.message);
 
-    const totalStrokesMap: Record<string, Record<string, number>> = {};
+    // participant_id → total raw strokes
+    const totalStrokesMap: Record<string, number> = {};
     for (const s of scoreRows ?? []) {
       if (s.strokes == null) continue;
-      if (!totalStrokesMap[s.round_id]) totalStrokesMap[s.round_id] = {};
-      totalStrokesMap[s.round_id][s.participant_id] = (totalStrokesMap[s.round_id][s.participant_id] ?? 0) + s.strokes;
+      totalStrokesMap[s.participant_id] = (totalStrokesMap[s.participant_id] ?? 0) + s.strokes;
     }
 
     // ── 6. Build CSV rows ─────────────────────────────────────────────────────
@@ -128,7 +129,9 @@ export async function POST(req: Request) {
       if (!participant) continue;
 
       const tee = hrr.tee_snapshot_id ? teeBySnapshotId[hrr.tee_snapshot_id] : null;
-      const totalStrokes = totalStrokesMap[hrr.round_id]?.[hrr.participant_id];
+      // Raw strokes first; fall back to adjusted_gross_score (already stored in HRR)
+      // for accepted rounds where score events aren't available — mirrors history page.
+      const totalStrokes = totalStrokesMap[hrr.participant_id] ?? hrr.adjusted_gross_score ?? null;
 
       // profiles is a joined object; handle Supabase nested return shape
       const profileData = participant.profiles as { name: string | null } | null;
