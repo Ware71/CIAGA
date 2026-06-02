@@ -1898,7 +1898,25 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       const isAdmin = myRole === "owner" || myRole === "admin";
       const currencySymbol = "£"; // extend if needed
 
+      const txTypeLabel = (type: string) => {
+        const labels: Record<string, string> = {
+          entry_fee: "Entry Fee",
+          green_fee: "Green Fee",
+          extra_charge: "Extra Charge",
+          payment: "Payment",
+          winnings: "Winnings",
+          adjustment: "Adjustment",
+        };
+        return labels[type] ?? type.replace(/_/g, " ");
+      };
+
       if (isAdmin) {
+        // Group-level financial summary
+        const totalCharged = balanceMembers.reduce((s, m) => s + m.total_charged, 0);
+        const totalPaid = balanceMembers.reduce((s, m) => s + m.total_paid, 0);
+        const totalOutstanding = balanceMembers.filter((m) => m.balance > 0).reduce((s, m) => s + m.balance, 0);
+        const totalCredit = balanceMembers.filter((m) => m.balance < 0).reduce((s, m) => s + Math.abs(m.balance), 0);
+
         return (
           <div className="space-y-4">
             {/* Export CSV */}
@@ -1908,6 +1926,35 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             >
               Export CSV
             </a>
+
+            {/* Group financial summary */}
+            {balanceMembers.length > 0 && (
+              <div className="rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/60 px-4 py-3">
+                <div className="text-[10px] uppercase tracking-wider text-emerald-200/50 font-semibold mb-2">Group Summary</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-xl bg-[#0b3b21]/60 border border-emerald-900/40 px-2 py-2 text-center">
+                    <div className="text-[9px] text-emerald-200/40 uppercase">Total Charged</div>
+                    <div className="text-sm font-bold text-emerald-100">{currencySymbol}{totalCharged.toFixed(2)}</div>
+                  </div>
+                  <div className="rounded-xl bg-[#0b3b21]/60 border border-emerald-900/40 px-2 py-2 text-center">
+                    <div className="text-[9px] text-emerald-200/40 uppercase">Total Collected</div>
+                    <div className="text-sm font-bold text-emerald-400">{currencySymbol}{totalPaid.toFixed(2)}</div>
+                  </div>
+                  {totalOutstanding > 0 && (
+                    <div className="rounded-xl bg-red-950/30 border border-red-900/30 px-2 py-2 text-center">
+                      <div className="text-[9px] text-red-300/50 uppercase">Outstanding</div>
+                      <div className="text-sm font-bold text-red-400">{currencySymbol}{totalOutstanding.toFixed(2)}</div>
+                    </div>
+                  )}
+                  {totalCredit > 0 && (
+                    <div className="rounded-xl bg-emerald-900/20 border border-emerald-800/30 px-2 py-2 text-center">
+                      <div className="text-[9px] text-emerald-300/50 uppercase">In Credit</div>
+                      <div className="text-sm font-bold text-emerald-400">{currencySymbol}{totalCredit.toFixed(2)}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* All member balances */}
             {balanceMembers.length === 0 ? (
@@ -1952,8 +1999,10 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                             m.transactions.map((tx: any) => (
                               <div key={tx.id} className="flex items-start justify-between gap-2 text-[11px]">
                                 <div>
-                                  <div className="text-emerald-100/80 capitalize">{tx.type.replace(/_/g, " ")}</div>
-                                  {tx.competition?.name && <div className="text-emerald-200/40">{tx.competition.name}</div>}
+                                  <div className="text-emerald-100/80">{txTypeLabel(tx.type)}</div>
+                                  {(tx.event?.name ?? tx.competition?.name) && (
+                                    <div className="text-emerald-200/40">{tx.event?.name ?? tx.competition?.name}</div>
+                                  )}
                                   {tx.note && <div className="text-emerald-200/40 italic">{tx.note}</div>}
                                   <div className="text-emerald-200/30">{new Date(tx.created_at).toLocaleDateString()}</div>
                                 </div>
@@ -2055,8 +2104,10 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                   myBalance.transactions.map((tx: any) => (
                     <div key={tx.id} className="flex items-start justify-between gap-2 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5">
                       <div>
-                        <div className="text-sm text-emerald-100/80 capitalize">{tx.type.replace(/_/g, " ")}</div>
-                        {tx.competition?.name && <div className="text-[11px] text-emerald-200/50">{tx.competition.name}</div>}
+                        <div className="text-sm text-emerald-100/80">{txTypeLabel(tx.type)}</div>
+                        {(tx.event?.name ?? tx.competition?.name) && (
+                          <div className="text-[11px] text-emerald-200/50">{tx.event?.name ?? tx.competition?.name}</div>
+                        )}
                         {tx.note && <div className="text-[10px] text-emerald-200/40 italic">{tx.note}</div>}
                         <div className="text-[10px] text-emerald-200/30">{new Date(tx.created_at).toLocaleDateString()}</div>
                       </div>

@@ -17,6 +17,8 @@ import type {
   ProposedWinning,
   EventWaitlistEntry,
   LeaderboardRevealStyle,
+  EventCharge,
+  EventPlayerChargeWithProfile,
 } from "@/lib/majors/types";
 import { EVENT_TYPES, SCORING_MODELS, POINTS_MODELS } from "@/lib/events/constants";
 import { HandicapRulesEditor } from "@/components/competitions/HandicapRulesEditor";
@@ -47,7 +49,7 @@ function getPointsForPosition(
   return null;
 }
 
-type Tab = "overview" | "leaderboard" | "tee-times" | "rules" | "fixtures" | "bracket" | "league-table" | "winnings";
+type Tab = "overview" | "leaderboard" | "tee-times" | "rules" | "fixtures" | "bracket" | "league-table" | "winnings" | "finances";
 
 const STROKE_TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
@@ -1432,6 +1434,14 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
   const [playerRounds, setPlayerRounds] = useState<any[] | null>(null);
   const [playerRoundsLoading, setPlayerRoundsLoading] = useState(false);
 
+  // Finances tab state
+  const [eventCharges, setEventCharges] = useState<EventCharge[]>([]);
+  const [playerCharges, setPlayerCharges] = useState<EventPlayerChargeWithProfile[]>([]);
+  const [financesLoaded, setFinancesLoaded] = useState(false);
+  const [addingCharge, setAddingCharge] = useState(false);
+  const [addChargeForm, setAddChargeForm] = useState<{ name: string; amount: string; category: string; description: string } | null>(null);
+  const [chargeError, setChargeError] = useState<string | null>(null);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -1588,6 +1598,12 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
     return () => { supabase.removeChannel(channel); };
   }, [eventId]);
 
+  // Lazy-load finances when tab first opens
+  useEffect(() => {
+    if (tab !== "finances" || financesLoaded) return;
+    refreshFinances();
+  }, [tab, financesLoaded]);
+
   async function handleReveal() {
     setRevealLoading(true);
     try {
@@ -1626,6 +1642,19 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
       const j = await crRes.json();
       setCompetitionRounds(j.rounds ?? []);
     }
+  };
+
+  const refreshFinances = async () => {
+    const session = await getViewerSession();
+    if (!session) return;
+    const headers = { Authorization: `Bearer ${session.accessToken}` };
+    const [cRes, pcRes] = await Promise.all([
+      fetch(`/api/majors/events/${eventId}/charges`, { headers }),
+      fetch(`/api/majors/events/${eventId}/player-charges`, { headers }),
+    ]);
+    if (cRes.ok) { const j = await cRes.json(); setEventCharges(j.charges ?? []); }
+    if (pcRes.ok) { const j = await pcRes.json(); setPlayerCharges(j.player_charges ?? []); }
+    setFinancesLoaded(true);
   };
 
   const handleEnter = async () => {
@@ -1826,6 +1855,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
     const BASE = getTabsForEvent(event);
     let tabs = [...BASE];
     if (event?.majors_status === "cancelled") tabs = tabs.filter((t) => t.id !== "tee-times");
+    if (isAdminOrOwner && event?.group_id) tabs.push({ id: "finances" as Tab, label: "Finances" });
     return tabs;
   })();
 
@@ -2634,6 +2664,379 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
         )}
       </div>
     ),
+
+    finances: (() => {
+      const currencySymbol = "£";
+      const entryFee = (event as any)?.entry_fee_amount as number | null;
+      const enteredCount = participants.length;
+      const pot = entryFee && entryFee > 0 ? entryFee * enteredCount : 0;
+      const totalWinningsPaid = winnings.reduce((s, w) => s + w.amount, 0);
+
+      // Category labels
+      const categoryLabel: Record<string, string> = {
+        green_fee: "Green Fee",
+        buggy: "Buggy",
+        food: "Food",
+        drink: "Drinks",
+        other: "Other",
+      };
+
+      const handleAddCharge = async () => {
+        if (!addChargeForm || !addChargeForm.name || !addChargeForm.amount) return;
+        setAddingCharge(true);
+        setChargeError(null);
+        try {
+          const session = await getViewerSession();
+          if (!session) return;
+          const res = await fetch(`/api/majors/events/${eventId}/charges`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: addChargeForm.name.trim(),
+              amount: parseFloat(addChargeForm.amount),
+              category: addChargeForm.category,
+              description: addChargeForm.description.trim() || null,
+            }),
+          });
+          if (!res.ok) {
+            const j = await res.json();
+            setChargeError(j.error ?? "Failed to add charge");
+            return;
+          }
+          setAddChargeForm(null);
+          await refreshFinances();
+        } finally {
+          setAddingCharge(false);
+        }
+      };
+
+      const handleDeleteCharge = async (chargeId: string) => {
+        const session = await getViewerSession();
+        if (!session) return;
+        const res = await fetch(`/api/majors/events/${eventId}/charges/${chargeId}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${session.accessToken}` },
+        });
+        if (!res.ok) {
+          const j = await res.json();
+          setChargeError(j.error ?? "Failed to delete charge");
+          return;
+        }
+        await refreshFinances();
+      };
+
+      const handleAssignAll = async (chargeId: string) => {
+        const session = await getViewerSession();
+        if (!session) return;
+        const res = await fetch(`/api/majors/events/${eventId}/charges/${chargeId}/assign-all`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+        if (!res.ok) {
+          const j = await res.json();
+          setChargeError(j.error ?? "Failed to apply charge");
+          return;
+        }
+        await refreshFinances();
+      };
+
+      const handleMarkPaid = async (playerChargeId: string) => {
+        const session = await getViewerSession();
+        if (!session) return;
+        const res = await fetch(`/api/majors/events/${eventId}/player-charges/${playerChargeId}/pay`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+        if (!res.ok) {
+          const j = await res.json();
+          setChargeError(j.error ?? "Failed to mark paid");
+          return;
+        }
+        await refreshFinances();
+      };
+
+      const handleRemovePlayerCharge = async (playerChargeId: string) => {
+        const session = await getViewerSession();
+        if (!session) return;
+        const res = await fetch(`/api/majors/events/${eventId}/player-charges/${playerChargeId}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${session.accessToken}` },
+        });
+        if (!res.ok) {
+          const j = await res.json();
+          setChargeError(j.error ?? "Failed to remove charge");
+          return;
+        }
+        await refreshFinances();
+      };
+
+      const handleAssignToPlayer = async (chargeId: string, profileId: string) => {
+        const session = await getViewerSession();
+        if (!session) return;
+        const res = await fetch(`/api/majors/events/${eventId}/charges/${chargeId}/assign`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ profile_ids: [profileId] }),
+        });
+        if (!res.ok) {
+          const j = await res.json();
+          setChargeError(j.error ?? "Failed to assign charge");
+          return;
+        }
+        await refreshFinances();
+      };
+
+      const inputCls = "w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600";
+
+      return (
+        <div className="space-y-5">
+          {chargeError && (
+            <div className="text-[11px] text-red-400 bg-red-950/30 border border-red-900/50 rounded-xl px-3 py-2">
+              {chargeError}
+              <button type="button" onClick={() => setChargeError(null)} className="ml-2 underline">Dismiss</button>
+            </div>
+          )}
+
+          {/* Section A: Competition Fees & Prize Pot */}
+          {entryFee && entryFee > 0 && (
+            <div className="rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/60 px-4 py-3 space-y-2">
+              <div className="text-[10px] uppercase tracking-wider text-emerald-200/50 font-semibold">Competition Fee & Prize Pot</div>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="text-center">
+                  <div className="text-[10px] text-emerald-200/50">Entry Fee</div>
+                  <div className="text-sm font-bold text-emerald-50">{currencySymbol}{entryFee.toFixed(2)}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-[10px] text-emerald-200/50">Total Pot</div>
+                  <div className="text-sm font-bold text-[#f5e6b0]">{currencySymbol}{pot.toFixed(2)}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-[10px] text-emerald-200/50">Paid Out</div>
+                  <div className="text-sm font-bold text-emerald-400">{currencySymbol}{totalWinningsPaid.toFixed(2)}</div>
+                </div>
+              </div>
+              <div className="text-[10px] text-emerald-200/40 text-center">
+                {enteredCount} {enteredCount === 1 ? "entry" : "entries"} · see Winnings tab for payouts
+              </div>
+            </div>
+          )}
+
+          {/* Section B: Charge Catalog */}
+          <div className="space-y-2">
+            <div className="text-[10px] uppercase tracking-wider text-emerald-200/50 font-semibold">Event Charges</div>
+
+            {eventCharges.length === 0 && !addChargeForm && (
+              <div className="text-[11px] text-emerald-200/40 text-center py-2">No charges defined yet.</div>
+            )}
+
+            {eventCharges.map((charge) => (
+              <div key={charge.id} className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/50 px-3 py-2.5 space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-emerald-700/50 text-emerald-300/80 bg-emerald-900/30 shrink-0">
+                      {categoryLabel[charge.category] ?? charge.category}
+                    </span>
+                    <span className="text-sm font-semibold text-emerald-50 truncate">{charge.name}</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-sm font-bold text-emerald-200">{currencySymbol}{charge.amount.toFixed(2)}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteCharge(charge.id)}
+                      className="text-[10px] text-red-400/60 hover:text-red-400"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+                {charge.description && <div className="text-[10px] text-emerald-200/40">{charge.description}</div>}
+                <button
+                  type="button"
+                  onClick={() => handleAssignAll(charge.id)}
+                  className="w-full py-1 rounded-full border border-emerald-700/40 text-[10px] text-emerald-200/70 hover:bg-emerald-900/30"
+                >
+                  Apply to all entered players
+                </button>
+              </div>
+            ))}
+
+            {addChargeForm ? (
+              <div className="rounded-xl border border-emerald-700/40 bg-[#0b3b21]/50 px-3 py-3 space-y-2">
+                <div className="text-[11px] font-semibold text-emerald-200">New Charge</div>
+                <input
+                  type="text"
+                  placeholder="Name (e.g. Green Fee, Buggy)"
+                  value={addChargeForm.name}
+                  onChange={(e) => setAddChargeForm((f) => f && { ...f, name: e.target.value })}
+                  className={inputCls}
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="number"
+                    placeholder="Amount (£)"
+                    value={addChargeForm.amount}
+                    onChange={(e) => setAddChargeForm((f) => f && { ...f, amount: e.target.value })}
+                    className={inputCls}
+                    min="0"
+                    step="0.01"
+                  />
+                  <select
+                    value={addChargeForm.category}
+                    onChange={(e) => setAddChargeForm((f) => f && { ...f, category: e.target.value })}
+                    className={inputCls}
+                  >
+                    <option value="green_fee">Green Fee</option>
+                    <option value="buggy">Buggy</option>
+                    <option value="food">Food</option>
+                    <option value="drink">Drinks</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Description (optional)"
+                  value={addChargeForm.description}
+                  onChange={(e) => setAddChargeForm((f) => f && { ...f, description: e.target.value })}
+                  className={inputCls}
+                />
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setAddChargeForm(null)}
+                    className="flex-1 py-1.5 rounded-full border border-emerald-900/60 text-[11px] text-emerald-200/60">
+                    Cancel
+                  </button>
+                  <button type="button" onClick={handleAddCharge} disabled={addingCharge}
+                    className="flex-1 py-1.5 rounded-full bg-emerald-700 text-[11px] font-semibold text-white disabled:opacity-50">
+                    {addingCharge ? "Adding…" : "Add Charge"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setAddChargeForm({ name: "", amount: "", category: "green_fee", description: "" })}
+                className="w-full py-2 rounded-full border border-emerald-700/50 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-900/30"
+              >
+                + Add Charge
+              </button>
+            )}
+          </div>
+
+          {/* Section C: Player Charges Grid */}
+          {(eventCharges.length > 0 || playerCharges.length > 0) && (
+            <div className="space-y-2">
+              <div className="text-[10px] uppercase tracking-wider text-emerald-200/50 font-semibold">Player Charges</div>
+
+              {participants.length === 0 ? (
+                <div className="text-[11px] text-emerald-200/40 text-center py-2">No entered players yet.</div>
+              ) : (
+                <div className="space-y-2">
+                  {participants.map((participant) => {
+                    const pid = participant.profile_id;
+                    const profileName = participant.profile?.name ?? "Unknown";
+                    const profileAvatar = participant.profile?.avatar_url ?? null;
+                    const myCharges = playerCharges.filter((pc) => pc.profile_id === pid);
+                    const totalCharged = myCharges.reduce((s, pc) => s + pc.amount, 0);
+                    const totalPaid = myCharges.filter((pc) => pc.is_paid).reduce((s, pc) => s + pc.amount, 0);
+                    const outstanding = totalCharged - totalPaid;
+
+                    return (
+                      <div key={pid} className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/50 px-3 py-3 space-y-2">
+                        <div className="flex items-center gap-2">
+                          {profileAvatar ? (
+                            <img src={profileAvatar} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
+                          ) : (
+                            <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[9px] font-bold text-emerald-200 shrink-0">
+                              {profileName.slice(0, 2).toUpperCase()}
+                            </div>
+                          )}
+                          <span className="flex-1 text-sm font-semibold text-emerald-50">{profileName}</span>
+                          {totalCharged > 0 && (
+                            <div className="text-right shrink-0">
+                              <div className={`text-[11px] font-bold ${outstanding > 0 ? "text-red-400" : "text-emerald-400"}`}>
+                                {outstanding > 0 ? `Owes ${currencySymbol}${outstanding.toFixed(2)}` : "Settled"}
+                              </div>
+                              <div className="text-[9px] text-emerald-200/30">
+                                {currencySymbol}{totalCharged.toFixed(2)} total
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Per-charge rows */}
+                        {eventCharges.map((charge) => {
+                          const pc = myCharges.find((c) => c.charge_id === charge.id);
+                          return (
+                            <div key={charge.id} className="flex items-center justify-between gap-2 pl-9 text-[11px]">
+                              <span className="text-emerald-200/60">{charge.name}</span>
+                              {pc ? (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-emerald-200/80">{currencySymbol}{pc.amount.toFixed(2)}</span>
+                                  {pc.is_paid ? (
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-800/50 text-emerald-300">Paid</span>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleMarkPaid(pc.id)}
+                                      className="text-[9px] px-1.5 py-0.5 rounded-full border border-emerald-700/50 text-emerald-200/70 hover:bg-emerald-900/40"
+                                    >
+                                      Mark Paid
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemovePlayerCharge(pc.id)}
+                                    className="text-red-400/50 hover:text-red-400 text-[9px]"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleAssignToPlayer(charge.id, pid)}
+                                  className="text-[9px] px-1.5 py-0.5 rounded-full border border-emerald-900/50 text-emerald-200/40 hover:text-emerald-200/80 hover:border-emerald-700/50"
+                                >
+                                  + Assign
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+
+                        {/* Ad-hoc player charges not linked to a catalog item */}
+                        {myCharges
+                          .filter((pc) => !pc.charge_id || !eventCharges.find((c) => c.id === pc.charge_id))
+                          .map((pc) => (
+                            <div key={pc.id} className="flex items-center justify-between gap-2 pl-9 text-[11px]">
+                              <span className="text-emerald-200/60">{pc.name}</span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-emerald-200/80">{currencySymbol}{pc.amount.toFixed(2)}</span>
+                                {pc.is_paid ? (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-800/50 text-emerald-300">Paid</span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleMarkPaid(pc.id)}
+                                    className="text-[9px] px-1.5 py-0.5 rounded-full border border-emerald-700/50 text-emerald-200/70 hover:bg-emerald-900/40"
+                                  >
+                                    Mark Paid
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    })(),
 
     winnings: (
       <div className="space-y-4">

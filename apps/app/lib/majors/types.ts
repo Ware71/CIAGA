@@ -715,10 +715,45 @@ export type MajorProfileData = {
 
 export type BalanceTransactionType =
   | "entry_fee"
+  | "green_fee"
   | "extra_charge"
   | "payment"
   | "winnings"
   | "adjustment";
+
+export type EventChargeCategory = "green_fee" | "buggy" | "food" | "drink" | "other";
+
+export type EventCharge = {
+  id: string;
+  event_id: string;
+  name: string;
+  amount: number;
+  category: EventChargeCategory;
+  description: string | null;
+  applies_to_all_entries: boolean;
+  created_by: string;
+  created_at: string;
+};
+
+export type EventPlayerCharge = {
+  id: string;
+  event_id: string;
+  charge_id: string | null;
+  profile_id: string;
+  name: string;
+  amount: number;
+  category: EventChargeCategory;
+  charge_transaction_id: string | null;
+  payment_transaction_id: string | null;
+  /** Derived: payment_transaction_id IS NOT NULL */
+  is_paid: boolean;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type EventPlayerChargeWithProfile = EventPlayerCharge & {
+  profile: { id: string; name: string | null; avatar_url: string | null };
+};
 
 export type EventExtra = {
   id: string;
