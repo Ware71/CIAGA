@@ -435,13 +435,6 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     }
   };
 
-  const [showCreateCompetitionModal, setShowCreateCompetitionModal] = useState(false);
-  const [newCompetitionName, setNewCompetitionName] = useState("");
-  const [newCompetitionDesc, setNewCompetitionDesc] = useState("");
-  const [newCompetitionMonth, setNewCompetitionMonth] = useState("");
-  const [newCompetitionHandicapPct, setNewCompetitionHandicapPct] = useState("100");
-  const [newCompetitionHandicapMax, setNewCompetitionHandicapMax] = useState("");
-  const [creatingCompetition, setCreatingCompetition] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -726,42 +719,6 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       console.error(err);
     } finally {
       setUploadingImage(false);
-    }
-  };
-
-  const handleCreateCompetition = async () => {
-    if (!newCompetitionName.trim()) return;
-    setCreatingCompetition(true);
-    try {
-      const session = await getViewerSession();
-      if (!session) return;
-      const res = await fetch("/api/majors/competitions", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          group_id: groupId,
-          name: newCompetitionName.trim(),
-          description: newCompetitionDesc.trim() || null,
-          recur_annually: true,
-          typical_month: newCompetitionMonth ? parseInt(newCompetitionMonth, 10) : null,
-          template_settings: {
-            handicap_allowance_pct: parseInt(newCompetitionHandicapPct, 10) || 100,
-            max_handicap: newCompetitionHandicapMax ? parseInt(newCompetitionHandicapMax, 10) : null,
-          },
-        }),
-      });
-      if (res.ok) {
-        const j = await res.json();
-        setCompetitions((prev) => [...prev, j.competition]);
-        setShowCreateCompetitionModal(false);
-        setNewCompetitionName("");
-        setNewCompetitionDesc("");
-        setNewCompetitionMonth("");
-        setNewCompetitionHandicapPct("100");
-        setNewCompetitionHandicapMax("");
-      }
-    } finally {
-      setCreatingCompetition(false);
     }
   };
 
@@ -1782,7 +1739,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         {isAdminOrOwner && (
           <button
             type="button"
-            onClick={() => setShowCreateCompetitionModal(true)}
+            onClick={() => router.push(`/majors/competitions/create?group_id=${groupId}`)}
             className="w-full py-2.5 rounded-full border border-emerald-700/60 text-sm font-semibold text-emerald-200 hover:bg-emerald-900/30"
           >
             + Create Competition Template
@@ -2377,90 +2334,6 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       </div>
 
       <div className="px-4 pb-8">{tabContent[tab]}</div>
-
-      {/* Create Competition Modal */}
-      {showCreateCompetitionModal && (
-        <div className="fixed inset-0 bg-black/70 flex items-end justify-center z-50 pb-[env(safe-area-inset-bottom)]">
-          <div className="w-full max-w-sm bg-[#0c2e18] rounded-t-2xl p-6 space-y-4 max-h-[85dvh] overflow-y-auto">
-            <div className="text-sm font-semibold text-emerald-50">New Competition Template</div>
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Competition Name *</label>
-                <input
-                  type="text"
-                  value={newCompetitionName}
-                  onChange={(e) => setNewCompetitionName(e.target.value)}
-                  placeholder="e.g. The Club Masters"
-                  className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
-                  autoFocus
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Description (optional)</label>
-                <textarea
-                  value={newCompetitionDesc}
-                  onChange={(e) => setNewCompetitionDesc(e.target.value)}
-                  rows={2}
-                  placeholder="Brief description of this recurring competition"
-                  className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600 resize-none"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Typical Month (optional)</label>
-                <select
-                  value={newCompetitionMonth}
-                  onChange={(e) => setNewCompetitionMonth(e.target.value)}
-                  className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
-                >
-                  <option value="">— Select month —</option>
-                  {["January","February","March","April","May","June","July","August","September","October","November","December"].map((m, i) => (
-                    <option key={i+1} value={String(i+1)}>{m}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Default Handicap Allowance %</label>
-                <input
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={newCompetitionHandicapPct}
-                  onChange={(e) => setNewCompetitionHandicapPct(e.target.value)}
-                  className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Max Handicap (optional)</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={newCompetitionHandicapMax}
-                  onChange={(e) => setNewCompetitionHandicapMax(e.target.value)}
-                  placeholder="Leave blank for no limit"
-                  className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
-                />
-              </div>
-            </div>
-            <div className="flex gap-3 pt-1">
-              <button
-                type="button"
-                onClick={() => { setShowCreateCompetitionModal(false); setNewCompetitionName(""); setNewCompetitionDesc(""); setNewCompetitionMonth(""); setNewCompetitionHandicapPct("100"); setNewCompetitionHandicapMax(""); }}
-                className="flex-1 py-2.5 rounded-full border border-emerald-800 text-sm text-emerald-200"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleCreateCompetition}
-                disabled={!newCompetitionName.trim() || creatingCompetition}
-                className="flex-1 py-2.5 rounded-full bg-emerald-700 text-sm font-semibold text-white disabled:opacity-40"
-              >
-                {creatingCompetition ? "Creating…" : "Create"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Player detail drawer */}
       {selectedPlayerForDrawer && (
