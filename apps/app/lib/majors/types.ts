@@ -357,6 +357,7 @@ export type EventFull = {
   aggregate_config: Record<string, unknown>;
   // Spec-aligned additions
   season_id: string | null;
+  group_season_id: string | null;
   event_structure: EventStructure;
   scoring_basis: ScoringBasis | null;
   published_rules_version_id: string | null;

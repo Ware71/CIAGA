@@ -70,6 +70,20 @@ export async function POST(req: Request) {
       }
     }
 
+    // Auto-detect which group season this event falls into
+    let group_season_id: string | null = null;
+    if (group_id && event_date) {
+      const { data: matchedSeason } = await supabaseAdmin
+        .from("group_seasons")
+        .select("id")
+        .eq("group_id", group_id)
+        .lte("start_date", event_date)
+        .gte("end_date", event_date)
+        .limit(1)
+        .maybeSingle();
+      group_season_id = (matchedSeason as any)?.id ?? null;
+    }
+
     const { data: event, error } = await supabaseAdmin
       .from("events")
       .insert({
@@ -100,6 +114,7 @@ export async function POST(req: Request) {
         event_year: event_year ?? null,
         event_category: event_category ?? "round_based",
         aggregate_config: aggregate_config ?? {},
+        group_season_id,
         leaderboard_freeze_last_holes: leaderboard_freeze_last_holes ?? null,
         leaderboard_freeze_scope: leaderboard_freeze_scope ?? "all",
         leaderboard_freeze_top_x: leaderboard_freeze_top_x ?? null,

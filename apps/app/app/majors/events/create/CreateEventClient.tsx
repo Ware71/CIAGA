@@ -767,6 +767,7 @@ export default function CreateEventClient() {
   const [creatingCompetition, setCreatingCompetition] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [groupSeasons, setGroupSeasons] = useState<{ id: string; name: string; start_date: string; end_date: string }[]>([]);
   const [showCoursePicker, setShowCoursePicker] = useState(false);
   const [teeBoxes, setTeeBoxes] = useState<{ id: string; name: string; gender: string | null }[]>([]);
 
@@ -927,6 +928,22 @@ export default function CreateEventClient() {
       if (res.ok) {
         const j = await res.json();
         setGroupCompetitions(j.competitions ?? []);
+      }
+    })();
+  }, [form.group_id]);
+
+  // Load group seasons whenever group changes
+  useEffect(() => {
+    if (!form.group_id) { setGroupSeasons([]); return; }
+    (async () => {
+      const session = await getViewerSession();
+      if (!session) return;
+      const res = await fetch(`/api/majors/groups/${form.group_id}/seasons`, {
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+      });
+      if (res.ok) {
+        const j = await res.json();
+        setGroupSeasons(j.seasons ?? []);
       }
     })();
   }, [form.group_id]);
@@ -1208,6 +1225,18 @@ export default function CreateEventClient() {
           onChange={(e) => update("event_date", e.target.value)}
           className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-3 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
         />
+        {(() => {
+          if (!form.group_id || !form.event_date) return null;
+          const matched = groupSeasons.find(
+            (s) => s.start_date <= form.event_date && s.end_date >= form.event_date
+          );
+          if (!matched) return null;
+          return (
+            <div className="text-[11px] text-emerald-400/80">
+              Season: <span className="font-medium text-emerald-300">{matched.name}</span>
+            </div>
+          );
+        })()}
       </div>
       <div className="space-y-2">
         <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Course (optional)</label>

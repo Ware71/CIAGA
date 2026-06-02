@@ -54,7 +54,7 @@ type FormState = {
   max_members: string;
 };
 
-type SeasonDraft = { name: string; start_date: string; end_date: string };
+type SeasonDraft = { name: string; start_date: string; end_date: string; mode: "annual" | "custom" };
 
 const currentYear = new Date().getFullYear();
 
@@ -84,6 +84,7 @@ function addNextSeason(seasons: SeasonDraft[]): SeasonDraft {
     name,
     start_date: nextStart.toISOString().slice(0, 10),
     end_date:   nextEnd.toISOString().slice(0, 10),
+    mode: sy === ey ? "annual" : "custom",
   };
 }
 
@@ -110,7 +111,7 @@ export default function CreateGroupClient() {
 
   // Seasons state
   const [seasons, setSeasons] = useState<SeasonDraft[]>([
-    { name: `${currentYear} Season`, start_date: `${currentYear}-01-01`, end_date: `${currentYear}-12-31` },
+    { name: `${currentYear} Season`, start_date: `${currentYear}-01-01`, end_date: `${currentYear}-12-31`, mode: "annual" },
   ]);
 
   const update = (field: keyof FormState, value: string) =>
@@ -179,7 +180,7 @@ export default function CreateGroupClient() {
           privacy: form.privacy,
           join_method: form.join_method,
           max_members: form.max_members ? parseInt(form.max_members, 10) : null,
-          seasons,
+          seasons: seasons.map(({ name, start_date, end_date }) => ({ name, start_date, end_date })),
           default_scoring_prefs: buildDefaultScoringPrefs(),
         }),
       });
@@ -407,6 +408,7 @@ export default function CreateGroupClient() {
       <div className="space-y-3">
         {seasons.map((s, i) => (
           <div key={i} className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 p-3 space-y-3">
+            {/* Name + remove */}
             <div className="flex items-center justify-between">
               <input
                 type="text"
@@ -425,26 +427,64 @@ export default function CreateGroupClient() {
                 </button>
               )}
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <div className="text-[10px] uppercase tracking-wider text-emerald-200/50">Start</div>
-                <input
-                  type="date"
-                  value={s.start_date}
-                  onChange={(e) => updateSeason(i, "start_date", e.target.value)}
-                  className="w-full rounded-lg border border-emerald-900/60 bg-[#0b3b21]/60 px-2 py-1.5 text-xs text-emerald-50 focus:outline-none focus:border-emerald-600"
-                />
-              </div>
-              <div className="space-y-1">
-                <div className="text-[10px] uppercase tracking-wider text-emerald-200/50">End</div>
-                <input
-                  type="date"
-                  value={s.end_date}
-                  onChange={(e) => updateSeason(i, "end_date", e.target.value)}
-                  className="w-full rounded-lg border border-emerald-900/60 bg-[#0b3b21]/60 px-2 py-1.5 text-xs text-emerald-50 focus:outline-none focus:border-emerald-600"
-                />
-              </div>
+
+            {/* Annual / Custom toggle */}
+            <div className="flex gap-1">
+              {(["annual", "custom"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => updateSeason(i, "mode", m)}
+                  className={`rounded-lg border px-3 py-1 text-[10px] uppercase tracking-wider transition-colors ${
+                    s.mode === m
+                      ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
+                      : "border-emerald-900/50 bg-transparent text-emerald-200/50"
+                  }`}
+                >
+                  {m === "annual" ? "Annual" : "Custom dates"}
+                </button>
+              ))}
             </div>
+
+            {/* Date inputs */}
+            {s.mode === "annual" ? (
+              <div className="space-y-1">
+                <div className="text-[10px] uppercase tracking-wider text-emerald-200/50">Year</div>
+                <input
+                  type="number"
+                  min={2000}
+                  max={2100}
+                  value={parseInt(s.start_date.slice(0, 4), 10)}
+                  onChange={(e) => {
+                    const y = e.target.value.padStart(4, "0");
+                    updateSeason(i, "start_date", `${y}-01-01`);
+                    updateSeason(i, "end_date", `${y}-12-31`);
+                  }}
+                  className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
+                />
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="space-y-1">
+                  <div className="text-[10px] uppercase tracking-wider text-emerald-200/50">Start date</div>
+                  <input
+                    type="date"
+                    value={s.start_date}
+                    onChange={(e) => updateSeason(i, "start_date", e.target.value)}
+                    className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <div className="text-[10px] uppercase tracking-wider text-emerald-200/50">End date</div>
+                  <input
+                    type="date"
+                    value={s.end_date}
+                    onChange={(e) => updateSeason(i, "end_date", e.target.value)}
+                    className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>
