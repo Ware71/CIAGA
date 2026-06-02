@@ -19,6 +19,9 @@ import type {
   LeaderboardRevealStyle,
   EventCharge,
   EventPlayerChargeWithProfile,
+  PrizePotWithDetails,
+  PrizePotDistributionType,
+  PrizeTableEntry,
 } from "@/lib/majors/types";
 import { EVENT_TYPES, SCORING_MODELS, POINTS_MODELS, FEDEX_POINTS } from "@/lib/events/constants";
 import { HandicapRulesEditor } from "@/components/competitions/HandicapRulesEditor";
@@ -1437,10 +1440,30 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
   // Finances tab state
   const [eventCharges, setEventCharges] = useState<EventCharge[]>([]);
   const [playerCharges, setPlayerCharges] = useState<EventPlayerChargeWithProfile[]>([]);
+  const [prizePots, setPrizePots] = useState<PrizePotWithDetails[]>([]);
   const [financesLoaded, setFinancesLoaded] = useState(false);
   const [addingCharge, setAddingCharge] = useState(false);
-  const [addChargeForm, setAddChargeForm] = useState<{ name: string; amount: string; category: string; description: string } | null>(null);
+  const [addChargeForm, setAddChargeForm] = useState<{ name: string; amount: string; category: string; description: string; round_id: string } | null>(null);
   const [chargeError, setChargeError] = useState<string | null>(null);
+  const [chargesViewMode, setChargesViewMode] = useState<"list" | "matrix">("list");
+  // Prize pot state
+  const [potError, setPotError] = useState<string | null>(null);
+  const [addPotForm, setAddPotForm] = useState<{
+    name: string;
+    description: string;
+    distribution_type: PrizePotDistributionType;
+    entry_fee_amount: string;
+    entry_fee_notes: string;
+    prize_table: PrizeTableEntry[];
+    metric_type: string;
+    metric_description: string;
+    is_monetary: boolean;
+    prize_description: string;
+  } | null>(null);
+  const [addingPot, setAddingPot] = useState(false);
+  const [expandedPotId, setExpandedPotId] = useState<string | null>(null);
+  const [potActionLoading, setPotActionLoading] = useState<string | null>(null);
+  const [proposedDistribution, setProposedDistribution] = useState<{ potId: string; total_pot: number; proposed: Array<{ profile_id: string; profile: { name: string | null } | null; position: number | null; amount: number | null; note: string }> } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -1648,12 +1671,14 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
     const session = await getViewerSession();
     if (!session) return;
     const headers = { Authorization: `Bearer ${session.accessToken}` };
-    const [cRes, pcRes] = await Promise.all([
+    const [cRes, pcRes, ppRes] = await Promise.all([
       fetch(`/api/majors/events/${eventId}/charges`, { headers }),
       fetch(`/api/majors/events/${eventId}/player-charges`, { headers }),
+      fetch(`/api/majors/events/${eventId}/prize-pots`, { headers }),
     ]);
     if (cRes.ok) { const j = await cRes.json(); setEventCharges(j.charges ?? []); }
     if (pcRes.ok) { const j = await pcRes.json(); setPlayerCharges(j.player_charges ?? []); }
+    if (ppRes.ok) { const j = await ppRes.json(); setPrizePots(j.pots ?? []); }
     setFinancesLoaded(true);
   };
 
@@ -2696,6 +2721,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
               amount: parseFloat(addChargeForm.amount),
               category: addChargeForm.category,
               description: addChargeForm.description.trim() || null,
+              round_id: addChargeForm.round_id || null,
             }),
           });
           if (!res.ok) {
@@ -2788,6 +2814,191 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
         await refreshFinances();
       };
 
+      // ── Prize pot handlers ──────────────────────────────────────────────────
+
+      const handleAddPot = async () => {
+        if (!addPotForm || !addPotForm.name.trim()) return;
+        setAddingPot(true);
+        setPotError(null);
+        try {
+          const session = await getViewerSession();
+          if (!session) return;
+          const res = await fetch(`/api/majors/events/${eventId}/prize-pots`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: addPotForm.name.trim(),
+              description: addPotForm.description.trim() || null,
+              distribution_type: addPotForm.distribution_type,
+              entry_fee_amount: addPotForm.entry_fee_amount ? parseFloat(addPotForm.entry_fee_amount) : null,
+              entry_fee_notes: addPotForm.entry_fee_notes.trim() || null,
+              prize_table: addPotForm.prize_table.length > 0 ? addPotForm.prize_table : null,
+              metric_type: addPotForm.metric_type || null,
+              metric_description: addPotForm.metric_description.trim() || null,
+              is_monetary: addPotForm.is_monetary,
+              prize_description: addPotForm.prize_description.trim() || null,
+            }),
+          });
+          if (!res.ok) {
+            const j = await res.json();
+            setPotError(j.error ?? "Failed to create prize pot");
+            return;
+          }
+          setAddPotForm(null);
+          await refreshFinances();
+        } finally {
+          setAddingPot(false);
+        }
+      };
+
+      const handleDeletePot = async (potId: string) => {
+        setPotActionLoading(potId + ":delete");
+        setPotError(null);
+        try {
+          const session = await getViewerSession();
+          if (!session) return;
+          const res = await fetch(`/api/majors/prize-pots/${potId}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${session.accessToken}` },
+          });
+          if (!res.ok) {
+            const j = await res.json();
+            setPotError(j.error ?? "Failed to delete prize pot");
+            return;
+          }
+          if (expandedPotId === potId) setExpandedPotId(null);
+          await refreshFinances();
+        } finally {
+          setPotActionLoading(null);
+        }
+      };
+
+      const handleEnrollAllPot = async (potId: string) => {
+        setPotActionLoading(potId + ":enroll");
+        setPotError(null);
+        try {
+          const session = await getViewerSession();
+          if (!session) return;
+          const res = await fetch(`/api/majors/prize-pots/${potId}/enroll`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify({}),
+          });
+          if (!res.ok) {
+            const j = await res.json();
+            setPotError(j.error ?? "Failed to enroll players");
+            return;
+          }
+          await refreshFinances();
+        } finally {
+          setPotActionLoading(null);
+        }
+      };
+
+      const handleComputeTwos = async (potId: string) => {
+        setPotActionLoading(potId + ":compute");
+        setPotError(null);
+        try {
+          const session = await getViewerSession();
+          if (!session) return;
+          const res = await fetch(`/api/majors/prize-pots/${potId}/metrics/compute`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify({}),
+          });
+          if (!res.ok) {
+            const j = await res.json();
+            setPotError(j.error ?? "Failed to compute twos");
+            return;
+          }
+          await refreshFinances();
+        } finally {
+          setPotActionLoading(null);
+        }
+      };
+
+      const handleProposeDistribution = async (potId: string) => {
+        setPotActionLoading(potId + ":propose");
+        setPotError(null);
+        setProposedDistribution(null);
+        try {
+          const session = await getViewerSession();
+          if (!session) return;
+          const res = await fetch(`/api/majors/prize-pots/${potId}/distribute`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ confirm: false }),
+          });
+          const j = await res.json();
+          if (!res.ok) {
+            setPotError(j.error ?? "Failed to propose distribution");
+            return;
+          }
+          setProposedDistribution({ potId, total_pot: j.total_pot, proposed: j.proposed });
+        } finally {
+          setPotActionLoading(null);
+        }
+      };
+
+      const handleConfirmDistribution = async (potId: string) => {
+        setPotActionLoading(potId + ":confirm");
+        setPotError(null);
+        try {
+          const session = await getViewerSession();
+          if (!session) return;
+          const res = await fetch(`/api/majors/prize-pots/${potId}/distribute`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ confirm: true }),
+          });
+          const j = await res.json();
+          if (!res.ok) {
+            setPotError(j.error ?? "Failed to confirm distribution");
+            return;
+          }
+          setProposedDistribution(null);
+          await refreshFinances();
+        } finally {
+          setPotActionLoading(null);
+        }
+      };
+
+      const distTypeLabel: Record<string, string> = {
+        position_based: "Position-Based",
+        metric_weighted: "Metric (Weighted)",
+        metric_equal: "Metric (Equal Split)",
+        equal_split: "Equal Split",
+        non_monetary: "Non-Monetary",
+        entry_only: "Entry Only",
+      };
+
+      const metricTypeLabel: Record<string, string> = {
+        twos: "Two's Club",
+        nearest_pin: "Nearest Pin",
+        longest_drive: "Longest Drive",
+        season_points: "Season Points",
+        custom: "Custom",
+      };
+
+      const potStatusColour: Record<string, string> = {
+        active: "text-emerald-400 bg-emerald-900/30 border-emerald-700/40",
+        locked: "text-yellow-300 bg-yellow-900/20 border-yellow-700/40",
+        distributed: "text-blue-300 bg-blue-900/20 border-blue-700/40",
+      };
+
+      const emptyAddPotForm = () => ({
+        name: "",
+        description: "",
+        distribution_type: "position_based" as PrizePotDistributionType,
+        entry_fee_amount: "",
+        entry_fee_notes: "",
+        prize_table: [] as PrizeTableEntry[],
+        metric_type: "",
+        metric_description: "",
+        is_monetary: true,
+        prize_description: "",
+      });
+
       const inputCls = "w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600";
 
       return (
@@ -2831,36 +3042,44 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
               <div className="text-[11px] text-emerald-200/40 text-center py-2">No charges defined yet.</div>
             )}
 
-            {eventCharges.map((charge) => (
-              <div key={charge.id} className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/50 px-3 py-2.5 space-y-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-emerald-700/50 text-emerald-300/80 bg-emerald-900/30 shrink-0">
-                      {categoryLabel[charge.category] ?? charge.category}
-                    </span>
-                    <span className="text-sm font-semibold text-emerald-50 truncate">{charge.name}</span>
+            {eventCharges.map((charge) => {
+              const chargeRound = charge.round_id ? eventRounds.find((r) => r.id === charge.round_id) : null;
+              return (
+                <div key={charge.id} className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/50 px-3 py-2.5 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-emerald-700/50 text-emerald-300/80 bg-emerald-900/30 shrink-0">
+                        {categoryLabel[charge.category] ?? charge.category}
+                      </span>
+                      {chargeRound && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-blue-700/50 text-blue-300/80 bg-blue-900/20 shrink-0">
+                          {chargeRound.name || `Round ${chargeRound.round_number}`}
+                        </span>
+                      )}
+                      <span className="text-sm font-semibold text-emerald-50 truncate">{charge.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-sm font-bold text-emerald-200">{currencySymbol}{charge.amount.toFixed(2)}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCharge(charge.id)}
+                        className="text-[10px] text-red-400/60 hover:text-red-400"
+                      >
+                        ✕
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-sm font-bold text-emerald-200">{currencySymbol}{charge.amount.toFixed(2)}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteCharge(charge.id)}
-                      className="text-[10px] text-red-400/60 hover:text-red-400"
-                    >
-                      ✕
-                    </button>
-                  </div>
+                  {charge.description && <div className="text-[10px] text-emerald-200/40">{charge.description}</div>}
+                  <button
+                    type="button"
+                    onClick={() => handleAssignAll(charge.id)}
+                    className="w-full py-1 rounded-full border border-emerald-700/40 text-[10px] text-emerald-200/70 hover:bg-emerald-900/30"
+                  >
+                    Apply to all entered players
+                  </button>
                 </div>
-                {charge.description && <div className="text-[10px] text-emerald-200/40">{charge.description}</div>}
-                <button
-                  type="button"
-                  onClick={() => handleAssignAll(charge.id)}
-                  className="w-full py-1 rounded-full border border-emerald-700/40 text-[10px] text-emerald-200/70 hover:bg-emerald-900/30"
-                >
-                  Apply to all entered players
-                </button>
-              </div>
-            ))}
+              );
+            })}
 
             {addChargeForm ? (
               <div className="rounded-xl border border-emerald-700/40 bg-[#0b3b21]/50 px-3 py-3 space-y-2">
@@ -2901,6 +3120,20 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                   onChange={(e) => setAddChargeForm((f) => f && { ...f, description: e.target.value })}
                   className={inputCls}
                 />
+                {eventRounds.length > 1 && (
+                  <select
+                    value={addChargeForm.round_id}
+                    onChange={(e) => setAddChargeForm((f) => f && { ...f, round_id: e.target.value })}
+                    className={inputCls}
+                  >
+                    <option value="">Whole event (all rounds)</option>
+                    {eventRounds.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name || `Round ${r.round_number}`}{r.scheduled_date ? ` — ${r.scheduled_date}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                )}
                 <div className="flex gap-2">
                   <button type="button" onClick={() => setAddChargeForm(null)}
                     className="flex-1 py-1.5 rounded-full border border-emerald-900/60 text-[11px] text-emerald-200/60">
@@ -2915,7 +3148,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
             ) : (
               <button
                 type="button"
-                onClick={() => setAddChargeForm({ name: "", amount: "", category: "green_fee", description: "" })}
+                onClick={() => setAddChargeForm({ name: "", amount: "", category: "green_fee", description: "", round_id: "" })}
                 className="w-full py-2 rounded-full border border-emerald-700/50 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-900/30"
               >
                 + Add Charge
@@ -2926,10 +3159,83 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
           {/* Section C: Player Charges Grid */}
           {(eventCharges.length > 0 || playerCharges.length > 0) && (
             <div className="space-y-2">
-              <div className="text-[10px] uppercase tracking-wider text-emerald-200/50 font-semibold">Player Charges</div>
+              <div className="flex items-center justify-between">
+                <div className="text-[10px] uppercase tracking-wider text-emerald-200/50 font-semibold">Player Charges</div>
+                {eventCharges.length > 0 && participants.length > 0 && (
+                  <div className="flex rounded-full border border-emerald-900/60 overflow-hidden text-[9px]">
+                    <button
+                      type="button"
+                      onClick={() => setChargesViewMode("list")}
+                      className={`px-2.5 py-1 ${chargesViewMode === "list" ? "bg-emerald-800/60 text-emerald-100" : "text-emerald-200/50 hover:text-emerald-200/80"}`}
+                    >
+                      List
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setChargesViewMode("matrix")}
+                      className={`px-2.5 py-1 ${chargesViewMode === "matrix" ? "bg-emerald-800/60 text-emerald-100" : "text-emerald-200/50 hover:text-emerald-200/80"}`}
+                    >
+                      Matrix
+                    </button>
+                  </div>
+                )}
+              </div>
 
               {participants.length === 0 ? (
                 <div className="text-[11px] text-emerald-200/40 text-center py-2">No entered players yet.</div>
+              ) : chargesViewMode === "matrix" ? (
+                /* Matrix view: players × charges grid */
+                <div className="overflow-x-auto">
+                  <table className="w-full text-[10px] border-collapse">
+                    <thead>
+                      <tr>
+                        <th className="text-left text-emerald-200/50 pb-1 pr-2 font-normal">Player</th>
+                        {eventCharges.map((charge) => {
+                          const chargeRound = charge.round_id ? eventRounds.find((r) => r.id === charge.round_id) : null;
+                          return (
+                            <th key={charge.id} className="text-center text-emerald-200/50 pb-1 px-1 font-normal leading-tight max-w-[60px]">
+                              <div className="truncate">{charge.name}</div>
+                              {chargeRound && <div className="text-[8px] text-blue-300/60">{chargeRound.name || `R${chargeRound.round_number}`}</div>}
+                              <div className="text-emerald-200/30">{currencySymbol}{charge.amount.toFixed(0)}</div>
+                            </th>
+                          );
+                        })}
+                        <th className="text-right text-emerald-200/50 pb-1 pl-2 font-normal">Bal.</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {participants.map((participant) => {
+                        const pid = participant.profile_id;
+                        const profileName = participant.profile?.name ?? "?";
+                        const myCharges = playerCharges.filter((pc) => pc.profile_id === pid);
+                        const totalCharged = myCharges.reduce((s, pc) => s + pc.amount, 0);
+                        const totalPaid = myCharges.filter((pc) => pc.is_paid).reduce((s, pc) => s + pc.amount, 0);
+                        return (
+                          <tr key={pid} className="border-t border-emerald-900/30">
+                            <td className="py-1.5 pr-2 text-emerald-50 font-medium whitespace-nowrap truncate max-w-[80px]">{profileName}</td>
+                            {eventCharges.map((charge) => {
+                              const pc = myCharges.find((c) => c.charge_id === charge.id);
+                              return (
+                                <td key={charge.id} className="text-center py-1.5 px-1">
+                                  {pc ? (
+                                    pc.is_paid
+                                      ? <span className="text-emerald-400">✓</span>
+                                      : <span className="text-yellow-400/80">{currencySymbol}{pc.amount.toFixed(0)}</span>
+                                  ) : (
+                                    <span className="text-emerald-200/20">—</span>
+                                  )}
+                                </td>
+                              );
+                            })}
+                            <td className={`text-right py-1.5 pl-2 font-semibold ${totalCharged > totalPaid ? "text-red-400" : totalCharged > 0 ? "text-emerald-400" : "text-emerald-200/30"}`}>
+                              {totalCharged > 0 ? (totalCharged > totalPaid ? `-${currencySymbol}${(totalCharged - totalPaid).toFixed(0)}` : "✓") : "—"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               ) : (
                 <div className="space-y-2">
                   {participants.map((participant) => {
@@ -3030,6 +3336,310 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                       </div>
                     );
                   })}
+                </div>
+              )}
+            </div>
+          )}
+          {/* Section D: Prize Pots */}
+          {isAdminOrOwner && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="text-[10px] uppercase tracking-wider text-emerald-200/50 font-semibold">Prize Pots</div>
+                {!addPotForm && (
+                  <button
+                    type="button"
+                    onClick={() => setAddPotForm(emptyAddPotForm())}
+                    className="text-[10px] text-emerald-300/70 hover:text-emerald-300 border border-emerald-800/50 rounded-full px-2.5 py-1"
+                  >
+                    + Add Pot
+                  </button>
+                )}
+              </div>
+
+              {potError && (
+                <div className="text-[11px] text-red-400 bg-red-950/30 border border-red-900/50 rounded-xl px-3 py-2">
+                  {potError}
+                  <button type="button" onClick={() => setPotError(null)} className="ml-2 underline">Dismiss</button>
+                </div>
+              )}
+
+              {prizePots.length === 0 && !addPotForm && (
+                <div className="text-[11px] text-emerald-200/30 text-center py-2">
+                  No prize pots. Add entry fees, Two&apos;s Club, side pots, or non-monetary prizes.
+                </div>
+              )}
+
+              {prizePots.map((pot) => {
+                const isExpanded = expandedPotId === pot.id;
+                const actionPrefix = potActionLoading?.startsWith(pot.id + ":") ? potActionLoading.split(":")[1] : null;
+
+                return (
+                  <div key={pot.id} className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/50 overflow-hidden">
+                    {/* Pot header */}
+                    <div className="px-3 py-2.5 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-semibold text-emerald-50">{pot.name}</span>
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded-full border ${potStatusColour[pot.status] ?? ""}`}>
+                              {pot.status}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-emerald-700/40 text-emerald-300/70">
+                              {distTypeLabel[pot.distribution_type] ?? pot.distribution_type}
+                            </span>
+                            {pot.metric_type && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-purple-700/40 text-purple-300/70">
+                                {metricTypeLabel[pot.metric_type] ?? pot.metric_type}
+                              </span>
+                            )}
+                            {!pot.is_monetary && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-amber-700/40 text-amber-300/70">
+                                Non-cash prize
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          {pot.is_monetary && (
+                            <div className="text-sm font-bold text-[#f5e6b0]">{currencySymbol}{pot.total_pot.toFixed(2)} pot</div>
+                          )}
+                          {pot.entry_fee_amount && pot.entry_fee_amount > 0 && (
+                            <div className="text-[10px] text-emerald-200/50">{currencySymbol}{pot.entry_fee_amount.toFixed(2)}/player</div>
+                          )}
+                          {pot.prize_description && !pot.is_monetary && (
+                            <div className="text-[10px] text-amber-200/70 max-w-[120px] text-right">{pot.prize_description}</div>
+                          )}
+                        </div>
+                      </div>
+                      {pot.description && (
+                        <div className="text-[10px] text-emerald-200/40">{pot.description}</div>
+                      )}
+
+                      {/* Action buttons */}
+                      {pot.status !== "distributed" && (
+                        <div className="flex flex-wrap gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleEnrollAllPot(pot.id)}
+                            disabled={actionPrefix === "enroll"}
+                            className="text-[10px] px-2.5 py-1 rounded-full border border-emerald-700/50 text-emerald-200/70 hover:bg-emerald-900/30 disabled:opacity-50"
+                          >
+                            {actionPrefix === "enroll" ? "Enrolling…" : "Enroll All Players"}
+                          </button>
+                          {pot.metric_type === "twos" && (
+                            <button
+                              type="button"
+                              onClick={() => handleComputeTwos(pot.id)}
+                              disabled={actionPrefix === "compute"}
+                              className="text-[10px] px-2.5 py-1 rounded-full border border-purple-700/50 text-purple-200/70 hover:bg-purple-900/30 disabled:opacity-50"
+                            >
+                              {actionPrefix === "compute" ? "Computing…" : "Compute Two's"}
+                            </button>
+                          )}
+                          {pot.distribution_type !== "entry_only" && (
+                            <button
+                              type="button"
+                              onClick={() => handleProposeDistribution(pot.id)}
+                              disabled={actionPrefix === "propose"}
+                              className="text-[10px] px-2.5 py-1 rounded-full border border-amber-700/50 text-amber-200/70 hover:bg-amber-900/30 disabled:opacity-50"
+                            >
+                              {actionPrefix === "propose" ? "Calculating…" : "Propose Distribution"}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleDeletePot(pot.id)}
+                            disabled={actionPrefix === "delete"}
+                            className="text-[10px] px-2 py-1 text-red-400/50 hover:text-red-400 disabled:opacity-50"
+                          >
+                            {actionPrefix === "delete" ? "…" : "Delete"}
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Toggle expand */}
+                      {(pot.entries.length > 0 || pot.payouts.length > 0) && (
+                        <button
+                          type="button"
+                          onClick={() => setExpandedPotId(isExpanded ? null : pot.id)}
+                          className="w-full text-[10px] text-emerald-200/40 hover:text-emerald-200/70 text-center"
+                        >
+                          {isExpanded ? "▲ Hide" : `▼ ${pot.entries.length} enrolled${pot.payouts.length > 0 ? ` · ${pot.payouts.length} payouts` : ""}`}
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Proposed distribution banner */}
+                    {proposedDistribution?.potId === pot.id && (
+                      <div className="border-t border-emerald-900/50 px-3 py-3 space-y-2 bg-amber-950/20">
+                        <div className="text-[10px] font-semibold text-amber-200/80 uppercase tracking-wider">
+                          Proposed Distribution — {currencySymbol}{proposedDistribution.total_pot.toFixed(2)} total
+                        </div>
+                        <div className="space-y-1">
+                          {proposedDistribution.proposed.map((p, i) => (
+                            <div key={i} className="flex items-center justify-between text-[11px]">
+                              <span className="text-emerald-200/80">
+                                {p.position ? `${p.position}. ` : ""}{p.profile?.name ?? p.profile_id}
+                              </span>
+                              <div className="text-right">
+                                <span className="text-[#f5e6b0] font-semibold">
+                                  {p.amount != null ? `${currencySymbol}${p.amount.toFixed(2)}` : pot.prize_description ?? "Prize"}
+                                </span>
+                                <span className="text-emerald-200/30 ml-1.5 text-[9px]">{p.note}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setProposedDistribution(null)}
+                            className="flex-1 py-1.5 rounded-full border border-emerald-900/60 text-[11px] text-emerald-200/60"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleConfirmDistribution(pot.id)}
+                            disabled={potActionLoading === pot.id + ":confirm"}
+                            className="flex-1 py-1.5 rounded-full bg-amber-700/80 text-[11px] font-semibold text-white disabled:opacity-50"
+                          >
+                            {potActionLoading === pot.id + ":confirm" ? "Paying out…" : "Confirm & Pay Out"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Expanded: entries + payouts */}
+                    {isExpanded && (
+                      <div className="border-t border-emerald-900/50 px-3 py-2.5 space-y-2">
+                        {pot.entries.length > 0 && (
+                          <>
+                            <div className="text-[10px] text-emerald-200/40 font-semibold uppercase tracking-wider">Enrolled ({pot.entries.length})</div>
+                            <div className="space-y-1">
+                              {pot.entries.map((e) => (
+                                <div key={e.id} className="flex items-center justify-between text-[11px]">
+                                  <span className="text-emerald-200/80">{e.profile.name}</span>
+                                  <div className="flex items-center gap-2 text-right">
+                                    {e.metric_value != null && (
+                                      <span className="text-purple-300/70">{e.metric_value} {pot.metric_type === "twos" ? "two's" : "pts"}</span>
+                                    )}
+                                    {pot.entry_fee_amount && pot.entry_fee_amount > 0 && (
+                                      <span className="text-emerald-200/50">{currencySymbol}{e.amount_contributed.toFixed(2)}</span>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                        {pot.payouts.length > 0 && (
+                          <>
+                            <div className="text-[10px] text-emerald-200/40 font-semibold uppercase tracking-wider mt-2">Payouts</div>
+                            <div className="space-y-1">
+                              {pot.payouts.map((p) => (
+                                <div key={p.id} className="flex items-center justify-between text-[11px]">
+                                  <span className="text-emerald-200/80">{p.position ? `${p.position}. ` : ""}{p.profile.name}</span>
+                                  <span className="text-[#f5e6b0] font-semibold">
+                                    {p.amount != null ? `${currencySymbol}${p.amount.toFixed(2)}` : (pot.prize_description ?? "Prize")}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Add Prize Pot form */}
+              {addPotForm && (
+                <div className="rounded-xl border border-emerald-700/40 bg-[#0b3b21]/50 px-3 py-3 space-y-2">
+                  <div className="text-[11px] font-semibold text-emerald-200">New Prize Pot</div>
+                  <input
+                    type="text"
+                    placeholder="Name (e.g. Two's Club, Season FedEx Pot)"
+                    value={addPotForm.name}
+                    onChange={(e) => setAddPotForm((f) => f && { ...f, name: e.target.value })}
+                    className={inputCls}
+                  />
+                  <select
+                    value={addPotForm.distribution_type}
+                    onChange={(e) => setAddPotForm((f) => f && { ...f, distribution_type: e.target.value as PrizePotDistributionType })}
+                    className={inputCls}
+                  >
+                    <option value="position_based">Position-Based (1st/2nd/3rd splits)</option>
+                    <option value="metric_weighted">Metric — Weighted (e.g. proportional to two's count)</option>
+                    <option value="metric_equal">Metric — Equal Split (e.g. anyone with a two)</option>
+                    <option value="equal_split">Equal Split (all enrolled players)</option>
+                    <option value="non_monetary">Non-Monetary (voucher, trophy, etc.)</option>
+                    <option value="entry_only">Entry Fee Only (no distribution)</option>
+                  </select>
+
+                  {(addPotForm.distribution_type === "metric_weighted" || addPotForm.distribution_type === "metric_equal") && (
+                    <select
+                      value={addPotForm.metric_type}
+                      onChange={(e) => setAddPotForm((f) => f && { ...f, metric_type: e.target.value })}
+                      className={inputCls}
+                    >
+                      <option value="">Select metric type…</option>
+                      <option value="twos">Two's Club (auto-calculated from scores)</option>
+                      <option value="nearest_pin">Nearest Pin (manually recorded)</option>
+                      <option value="longest_drive">Longest Drive (manually recorded)</option>
+                      <option value="season_points">Season Points</option>
+                      <option value="custom">Custom (manually recorded)</option>
+                    </select>
+                  )}
+
+                  {addPotForm.distribution_type === "non_monetary" && (
+                    <input
+                      type="text"
+                      placeholder="Prize description (e.g. Callaway Driver, £50 Voucher)"
+                      value={addPotForm.prize_description}
+                      onChange={(e) => setAddPotForm((f) => f && { ...f, prize_description: e.target.value, is_monetary: false })}
+                      className={inputCls}
+                    />
+                  )}
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="number"
+                      placeholder="Entry fee per player (£, optional)"
+                      value={addPotForm.entry_fee_amount}
+                      onChange={(e) => setAddPotForm((f) => f && { ...f, entry_fee_amount: e.target.value })}
+                      className={inputCls}
+                      min="0"
+                      step="0.01"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Entry fee notes (optional)"
+                      value={addPotForm.entry_fee_notes}
+                      onChange={(e) => setAddPotForm((f) => f && { ...f, entry_fee_notes: e.target.value })}
+                      className={inputCls}
+                    />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Description (optional)"
+                    value={addPotForm.description}
+                    onChange={(e) => setAddPotForm((f) => f && { ...f, description: e.target.value })}
+                    className={inputCls}
+                  />
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => { setAddPotForm(null); setPotError(null); }}
+                      className="flex-1 py-1.5 rounded-full border border-emerald-900/60 text-[11px] text-emerald-200/60">
+                      Cancel
+                    </button>
+                    <button type="button" onClick={handleAddPot} disabled={addingPot}
+                      className="flex-1 py-1.5 rounded-full bg-emerald-700 text-[11px] font-semibold text-white disabled:opacity-50">
+                      {addingPot ? "Creating…" : "Create Prize Pot"}
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

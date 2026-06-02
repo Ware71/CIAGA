@@ -738,6 +738,8 @@ export type EventChargeCategory = "green_fee" | "buggy" | "food" | "drink" | "ot
 export type EventCharge = {
   id: string;
   event_id: string;
+  /** null = whole-event charge; set = round-specific charge */
+  round_id: string | null;
   name: string;
   amount: number;
   category: EventChargeCategory;
@@ -881,4 +883,85 @@ export type SeasonFinancialSummary = {
     winnings: number;
     net_balance: number;
   }>;
+};
+
+// ─── Prize Pots ───────────────────────────────────────────────────────────────
+
+export type PrizePotDistributionType =
+  | "position_based"    // 1st/2nd/3rd splits from prize_table
+  | "metric_weighted"   // proportional to metric value (e.g. 3 twos → 3× share)
+  | "metric_equal"      // equal share to each player with metric_value >= 1
+  | "equal_split"       // split equally among all enrolled players
+  | "non_monetary"      // no cash; prize_description only
+  | "entry_only";       // entry fee charged, no distribution
+
+export type PrizePotMetricType =
+  | "twos"          // auto-calculated from hole scores
+  | "nearest_pin"   // manually recorded
+  | "longest_drive" // manually recorded
+  | "season_points" // from competition season standings
+  | "custom";       // admin-defined, manually recorded
+
+export type PrizePotStatus = "active" | "locked" | "distributed";
+
+export type PrizePot = {
+  id: string;
+  group_id: string;
+  /** Exactly one of these is set */
+  event_id: string | null;
+  competition_season_id: string | null;
+  group_season_id: string | null;
+  name: string;
+  description: string | null;
+  entry_fee_amount: number | null;
+  entry_fee_currency: string;
+  entry_fee_notes: string | null;
+  distribution_type: PrizePotDistributionType;
+  prize_table: PrizeTableEntry[] | null;
+  metric_type: PrizePotMetricType | null;
+  metric_description: string | null;
+  is_monetary: boolean;
+  prize_description: string | null;
+  status: PrizePotStatus;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PrizePotEntry = {
+  id: string;
+  prize_pot_id: string;
+  profile_id: string;
+  amount_contributed: number;
+  transaction_id: string | null;
+  metric_value: number | null;
+  metric_detail: Array<{ round_id: string; hole_number: number; score: number }> | null;
+  enrolled_at: string;
+};
+
+export type PrizePotEntryWithProfile = PrizePotEntry & {
+  profile: { id: string; name: string | null; avatar_url: string | null };
+};
+
+export type PrizePotPayout = {
+  id: string;
+  prize_pot_id: string;
+  profile_id: string;
+  position: number | null;
+  amount: number | null;
+  note: string | null;
+  transaction_id: string | null;
+  recorded_by: string;
+  recorded_at: string;
+};
+
+export type PrizePotPayoutWithProfile = PrizePotPayout & {
+  profile: { id: string; name: string | null; avatar_url: string | null };
+};
+
+export type PrizePotWithDetails = PrizePot & {
+  entries: PrizePotEntryWithProfile[];
+  payouts: PrizePotPayoutWithProfile[];
+  /** Sum of all entry contributions */
+  total_pot: number;
 };
