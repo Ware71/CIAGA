@@ -54,6 +54,8 @@ export const POINTS_MODELS: { value: EventPointsModel; label: string; shortLabel
   { value: "custom_table", label: "Custom points table", shortLabel: "Custom table", desc: "Set your own points for each position." },
 ];
 
+export const FEDEX_POINTS: number[] = [500, 300, 190, 140, 110, 90, 75, 60, 48, 38, 30, 24, 18, 14, 10, 8, 6, 4, 2, 1];
+
 export const STANDINGS_CONTRIBUTIONS = [
   { value: "event_only" as const, label: "Event only" },
   { value: "season" as const, label: "Season" },

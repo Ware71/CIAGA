@@ -8,6 +8,7 @@ import type { RoundFormatType } from "@/lib/rounds/hooks/useRoundDetail";
 import type { FormatDisplayData } from "@/lib/rounds/formatScoring";
 import { supabase } from "@/lib/supabaseClient";
 import { getViewerSession } from "@/lib/auth/viewerSession";
+import { FEDEX_POINTS } from "@/lib/events/constants";
 
 const FORMAT_LABELS: Record<RoundFormatType, string> = {
   strokeplay: "Stroke Play",
@@ -113,7 +114,7 @@ type SeasonStandingEntry = {
   position: number | null;
 };
 
-const FEDEX_POINTS_SCALE = [500, 300, 190, 140, 110, 90, 75, 60, 48, 38, 30, 24, 18, 14, 10, 8, 6, 4, 2, 1];
+const FEDEX_POINTS_SCALE = FEDEX_POINTS;
 
 function projectedPoints(
   rank: number | null,

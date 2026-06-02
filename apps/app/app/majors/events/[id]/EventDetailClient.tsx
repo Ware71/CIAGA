@@ -20,13 +20,13 @@ import type {
   EventCharge,
   EventPlayerChargeWithProfile,
 } from "@/lib/majors/types";
-import { EVENT_TYPES, SCORING_MODELS, POINTS_MODELS } from "@/lib/events/constants";
+import { EVENT_TYPES, SCORING_MODELS, POINTS_MODELS, FEDEX_POINTS } from "@/lib/events/constants";
 import { HandicapRulesEditor } from "@/components/competitions/HandicapRulesEditor";
 import { CoursePickerModal } from "@/components/rounds/CoursePickerModal";
 import { supabase } from "@/lib/supabaseClient";
 import { LeaderboardReveal } from "@/components/majors/LeaderboardReveal";
 
-const FEDEX_POINTS_SCALE = [500, 300, 190, 140, 110, 90, 75, 60, 48, 38, 30, 24, 18, 14, 10, 8, 6, 4, 2, 1];
+const FEDEX_POINTS_SCALE = FEDEX_POINTS;
 
 function formatToPar(n: number): string {
   if (n === 0) return "E";

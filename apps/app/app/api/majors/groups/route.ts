@@ -32,7 +32,8 @@ export async function POST(req: Request) {
     const { profileId } = await getAuthedProfileOrThrow(req);
     const body = await req.json();
 
-    const { name, description, type, privacy, join_method, max_members, season_start, season_end, image_url } = body;
+    const { name, description, type, privacy, join_method, max_members, image_url, default_scoring_prefs } = body;
+    const seasons: { name: string; start_date: string; end_date: string }[] = body.seasons ?? [];
 
     if (!name?.trim()) {
       return NextResponse.json({ error: "Group name is required" }, { status: 400 });
@@ -40,6 +41,10 @@ export async function POST(req: Request) {
 
     // Generate a random join code
     const join_code = Math.random().toString(36).slice(2, 8).toUpperCase();
+
+    // Derive season bounds from the seasons array (first start → last end)
+    const season_start = seasons[0]?.start_date ?? null;
+    const season_end   = seasons.at(-1)?.end_date ?? null;
 
     const { data: group, error: groupErr } = await supabaseAdmin
       .from("major_groups")
@@ -52,8 +57,9 @@ export async function POST(req: Request) {
         image_url: image_url ?? null,
         owner_profile_id: profileId,
         max_members: max_members ?? null,
-        season_start: season_start ?? null,
-        season_end: season_end ?? null,
+        season_start,
+        season_end,
+        default_scoring_prefs: default_scoring_prefs ?? {},
         ciaga_tag: "none",
         join_code,
       })
@@ -62,17 +68,27 @@ export async function POST(req: Request) {
 
     if (groupErr) throw groupErr;
 
+    const groupId = (group as any).id;
+
     // Auto-add creator as owner member
     const { error: memberErr } = await supabaseAdmin
       .from("major_group_memberships")
       .insert({
-        group_id: (group as any).id,
+        group_id: groupId,
         profile_id: profileId,
         role: "owner",
         status: "active",
       });
 
     if (memberErr) throw memberErr;
+
+    // Insert seasons if provided
+    if (seasons.length > 0) {
+      const { error: seasonsErr } = await supabaseAdmin
+        .from("group_seasons")
+        .insert(seasons.map((s) => ({ ...s, group_id: groupId })));
+      if (seasonsErr) throw seasonsErr;
+    }
 
     return NextResponse.json({ group }, { status: 201 });
   } catch (e: any) {

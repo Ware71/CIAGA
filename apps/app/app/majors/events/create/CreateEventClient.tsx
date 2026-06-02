@@ -14,7 +14,7 @@ import type {
   MajorGroup,
 } from "@/lib/majors/types";
 import type { PlayingHandicapMode } from "@/components/rounds/PlayingHandicapSettings";
-import { EVENT_CATEGORIES, EVENT_TYPES, SCORING_MODELS, POINTS_MODELS, FORMAT_DEFAULT_SCORING, FORMAT_ALLOWS_SCORING_CHOICE } from "@/lib/events/constants";
+import { EVENT_CATEGORIES, EVENT_TYPES, SCORING_MODELS, POINTS_MODELS, FORMAT_DEFAULT_SCORING, FORMAT_ALLOWS_SCORING_CHOICE, FEDEX_POINTS } from "@/lib/events/constants";
 import { HandicapRulesEditor } from "@/components/competitions/HandicapRulesEditor";
 import { CoursePickerModal } from "@/components/rounds/CoursePickerModal";
 
@@ -109,8 +109,7 @@ const INITIAL: FormState = {
   reveal_top_x: "",
 };
 
-// Built-in FedEx-style points: positions 1–20
-const FEDEX_POINTS = [500, 300, 190, 140, 110, 90, 75, 60, 48, 38, 30, 24, 18, 14, 10, 8, 6, 4, 2, 1];
+
 
 function PointsTableEditor({
   pointsModel,

@@ -282,6 +282,16 @@ export type MajorGroup = {
   allow_credit: boolean;
 };
 
+export type GroupSeason = {
+  id: string;
+  group_id: string;
+  name: string;
+  start_date: string;
+  end_date: string;
+  status: "upcoming" | "active" | "completed";
+  created_at: string;
+};
+
 export type MajorGroupMembership = {
   id: string;
   group_id: string;

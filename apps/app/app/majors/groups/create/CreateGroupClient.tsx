@@ -12,7 +12,7 @@ import type {
   EventTypeV2,
   EventScoringModel,
 } from "@/lib/majors/types";
-import { SCORING_MODELS, POINTS_MODELS, EVENT_TYPES, FORMAT_DEFAULT_SCORING, FORMAT_ALLOWS_SCORING_CHOICE } from "@/lib/events/constants";
+import { SCORING_MODELS, POINTS_MODELS, EVENT_TYPES, FORMAT_DEFAULT_SCORING, FORMAT_ALLOWS_SCORING_CHOICE, FEDEX_POINTS } from "@/lib/events/constants";
 import { HandicapRulesEditor, type HandicapRules } from "@/components/competitions/HandicapRulesEditor";
 
 const GROUP_TYPES: { value: MajorGroupType; label: string; desc: string }[] = [
@@ -39,6 +39,12 @@ function getFormatsForGroupType(type: MajorGroupType) {
   );
 }
 
+function ordinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
 type FormState = {
   name: string;
   description: string;
@@ -46,10 +52,9 @@ type FormState = {
   privacy: MajorGroupPrivacy;
   join_method: MajorGroupJoinMethod;
   max_members: string;
-  season_start: string;
-  season_end: string;
-  useCustomDates: boolean;
 };
+
+type SeasonDraft = { name: string; start_date: string; end_date: string };
 
 const currentYear = new Date().getFullYear();
 
@@ -60,12 +65,27 @@ const INITIAL: FormState = {
   privacy: "public",
   join_method: "open",
   max_members: "",
-  season_start: `${currentYear}-01-01`,
-  season_end: `${currentYear}-12-31`,
-  useCustomDates: false,
 };
 
 const EMPTY_HANDICAP: HandicapRules = { mode: "allowance_pct", allowance_pct: "100", max_handicap: "" };
+
+function addNextSeason(seasons: SeasonDraft[]): SeasonDraft {
+  const last = seasons.at(-1)!;
+  const startMs = new Date(last.start_date).getTime();
+  const endMs   = new Date(last.end_date).getTime();
+  const durationMs = endMs - startMs + 86_400_000; // inclusive day
+  const nextStart = new Date(startMs + durationMs);
+  const nextEnd   = new Date(endMs   + durationMs);
+  const sy = nextStart.getFullYear(), ey = nextEnd.getFullYear();
+  const name = sy === ey
+    ? `${sy} Season`
+    : `${String(sy).slice(2)}/${String(ey).slice(2)} Season`;
+  return {
+    name,
+    start_date: nextStart.toISOString().slice(0, 10),
+    end_date:   nextEnd.toISOString().slice(0, 10),
+  };
+}
 
 function friendlyLabel(field: "type" | "access" | "format" | "points", value: string): string {
   if (field === "type")   return GROUP_TYPES.find((t) => t.value === value)?.label ?? value;
@@ -88,7 +108,12 @@ export default function CreateGroupClient() {
   const [defaultHandicap, setDefaultHandicap] = useState<HandicapRules>(EMPTY_HANDICAP);
   const [defaultPointsModel, setDefaultPointsModel] = useState<string | null>(null);
 
-  const update = (field: keyof FormState, value: string | boolean) =>
+  // Seasons state
+  const [seasons, setSeasons] = useState<SeasonDraft[]>([
+    { name: `${currentYear} Season`, start_date: `${currentYear}-01-01`, end_date: `${currentYear}-12-31` },
+  ]);
+
+  const update = (field: keyof FormState, value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
   const setAccess = (opt: typeof ACCESS_OPTIONS[number]) => {
@@ -97,7 +122,6 @@ export default function CreateGroupClient() {
 
   const setGroupType = (type: MajorGroupType) => {
     update("type", type);
-    // Auto-select matchplay format when switching to a matchplay group type
     if (MATCHPLAY_GROUP_TYPES.has(type)) {
       setDefaultCompType("matchplay");
       setDefaultScoringModel("match_result");
@@ -105,6 +129,14 @@ export default function CreateGroupClient() {
       setDefaultCompType(null);
       setDefaultScoringModel(null);
     }
+  };
+
+  const updateSeason = (i: number, field: keyof SeasonDraft, value: string) => {
+    setSeasons((prev) => prev.map((s, idx) => idx === i ? { ...s, [field]: value } : s));
+  };
+
+  const removeSeason = (i: number) => {
+    setSeasons((prev) => prev.filter((_, idx) => idx !== i));
   };
 
   const totalSteps = 5;
@@ -147,8 +179,7 @@ export default function CreateGroupClient() {
           privacy: form.privacy,
           join_method: form.join_method,
           max_members: form.max_members ? parseInt(form.max_members, 10) : null,
-          season_start: form.season_start || null,
-          season_end: form.season_end || null,
+          seasons,
           default_scoring_prefs: buildDefaultScoringPrefs(),
         }),
       });
@@ -328,64 +359,102 @@ export default function CreateGroupClient() {
               }`}
             >
               <div className="text-sm font-semibold text-emerald-50">{p.label}</div>
-              {p.desc && <div className="text-[11px] text-emerald-200/55">{p.desc}</div>}
+              {p.desc && <div className="text-[11px] text-emerald-200/55 mt-0.5">{p.desc}</div>}
+
+              {/* Points preview — shown when this model is selected */}
+              {defaultPointsModel === p.value && (
+                <div className="mt-3 pt-3 border-t border-emerald-700/40">
+                  {p.value === "fedex_style" && (
+                    <>
+                      <div className="grid grid-cols-5 gap-x-2 gap-y-1">
+                        {FEDEX_POINTS.map((pts, i) => (
+                          <div key={i} className="text-[10px] text-emerald-200/70">
+                            <span className="text-emerald-200/45">{ordinal(i + 1)}</span>{" "}
+                            <span className="font-semibold text-emerald-100">{pts}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-1.5 text-[10px] text-emerald-200/40">21st onwards — 0 pts</div>
+                    </>
+                  )}
+                  {p.value === "position_based" && (
+                    <div className="text-[10px] text-emerald-200/55">
+                      Fixed point values per finishing position. Set when creating each competition.
+                    </div>
+                  )}
+                  {p.value === "custom_table" && (
+                    <div className="text-[10px] text-emerald-200/55">
+                      Fully custom — you define the points for each position when creating each competition.
+                    </div>
+                  )}
+                </div>
+              )}
             </button>
           ))}
         </div>
       </div>
     </div>,
 
-    /* Step 3: Season */
-    <div key="step3" className="space-y-5">
+    /* Step 3: Seasons */
+    <div key="step3" className="space-y-4">
       <div>
-        <div className="text-sm font-semibold text-emerald-50 mb-1">Season</div>
+        <div className="text-sm font-semibold text-emerald-50 mb-1">Seasons</div>
         <div className="text-[11px] text-emerald-200/55">
-          Defaults to the current calendar year. Switch to custom dates if your season runs differently.
+          Define the season windows for this group. Add future seasons now or later.
         </div>
       </div>
 
-      <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 px-4 py-3">
-        {form.useCustomDates ? (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Season Start</label>
+      <div className="space-y-3">
+        {seasons.map((s, i) => (
+          <div key={i} className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 p-3 space-y-3">
+            <div className="flex items-center justify-between">
               <input
-                type="date"
-                value={form.season_start}
-                onChange={(e) => update("season_start", e.target.value)}
-                className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-3 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
+                type="text"
+                value={s.name}
+                onChange={(e) => updateSeason(i, "name", e.target.value)}
+                placeholder="Season name"
+                className="flex-1 bg-transparent text-sm font-semibold text-emerald-50 placeholder:text-emerald-100/30 focus:outline-none"
               />
+              {seasons.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => removeSeason(i)}
+                  className="ml-2 text-[11px] text-emerald-400/60 hover:text-red-400 transition-colors"
+                >
+                  Remove
+                </button>
+              )}
             </div>
-            <div className="space-y-2">
-              <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Season End</label>
-              <input
-                type="date"
-                value={form.season_end}
-                onChange={(e) => update("season_end", e.target.value)}
-                className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-3 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
-              />
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <div className="text-[10px] uppercase tracking-wider text-emerald-200/50">Start</div>
+                <input
+                  type="date"
+                  value={s.start_date}
+                  onChange={(e) => updateSeason(i, "start_date", e.target.value)}
+                  className="w-full rounded-lg border border-emerald-900/60 bg-[#0b3b21]/60 px-2 py-1.5 text-xs text-emerald-50 focus:outline-none focus:border-emerald-600"
+                />
+              </div>
+              <div className="space-y-1">
+                <div className="text-[10px] uppercase tracking-wider text-emerald-200/50">End</div>
+                <input
+                  type="date"
+                  value={s.end_date}
+                  onChange={(e) => updateSeason(i, "end_date", e.target.value)}
+                  className="w-full rounded-lg border border-emerald-900/60 bg-[#0b3b21]/60 px-2 py-1.5 text-xs text-emerald-50 focus:outline-none focus:border-emerald-600"
+                />
+              </div>
             </div>
           </div>
-        ) : (
-          <div className="text-sm text-emerald-50">
-            Season: <span className="font-semibold">{currentYear}</span>
-            <span className="ml-2 text-[11px] text-emerald-200/55">(1 Jan – 31 Dec)</span>
-          </div>
-        )}
+        ))}
       </div>
 
       <button
         type="button"
-        onClick={() => {
-          if (form.useCustomDates) {
-            update("season_start", `${currentYear}-01-01`);
-            update("season_end", `${currentYear}-12-31`);
-          }
-          update("useCustomDates", !form.useCustomDates);
-        }}
+        onClick={() => setSeasons((prev) => [...prev, addNextSeason(prev)])}
         className="text-[11px] text-emerald-400 hover:text-emerald-300 transition-colors"
       >
-        {form.useCustomDates ? "← Use annual default" : "Use custom dates →"}
+        + Add season
       </button>
     </div>,
 
@@ -398,7 +467,6 @@ export default function CreateGroupClient() {
           { label: "Type", value: friendlyLabel("type", form.type) },
           { label: "Access", value: friendlyLabel("access", form.privacy) },
           form.max_members ? { label: "Max members", value: form.max_members } : null,
-          { label: "Season", value: form.useCustomDates ? `${form.season_start} – ${form.season_end}` : String(currentYear) },
           defaultCompType ? { label: "Default format", value: friendlyLabel("format", defaultCompType) } : null,
           defaultPointsModel ? { label: "Default points", value: friendlyLabel("points", defaultPointsModel) } : null,
         ]
@@ -409,6 +477,17 @@ export default function CreateGroupClient() {
               <span className="text-emerald-50">{item!.value}</span>
             </div>
           ))}
+
+        {/* Seasons summary */}
+        <div className="pt-2 mt-1 border-t border-emerald-800/40 space-y-1">
+          <div className="text-[10px] uppercase tracking-wider text-emerald-200/45 mb-1">Seasons</div>
+          {seasons.map((s, i) => (
+            <div key={i} className="flex justify-between text-sm">
+              <span className="text-emerald-200/55">{s.name}</span>
+              <span className="text-emerald-50 text-[11px]">{s.start_date} – {s.end_date}</span>
+            </div>
+          ))}
+        </div>
       </div>
       {error && <div className="text-sm text-red-400">{error}</div>}
     </div>,
