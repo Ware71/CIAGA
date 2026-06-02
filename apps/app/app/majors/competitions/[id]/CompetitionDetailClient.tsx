@@ -13,7 +13,8 @@ import type {
   EventPointsModel,
   EventCategory,
 } from "@/lib/majors/types";
-import { EVENT_TYPES } from "@/lib/events/constants";
+import { EVENT_TYPES, FORMAT_DEFAULT_SCORING, FORMAT_ALLOWS_SCORING_CHOICE } from "@/lib/events/constants";
+import { HandicapRulesEditor, type HandicapRules, type HandicapMode } from "@/components/competitions/HandicapRulesEditor";
 
 const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -79,9 +80,11 @@ function CompetitionEditModal({
   const [pointsModel, setPointsModel] = useState<EventPointsModel>(competition.template_points_model ?? "none");
   const [numRounds, setNumRounds] = useState(String(competition.template_num_rounds ?? "1"));
   const [rulesText, setRulesText] = useState(competition.template_rules_text ?? "");
-  const [handicapMode, setHandicapMode] = useState<string>((settings.handicap_mode as string) ?? "allowance_pct");
-  const [handicapPct, setHandicapPct] = useState(settings.handicap_allowance_pct != null ? String(settings.handicap_allowance_pct) : "100");
-  const [handicapMax, setHandicapMax] = useState(settings.max_handicap != null ? String(settings.max_handicap) : "");
+  const [handicapRules, setHandicapRules] = useState<HandicapRules>({
+    mode: ((settings.handicap_mode as string) ?? "allowance_pct") as HandicapMode,
+    allowance_pct: settings.handicap_allowance_pct != null ? String(settings.handicap_allowance_pct) : "100",
+    max_handicap: settings.max_handicap != null ? String(settings.max_handicap) : "",
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -93,9 +96,11 @@ function CompetitionEditModal({
       const session = await getViewerSession();
       if (!session) { setError("Not signed in"); return; }
 
-      const template_settings: Record<string, unknown> = { handicap_mode: handicapMode };
-      if (handicapMode === "allowance_pct") template_settings.handicap_allowance_pct = parseInt(handicapPct, 10) || 100;
-      if (handicapMode !== "none" && handicapMax) template_settings.max_handicap = parseInt(handicapMax, 10);
+      const template_settings: Record<string, unknown> = { handicap_mode: handicapRules.mode };
+      if (handicapRules.mode === "allowance_pct" || handicapRules.mode === "compare_against_lowest")
+        template_settings.handicap_allowance_pct = parseInt(handicapRules.allowance_pct, 10) || 100;
+      if (handicapRules.mode !== "none" && handicapRules.max_handicap)
+        template_settings.max_handicap = parseInt(handicapRules.max_handicap, 10);
 
       const res = await fetch(`/api/majors/competitions/${competition.id}`, {
         method: "PATCH",
@@ -151,14 +156,16 @@ function CompetitionEditModal({
             />
           </div>
 
-          <button
-            type="button"
-            onClick={() => setRecurAnnually((v) => !v)}
-            className={`w-full flex items-center justify-between rounded-xl border px-3 py-2 text-sm transition-colors ${recurAnnually ? "border-emerald-500 bg-emerald-900/40 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}
-          >
-            <span>Recurs annually</span>
-            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${recurAnnually ? "bg-emerald-600 text-white" : "bg-emerald-900/40 text-emerald-400"}`}>{recurAnnually ? "On" : "Off"}</span>
-          </button>
+          <div className="flex items-center justify-between rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 px-3 py-2">
+            <span className="text-sm text-emerald-50">Recurs annually</span>
+            <button
+              type="button"
+              onClick={() => setRecurAnnually((v) => !v)}
+              className={`relative h-6 w-11 rounded-full transition-colors ${recurAnnually ? "bg-emerald-600" : "bg-emerald-900/60"}`}
+            >
+              <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${recurAnnually ? "translate-x-5" : "translate-x-0"}`} />
+            </button>
+          </div>
 
           <div className="space-y-1">
             <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Typical Month</label>
@@ -188,7 +195,8 @@ function CompetitionEditModal({
             <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Default Format</label>
             <div className="grid grid-cols-2 gap-1.5">
               {EVENT_TYPES.map((t) => (
-                <button key={t.value} type="button" onClick={() => setCompType(t.value)}
+                <button key={t.value} type="button"
+                  onClick={() => { setCompType(t.value); setScoringModel(FORMAT_DEFAULT_SCORING[t.value] ?? "net"); }}
                   className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${compType === t.value ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
                   {t.label}
                 </button>
@@ -198,49 +206,26 @@ function CompetitionEditModal({
 
           <div className="space-y-1">
             <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Default Scoring</label>
-            <div className="grid grid-cols-2 gap-1.5">
-              {SCORING_MODELS.map((s) => (
-                <button key={s.value} type="button" onClick={() => setScoringModel(s.value)}
-                  className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${scoringModel === s.value ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
-                  {s.label}
-                </button>
-              ))}
-            </div>
+            {!FORMAT_ALLOWS_SCORING_CHOICE(compType) ? (
+              <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 px-3 py-2 text-[11px] text-emerald-200/55">
+                {scoringModel === "stableford_points" ? "Stableford Points" : "Match Result"} — determined by format
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-1.5">
+                {SCORING_MODELS.filter((s) => s.value === "net" || s.value === "gross").map((s) => (
+                  <button key={s.value} type="button" onClick={() => setScoringModel(s.value)}
+                    className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${scoringModel === s.value ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {scoringModel !== "gross" && (
             <div className="rounded-xl border border-emerald-900/40 bg-emerald-950/30 p-3 space-y-2">
               <div className="text-[10px] uppercase tracking-wider text-emerald-200/50 font-semibold">Default Handicap Rules</div>
-              <div className="space-y-1">
-                <label className="text-[10px] text-emerald-200/60">Mode</label>
-                <select
-                  className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 focus:outline-none"
-                  value={handicapMode}
-                  onChange={(e) => setHandicapMode(e.target.value)}
-                >
-                  <option value="allowance_pct">Percentage Allowance</option>
-                  <option value="compare_against_lowest">Off the Lowest</option>
-                  <option value="fixed">Fixed</option>
-                  <option value="none">None (Gross)</option>
-                </select>
-              </div>
-              {handicapMode === "allowance_pct" && (
-                <div className="space-y-1">
-                  <label className="text-[10px] text-emerald-200/60">Allowance %</label>
-                  <input type="number" min={0} max={100} value={handicapPct}
-                    onChange={(e) => setHandicapPct(e.target.value)}
-                    className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 focus:outline-none" />
-                </div>
-              )}
-              {handicapMode !== "none" && (
-                <div className="space-y-1">
-                  <label className="text-[10px] text-emerald-200/60">Max Handicap (optional)</label>
-                  <input type="number" min={0} value={handicapMax}
-                    onChange={(e) => setHandicapMax(e.target.value)}
-                    placeholder="No limit"
-                    className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none" />
-                </div>
-              )}
+              <HandicapRulesEditor compact value={handicapRules} onChange={setHandicapRules} />
             </div>
           )}
 

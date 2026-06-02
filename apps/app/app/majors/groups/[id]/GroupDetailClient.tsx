@@ -2118,6 +2118,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             const prefs = leagueSettingsForm ?? group.default_scoring_prefs ?? {};
             const scoringModel = (prefs as any).scoring_model ?? null;
             const pointsModel = (prefs as any).points_model ?? null;
+            const handicapMode = (prefs as any).handicap_rules?.mode ?? "allowance_pct";
             const allowancePct = (prefs as any).handicap_rules?.allowance_pct ?? null;
             const maxHandicap = (prefs as any).handicap_rules?.max_handicap ?? null;
 
@@ -2167,42 +2168,79 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                   </div>
                 </div>
 
-                {/* Handicap allowance */}
-                <div className="flex items-center gap-3">
-                  <div className="flex-1 space-y-1.5">
-                    <div className="text-[10px] text-emerald-200/50">Handicap Allowance</div>
-                    <div className="flex items-center gap-1.5">
+                {/* Handicap rules */}
+                <div className="space-y-2">
+                  <div className="text-[10px] text-emerald-200/50">Handicap Mode</div>
+                  <select
+                    value={handicapMode}
+                    onChange={(e) => {
+                      const hr = { ...((prefs as any).handicap_rules ?? {}), mode: e.target.value };
+                      setPrefs({ handicap_rules: hr });
+                    }}
+                    className="w-full bg-[#042713] border border-emerald-900/60 rounded-lg px-2 py-1.5 text-[12px] text-emerald-100 focus:outline-none [color-scheme:dark]"
+                  >
+                    <option value="allowance_pct">Percentage Allowance</option>
+                    <option value="compare_against_lowest">Off the Lowest</option>
+                    <option value="fixed">Fixed Handicap</option>
+                    <option value="none">No Handicap</option>
+                  </select>
+                  {(handicapMode === "allowance_pct" || handicapMode === "compare_against_lowest") && (
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 space-y-1.5">
+                        <div className="text-[10px] text-emerald-200/50">Allowance %</div>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={allowancePct ?? ""}
+                            onChange={(e) => {
+                              const v = e.target.value ? parseInt(e.target.value, 10) : null;
+                              const hr = { ...((prefs as any).handicap_rules ?? {}), mode: handicapMode, allowance_pct: v };
+                              setPrefs({ handicap_rules: hr });
+                            }}
+                            placeholder="100"
+                            className="w-16 bg-[#042713] border border-emerald-900/60 rounded-lg px-2 py-1 text-[12px] text-emerald-100 text-center"
+                          />
+                          <span className="text-[11px] text-emerald-200/50">%</span>
+                        </div>
+                      </div>
+                      {handicapMode !== "none" && (
+                        <div className="flex-1 space-y-1.5">
+                          <div className="text-[10px] text-emerald-200/50">Max Handicap</div>
+                          <input
+                            type="number"
+                            min={0}
+                            value={maxHandicap ?? ""}
+                            onChange={(e) => {
+                              const v = e.target.value ? parseInt(e.target.value, 10) : null;
+                              const hr = { ...((prefs as any).handicap_rules ?? {}), mode: handicapMode, max_handicap: v };
+                              setPrefs({ handicap_rules: hr });
+                            }}
+                            placeholder="No limit"
+                            className="w-full bg-[#042713] border border-emerald-900/60 rounded-lg px-2 py-1 text-[12px] text-emerald-100 text-center"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {handicapMode !== "none" && handicapMode !== "allowance_pct" && handicapMode !== "compare_against_lowest" && (
+                    <div className="space-y-1.5">
+                      <div className="text-[10px] text-emerald-200/50">Max Handicap</div>
                       <input
                         type="number"
                         min={0}
-                        max={100}
-                        value={allowancePct ?? ""}
+                        value={maxHandicap ?? ""}
                         onChange={(e) => {
                           const v = e.target.value ? parseInt(e.target.value, 10) : null;
-                          const hr = { ...((prefs as any).handicap_rules ?? {}), mode: "allowance_pct", allowance_pct: v };
+                          const hr = { ...((prefs as any).handicap_rules ?? {}), mode: handicapMode, max_handicap: v };
                           setPrefs({ handicap_rules: hr });
                         }}
-                        placeholder="100"
-                        className="w-16 bg-[#042713] border border-emerald-900/60 rounded-lg px-2 py-1 text-[12px] text-emerald-100 text-center"
+                        placeholder="No limit"
+                        className="w-full bg-[#042713] border border-emerald-900/60 rounded-lg px-2 py-1 text-[12px] text-emerald-100 text-center"
                       />
-                      <span className="text-[11px] text-emerald-200/50">%</span>
                     </div>
-                  </div>
-                  <div className="flex-1 space-y-1.5">
-                    <div className="text-[10px] text-emerald-200/50">Max Handicap</div>
-                    <input
-                      type="number"
-                      min={0}
-                      value={maxHandicap ?? ""}
-                      onChange={(e) => {
-                        const v = e.target.value ? parseInt(e.target.value, 10) : null;
-                        const hr = { ...((prefs as any).handicap_rules ?? {}), max_handicap: v };
-                        setPrefs({ handicap_rules: hr });
-                      }}
-                      placeholder="No limit"
-                      className="w-full bg-[#042713] border border-emerald-900/60 rounded-lg px-2 py-1 text-[12px] text-emerald-100 text-center"
-                    />
-                  </div>
+                  )}
                 </div>
 
                 <div className="text-[9px] text-emerald-200/30 text-center">Applies to new events only — past seasons unaffected.</div>

@@ -124,7 +124,7 @@ export default function CreateCompetitionClient() {
   };
 
   const allowsScoringChoice = FORMAT_ALLOWS_SCORING_CHOICE(eventType);
-  const showHandicap = scoringModel === "net";
+  const showHandicap = scoringModel !== "gross";
   const showRounds = !["matchplay", "skins", "scramble"].includes(eventType);
 
   const steps = [
@@ -175,8 +175,8 @@ export default function CreateCompetitionClient() {
           className={`relative h-6 w-11 rounded-full transition-colors ${form.recur_annually ? "bg-emerald-600" : "bg-emerald-900/60"}`}
         >
           <span
-            className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-              form.recur_annually ? "translate-x-5" : "translate-x-0.5"
+            className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+              form.recur_annually ? "translate-x-5" : "translate-x-0"
             }`}
           />
         </button>
