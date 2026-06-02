@@ -12,31 +12,32 @@ import type {
   EventTypeV2,
   EventScoringModel,
 } from "@/lib/majors/types";
-import { SCORING_MODELS, POINTS_MODELS, STANDINGS_CONTRIBUTIONS, EVENT_TYPES, FORMAT_DEFAULT_SCORING, FORMAT_ALLOWS_SCORING_CHOICE } from "@/lib/events/constants";
+import { SCORING_MODELS, POINTS_MODELS, EVENT_TYPES, FORMAT_DEFAULT_SCORING, FORMAT_ALLOWS_SCORING_CHOICE } from "@/lib/events/constants";
 import { HandicapRulesEditor, type HandicapRules } from "@/components/competitions/HandicapRulesEditor";
 
 const GROUP_TYPES: { value: MajorGroupType; label: string; desc: string }[] = [
-  { value: "league", label: "League", desc: "Season-long standings competition" },
-  { value: "tour", label: "Tour", desc: "Multi-event tour series" },
-  { value: "season", label: "Season", desc: "Time-bounded competition season" },
-  { value: "major_series", label: "Major Series", desc: "Annual competition that recurs each year" },
-  { value: "oneoff", label: "One-off", desc: "Single event container" },
-  { value: "matchplay_series", label: "Match Play", desc: "Match play bracket or series" },
-  { value: "custom", label: "Custom", desc: "Your own format" },
+  { value: "league",             label: "Strokeplay League",  desc: "Multiple events that roll up to a points-based league table." },
+  { value: "matchplay_series",   label: "Matchplay League",   desc: "League table where points are awarded for matchplay results." },
+  { value: "matchplay_knockout", label: "Matchplay Knockout", desc: "A knockout bracket — players are eliminated after losing." },
+  { value: "major_series",       label: "Major Series",       desc: "Recurring signature events that post to a shared leaderboard." },
+  { value: "oneoff",             label: "Tournament",         desc: "A standalone signature event with its own container." },
 ];
 
-const PRIVACY_OPTIONS: { value: MajorGroupPrivacy; label: string; desc: string }[] = [
-  { value: "public", label: "Public", desc: "Anyone can discover and join" },
-  { value: "request", label: "Request to Join", desc: "Discoverable but requires approval" },
-  { value: "invite_only", label: "Invite Only", desc: "Hidden, members by invitation" },
+const ACCESS_OPTIONS: { value: string; label: string; desc: string; privacy: MajorGroupPrivacy; join_method: MajorGroupJoinMethod }[] = [
+  { value: "open",    label: "Open",            desc: "Anyone can find and join instantly.",           privacy: "public",      join_method: "open" },
+  { value: "request", label: "Request to Join", desc: "Discoverable, but joining requires approval.",  privacy: "request",     join_method: "request" },
+  { value: "private", label: "Private",         desc: "Join by invitation or shared code only.",       privacy: "invite_only", join_method: "code" },
 ];
 
-const JOIN_METHODS: { value: MajorGroupJoinMethod; label: string }[] = [
-  { value: "open", label: "Open (instant join)" },
-  { value: "request", label: "Request (approval required)" },
-  { value: "invite_only", label: "Invite only" },
-  { value: "code", label: "Join code" },
-];
+const MATCHPLAY_GROUP_TYPES = new Set<MajorGroupType>(["matchplay_series", "matchplay_knockout"]);
+
+function getFormatsForGroupType(type: MajorGroupType) {
+  if (MATCHPLAY_GROUP_TYPES.has(type))
+    return EVENT_TYPES.filter((t) => t.value === "matchplay");
+  return EVENT_TYPES.filter((t) =>
+    ["stroke", "stableford", "skins", "scramble", "bestball", "custom"].includes(t.value)
+  );
+}
 
 type FormState = {
   name: string;
@@ -47,7 +48,10 @@ type FormState = {
   max_members: string;
   season_start: string;
   season_end: string;
+  useCustomDates: boolean;
 };
+
+const currentYear = new Date().getFullYear();
 
 const INITIAL: FormState = {
   name: "",
@@ -56,11 +60,20 @@ const INITIAL: FormState = {
   privacy: "public",
   join_method: "open",
   max_members: "",
-  season_start: "",
-  season_end: "",
+  season_start: `${currentYear}-01-01`,
+  season_end: `${currentYear}-12-31`,
+  useCustomDates: false,
 };
 
 const EMPTY_HANDICAP: HandicapRules = { mode: "allowance_pct", allowance_pct: "100", max_handicap: "" };
+
+function friendlyLabel(field: "type" | "access" | "format" | "points", value: string): string {
+  if (field === "type")   return GROUP_TYPES.find((t) => t.value === value)?.label ?? value;
+  if (field === "access") return ACCESS_OPTIONS.find((a) => a.privacy === value)?.label ?? value;
+  if (field === "format") return EVENT_TYPES.find((t) => t.value === value)?.label ?? value;
+  if (field === "points") return POINTS_MODELS.find((p) => p.value === value)?.label ?? value;
+  return value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 export default function CreateGroupClient() {
   const router = useRouter();
@@ -69,16 +82,30 @@ export default function CreateGroupClient() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Competition defaults state (optional step — can be skipped)
+  // Competition defaults state
   const [defaultScoringModel, setDefaultScoringModel] = useState<EventScoringModel | null>(null);
   const [defaultCompType, setDefaultCompType] = useState<EventTypeV2 | null>(null);
   const [defaultHandicap, setDefaultHandicap] = useState<HandicapRules>(EMPTY_HANDICAP);
   const [defaultPointsModel, setDefaultPointsModel] = useState<string | null>(null);
-  const [defaultStandingsContrib, setDefaultStandingsContrib] = useState<string | null>(null);
-  const [defaultsEnabled, setDefaultsEnabled] = useState(false);
 
-  const update = (field: keyof FormState, value: string) =>
+  const update = (field: keyof FormState, value: string | boolean) =>
     setForm((prev) => ({ ...prev, [field]: value }));
+
+  const setAccess = (opt: typeof ACCESS_OPTIONS[number]) => {
+    setForm((prev) => ({ ...prev, privacy: opt.privacy, join_method: opt.join_method }));
+  };
+
+  const setGroupType = (type: MajorGroupType) => {
+    update("type", type);
+    // Auto-select matchplay format when switching to a matchplay group type
+    if (MATCHPLAY_GROUP_TYPES.has(type)) {
+      setDefaultCompType("matchplay");
+      setDefaultScoringModel("match_result");
+    } else if (defaultCompType === "matchplay") {
+      setDefaultCompType(null);
+      setDefaultScoringModel(null);
+    }
+  };
 
   const totalSteps = 5;
 
@@ -88,17 +115,11 @@ export default function CreateGroupClient() {
   };
 
   const buildDefaultScoringPrefs = (): GroupScoringPrefs => {
-    if (!defaultsEnabled) return {
-      scoring_model: null,
-      competition_type: null,
-      handicap_rules: null,
-      points_model: null,
-      standings_contribution: null,
-    };
+    const hasDefaults = defaultCompType !== null || defaultPointsModel !== null;
     return {
       scoring_model: defaultScoringModel,
       competition_type: defaultCompType,
-      handicap_rules: defaultScoringModel !== "gross"
+      handicap_rules: defaultScoringModel && defaultScoringModel !== "gross"
         ? {
             mode: defaultHandicap.mode,
             allowance_pct: defaultHandicap.mode === "allowance_pct" ? (parseInt(defaultHandicap.allowance_pct, 10) || 100) : null,
@@ -106,7 +127,7 @@ export default function CreateGroupClient() {
           }
         : null,
       points_model: (defaultPointsModel as any) ?? null,
-      standings_contribution: (defaultStandingsContrib as any) ?? null,
+      standings_contribution: hasDefaults ? "both" : null,
     };
   };
 
@@ -120,7 +141,11 @@ export default function CreateGroupClient() {
         method: "POST",
         headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...form,
+          name: form.name,
+          description: form.description,
+          type: form.type,
+          privacy: form.privacy,
+          join_method: form.join_method,
           max_members: form.max_members ? parseInt(form.max_members, 10) : null,
           season_start: form.season_start || null,
           season_end: form.season_end || null,
@@ -134,6 +159,9 @@ export default function CreateGroupClient() {
       setSubmitting(false);
     }
   };
+
+  const activeAccess = ACCESS_OPTIONS.find((a) => a.privacy === form.privacy) ?? ACCESS_OPTIONS[0];
+  const availableFormats = getFormatsForGroupType(form.type);
 
   const steps = [
     /* Step 0: Name, Description, Type */
@@ -160,63 +188,44 @@ export default function CreateGroupClient() {
       </div>
       <div className="space-y-2">
         <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Group Type</label>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-2">
           {GROUP_TYPES.map((t) => (
             <button
               key={t.value}
               type="button"
-              onClick={() => update("type", t.value)}
-              className={`rounded-xl border px-3 py-2 text-left transition-colors ${
+              onClick={() => setGroupType(t.value)}
+              className={`w-full rounded-xl border px-4 py-3 text-left transition-colors ${
                 form.type === t.value
                   ? "border-emerald-500 bg-emerald-900/50"
                   : "border-emerald-900/50 bg-[#0b3b21]/40 hover:border-emerald-700/50"
               }`}
             >
-              <div className="text-xs font-semibold text-emerald-50">{t.label}</div>
-              <div className="text-[10px] text-emerald-200/55">{t.desc}</div>
+              <div className="text-sm font-semibold text-emerald-50">{t.label}</div>
+              <div className="text-[11px] text-emerald-200/55">{t.desc}</div>
             </button>
           ))}
         </div>
       </div>
     </div>,
 
-    /* Step 1: Privacy, Join method, Max members */
+    /* Step 1: Access & Max members */
     <div key="step1" className="space-y-5">
       <div className="space-y-2">
-        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Privacy</label>
+        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Access</label>
         <div className="space-y-2">
-          {PRIVACY_OPTIONS.map((p) => (
+          {ACCESS_OPTIONS.map((a) => (
             <button
-              key={p.value}
+              key={a.value}
               type="button"
-              onClick={() => update("privacy", p.value)}
+              onClick={() => setAccess(a)}
               className={`w-full rounded-xl border px-4 py-3 text-left transition-colors ${
-                form.privacy === p.value
+                activeAccess.value === a.value
                   ? "border-emerald-500 bg-emerald-900/50"
                   : "border-emerald-900/50 bg-[#0b3b21]/40 hover:border-emerald-700/50"
               }`}
             >
-              <div className="text-sm font-semibold text-emerald-50">{p.label}</div>
-              <div className="text-[11px] text-emerald-200/55">{p.desc}</div>
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="space-y-2">
-        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Join Method</label>
-        <div className="space-y-2">
-          {JOIN_METHODS.map((j) => (
-            <button
-              key={j.value}
-              type="button"
-              onClick={() => update("join_method", j.value)}
-              className={`w-full rounded-xl border px-4 py-2 text-left transition-colors ${
-                form.join_method === j.value
-                  ? "border-emerald-500 bg-emerald-900/50"
-                  : "border-emerald-900/50 bg-[#0b3b21]/40"
-              }`}
-            >
-              <div className="text-sm text-emerald-50">{j.label}</div>
+              <div className="text-sm font-semibold text-emerald-50">{a.label}</div>
+              <div className="text-[11px] text-emerald-200/55">{a.desc}</div>
             </button>
           ))}
         </div>
@@ -234,153 +243,150 @@ export default function CreateGroupClient() {
       </div>
     </div>,
 
-    /* Step 2: Competition Defaults (optional) */
+    /* Step 2: Competition Defaults */
     <div key="step2" className="space-y-5">
       <div>
         <div className="text-sm font-semibold text-emerald-50 mb-1">Competition Defaults</div>
-        <div className="text-[11px] text-emerald-200/55 mb-4">
-          Set defaults that pre-fill when creating competitions in this group. All fields are optional and can be overridden per competition.
+        <div className="text-[11px] text-emerald-200/55">
+          Pre-fill settings when creating competitions in this group. All optional — override per competition anytime.
         </div>
       </div>
 
-      <div className="flex items-center justify-between rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 px-4 py-3">
-        <span className="text-sm text-emerald-50">Set competition defaults</span>
-        <button
-          type="button"
-          onClick={() => setDefaultsEnabled((v) => !v)}
-          className={`relative w-11 h-6 rounded-full transition-colors ${defaultsEnabled ? "bg-emerald-600" : "bg-emerald-900/60"}`}
-        >
-          <span className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${defaultsEnabled ? "left-6" : "left-1"}`} />
-        </button>
+      <div className="space-y-2">
+        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Default Format</label>
+        <div className="grid grid-cols-2 gap-2">
+          {availableFormats.map((t) => (
+            <button
+              key={t.value}
+              type="button"
+              onClick={() => {
+                const next = defaultCompType === t.value ? null : t.value;
+                setDefaultCompType(next);
+                if (next) setDefaultScoringModel(FORMAT_DEFAULT_SCORING[next]);
+                else setDefaultScoringModel(null);
+              }}
+              className={`rounded-xl border px-3 py-2 text-left text-[11px] transition-colors ${
+                defaultCompType === t.value
+                  ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
+                  : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {defaultsEnabled && (
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Default Format</label>
-            <div className="grid grid-cols-2 gap-2">
-              {EVENT_TYPES.map((t) => (
-                <button
-                  key={t.value}
-                  type="button"
-                  onClick={() => {
-                    const next = defaultCompType === t.value ? null : t.value;
-                    setDefaultCompType(next);
-                    // Auto-couple scoring model with format
-                    if (next) setDefaultScoringModel(FORMAT_DEFAULT_SCORING[next]);
-                    else setDefaultScoringModel(null);
-                  }}
-                  className={`rounded-xl border px-3 py-2 text-left text-[11px] transition-colors ${
-                    defaultCompType === t.value
-                      ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                      : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
+      {defaultCompType && !FORMAT_ALLOWS_SCORING_CHOICE(defaultCompType as any) ? (
+        <div className="space-y-2">
+          <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Default Scoring</label>
+          <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 px-3 py-2 text-[11px] text-emerald-200/55">
+            {defaultScoringModel === "stableford_points" ? "Stableford Points" : "Match Result"} — determined by format
           </div>
-
-          {defaultCompType && !FORMAT_ALLOWS_SCORING_CHOICE(defaultCompType as any) ? (
-            <div className="space-y-2">
-              <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Default Scoring</label>
-              <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 px-3 py-2 text-[11px] text-emerald-200/55">
-                {defaultScoringModel === "stableford_points" ? "Stableford Points" : "Match Result"} — determined by format
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Default Scoring</label>
-              <div className="grid grid-cols-2 gap-2">
-                {SCORING_MODELS.filter((s) => s.value === "net" || s.value === "gross").map((s) => (
-                  <button
-                    key={s.value}
-                    type="button"
-                    onClick={() => setDefaultScoringModel(defaultScoringModel === s.value ? null : s.value)}
-                    className={`rounded-xl border px-3 py-2 text-[11px] text-left transition-colors ${
-                      defaultScoringModel === s.value
-                        ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                        : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
-                    }`}
-                  >
-                    {s.shortLabel}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {defaultScoringModel && defaultScoringModel !== "gross" && (
-            <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 p-3 space-y-2">
-              <div className="text-[10px] uppercase tracking-wider text-emerald-200/55 font-semibold">Default Handicap Rules</div>
-              <HandicapRulesEditor value={defaultHandicap} onChange={setDefaultHandicap} />
-            </div>
-          )}
-
-          <div className="space-y-2">
-            <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Default Points Model</label>
-            <div className="grid grid-cols-2 gap-2">
-              {POINTS_MODELS.map((p) => (
-                <button
-                  key={p.value}
-                  type="button"
-                  onClick={() => setDefaultPointsModel(defaultPointsModel === p.value ? null : p.value)}
-                  className={`rounded-xl border px-3 py-2 text-[11px] text-left transition-colors ${
-                    defaultPointsModel === p.value
-                      ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                      : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
-                  }`}
-                >
-                  {p.shortLabel}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Default Season Standings</label>
-            <div className="grid grid-cols-3 gap-2">
-              {STANDINGS_CONTRIBUTIONS.map((s) => (
-                <button
-                  key={s.value}
-                  type="button"
-                  onClick={() => setDefaultStandingsContrib(defaultStandingsContrib === s.value ? null : s.value)}
-                  className={`rounded-xl border px-2 py-2 text-[10px] text-center transition-colors ${
-                    defaultStandingsContrib === s.value
-                      ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                      : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
-                  }`}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Default Scoring</label>
+          <div className="grid grid-cols-2 gap-2">
+            {SCORING_MODELS.filter((s) => s.value === "net" || s.value === "gross").map((s) => (
+              <button
+                key={s.value}
+                type="button"
+                onClick={() => setDefaultScoringModel(defaultScoringModel === s.value ? null : s.value)}
+                className={`rounded-xl border px-3 py-2 text-[11px] text-left transition-colors ${
+                  defaultScoringModel === s.value
+                    ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
+                    : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
+                }`}
+              >
+                {s.shortLabel}
+              </button>
+            ))}
           </div>
         </div>
       )}
+
+      {defaultScoringModel && defaultScoringModel !== "gross" && (
+        <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 p-3 space-y-2">
+          <div className="text-[10px] uppercase tracking-wider text-emerald-200/55 font-semibold">Default Handicap Rules</div>
+          <HandicapRulesEditor value={defaultHandicap} onChange={setDefaultHandicap} />
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Default Points Model</label>
+        <div className="space-y-2">
+          {POINTS_MODELS.map((p) => (
+            <button
+              key={p.value}
+              type="button"
+              onClick={() => setDefaultPointsModel(defaultPointsModel === p.value ? null : p.value)}
+              className={`w-full rounded-xl border px-4 py-3 text-left transition-colors ${
+                defaultPointsModel === p.value
+                  ? "border-emerald-500 bg-emerald-900/50"
+                  : "border-emerald-900/50 bg-[#0b3b21]/40 hover:border-emerald-700/50"
+              }`}
+            >
+              <div className="text-sm font-semibold text-emerald-50">{p.label}</div>
+              {p.desc && <div className="text-[11px] text-emerald-200/55">{p.desc}</div>}
+            </button>
+          ))}
+        </div>
+      </div>
     </div>,
 
-    /* Step 3: Season dates */
+    /* Step 3: Season */
     <div key="step3" className="space-y-5">
-      <div className="space-y-2">
-        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Season Start (optional)</label>
-        <input
-          type="date"
-          value={form.season_start}
-          onChange={(e) => update("season_start", e.target.value)}
-          className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-3 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
-        />
+      <div>
+        <div className="text-sm font-semibold text-emerald-50 mb-1">Season</div>
+        <div className="text-[11px] text-emerald-200/55">
+          Defaults to the current calendar year. Switch to custom dates if your season runs differently.
+        </div>
       </div>
-      <div className="space-y-2">
-        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Season End (optional)</label>
-        <input
-          type="date"
-          value={form.season_end}
-          onChange={(e) => update("season_end", e.target.value)}
-          className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-3 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
-        />
+
+      <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 px-4 py-3">
+        {form.useCustomDates ? (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Season Start</label>
+              <input
+                type="date"
+                value={form.season_start}
+                onChange={(e) => update("season_start", e.target.value)}
+                className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-3 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Season End</label>
+              <input
+                type="date"
+                value={form.season_end}
+                onChange={(e) => update("season_end", e.target.value)}
+                className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-3 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="text-sm text-emerald-50">
+            Season: <span className="font-semibold">{currentYear}</span>
+            <span className="ml-2 text-[11px] text-emerald-200/55">(1 Jan – 31 Dec)</span>
+          </div>
+        )}
       </div>
+
+      <button
+        type="button"
+        onClick={() => {
+          if (form.useCustomDates) {
+            update("season_start", `${currentYear}-01-01`);
+            update("season_end", `${currentYear}-12-31`);
+          }
+          update("useCustomDates", !form.useCustomDates);
+        }}
+        className="text-[11px] text-emerald-400 hover:text-emerald-300 transition-colors"
+      >
+        {form.useCustomDates ? "← Use annual default" : "Use custom dates →"}
+      </button>
     </div>,
 
     /* Step 4: Confirm */
@@ -389,20 +395,18 @@ export default function CreateGroupClient() {
       <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4 space-y-2">
         {[
           { label: "Name", value: form.name },
-          { label: "Type", value: form.type },
-          { label: "Privacy", value: form.privacy },
-          { label: "Join", value: form.join_method },
+          { label: "Type", value: friendlyLabel("type", form.type) },
+          { label: "Access", value: friendlyLabel("access", form.privacy) },
           form.max_members ? { label: "Max members", value: form.max_members } : null,
-          form.season_start ? { label: "Season start", value: form.season_start } : null,
-          form.season_end ? { label: "Season end", value: form.season_end } : null,
-          defaultsEnabled && defaultScoringModel ? { label: "Default scoring", value: defaultScoringModel } : null,
-          defaultsEnabled && defaultCompType ? { label: "Default format", value: defaultCompType } : null,
+          { label: "Season", value: form.useCustomDates ? `${form.season_start} – ${form.season_end}` : String(currentYear) },
+          defaultCompType ? { label: "Default format", value: friendlyLabel("format", defaultCompType) } : null,
+          defaultPointsModel ? { label: "Default points", value: friendlyLabel("points", defaultPointsModel) } : null,
         ]
           .filter(Boolean)
           .map((item) => (
             <div key={item!.label} className="flex justify-between text-sm">
               <span className="text-emerald-200/55">{item!.label}</span>
-              <span className="text-emerald-50 capitalize">{item!.value}</span>
+              <span className="text-emerald-50">{item!.value}</span>
             </div>
           ))}
       </div>
@@ -463,7 +467,7 @@ export default function CreateGroupClient() {
             disabled={!canNext()}
             className="w-full py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-40"
           >
-            {step === 2 && !defaultsEnabled ? "Skip" : "Next"}
+            Next
           </button>
         ) : (
           <button

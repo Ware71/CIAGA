@@ -48,10 +48,10 @@ export const SCORING_MODELS: { value: EventScoringModel; label: string; shortLab
 ];
 
 export const POINTS_MODELS: { value: EventPointsModel; label: string; shortLabel: string; desc?: string }[] = [
-  { value: "none", label: "No points (event result only)", shortLabel: "None" },
-  { value: "fedex_style", label: "FedEx-style season points", shortLabel: "FedEx-style" },
-  { value: "position_based", label: "Position-based points", shortLabel: "Position-based", desc: "Fixed points per finishing position" },
-  { value: "custom_table", label: "Custom points table", shortLabel: "Custom table", desc: "Set your own points for each position" },
+  { value: "none", label: "No points (event result only)", shortLabel: "None", desc: "Results stand alone — no points awarded to the season table." },
+  { value: "fedex_style", label: "FedEx-style season points", shortLabel: "FedEx-style", desc: "Points taper through the field, with a sharp premium for finishing at the top." },
+  { value: "position_based", label: "Position-based points", shortLabel: "Position-based", desc: "Fixed points per finishing position." },
+  { value: "custom_table", label: "Custom points table", shortLabel: "Custom table", desc: "Set your own points for each position." },
 ];
 
 export const STANDINGS_CONTRIBUTIONS = [

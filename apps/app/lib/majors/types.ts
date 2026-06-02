@@ -37,6 +37,7 @@ export type MajorGroupType =
   | "season"
   | "oneoff"
   | "matchplay_series"
+  | "matchplay_knockout"
   | "major_series"
   | "custom"
   // Spec-aligned additions
