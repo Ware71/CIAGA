@@ -20,6 +20,8 @@ import type { SeasonStandingEntry } from "@/app/api/majors/seasons/[id]/standing
 import type { GroupScoringPrefs } from "@/lib/majors/types";
 import { eventStatusLabel } from "@/lib/majors/labels";
 import { formatHI } from "@/lib/rounds/handicapUtils";
+import { EVENT_TYPES, FORMAT_DEFAULT_SCORING, FORMAT_ALLOWS_SCORING_CHOICE } from "@/lib/events/constants";
+import type { MajorGroupType, EventTypeV2 } from "@/lib/majors/types";
 
 type CompetitionSeriesWithEventCount = Competition & {
   event_templates: Pick<CompetitionEventTemplate, "id">[];
@@ -42,6 +44,28 @@ const TABS: { id: Tab; label: string }[] = [
 
 
 type GroupData = MajorGroup & { member_count: number };
+
+const ACCESS_OPTIONS = [
+  { value: "open",    label: "Open",            desc: "Anyone can find and join instantly.",          privacy: "public" as const,      join_method: "open" as const },
+  { value: "request", label: "Request to Join", desc: "Discoverable, but joining requires approval.", privacy: "request" as const,     join_method: "request" as const },
+  { value: "private", label: "Private",         desc: "Join by invitation or shared code only.",      privacy: "invite_only" as const, join_method: "code" as const },
+];
+
+const MATCHPLAY_GROUP_TYPES = new Set<MajorGroupType>(["matchplay_series", "matchplay_knockout"]);
+
+function getFormatsForGroupType(type: MajorGroupType) {
+  if (MATCHPLAY_GROUP_TYPES.has(type))
+    return EVENT_TYPES.filter((t) => t.value === "matchplay");
+  return EVENT_TYPES.filter((t) =>
+    ["stroke", "stableford", "skins", "scramble", "bestball", "custom"].includes(t.value)
+  );
+}
+
+function deriveAccess(g: GroupData): string {
+  if (g.privacy === "public") return "open";
+  if (g.privacy === "request") return "request";
+  return "private";
+}
 
 function PositionBadge({ position }: { position: number | null }) {
   if (position == null) return <span className="w-7 text-center text-xs text-emerald-200/40">—</span>;
@@ -399,6 +423,11 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   // League settings
   const [leagueSettingsForm, setLeagueSettingsForm] = useState<GroupScoringPrefs | null>(null);
   const [savingLeagueSettings, setSavingLeagueSettings] = useState(false);
+  // Group details
+  const [groupDetailsForm, setGroupDetailsForm] = useState<{
+    name: string; description: string; access: string; max_members: string;
+  } | null>(null);
+  const [savingGroupDetails, setSavingGroupDetails] = useState(false);
   // Player detail drawer
   const [selectedPlayerForDrawer, setSelectedPlayerForDrawer] = useState<{ profileId: string; name: string; avatarUrl: string | null; currentSeasonId: string | null; seasonLabel?: string } | null>(null);
   const [playerBreakdownEntries, setPlayerBreakdownEntries] = useState<PlayerBreakdownEntry[]>([]);
@@ -2083,6 +2112,111 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
     settings: isAdminOrOwner ? (
       <div className="space-y-4">
+        {/* Group Details */}
+        {(() => {
+          const details = groupDetailsForm ?? {
+            name: group.name,
+            description: group.description ?? "",
+            access: deriveAccess(group),
+            max_members: group.max_members ? String(group.max_members) : "",
+          };
+          const setDetails = (patch: Partial<typeof details>) =>
+            setGroupDetailsForm({ ...details, ...patch });
+          const activeAccess = ACCESS_OPTIONS.find((a) => a.value === details.access) ?? ACCESS_OPTIONS[0];
+
+          return (
+            <div className="space-y-3">
+              <div className="text-[10px] uppercase tracking-wider text-emerald-200/50">Group Details</div>
+              <div className="space-y-3 rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/60 p-4">
+                <div className="space-y-1.5">
+                  <div className="text-[10px] text-emerald-200/50">Name</div>
+                  <input
+                    type="text"
+                    value={details.name}
+                    onChange={(e) => setDetails({ name: e.target.value })}
+                    className="w-full rounded-xl bg-[#042713] border border-emerald-900/60 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none focus:border-emerald-600"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <div className="text-[10px] text-emerald-200/50">Description</div>
+                  <textarea
+                    rows={3}
+                    value={details.description}
+                    onChange={(e) => setDetails({ description: e.target.value })}
+                    placeholder="What is this group about?"
+                    className="w-full rounded-xl bg-[#042713] border border-emerald-900/60 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none focus:border-emerald-600 resize-none"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <div className="text-[10px] text-emerald-200/50">Access</div>
+                  <div className="space-y-1.5">
+                    {ACCESS_OPTIONS.map((a) => (
+                      <button
+                        key={a.value}
+                        type="button"
+                        onClick={() => setDetails({ access: a.value })}
+                        className={`w-full rounded-xl border px-3 py-2.5 text-left transition-colors ${
+                          activeAccess.value === a.value
+                            ? "border-emerald-500 bg-emerald-900/50"
+                            : "border-emerald-900/50 bg-[#0b3b21]/40 hover:border-emerald-700/50"
+                        }`}
+                      >
+                        <div className="text-sm font-semibold text-emerald-50">{a.label}</div>
+                        <div className="text-[11px] text-emerald-200/55">{a.desc}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <div className="text-[10px] text-emerald-200/50">Max Members (optional)</div>
+                  <input
+                    type="number"
+                    min={2}
+                    value={details.max_members}
+                    onChange={(e) => setDetails({ max_members: e.target.value })}
+                    placeholder="Unlimited"
+                    className="w-full rounded-xl bg-[#042713] border border-emerald-900/60 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none focus:border-emerald-600"
+                  />
+                </div>
+                <button
+                  type="button"
+                  disabled={!groupDetailsForm || savingGroupDetails}
+                  onClick={async () => {
+                    if (!groupDetailsForm) return;
+                    setSavingGroupDetails(true);
+                    try {
+                      const session = await getViewerSession();
+                      if (!session) return;
+                      const access = ACCESS_OPTIONS.find((a) => a.value === groupDetailsForm.access) ?? ACCESS_OPTIONS[0];
+                      const res = await fetch(`/api/majors/groups/${groupId}`, {
+                        method: "PATCH",
+                        headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          name: groupDetailsForm.name.trim(),
+                          description: groupDetailsForm.description.trim() || null,
+                          privacy: access.privacy,
+                          join_method: access.join_method,
+                          max_members: groupDetailsForm.max_members ? parseInt(groupDetailsForm.max_members, 10) : null,
+                        }),
+                      });
+                      if (res.ok) {
+                        const j = await res.json();
+                        setGroup((g) => g ? { ...g, ...j.group } : g);
+                        setGroupDetailsForm(null);
+                      }
+                    } finally {
+                      setSavingGroupDetails(false);
+                    }
+                  }}
+                  className="w-full py-2.5 rounded-full bg-emerald-700 text-sm font-semibold text-white disabled:opacity-40"
+                >
+                  {savingGroupDetails ? "Saving…" : "Save Group Details"}
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Group Image */}
         <div className="space-y-2">
           <div className="text-[10px] uppercase tracking-wider text-emerald-200/50">Group Image</div>
@@ -2116,11 +2250,14 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           <div className="text-[10px] uppercase tracking-wider text-emerald-200/50">League Settings</div>
           {(() => {
             const prefs = leagueSettingsForm ?? group.default_scoring_prefs ?? {};
+            const competitionType = (prefs as any).competition_type ?? null;
             const scoringModel = (prefs as any).scoring_model ?? null;
             const pointsModel = (prefs as any).points_model ?? null;
             const handicapMode = (prefs as any).handicap_rules?.mode ?? "allowance_pct";
             const allowancePct = (prefs as any).handicap_rules?.allowance_pct ?? null;
             const maxHandicap = (prefs as any).handicap_rules?.max_handicap ?? null;
+            const availableFormats = getFormatsForGroupType(group.type as MajorGroupType);
+            const scoringLocked = competitionType && !FORMAT_ALLOWS_SCORING_CHOICE(competitionType as EventTypeV2);
 
             const setPrefs = (patch: Record<string, unknown>) => {
               const base = leagueSettingsForm ?? (group.default_scoring_prefs as any) ?? {};
@@ -2129,21 +2266,51 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
             return (
               <div className="space-y-4 rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/60 p-4">
-                {/* Scoring model */}
+                {/* Default Format */}
                 <div className="space-y-1.5">
-                  <div className="text-[10px] text-emerald-200/50">Default Scoring</div>
-                  <div className="flex gap-2">
-                    {(["net", "gross", "stableford_points"] as const).map((m) => (
+                  <div className="text-[10px] text-emerald-200/50">Default Format</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setPrefs({ competition_type: null, scoring_model: null })}
+                      className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors ${competitionType === null ? "bg-emerald-700 text-white border-emerald-600" : "border-emerald-900/60 text-emerald-200/60 hover:text-emerald-100"}`}
+                    >
+                      None
+                    </button>
+                    {availableFormats.map((t) => (
                       <button
-                        key={m}
+                        key={t.value}
                         type="button"
-                        onClick={() => setPrefs({ scoring_model: m })}
-                        className={`flex-1 py-1.5 rounded-full text-[11px] font-semibold transition-colors ${scoringModel === m ? "bg-emerald-700 text-white" : "border border-emerald-900/60 text-emerald-200/60 hover:text-emerald-100"}`}
+                        onClick={() => setPrefs({ competition_type: t.value, scoring_model: FORMAT_DEFAULT_SCORING[t.value as EventTypeV2] ?? "net" })}
+                        className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors ${competitionType === t.value ? "bg-emerald-700 text-white border-emerald-600" : "border-emerald-900/60 text-emerald-200/60 hover:text-emerald-100"}`}
                       >
-                        {m === "net" ? "Net" : m === "gross" ? "Gross" : "Stableford"}
+                        {t.label}
                       </button>
                     ))}
                   </div>
+                </div>
+
+                {/* Scoring model */}
+                <div className="space-y-1.5">
+                  <div className="text-[10px] text-emerald-200/50">Default Scoring</div>
+                  {scoringLocked ? (
+                    <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 px-3 py-1.5 text-[11px] text-emerald-200/55">
+                      {scoringModel === "stableford_points" ? "Stableford Points" : "Match Result"} — determined by format
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      {(["net", "gross", "stableford_points"] as const).map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => setPrefs({ scoring_model: m })}
+                          className={`flex-1 py-1.5 rounded-full text-[11px] font-semibold transition-colors ${scoringModel === m ? "bg-emerald-700 text-white" : "border border-emerald-900/60 text-emerald-200/60 hover:text-emerald-100"}`}
+                        >
+                          {m === "net" ? "Net" : m === "gross" ? "Gross" : "Stableford"}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Points model */}
