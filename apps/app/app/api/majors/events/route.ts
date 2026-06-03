@@ -40,12 +40,12 @@ export async function POST(req: Request) {
     const { profileId } = await getAuthedProfileOrThrow(req);
     const body = await req.json();
 
-    const { name, group_id, description, event_type, format, course_id,
-      default_tee_male_id, default_tee_female_id,
+    const { name, group_id, description, event_type, format,
       event_date, entry_window_start, entry_window_end, rules_text,
       scoring_model, points_model, points_table, eligibility_rules, handicap_rules,
       num_rounds, round_rules, time_rules, membership_rules, standings_contribution,
       competition_id, competition_event_template_id, event_year, event_category, aggregate_config,
+      rounds,
       // Leaderboard freeze / ceremony reveal
       leaderboard_freeze_last_holes, leaderboard_freeze_scope, leaderboard_freeze_top_x,
       leaderboard_freeze_auto_reveal, leaderboard_reveal_style, leaderboard_reveal_top_x,
@@ -92,7 +92,7 @@ export async function POST(req: Request) {
         group_id: group_id ?? null,
         event_type: event_type ?? "stroke",
         format: format ?? null,
-        course_id: course_id ?? null,
+        course_id: (rounds?.[0]?.course_id) ?? null,
         event_date: event_date ?? null,
         entry_window_start: entry_window_start ?? null,
         entry_window_end: entry_window_end ?? null,
@@ -131,15 +131,18 @@ export async function POST(req: Request) {
     // Auto-create event_rounds for every round in this event
     const numRounds = (event as any).num_rounds ?? 1;
     if (numRounds > 0) {
-      const roundRows = Array.from({ length: numRounds }, (_, i) => ({
-        event_id: (event as any).id,
-        round_number: i + 1,
-        name: `Round ${i + 1}`,
-        status: "scheduled",
-        course_id: course_id ?? null,
-        default_tee_box_id_male: default_tee_male_id ?? null,
-        default_tee_box_id_female: default_tee_female_id ?? null,
-      }));
+      const roundRows = Array.from({ length: numRounds }, (_, i) => {
+        const roundData = Array.isArray(rounds) ? (rounds[i] ?? {}) : {};
+        return {
+          event_id: (event as any).id,
+          round_number: i + 1,
+          name: `Round ${i + 1}`,
+          status: "scheduled",
+          course_id: roundData.course_id ?? null,
+          default_tee_box_id_male: roundData.default_tee_male_id ?? null,
+          default_tee_box_id_female: roundData.default_tee_female_id ?? null,
+        };
+      });
       await supabaseAdmin.from("event_rounds").insert(roundRows);
     }
 
