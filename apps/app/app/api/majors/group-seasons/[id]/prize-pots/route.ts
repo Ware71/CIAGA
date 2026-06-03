@@ -94,6 +94,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       metric_type,
       metric_description,
       is_monetary = true,
+      is_mandatory = false,
       prize_description,
     } = body as Record<string, unknown>;
 
@@ -116,6 +117,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         metric_type: metric_type ?? null,
         metric_description: metric_description ?? null,
         is_monetary: is_monetary ?? true,
+        is_mandatory: is_mandatory ?? false,
         prize_description: prize_description ?? null,
         created_by: profileId,
       })

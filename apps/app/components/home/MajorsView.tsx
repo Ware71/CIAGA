@@ -117,10 +117,122 @@ function GroupCard({ group, onClick }: { group: MajorGroup & { member_count: num
   );
 }
 
+type GroupBalance = {
+  group_id: string;
+  group_name: string;
+  balance: number;
+  by_event: { event_id: string | null; event_name: string | null; net: number }[];
+};
+type BalanceData = {
+  total_balance: number;
+  has_debt: boolean;
+  groups: GroupBalance[];
+};
+
+function PurseIcon({ size = 18, className }: { size?: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+      <path d="M20 12V22H4V12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M22 7H2v5h20V7Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M12 22V7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function BalanceDrawer({ balance, onClose }: { balance: BalanceData; onClose: () => void }) {
+  const fmt = (n: number) => `£${Math.abs(n).toFixed(2)}`;
+  const debtGroups = balance.groups.filter((g) => g.balance > 0);
+  const creditGroups = balance.groups.filter((g) => g.balance < 0);
+  const content = (
+    <div className="fixed inset-0 z-[200]" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/60" />
+      <div
+        className="absolute left-0 right-0 bottom-0 rounded-t-3xl border-t border-emerald-900/70 bg-[#061f12] max-h-[85dvh] overflow-y-auto overscroll-contain"
+        style={{ paddingBottom: "env(safe-area-inset-bottom, 16px)" }}
+        onClick={(e) => e.stopPropagation()}
+        onTouchMove={(e) => e.stopPropagation()}
+        onWheel={(e) => e.stopPropagation()}
+      >
+        <div className="w-10 h-1 rounded-full bg-emerald-800/60 mx-auto mt-3 mb-1" />
+        <div className="flex items-center justify-between px-4 py-3">
+          <div className="text-sm font-semibold text-emerald-50">Your Balance</div>
+          <button type="button" onClick={onClose} className="text-emerald-200/60 hover:text-emerald-100 text-lg leading-none">✕</button>
+        </div>
+
+        {/* Total summary */}
+        <div className="mx-4 mb-3 rounded-2xl border bg-[#0b3b21]/80 p-4 flex items-center justify-between"
+          style={{ borderColor: balance.has_debt ? "rgba(239,68,68,0.3)" : "rgba(16,185,129,0.3)" }}>
+          <div className="text-[11px] uppercase tracking-widest text-emerald-200/50">Total</div>
+          <div className={`text-lg font-bold ${balance.has_debt ? "text-red-400" : "text-emerald-400"}`}>
+            {balance.has_debt ? `Owes ${fmt(balance.total_balance)}` : balance.total_balance < 0 ? `Credit ${fmt(balance.total_balance)}` : "Settled"}
+          </div>
+        </div>
+
+        <div className="px-4 pb-4 space-y-3">
+          {/* Debts first */}
+          {debtGroups.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-[10px] uppercase tracking-widest text-red-400/70 font-semibold">You Owe</div>
+              {debtGroups.map((g) => (
+                <div key={g.group_id} className="rounded-2xl border border-red-900/30 bg-red-950/20 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold text-emerald-50 truncate">{g.group_name}</span>
+                    <span className="text-sm font-bold text-red-400 shrink-0 ml-2">Owes {fmt(g.balance)}</span>
+                  </div>
+                  {g.by_event.filter((e) => e.net !== 0).map((e, i) => (
+                    <div key={e.event_id ?? i} className="flex items-center justify-between text-[11px] pl-1">
+                      <span className="text-emerald-200/60 truncate">{e.event_name ?? "General"}</span>
+                      <span className={`shrink-0 ml-2 ${e.net > 0 ? "text-red-400/80" : "text-emerald-400/80"}`}>
+                        {e.net > 0 ? `+${fmt(e.net)}` : `-${fmt(e.net)}`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Credits */}
+          {creditGroups.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-[10px] uppercase tracking-widest text-emerald-400/70 font-semibold">In Credit</div>
+              {creditGroups.map((g) => (
+                <div key={g.group_id} className="rounded-2xl border border-emerald-800/30 bg-emerald-950/20 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold text-emerald-50 truncate">{g.group_name}</span>
+                    <span className="text-sm font-bold text-emerald-400 shrink-0 ml-2">Credit {fmt(g.balance)}</span>
+                  </div>
+                  {g.by_event.filter((e) => e.net !== 0).map((e, i) => (
+                    <div key={e.event_id ?? i} className="flex items-center justify-between text-[11px] pl-1">
+                      <span className="text-emerald-200/60 truncate">{e.event_name ?? "General"}</span>
+                      <span className={`shrink-0 ml-2 ${e.net > 0 ? "text-red-400/80" : "text-emerald-400/80"}`}>
+                        {e.net > 0 ? `+${fmt(e.net)}` : `-${fmt(e.net)}`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {balance.groups.length === 0 && (
+            <div className="text-xs text-emerald-200/40 text-center py-6">No balance activity yet</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+  return createPortal(content, document.body);
+}
+
 function MajorsHubPreview({ open, initialHub }: { open: boolean; initialHub?: MajorHubSummary | null }) {
   const router = useRouter();
   const [hub, setHub] = useState<MajorHubSummary | null>(initialHub ?? null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [balanceData, setBalanceData] = useState<BalanceData | null>(null);
+  const [balanceDrawerOpen, setBalanceDrawerOpen] = useState(false);
 
   // Sync if the parent finishes preloading after we already mounted
   useEffect(() => {
@@ -147,6 +259,27 @@ function MajorsHubPreview({ open, initialHub }: { open: boolean; initialHub?: Ma
     })();
     return () => { cancelled = true; };
   }, [initialHub]);
+
+  // Fetch aggregate balance for purse display
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const session = await getViewerSession();
+        if (!session || cancelled) return;
+        const res = await fetch("/api/majors/balance", {
+          headers: { Authorization: `Bearer ${session.accessToken}` },
+        });
+        if (res.ok && !cancelled) {
+          const data = await res.json();
+          setBalanceData(data);
+        }
+      } catch {
+        // silently ignore
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   return (
     <motion.div
@@ -191,6 +324,9 @@ function MajorsHubPreview({ open, initialHub }: { open: boolean; initialHub?: Ma
           {drawerOpen && <SeasonStatsDrawer hub={hub} onClose={() => setDrawerOpen(false)} />}
         </>
       )}
+      {balanceDrawerOpen && balanceData && (
+        <BalanceDrawer balance={balanceData} onClose={() => setBalanceDrawerOpen(false)} />
+      )}
 
       {/* Live events */}
       {hub && hub.active_events.length > 0 && (
@@ -218,12 +354,35 @@ function MajorsHubPreview({ open, initialHub }: { open: boolean; initialHub?: Ma
       {/* My Groups */}
       {hub && hub.my_groups.length > 0 && (
         <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/55">My Groups</div>
+          <div className="flex items-center justify-between gap-2">
+            {/* Purse icon + balance */}
+            <button
+              type="button"
+              onClick={() => balanceData && setBalanceDrawerOpen(true)}
+              className="relative flex items-center gap-1.5 shrink-0"
+              aria-label="My balance"
+            >
+              <div className="relative">
+                <PurseIcon size={18} className="text-emerald-300/70" />
+                {balanceData?.has_debt && (
+                  <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-red-500 border border-[#042713]" />
+                )}
+              </div>
+              {balanceData != null && (
+                <span className={`text-[11px] font-semibold ${balanceData.has_debt ? "text-red-400" : "text-emerald-300/70"}`}>
+                  {balanceData.total_balance === 0
+                    ? "£0"
+                    : balanceData.has_debt
+                    ? `-£${Math.abs(balanceData.total_balance).toFixed(2)}`
+                    : `£${Math.abs(balanceData.total_balance).toFixed(2)}`}
+                </span>
+              )}
+            </button>
+            <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/55 flex-1 text-center">My Groups</div>
             <button
               type="button"
               onClick={() => router.push("/majors/groups/create")}
-              className="text-[10px] text-emerald-400 hover:text-emerald-300"
+              className="text-[10px] text-emerald-400 hover:text-emerald-300 shrink-0"
             >
               + New
             </button>

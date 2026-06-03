@@ -38,17 +38,17 @@ const majorsMenuItems: MenuItem[] = [
 
 type ViewMode = "home" | "majors";
 
-function EnvelopeIcon(props: { size?: number; className?: string }) {
+function BellIcon(props: { size?: number; className?: string }) {
   const s = props.size ?? 28;
   return (
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none" className={props.className} aria-hidden="true">
       <path
-        d="M4.5 7.5h15v9a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2v-9Z"
+        d="M15 17h5l-1.405-1.405A2.032 2.032 0 0 1 18 14.158V11a6.002 6.002 0 0 0-4-5.659V5a2 2 0 1 0-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 1 1-6 0v-1m6 0H9"
         stroke="currentColor"
-        strokeWidth="2"
+        strokeWidth="1.8"
+        strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <path d="M5.2 8.2 12 13.2l6.8-5" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -98,6 +98,7 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
   const [miniFeedError, setMiniFeedError] = useState<string | null>(null);
   const [majorsPreload, setMajorsPreload] = useState<MajorHubSummary | null>(initialMajors ?? null);
   const [retryKey, setRetryKey] = useState(0);
+  const [showInviteSheet, setShowInviteSheet] = useState(false);
 
   useEffect(() => {
     const updateViewport = () => {
@@ -353,20 +354,63 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
             <div className="flex items-center gap-4">
               <button
                 type="button"
-                className="h-14 w-14 rounded-full grid place-items-center text-emerald-100/75 hover:text-emerald-50 hover:bg-emerald-900/25"
+                className="relative h-14 w-14 rounded-full grid place-items-center text-emerald-100/75 hover:text-emerald-50 hover:bg-emerald-900/25"
                 onClick={() => {
-                  // TODO: wire mailbox/notifications
+                  const invites = majorsPreload?.pending_invites ?? [];
+                  if (invites.length === 1) {
+                    router.push(`/majors/groups/${invites[0].group_id}`);
+                  } else if (invites.length > 1) {
+                    setShowInviteSheet(true);
+                  }
                 }}
                 aria-label="Notifications"
                 title="Notifications"
               >
-                <EnvelopeIcon size={38} className="opacity-90" />
+                <BellIcon size={28} className="opacity-90" />
+                {(majorsPreload?.pending_invites?.length ?? 0) > 0 && (
+                  <span className="absolute top-2.5 right-2.5 h-2.5 w-2.5 rounded-full bg-red-500 border border-[#071c10]" />
+                )}
               </button>
 
               <div className="scale-[1.4] origin-top-right -translate-y-[4px]">
                 <AuthUser />
               </div>
             </div>
+
+            {/* Invite sheet — multiple pending invites */}
+            {showInviteSheet && (majorsPreload?.pending_invites?.length ?? 0) > 1 && (
+              <div
+                className="fixed inset-0 z-50 flex items-end"
+                onClick={() => setShowInviteSheet(false)}
+              >
+                <div className="absolute inset-0 bg-black/60" />
+                <div
+                  className="relative w-full rounded-t-3xl bg-[#071c10] border-t border-emerald-900/60 px-4 pt-4 pb-10 space-y-2"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="text-[11px] uppercase tracking-widest text-emerald-200/50 font-semibold mb-3">Group Invites</div>
+                  {(majorsPreload?.pending_invites ?? []).map((inv) => (
+                    <button
+                      key={inv.group_id}
+                      type="button"
+                      onClick={() => { setShowInviteSheet(false); router.push(`/majors/groups/${inv.group_id}`); }}
+                      className="w-full flex items-center gap-3 rounded-2xl border border-emerald-900/50 bg-emerald-950/40 px-4 py-3 text-left hover:bg-emerald-900/30"
+                    >
+                      <div className="h-9 w-9 rounded-full bg-emerald-900/60 grid place-items-center text-[11px] font-bold text-emerald-200 shrink-0 overflow-hidden">
+                        {inv.group.image_url
+                          ? <img src={inv.group.image_url} alt="" className="h-full w-full object-cover" />
+                          : inv.group.name.slice(0, 2).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-semibold text-emerald-50 truncate">{inv.group.name}</div>
+                        <div className="text-[11px] text-emerald-200/50">You&apos;ve been invited</div>
+                      </div>
+                      <span className="text-[11px] text-emerald-400/80 shrink-0">View →</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </header>
 
           {/* Subtle summary */}

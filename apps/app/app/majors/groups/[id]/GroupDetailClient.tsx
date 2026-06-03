@@ -401,6 +401,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   const [myRole, setMyRole] = useState<string | null>(null);
   const [myProfileId, setMyProfileId] = useState<string | null>(null);
   const [showInvite, setShowInvite] = useState(false);
+  const [invitedCollapsed, setInvitedCollapsed] = useState(false);
   const [joining, setJoining] = useState(false);
   const [joinedStatus, setJoinedStatus] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -445,6 +446,12 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   const [createSeasonForm, setCreateSeasonForm] = useState<{ season_type: "calendar_year" | "custom"; year: string; name: string; start_date: string; end_date: string; standings_model: string }>({ season_type: "calendar_year", year: String(new Date().getFullYear()), name: "", start_date: "", end_date: "", standings_model: "none" });
   const [creatingSeason, setCreatingSeason] = useState(false);
   const [createSeasonError, setCreateSeasonError] = useState<string | null>(null);
+  // Season prize pot management
+  const [potsManagedSeasonId, setPotsManagedSeasonId] = useState<string | null>(null);
+  const [seasonPots, setSeasonPots] = useState<Record<string, any[]>>({});
+  const [addPotForm, setAddPotForm] = useState<{ name: string; entry_fee_amount: string; distribution_type: string; is_mandatory: boolean }>({ name: "", entry_fee_amount: "", distribution_type: "entry_only", is_mandatory: true });
+  const [showAddPotForm, setShowAddPotForm] = useState(false);
+  const [savingPot, setSavingPot] = useState(false);
   // League settings
   const [leagueSettingsForm, setLeagueSettingsForm] = useState<GroupScoringPrefs | null>(null);
   const [savingLeagueSettings, setSavingLeagueSettings] = useState(false);
@@ -1003,6 +1010,16 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             {joining ? "Joining…" : group.join_method === "request" ? "Request to Join" : "Join Group"}
           </button>
         )}
+        {joinedStatus === "invited" && (
+          <button
+            type="button"
+            onClick={handleJoin}
+            disabled={joining}
+            className="w-full py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
+          >
+            {joining ? "Joining…" : "Accept Invite"}
+          </button>
+        )}
         {joinedStatus === "pending" && (
           <div className="text-sm text-amber-300/80 text-center py-2 border border-amber-800/30 rounded-xl bg-amber-900/20">
             Request pending approval
@@ -1450,24 +1467,64 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           </div>
         )}
 
-        {/* Invited members — visible to admins */}
+        {/* Invited members — collapsible, visible to admins/owners */}
         {invitedMembers.length > 0 && isAdminOrOwner && (
-          <div className="rounded-2xl border border-emerald-800/30 bg-emerald-950/30 p-3 space-y-2">
-            <div className="text-[10px] uppercase tracking-wider text-emerald-200/40 font-semibold">
-              {invitedMembers.length} Invited
-            </div>
-            {invitedMembers.map((m) => (
-              <div key={m.id} className="flex items-center gap-3 px-1 py-1">
-                <div className="h-8 w-8 rounded-full bg-emerald-900/60 flex items-center justify-center text-[10px] font-bold text-emerald-200 shrink-0">
-                  {m.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
-                </div>
-                <span className="flex-1 text-[13px] text-emerald-200/70 truncate">{m.profile?.name ?? m.profile_id}</span>
-                <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full border border-amber-700/40 text-amber-300/70 bg-amber-900/20">
-                  Invited
-                </span>
+          <div className="rounded-2xl border border-emerald-800/30 bg-emerald-950/30 overflow-hidden">
+            <button
+              type="button"
+              className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-emerald-900/20 transition-colors"
+              onClick={() => setInvitedCollapsed((c) => !c)}
+            >
+              <span className="text-[10px] uppercase tracking-wider text-emerald-200/50 font-semibold">
+                {invitedMembers.length} Invited
+              </span>
+              <span className={`text-emerald-200/40 text-xs transition-transform ${invitedCollapsed ? "rotate-0" : "rotate-90"}`}>›</span>
+            </button>
+            {!invitedCollapsed && (
+              <div className="px-3 pb-3 space-y-2">
+                {invitedMembers.map((m) => {
+                  const hi = m.tournament_index != null
+                    ? { text: formatHI(m.tournament_index), cls: "text-amber-300/80 border-amber-800/40 bg-amber-900/20" }
+                    : m.handicap_index != null
+                    ? { text: formatHI(m.handicap_index), cls: "text-emerald-200/70 border-emerald-900/50 bg-transparent" }
+                    : null;
+                  return (
+                    <div key={m.id} className="flex items-center gap-3 py-1">
+                      {m.profile?.avatar_url ? (
+                        <img src={m.profile.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
+                      ) : (
+                        <div className="h-8 w-8 rounded-full bg-emerald-900/60 flex items-center justify-center text-[10px] font-bold text-emerald-200 shrink-0">
+                          {m.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
+                        </div>
+                      )}
+                      <span className="flex-1 text-[13px] text-emerald-200/70 truncate">{m.profile?.name ?? m.profile_id}</span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {hi && (
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${hi.cls}`}>
+                            {hi.text}
+                          </span>
+                        )}
+                        <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full border border-emerald-800/40 text-emerald-300/50 bg-transparent">
+                          Invited
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            ))}
+            )}
           </div>
+        )}
+
+        {/* Invite button */}
+        {isAdminOrOwner && (
+          <button
+            type="button"
+            className="w-full py-2 rounded-full border border-emerald-700/50 text-sm text-emerald-200/70 hover:text-emerald-200 hover:bg-emerald-900/20"
+            onClick={() => setShowInvite(true)}
+          >
+            + Invite Member
+          </button>
         )}
 
         {/* Active members */}
@@ -1486,17 +1543,6 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             />
           ))}
         </div>
-
-        {/* Invite button */}
-        {isAdminOrOwner && (
-          <button
-            type="button"
-            className="w-full py-2 rounded-full border border-emerald-700/50 text-sm text-emerald-200/70 hover:text-emerald-200 hover:bg-emerald-900/20 mt-2"
-            onClick={() => setShowInvite(true)}
-          >
-            + Invite Member
-          </button>
-        )}
       </div>
     ),
 
@@ -1887,6 +1933,172 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                   {creatingSeason ? "Creating…" : "Create"}
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* Season prize pot & charge management — admin only */}
+          {isAdminOrOwner && groupSeasons.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="text-[10px] uppercase tracking-wider text-emerald-200/50 font-semibold">Season Pots &amp; Charges</div>
+              {[...groupSeasons]
+                .sort((a: any, b: any) => (b.season_year ?? 0) - (a.season_year ?? 0))
+                .map((s: any) => {
+                  const isOpen = potsManagedSeasonId === s.id;
+                  const pots: any[] = seasonPots[s.id] ?? [];
+                  const loadPots = async () => {
+                    if (seasonPots[s.id]) return;
+                    try {
+                      const session = await getViewerSession();
+                      if (!session) return;
+                      const res = await fetch(`/api/majors/group-seasons/${s.id}/prize-pots`, {
+                        headers: { Authorization: `Bearer ${session.accessToken}` },
+                      });
+                      if (res.ok) {
+                        const j = await res.json();
+                        setSeasonPots((prev) => ({ ...prev, [s.id]: j.pots ?? [] }));
+                      }
+                    } catch { /* ignore */ }
+                  };
+                  const toggleOpen = async () => {
+                    if (isOpen) { setPotsManagedSeasonId(null); setShowAddPotForm(false); return; }
+                    setPotsManagedSeasonId(s.id);
+                    setShowAddPotForm(false);
+                    await loadPots();
+                  };
+                  const handleDeletePot = async (potId: string) => {
+                    try {
+                      const session = await getViewerSession();
+                      if (!session) return;
+                      const res = await fetch(`/api/majors/prize-pots/${potId}`, {
+                        method: "DELETE",
+                        headers: { Authorization: `Bearer ${session.accessToken}` },
+                      });
+                      if (res.ok) {
+                        setSeasonPots((prev) => ({ ...prev, [s.id]: (prev[s.id] ?? []).filter((p) => p.id !== potId) }));
+                      }
+                    } catch { /* ignore */ }
+                  };
+                  const handleAddPot = async () => {
+                    if (!addPotForm.name.trim()) return;
+                    setSavingPot(true);
+                    try {
+                      const session = await getViewerSession();
+                      if (!session) return;
+                      const res = await fetch(`/api/majors/group-seasons/${s.id}/prize-pots`, {
+                        method: "POST",
+                        headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          name: addPotForm.name.trim(),
+                          distribution_type: addPotForm.distribution_type,
+                          entry_fee_amount: addPotForm.entry_fee_amount ? Number(addPotForm.entry_fee_amount) : null,
+                          is_mandatory: addPotForm.is_mandatory,
+                        }),
+                      });
+                      if (res.ok) {
+                        const j = await res.json();
+                        setSeasonPots((prev) => ({ ...prev, [s.id]: [...(prev[s.id] ?? []), j.pot] }));
+                        setAddPotForm({ name: "", entry_fee_amount: "", distribution_type: "entry_only", is_mandatory: true });
+                        setShowAddPotForm(false);
+                      }
+                    } finally { setSavingPot(false); }
+                  };
+                  return (
+                    <div key={s.id} className="rounded-2xl border border-emerald-800/30 bg-emerald-950/20 overflow-hidden">
+                      <button
+                        type="button"
+                        className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-emerald-900/20"
+                        onClick={toggleOpen}
+                      >
+                        <span className="text-[13px] font-medium text-emerald-100">{s.season_label ?? s.name}</span>
+                        <span className={`text-emerald-200/40 text-xs transition-transform ${isOpen ? "rotate-90" : "rotate-0"}`}>›</span>
+                      </button>
+                      {isOpen && (
+                        <div className="px-3 pb-3 space-y-2">
+                          {pots.length === 0 && !showAddPotForm && (
+                            <div className="text-[11px] text-emerald-200/40 text-center py-2">No pots or charges yet</div>
+                          )}
+                          {pots.map((pot) => (
+                            <div key={pot.id} className="flex items-center gap-2 rounded-xl border border-emerald-900/40 bg-[#0b3b21]/50 px-3 py-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="text-[13px] font-medium text-emerald-50 truncate">{pot.name}</div>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  {pot.entry_fee_amount != null && (
+                                    <span className="text-[10px] text-emerald-200/60">£{Number(pot.entry_fee_amount).toFixed(2)}</span>
+                                  )}
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${pot.is_mandatory ? "border-amber-800/40 text-amber-300/70 bg-amber-900/20" : "border-emerald-800/40 text-emerald-300/50"}`}>
+                                    {pot.is_mandatory ? "Required" : "Optional"}
+                                  </span>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleDeletePot(pot.id)}
+                                className="text-[10px] text-red-400/70 border border-red-900/30 rounded-full px-2 py-0.5 hover:bg-red-900/20 shrink-0"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          ))}
+                          {showAddPotForm ? (
+                            <div className="space-y-2 rounded-xl border border-emerald-700/40 bg-[#0b3b21]/40 p-2.5">
+                              <input
+                                type="text"
+                                placeholder="Name (e.g. Season Entry Fee)"
+                                value={addPotForm.name}
+                                onChange={(e) => setAddPotForm((f) => ({ ...f, name: e.target.value }))}
+                                className="w-full rounded-lg border border-emerald-900/60 bg-[#0b3b21]/60 px-2.5 py-1.5 text-[12px] text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
+                              />
+                              <input
+                                type="number"
+                                placeholder="Entry fee £ (optional)"
+                                value={addPotForm.entry_fee_amount}
+                                onChange={(e) => setAddPotForm((f) => ({ ...f, entry_fee_amount: e.target.value }))}
+                                className="w-full rounded-lg border border-emerald-900/60 bg-[#0b3b21]/60 px-2.5 py-1.5 text-[12px] text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
+                                min="0" step="0.01"
+                              />
+                              <select
+                                value={addPotForm.distribution_type}
+                                onChange={(e) => setAddPotForm((f) => ({ ...f, distribution_type: e.target.value }))}
+                                className="w-full rounded-lg border border-emerald-900/60 bg-[#0b3b21]/60 px-2.5 py-1.5 text-[12px] text-emerald-50 focus:outline-none [color-scheme:dark]"
+                              >
+                                <option value="entry_only">Entry fee only (no prize)</option>
+                                <option value="position_based">Position-based prize</option>
+                                <option value="equal_split">Equal split</option>
+                                <option value="metric_equal">Metric equal (e.g. twos)</option>
+                                <option value="non_monetary">Non-monetary prize</option>
+                              </select>
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={addPotForm.is_mandatory}
+                                  onChange={(e) => setAddPotForm((f) => ({ ...f, is_mandatory: e.target.checked }))}
+                                  className="rounded border-emerald-700/60 bg-[#0b3b21]/60 text-emerald-500"
+                                />
+                                <span className="text-[12px] text-emerald-200/70">Mandatory (players must pay to enter)</span>
+                              </label>
+                              <div className="flex gap-2">
+                                <button type="button" onClick={() => setShowAddPotForm(false)}
+                                  className="flex-1 py-1 rounded-full border border-emerald-900/60 text-[11px] text-emerald-200/60">Cancel</button>
+                                <button type="button" onClick={handleAddPot} disabled={savingPot || !addPotForm.name.trim()}
+                                  className="flex-1 py-1 rounded-full bg-emerald-700 text-[11px] font-semibold text-white disabled:opacity-50">
+                                  {savingPot ? "Saving…" : "Add"}
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setShowAddPotForm(true)}
+                              className="w-full py-1.5 rounded-full border border-emerald-700/40 text-[11px] text-emerald-200/60 hover:text-emerald-200 hover:bg-emerald-900/20"
+                            >
+                              + Add Pot / Charge
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
             </div>
           )}
 
@@ -3062,11 +3274,6 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
               }`}
             >
               {t.label}
-              {t.id === "members" && (pendingMembers.length + invitedMembers.length) > 0 && isAdminOrOwner && (
-                <span className="ml-1 inline-flex items-center justify-center h-4 w-4 rounded-full bg-amber-500 text-[9px] font-bold text-white">
-                  {pendingMembers.length + invitedMembers.length}
-                </span>
-              )}
             </button>
           ))}
         </div>

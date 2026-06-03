@@ -40,7 +40,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ potId:
     const body = await req.json();
     const allowed = ["name", "description", "prize_table", "metric_description", "prize_description",
       "entry_fee_amount", "entry_fee_currency", "entry_fee_notes", "distribution_type", "metric_type",
-      "is_monetary"];
+      "is_monetary", "is_mandatory"];
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
     for (const key of allowed) {
       if (key in body) updates[key] = body[key];

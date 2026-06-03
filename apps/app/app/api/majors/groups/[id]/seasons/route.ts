@@ -61,6 +61,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         return NextResponse.json({ error: "year is required for calendar_year seasons." }, { status: 400 });
       }
 
+      const { data: existing } = await supabaseAdmin
+        .from("group_seasons")
+        .select("id")
+        .eq("group_id", groupId)
+        .eq("season_year", yr)
+        .maybeSingle();
+      if (existing) {
+        return NextResponse.json({ error: `A ${yr} season already exists for this group.` }, { status: 409 });
+      }
+
       const resolvedName = String(name ?? "").trim() || `${yr} Season`;
       const { data, error } = await supabaseAdmin
         .from("group_seasons")
@@ -88,6 +98,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const resolvedName = String(name ?? "").trim();
     if (!resolvedName) {
       return NextResponse.json({ error: "name is required for custom seasons." }, { status: 400 });
+    }
+
+    const { data: existingCustom } = await supabaseAdmin
+      .from("group_seasons")
+      .select("id")
+      .eq("group_id", groupId)
+      .ilike("name", resolvedName)
+      .maybeSingle();
+    if (existingCustom) {
+      return NextResponse.json({ error: `A season named "${resolvedName}" already exists for this group.` }, { status: 409 });
     }
 
     const { data, error } = await supabaseAdmin

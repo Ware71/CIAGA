@@ -418,9 +418,14 @@ export async function getMajorProfile(profileId: string): Promise<MajorProfileDa
 // ─── Hub Summary ─────────────────────────────────────────────────────────────
 
 export async function getMajorHubSummary(profileId: string): Promise<MajorHubSummary> {
-  const [myGroupRows, discoverGroups] = await Promise.all([
+  const [myGroupRows, discoverGroups, inviteRes] = await Promise.all([
     getGroupsByProfile(profileId),
     getDiscoverGroups(6),
+    supabaseAdmin
+      .from("major_group_memberships")
+      .select("group_id, group:major_groups!group_id(id, name, image_url)")
+      .eq("profile_id", profileId)
+      .eq("status", "invited"),
   ]);
 
   const myGroupIds = myGroupRows.map((g) => g.id);
@@ -531,6 +536,10 @@ export async function getMajorHubSummary(profileId: string): Promise<MajorHubSum
   const joinedGroupIds = new Set(myGroupIds);
   const filteredDiscover = discoverGroups.filter((g) => !joinedGroupIds.has(g.id));
 
+  const pending_invites = ((inviteRes.data ?? []) as any[])
+    .filter((r) => r.group)
+    .map((r) => ({ group_id: r.group_id as string, group: r.group as { id: string; name: string; image_url: string | null } }));
+
   return {
     season_events,
     season_rounds_played,
@@ -545,6 +554,7 @@ export async function getMajorHubSummary(profileId: string): Promise<MajorHubSum
     upcoming_events: upcomingEvents,
     my_groups: myGroupRows.map((g) => ({ ...g, member_count: 0 })),
     discover_groups: filteredDiscover,
+    pending_invites,
   };
 }
 
