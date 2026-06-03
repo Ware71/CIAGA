@@ -3,6 +3,6 @@ RETURNS void
 LANGUAGE plpgsql
 AS $$
 BEGIN
-  TRUNCATE TABLE major_groups CASCADE;
+  DELETE FROM major_groups;
 END;
 $$;
