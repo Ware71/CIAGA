@@ -15,8 +15,8 @@ import type {
 } from "@/lib/majors/types";
 import type { LiveGroupStandingEntry, LiveGroupStandingsResponse } from "@/app/api/majors/groups/[id]/live-standings/route";
 import type { CompetitionResultsResponse } from "@/app/api/majors/groups/[id]/event-results/route";
-import type { PlayerBreakdownEntry } from "@/app/api/majors/seasons/[id]/player-breakdown/route";
-import type { SeasonStandingEntry } from "@/app/api/majors/seasons/[id]/standings/route";
+import type { PlayerBreakdownEntry } from "@/app/api/majors/group-seasons/[id]/player-breakdown/route";
+import type { SeasonStandingEntry } from "@/app/api/majors/group-seasons/[id]/standings/route";
 import type { GroupScoringPrefs } from "@/lib/majors/types";
 import { eventStatusLabel } from "@/lib/majors/labels";
 import { formatHI } from "@/lib/rounds/handicapUtils";
@@ -709,7 +709,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       const session = await getViewerSession();
       if (!session || cancelled) return;
       const url = currentSeasonId
-        ? `/api/majors/seasons/${currentSeasonId}/player-breakdown?profile_id=${profileId}`
+        ? `/api/majors/group-seasons/${currentSeasonId}/player-breakdown?profile_id=${profileId}`
         : `/api/majors/groups/${groupId}/player-breakdown?profile_id=${profileId}`;
       const res = await fetch(url, { headers: { Authorization: `Bearer ${session.accessToken}` } });
       if (!cancelled && res.ok) {
@@ -1987,18 +1987,10 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                 {isAdminOrOwner && (
                   <button
                     type="button"
-                    onClick={() => {
-                      if ((s.event_templates?.length ?? 0) > 0) {
-                        router.push(`/majors/competitions/${s.id}`);
-                      } else {
-                        router.push(
-                          `/majors/events/create?group_id=${groupId}&competition_id=${s.id}&year=${new Date().getFullYear()}`
-                        );
-                      }
-                    }}
+                    onClick={() => router.push(`/majors/events/create?group_id=${groupId}&competition_id=${s.id}`)}
                     className="w-full py-2 rounded-full bg-emerald-700/80 text-[11px] font-semibold text-white hover:bg-emerald-600"
                   >
-                    {`+ Schedule ${new Date().getFullYear()} Events`}
+                    + Add Event
                   </button>
                 )}
               </div>

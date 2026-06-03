@@ -12,9 +12,6 @@ import type {
   CompetitionWithEventTemplates,
   CompetitionYearGroup,
   EventTemplateHistory,
-  CompetitionSeason,
-  CompetitionSeasonWithCompetition,
-  SeasonStandingsEntryWithProfile,
 } from "./types";
 
 // ─── Groups ──────────────────────────────────────────────────────────────────
@@ -675,53 +672,6 @@ export async function getPlayerCompetitionHistory(profileId: string, competition
   }));
 }
 
-// ─── Seasons ─────────────────────────────────────────────────────────────────
-
-export async function getSeasonsByCompetitionId(competitionId: string): Promise<CompetitionSeason[]> {
-  const { data, error } = await supabaseAdmin
-    .from("competition_seasons")
-    .select("*")
-    .eq("competition_id", competitionId)
-    .order("season_year", { ascending: false });
-  if (error) throw error;
-  return (data ?? []) as CompetitionSeason[];
-}
-
-export async function getSeasonById(
-  seasonId: string
-): Promise<(CompetitionSeasonWithCompetition & { events: EventWithGroup[] }) | null> {
-  const { data: seasonData, error: seasonErr } = await supabaseAdmin
-    .from("competition_seasons")
-    .select("*, competition:competitions(id, name, group_id, competition_type)")
-    .eq("id", seasonId)
-    .maybeSingle();
-  if (seasonErr) throw seasonErr;
-  if (!seasonData) return null;
-
-  const { data: evts, error: evtsErr } = await supabaseAdmin
-    .from("events")
-    .select("*, group:major_groups(id, name, type, ciaga_tag), course:courses(id, name)")
-    .eq("season_id", seasonId)
-    .order("event_date", { ascending: true });
-  if (evtsErr) throw evtsErr;
-
-  return {
-    ...(seasonData as unknown as CompetitionSeasonWithCompetition),
-    events: (evts ?? []) as EventWithGroup[],
-  };
-}
-
-export async function getSeasonStandings(
-  seasonId: string
-): Promise<SeasonStandingsEntryWithProfile[]> {
-  const { data, error } = await supabaseAdmin
-    .from("season_standings_entries")
-    .select("*, profile:profiles(id, name, avatar_url)")
-    .eq("season_id", seasonId)
-    .order("position", { ascending: true });
-  if (error) throw error;
-  return (data ?? []) as unknown as SeasonStandingsEntryWithProfile[];
-}
 
 // ─── Event history summaries ──────────────────────────────────────────────────
 

@@ -125,7 +125,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ potId: 
           return NextResponse.json({ error: "No prize table configured for this pot." }, { status: 400 });
         }
 
-        // Resolve positions — for event pots use event leaderboard; for season pots use competition_season_standings
+        // Resolve positions — for event pots use event leaderboard; for group-season pots use group season standings
         let positionMap: Record<number, { profile_id: string; profile: unknown }> = {};
 
         if ((pot as any).event_id) {
@@ -138,11 +138,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ potId: 
           for (const row of lb ?? [] as any[]) {
             positionMap[row.position] = { profile_id: row.profile_id, profile: row.profile };
           }
-        } else if ((pot as any).competition_season_id) {
+        } else if ((pot as any).group_season_id) {
           const { data: standings } = await supabaseAdmin
-            .from("competition_season_standings")
+            .from("group_season_standings_entries")
             .select("profile_id, position, profile:profiles!profile_id(id, name, avatar_url)")
-            .eq("season_id", (pot as any).competition_season_id)
+            .eq("group_season_id", (pot as any).group_season_id)
             .not("position", "is", null);
 
           for (const row of standings ?? [] as any[]) {

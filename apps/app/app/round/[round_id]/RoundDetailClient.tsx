@@ -295,7 +295,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
   useEffect(() => {
     supabase
       .from("event_tee_times")
-      .select("event_id, event:events(points_model, points_table, group_id, season_id, scoring_model)")
+      .select("event_id, event:events(points_model, points_table, group_id, group_season_id, scoring_model)")
       .eq("round_id", roundId)
       .maybeSingle()
       .then(({ data }) => {
@@ -306,7 +306,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
             setCompetitionPointsModel(comp.points_model ?? undefined);
             setCompetitionPointsTable(comp.points_table ?? undefined);
             setCompetitionGroupId(comp.group_id ?? undefined);
-            setCompetitionSeasonId(comp.season_id ?? undefined);
+            setCompetitionSeasonId(comp.group_season_id ?? undefined);
             setCompetitionScoringModel(comp.scoring_model ?? undefined);
           }
         }

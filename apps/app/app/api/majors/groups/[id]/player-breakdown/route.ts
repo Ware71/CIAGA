@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
-import type { PlayerBreakdownEntry, PlayerBreakdownResponse } from "@/app/api/majors/seasons/[id]/player-breakdown/route";
+import type { PlayerBreakdownEntry, PlayerBreakdownResponse } from "@/app/api/majors/group-seasons/[id]/player-breakdown/route";
 
 export const runtime = "nodejs";
 

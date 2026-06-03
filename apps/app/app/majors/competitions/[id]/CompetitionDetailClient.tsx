@@ -6,7 +6,6 @@ import { getViewerSession } from "@/lib/auth/viewerSession";
 import type {
   CompetitionWithEventTemplates,
   CompetitionEventTemplate,
-  CompetitionSeason,
   EventWithGroup,
   EventTypeV2,
   EventScoringModel,
@@ -43,7 +42,6 @@ const CATEGORIES: { value: EventCategory; label: string }[] = [
 type CompetitionViewerStats = {
   appearances: number;
   wins: number;
-  seasons_played: number;
   best_finish: number | null;
   avg_finish: number | null;
 };
@@ -474,214 +472,6 @@ function EventTemplateModal({
   );
 }
 
-// ─── Create Season modal ──────────────────────────────────────────────────────
-
-function CreateSeasonModal({
-  competitionId,
-  eventTemplates,
-  onClose,
-  onCreated,
-}: {
-  competitionId: string;
-  eventTemplates: CompetitionEventTemplate[];
-  onClose: () => void;
-  onCreated: () => void;
-}) {
-  const currentYear = new Date().getFullYear();
-  const [seasonType, setSeasonType] = useState<"calendar_year" | "custom">("calendar_year");
-  const [year, setYear] = useState(currentYear.toString());
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [seasonLabel, setSeasonLabel] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Per-event optional date overrides, keyed by template ID
-  const [eventDates, setEventDates] = useState<Record<string, string>>(() => {
-    const init: Record<string, string> = {};
-    eventTemplates.forEach((et) => {
-      init[et.id] = et.typical_month
-        ? `${currentYear}-${String(et.typical_month).padStart(2, "0")}-01`
-        : "";
-    });
-    return init;
-  });
-
-  const handleYearChange = (val: string) => {
-    setYear(val);
-    const y = parseInt(val, 10);
-    if (!y || y < 2000 || y > 2100) return;
-    const updated: Record<string, string> = {};
-    eventTemplates.forEach((et) => {
-      updated[et.id] = et.typical_month
-        ? `${y}-${String(et.typical_month).padStart(2, "0")}-01`
-        : "";
-    });
-    setEventDates(updated);
-  };
-
-  // Auto-compute label from dates when custom
-  const computedLabel = (() => {
-    if (seasonType === "calendar_year") return year || "";
-    if (!startDate || !endDate) return "";
-    const sy = new Date(startDate).getFullYear();
-    const ey = new Date(endDate).getFullYear();
-    return sy === ey ? `${sy} Season` : `${sy % 100}/${ey % 100} Season`;
-  })();
-
-  const handleCreate = async () => {
-    setCreating(true);
-    setError(null);
-    try {
-      const session = await getViewerSession();
-      if (!session) { setError("Not signed in"); return; }
-
-      let body: Record<string, unknown>;
-      if (seasonType === "calendar_year") {
-        const y = parseInt(year, 10);
-        if (!y) { setError("Valid year is required"); return; }
-        const event_overrides = eventTemplates
-          .filter((et) => eventDates[et.id])
-          .map((et) => ({ template_id: et.id, event_date: eventDates[et.id] }));
-        body = { year: y, ...(event_overrides.length > 0 ? { event_overrides } : {}) };
-      } else {
-        if (!startDate || !endDate) { setError("Start and end dates are required"); return; }
-        body = {
-          season_type: "custom",
-          start_date: startDate,
-          end_date: endDate,
-          season_label: (seasonLabel.trim() || computedLabel) || undefined,
-        };
-      }
-
-      const res = await fetch(`/api/majors/competitions/${competitionId}/instantiate`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const json = await res.json();
-      if (!res.ok) { setError(json.error ?? "Failed to create season"); return; }
-      onCreated();
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  const inputCls = "w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 focus:outline-none";
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4" onClick={onClose}>
-      <div
-        className="w-full max-w-sm rounded-2xl bg-[#0a2e18] border border-emerald-800/60 max-h-[88vh] flex flex-col overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="shrink-0 px-5 pt-5 pb-3">
-          <div className="text-sm font-semibold text-emerald-50">Create Season</div>
-        </div>
-        <div className="flex-1 overflow-y-auto px-5 pb-2 space-y-4">
-
-          {/* Season type toggle */}
-          <div className="flex gap-2">
-            {(["calendar_year", "custom"] as const).map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setSeasonType(t)}
-                className={`flex-1 py-1.5 rounded-full text-[11px] font-semibold transition-colors ${
-                  seasonType === t ? "bg-emerald-700 text-white" : "border border-emerald-800/50 text-emerald-200/60 hover:text-emerald-100"
-                }`}
-              >
-                {t === "calendar_year" ? "Calendar Year" : "Custom Dates"}
-              </button>
-            ))}
-          </div>
-
-          {seasonType === "calendar_year" ? (
-            <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Year</label>
-              <input type="number" className={inputCls} value={year} onChange={(e) => handleYearChange(e.target.value)} />
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Start Date</label>
-                <input type="date" className={inputCls} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">End Date</label>
-                <input type="date" className={inputCls} value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">
-                  Season Label
-                  <span className="normal-case ml-1 text-emerald-200/35">(auto: {computedLabel || "—"})</span>
-                </label>
-                <input
-                  type="text"
-                  className={inputCls}
-                  value={seasonLabel}
-                  onChange={(e) => setSeasonLabel(e.target.value)}
-                  placeholder={computedLabel || "e.g. 25/26 Season"}
-                />
-              </div>
-            </div>
-          )}
-
-          {seasonType === "calendar_year" && (
-            <div className="space-y-2">
-              <div className="text-[10px] uppercase tracking-wider text-emerald-200/60">
-                Event Dates
-                <span className="normal-case ml-1 text-emerald-200/35">(optional — leave blank to set later)</span>
-              </div>
-              <div className="space-y-2">
-                {eventTemplates.map((et) => (
-                  <div
-                    key={et.id}
-                    className="rounded-xl border border-emerald-900/50 bg-emerald-950/40 px-3 py-2.5 space-y-1.5"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                      <span className="text-sm text-emerald-100/80 flex-1 truncate">{et.name}</span>
-                      {et.typical_month && (
-                        <span className="text-[10px] text-emerald-200/40 shrink-0">
-                          ({monthNames[et.typical_month - 1]})
-                        </span>
-                      )}
-                    </div>
-                    <input
-                      type="date"
-                      className="w-full rounded-lg bg-emerald-900/30 border border-emerald-800/40 px-2 py-1.5 text-xs text-emerald-50 focus:outline-none"
-                      value={eventDates[et.id] ?? ""}
-                      onChange={(e) =>
-                        setEventDates((prev) => ({ ...prev, [et.id]: e.target.value }))
-                      }
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {error && <div className="text-xs text-red-400">{error}</div>}
-        </div>
-        <div className="shrink-0 px-5 py-4 border-t border-emerald-900/50">
-          <div className="flex gap-2">
-            <button type="button" onClick={onClose}
-              className="flex-1 py-2 rounded-full border border-emerald-700/50 text-sm text-emerald-200 hover:bg-emerald-900/30">
-              Cancel
-            </button>
-            <button type="button" onClick={handleCreate}
-              disabled={creating}
-              className="flex-1 py-2 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-40">
-              {creating ? "Creating…" : `Create Season`}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function CompetitionDetailClient({ competitionId }: { competitionId: string }) {
@@ -689,13 +479,11 @@ export default function CompetitionDetailClient({ competitionId }: { competition
   const [competition, setCompetition] = useState<CompetitionWithEventTemplates | null>(null);
   const [history, setHistory] = useState<EnrichedYearGroup[]>([]);
   const [viewerStats, setViewerStats] = useState<CompetitionViewerStats | null>(null);
-  const [seasons, setSeasons] = useState<CompetitionSeason[]>([]);
   const [loading, setLoading] = useState(true);
   const [myRole, setMyRole] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"history" | "events">("history");
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [editingEvent, setEditingEvent] = useState<CompetitionEventTemplate | null>(null);
-  const [showCreateSeason, setShowCreateSeason] = useState(false);
   const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
   const [showEditCompetition, setShowEditCompetition] = useState(false);
 
@@ -708,10 +496,9 @@ export default function CompetitionDetailClient({ competitionId }: { competition
       if (!session) { router.push("/login"); return; }
       const headers = { Authorization: `Bearer ${session.accessToken}` };
 
-      const [competitionRes, historyRes, seasonsRes] = await Promise.all([
+      const [competitionRes, historyRes] = await Promise.all([
         fetch(`/api/majors/competitions/${competitionId}`, { headers }),
         fetch(`/api/majors/competitions/${competitionId}/history`, { headers }),
-        fetch(`/api/majors/seasons?competition_id=${competitionId}`, { headers }).catch(() => null),
       ]);
 
       if (competitionRes.ok) {
@@ -739,10 +526,6 @@ export default function CompetitionDetailClient({ competitionId }: { competition
         setViewerStats(hj.viewer_stats ?? null);
       }
 
-      if (seasonsRes?.ok) {
-        const sj = await seasonsRes.json();
-        setSeasons(sj.seasons ?? []);
-      }
     } finally {
       setLoading(false);
     }
@@ -920,11 +703,6 @@ export default function CompetitionDetailClient({ competitionId }: { competition
                     </div>
                   ))}
                 </div>
-                {viewerStats.seasons_played > 0 && (
-                  <div className="mt-3 text-[10px] text-emerald-200/45 text-center">
-                    {viewerStats.seasons_played} {viewerStats.seasons_played === 1 ? "season" : "seasons"} played
-                  </div>
-                )}
               </div>
             )}
 
@@ -935,20 +713,10 @@ export default function CompetitionDetailClient({ competitionId }: { competition
               </div>
             ) : (
               history.map((yearGroup) => {
-                const matchedSeason = seasons.find((s) => s.season_year === yearGroup.year);
                 return (
                   <div key={yearGroup.year} className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/60 p-4 space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="text-sm font-bold text-emerald-200">{yearGroup.year}</div>
-                      {matchedSeason && (
-                        <button
-                          type="button"
-                          onClick={() => router.push(`/majors/seasons/${matchedSeason.id}`)}
-                          className="text-[10px] text-emerald-200/55 hover:text-emerald-200 border border-emerald-900/50 rounded-full px-2 py-0.5 transition-colors"
-                        >
-                          Season →
-                        </button>
-                      )}
                     </div>
                     <div className="space-y-2">
                       {yearGroup.events.map(({ event, event_template, winner, viewer_entry }) => (
@@ -1099,14 +867,14 @@ export default function CompetitionDetailClient({ competitionId }: { competition
               </div>
             )}
 
-            {/* Create season CTA */}
-            {isAdminOrOwner && eventTemplates.length > 0 && (
+            {/* Add Event CTA */}
+            {isAdminOrOwner && competition?.group_id && (
               <button
                 type="button"
-                onClick={() => setShowCreateSeason(true)}
+                onClick={() => router.push(`/majors/events/create?group_id=${competition.group_id}&competition_id=${competitionId}`)}
                 className="w-full py-2.5 rounded-full bg-emerald-700/90 text-sm font-semibold text-white hover:bg-emerald-600 mt-1"
               >
-                + Create {new Date().getFullYear()} Season
+                + Add Event
               </button>
             )}
           </section>
@@ -1134,17 +902,6 @@ export default function CompetitionDetailClient({ competitionId }: { competition
         />
       )}
 
-      {showCreateSeason && (
-        <CreateSeasonModal
-          competitionId={competitionId}
-          eventTemplates={eventTemplates}
-          onClose={() => setShowCreateSeason(false)}
-          onCreated={() => {
-            setShowCreateSeason(false);
-            load(); // reload to show new season
-          }}
-        />
-      )}
     </div>
   );
 }

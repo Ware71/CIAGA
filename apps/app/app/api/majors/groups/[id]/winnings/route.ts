@@ -26,7 +26,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     // ── Fetch all prize pots for this group ────────────────────────────────
     const { data: pots } = await supabaseAdmin
       .from("prize_pots")
-      .select("id, name, event_id, competition_season_id, group_season_id, distribution_type, is_monetary")
+      .select("id, name, event_id, group_season_id, distribution_type, is_monetary")
       .eq("group_id", groupId);
 
     if (!pots || pots.length === 0) {
@@ -64,15 +64,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     // ── Resolve event/season names ─────────────────────────────────────────
     const eventIds = [...new Set(pots.filter((p: any) => p.event_id).map((p: any) => p.event_id))];
-    const compSeasonIds = [...new Set(pots.filter((p: any) => p.competition_season_id).map((p: any) => p.competition_season_id))];
     const groupSeasonIds = [...new Set(pots.filter((p: any) => p.group_season_id).map((p: any) => p.group_season_id))];
 
-    const [{ data: events }, { data: compSeasons }, { data: groupSeasons }] = await Promise.all([
+    const [{ data: events }, { data: groupSeasons }] = await Promise.all([
       eventIds.length > 0
-        ? supabaseAdmin.from("events").select("id, name, season_id, group_season_id").in("id", eventIds)
-        : Promise.resolve({ data: [] }),
-      compSeasonIds.length > 0
-        ? supabaseAdmin.from("competition_seasons").select("id, name").in("id", compSeasonIds)
+        ? supabaseAdmin.from("events").select("id, name, group_season_id").in("id", eventIds)
         : Promise.resolve({ data: [] }),
       groupSeasonIds.length > 0
         ? supabaseAdmin.from("group_seasons").select("id, name").in("id", groupSeasonIds)
@@ -80,22 +76,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     ]);
 
     const eventMap = new Map((events ?? []).map((e: any) => [e.id, e]));
-    const compSeasonMap = new Map((compSeasons ?? []).map((s: any) => [s.id, s]));
     const groupSeasonMap = new Map((groupSeasons ?? []).map((s: any) => [s.id, s]));
 
     // Build pot metadata lookup
     const potMeta = new Map(
       pots.map((p: any) => {
         const event = p.event_id ? eventMap.get(p.event_id) : null;
-        const compSeason = p.competition_season_id ? compSeasonMap.get(p.competition_season_id) : null;
-        const groupSeason = p.group_season_id ? groupSeasonMap.get(p.group_season_id) : null;
-        // Derive season from event if event-scoped
         const effectiveGroupSeasonId = p.group_season_id ?? (event?.group_season_id ?? null);
-        const effectiveCompSeasonId = p.competition_season_id ?? (event?.season_id ?? null);
-        const seasonName =
-          (compSeason?.name ?? compSeasonMap.get(event?.season_id)?.name) ??
-          (groupSeason?.name ?? groupSeasonMap.get(event?.group_season_id)?.name) ??
-          null;
+        const groupSeason = effectiveGroupSeasonId ? groupSeasonMap.get(effectiveGroupSeasonId) : null;
+        const seasonName = groupSeason?.name ?? null;
 
         return [
           p.id,
@@ -104,10 +93,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
             pot_name: p.name,
             event_id: p.event_id,
             event_name: event?.name ?? null,
-            season_id: effectiveCompSeasonId ?? effectiveGroupSeasonId ?? null,
+            season_id: effectiveGroupSeasonId ?? null,
             season_name: seasonName,
             group_season_id: effectiveGroupSeasonId,
-            competition_season_id: effectiveCompSeasonId,
           },
         ];
       })
@@ -116,7 +104,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     // ── Aggregate per player ───────────────────────────────────────────────
     type SeasonBucket = {
       group_season_id: string | null;
-      competition_season_id: string | null;
       season_name: string;
       spent: number;
       won: number;
@@ -167,7 +154,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       if (!p.seasons.has(seasonKey)) {
         p.seasons.set(seasonKey, {
           group_season_id: meta.group_season_id,
-          competition_season_id: meta.competition_season_id,
           season_name: meta.season_name ?? "Standalone Events",
           spent: 0,
           won: 0,

@@ -159,31 +159,6 @@ export type Competition = {
 export type CompetitionWithHolder = Competition & {
   event_templates: Pick<CompetitionEventTemplate, "id">[];
   current_holder: { name: string | null; avatar_url: string | null } | null;
-  latest_season: Pick<CompetitionSeason, "id" | "season_label" | "status"> | null;
-};
-
-// ── CompetitionSeason ─────────────────────────────────────────────
-export type SeasonStatus = "draft" | "published" | "live" | "completed" | "archived";
-export type SeasonType = "calendar_year" | "custom";
-
-export type CompetitionSeason = {
-  id: string;
-  competition_id: string;
-  season_year: number | null;
-  season_type: SeasonType;
-  season_label: string;
-  name: string;
-  status: SeasonStatus;
-  start_date: string | null;
-  end_date: string | null;
-  standings_model: StandingsModel;
-  standings_rules_version_id: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
-export type CompetitionSeasonWithCompetition = CompetitionSeason & {
-  competition: Pick<Competition, "id" | "name" | "competition_type" | "group_id">;
 };
 
 // ── EventRulesVersion ───────────────────────────────────────────────
@@ -291,7 +266,7 @@ export type GroupSeason = {
   start_date: string;
   end_date: string;
   status: GroupSeasonStatus;
-  season_type: SeasonType;
+  season_type: "calendar_year" | "custom";
   season_year: number | null;
   season_label: string | null;
   standings_model: StandingsModel;
@@ -380,7 +355,6 @@ export type EventFull = {
   event_category: EventCategory;
   aggregate_config: Record<string, unknown>;
   // Spec-aligned additions
-  season_id: string | null;
   group_season_id: string | null;
   event_structure: EventStructure;
   scoring_basis: ScoringBasis | null;
@@ -500,23 +474,6 @@ export type GroupStandingWithProfile = MajorGroupStanding & {
   };
 };
 
-// ─── Season standings ────────────────────────────────────────────────────────
-
-export type SeasonStandingsEntry = {
-  season_id: string;
-  profile_id: string;
-  position: number | null;
-  season_points: number;
-  events_played: number;
-  wins: number;
-  top_3s: number;
-  best_finish: number | null;
-  last_computed_at: string;
-};
-
-export type SeasonStandingsEntryWithProfile = SeasonStandingsEntry & {
-  profile: { id: string; name: string | null; avatar_url: string | null };
-};
 
 // ─── Event rounds ───────────────────────────────────────────────────────────
 
@@ -898,7 +855,7 @@ export type UserNotification = {
 // ─── Season financials ────────────────────────────────────────────────────────
 
 export type SeasonFinancialSummary = {
-  season_id: string;
+  group_season_id: string;
   total_entry_fees: number;
   total_extras: number;
   total_winnings_paid: number;
@@ -937,7 +894,6 @@ export type PrizePot = {
   group_id: string;
   /** Exactly one of these is set */
   event_id: string | null;
-  competition_season_id: string | null;
   group_season_id: string | null;
   name: string;
   description: string | null;
@@ -1053,7 +1009,6 @@ export type PlayerWinningSummary = {
   undrawn_winnings: number;
   by_season: Array<{
     group_season_id: string | null;
-    competition_season_id: string | null;
     season_name: string;
     spent: number;
     won: number;

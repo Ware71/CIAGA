@@ -4,6 +4,24 @@ import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 
 export const runtime = "nodejs";
 
+export type SeasonStandingEntry = {
+  season_id: string;
+  profile_id: string;
+  position: number | null;
+  season_points: number;
+  events_played: number;
+  wins: number;
+  top_3s: number;
+  best_finish: number | null;
+  last_computed_at: string | null;
+  profile: { id: string; name: string | null; avatar_url: string | null } | null;
+  total_gross: number | null;
+  total_net: number | null;
+  avg_gross_to_par: number | null;
+  avg_net_to_par: number | null;
+  won_events: { event_id: string; event_name: string; event_date: string | null }[];
+};
+
 async function refreshGroupSeasonStandings(groupSeasonId: string) {
   const { data: liveEvents } = await supabaseAdmin
     .from("events")

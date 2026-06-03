@@ -246,7 +246,7 @@ export default function RoundMenuSheet(props: {
       const authHeaders = { Authorization: `Bearer ${session.accessToken}` };
       let rows: SeasonStandingEntry[] = [];
       if (seasonId) {
-        const res = await fetch(`/api/majors/seasons/${seasonId}/standings`, { headers: authHeaders });
+        const res = await fetch(`/api/majors/group-seasons/${seasonId}/standings`, { headers: authHeaders });
         const data = await res.json();
         rows = (data.standings ?? []).map((r: any) => ({
           profile_id: r.profile_id,
@@ -338,8 +338,8 @@ export default function RoundMenuSheet(props: {
 
     let cancelled = false;
     const channelKey = seasonId ?? groupId!;
-    const table = seasonId ? "season_standings_entries" : "major_group_standings";
-    const filter = seasonId ? `season_id=eq.${seasonId}` : `group_id=eq.${groupId}`;
+    const table = seasonId ? "group_season_standings_entries" : "major_group_standings";
+    const filter = seasonId ? `group_season_id=eq.${seasonId}` : `group_id=eq.${groupId}`;
     const channel = supabase
       .channel(`round-menu:season:${channelKey}`)
       .on("postgres_changes", {

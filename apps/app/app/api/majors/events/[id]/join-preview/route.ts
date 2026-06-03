@@ -61,35 +61,18 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const mandatory_prize_pots = unenrolledEventPots.filter((p: any) => p.is_mandatory);
     const optional_prize_pots = unenrolledEventPots.filter((p: any) => !p.is_mandatory);
 
-    // ── 3. Season prize pots ──────────────────────────────────────────────────
-    const seasonPotFilters: any[] = [];
-    if ((event as any).season_id) {
-      seasonPotFilters.push({ competition_season_id: (event as any).season_id });
-    }
-    if ((event as any).group_season_id) {
-      seasonPotFilters.push({ group_season_id: (event as any).group_season_id });
-    }
-
+    // ── 3. Group-season prize pots ────────────────────────────────────────────
     let season_mandatory_pots: any[] = [];
     let season_optional_pots: any[] = [];
 
-    if (seasonPotFilters.length > 0) {
-      let seasonPotsQuery = supabaseAdmin
+    const groupSeasonId = (event as any).group_season_id;
+    if (groupSeasonId) {
+      const { data: seasonPots } = await supabaseAdmin
         .from("prize_pots")
         .select("*")
         .eq("group_id", event.group_id)
+        .eq("group_season_id", groupSeasonId)
         .in("status", ["active", "locked"]);
-
-      // Build OR filter for season scopes
-      const orParts = seasonPotFilters
-        .map((f) => {
-          const [key, val] = Object.entries(f)[0] as [string, string];
-          return `${key}.eq.${val}`;
-        })
-        .join(",");
-      seasonPotsQuery = seasonPotsQuery.or(orParts);
-
-      const { data: seasonPots } = await seasonPotsQuery;
 
       if (seasonPots && seasonPots.length > 0) {
         const seasonPotIds = seasonPots.map((p: any) => p.id);

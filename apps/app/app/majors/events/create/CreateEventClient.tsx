@@ -747,7 +747,6 @@ export default function CreateEventClient() {
 
   const preselectedCompetitionId = searchParams.get("competition_id") ?? "";
   const preselectedEventTemplateId = searchParams.get("competition_event_template_id") ?? "";
-  const preselectedYear = searchParams.get("year") ?? String(new Date().getFullYear());
 
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<FormState>({
@@ -755,7 +754,6 @@ export default function CreateEventClient() {
     group_id: preselectedGroupId,
     competition_id: preselectedCompetitionId,
     competition_event_template_id: preselectedEventTemplateId,
-    event_year: preselectedYear,
   });
   const [templateCompetition, setTemplateCompetition] = useState<Competition | null>(null);
   const [competitionEventTemplates, setCompetitionEventTemplates] = useState<CompetitionEventTemplate[]>([]);
@@ -1045,8 +1043,8 @@ export default function CreateEventClient() {
           standings_contribution: form.standings_contribution,
           competition_id: form.competition_id || null,
           competition_event_template_id: form.competition_event_template_id || null,
-          event_year: form.competition_id && form.event_year
-            ? parseInt(form.event_year, 10)
+          event_year: form.competition_id && form.event_date
+            ? new Date(form.event_date).getFullYear()
             : null,
           aggregate_config,
           handicap_rules: form.scoring_model !== "gross"
@@ -1230,10 +1228,23 @@ export default function CreateEventClient() {
           const matched = groupSeasons.find(
             (s) => s.start_date <= form.event_date && s.end_date >= form.event_date
           );
-          if (!matched) return null;
+          if (matched) {
+            return (
+              <div className="text-[11px] text-emerald-400/80">
+                Season: <span className="font-medium text-emerald-300">{matched.name}</span>
+              </div>
+            );
+          }
           return (
-            <div className="text-[11px] text-emerald-400/80">
-              Season: <span className="font-medium text-emerald-300">{matched.name}</span>
+            <div className="text-[11px] text-amber-400/80">
+              No season covers this date.{" "}
+              <button
+                type="button"
+                className="underline hover:text-amber-300"
+                onClick={() => router.push(`/majors/groups/${form.group_id}?tab=settings`)}
+              >
+                Add a season →
+              </button>
             </div>
           );
         })()}
@@ -1515,19 +1526,6 @@ export default function CreateEventClient() {
           ))}
         </div>
       )}
-      {form.competition_id && (
-        <div className="space-y-2">
-          <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Year</label>
-          <input
-            type="number"
-            value={form.event_year}
-            onChange={(e) => update("event_year", e.target.value)}
-            min={2000}
-            max={2100}
-            className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-3 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
-          />
-        </div>
-      )}
 
       {/* Ceremony freeze (collapsible) */}
       {!isAggregate && (
@@ -1573,7 +1571,6 @@ export default function CreateEventClient() {
           { label: "Standings", value: form.standings_contribution === "event_only" ? "Event only" : form.standings_contribution === "season" ? "Season" : "Both" },
           form.group_id ? { label: "Group", value: myGroups.find((g) => g.id === form.group_id)?.name ?? form.group_id } : null,
           form.competition_id ? { label: "Competition", value: groupCompetitions.find((s) => s.id === form.competition_id)?.name ?? form.competition_id } : null,
-          form.competition_id && form.event_year ? { label: "Year", value: form.event_year } : null,
           form.course_name ? { label: "Course", value: form.course_name } : null,
           form.event_date ? { label: "Date", value: form.event_date } : null,
           !isAggregate && form.freeze_enabled && form.freeze_last_holes
@@ -1624,7 +1621,7 @@ export default function CreateEventClient() {
         <div className="mb-5 rounded-xl border border-emerald-700/50 bg-emerald-900/30 px-4 py-2.5 flex items-center gap-2">
           <span className="text-[10px] text-emerald-400 shrink-0">Template</span>
           <span className="text-[11px] font-semibold text-emerald-50 truncate">{templateCompetition.name}</span>
-          <span className="text-[10px] text-emerald-200/50 shrink-0">· {preselectedYear}</span>
+          {form.event_date && <span className="text-[10px] text-emerald-200/50 shrink-0">· {new Date(form.event_date).getFullYear()}</span>}
         </div>
       )}
 

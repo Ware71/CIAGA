@@ -19,11 +19,11 @@ export type PlayerBreakdownResponse = {
   entries: PlayerBreakdownEntry[];
 };
 
-// GET /api/majors/seasons/[id]/player-breakdown?profile_id=xxx
+// GET /api/majors/group-seasons/[id]/player-breakdown?profile_id=xxx
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     await getAuthedProfileOrThrow(req);
-    const { id: seasonId } = await params;
+    const { id: groupSeasonId } = await params;
     const url = new URL(req.url);
     const profileId = url.searchParams.get("profile_id");
 
@@ -31,11 +31,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       return NextResponse.json({ error: "profile_id is required" }, { status: 400 });
     }
 
-    // All events in this season
     const { data: seasonEvents, error: evErr } = await supabaseAdmin
       .from("events")
       .select("id, name, event_date")
-      .eq("season_id", seasonId)
+      .eq("group_season_id", groupSeasonId)
       .in("majors_status", ["completed", "official", "live"])
       .order("event_date", { ascending: true });
 
@@ -48,7 +47,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const eventIds = events.map((e) => e.id as string);
     const eventMap = new Map(events.map((e) => [e.id as string, e]));
 
-    // Leaderboard entries for this player
     const { data: entries, error: leErr } = await supabaseAdmin
       .from("event_leaderboard_entries")
       .select("event_id, position, net_score, gross_score, points_earned, format_points")
