@@ -68,6 +68,17 @@ export default function CreateCompetitionClient() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Prize pot defaults
+  type PotDefault = { name: string; distribution_type: string; entry_fee_amount: string; is_mandatory: boolean; is_monetary: boolean };
+  const [hasPrizePot, setHasPrizePot] = useState(false);
+  const [potDefault, setPotDefault] = useState<PotDefault>({
+    name: "",
+    distribution_type: "winner_takes_all",
+    entry_fee_amount: "",
+    is_mandatory: true,
+    is_monetary: true,
+  });
+
   const update = (field: keyof FormState, value: string | boolean) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
@@ -76,7 +87,7 @@ export default function CreateCompetitionClient() {
     setScoringModel(FORMAT_DEFAULT_SCORING[type] ?? "net");
   };
 
-  const totalSteps = 4;
+  const totalSteps = 5;
 
   const canNext = (): boolean => {
     if (step === 0) return form.name.trim().length > 0;
@@ -113,6 +124,13 @@ export default function CreateCompetitionClient() {
           template_points_model: pointsModel,
           template_num_rounds: parseInt(numRounds, 10) || 1,
           template_settings: templateSettings,
+          default_prize_pots: hasPrizePot ? [{
+            name: potDefault.name || `${form.name} Prize`,
+            distribution_type: potDefault.distribution_type,
+            entry_fee_amount: potDefault.entry_fee_amount ? parseFloat(potDefault.entry_fee_amount) : null,
+            is_mandatory: potDefault.is_mandatory,
+            is_monetary: potDefault.is_monetary,
+          }] : null,
         }),
       });
       const json = await res.json();
@@ -311,8 +329,83 @@ export default function CreateCompetitionClient() {
       </div>
     </div>,
 
-    /* Step 3: Confirm */
-    <div key="step3" className="space-y-4">
+    /* Step 3: Prize Pot Defaults */
+    <div key="step3" className="space-y-5">
+      <div className="text-sm font-semibold text-emerald-50">Prize Pot</div>
+      <p className="text-[12px] text-emerald-200/55">Define a default prize pot for each event in this competition. It will pre-fill when you create a new event instance.</p>
+
+      {/* Toggle */}
+      <div className="flex items-center justify-between rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 px-4 py-3">
+        <div>
+          <div className="text-sm text-emerald-50">Add event prize pot</div>
+          <div className="text-[10px] text-emerald-200/50 mt-0.5">Pre-populate a pot for each event</div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setHasPrizePot((v) => !v)}
+          className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${hasPrizePot ? "bg-emerald-600" : "bg-emerald-900/60"}`}
+        >
+          <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${hasPrizePot ? "translate-x-5" : ""}`} />
+        </button>
+      </div>
+
+      {hasPrizePot && (
+        <div className="space-y-3 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 px-4 py-4">
+          <div className="space-y-1.5">
+            <label className="text-[10px] uppercase tracking-wider text-emerald-200/55">Pot Name</label>
+            <input
+              type="text"
+              placeholder={`${form.name || "Event"} Prize`}
+              value={potDefault.name}
+              onChange={(e) => setPotDefault((p) => ({ ...p, name: e.target.value }))}
+              className="w-full rounded-xl border border-emerald-900/60 bg-[#042713] px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/30 focus:outline-none focus:border-emerald-600"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] uppercase tracking-wider text-emerald-200/55">Distribution</label>
+            <select
+              value={potDefault.distribution_type}
+              onChange={(e) => setPotDefault((p) => ({ ...p, distribution_type: e.target.value }))}
+              className="w-full rounded-xl border border-emerald-900/60 bg-[#042713] px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
+            >
+              <option value="winner_takes_all">Winner takes all</option>
+              <option value="position_based">By finishing position (custom splits)</option>
+              <option value="metric_weighted">Proportional to metric</option>
+              <option value="metric_equal">Equal split among qualifiers</option>
+              <option value="non_monetary">Non-cash prize</option>
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] uppercase tracking-wider text-emerald-200/55">Entry Fee per Player (£)</label>
+            <input
+              type="number"
+              min="0"
+              step="0.50"
+              placeholder="e.g. 10"
+              value={potDefault.entry_fee_amount}
+              onChange={(e) => setPotDefault((p) => ({ ...p, entry_fee_amount: e.target.value }))}
+              className="w-full rounded-xl border border-emerald-900/60 bg-[#042713] px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/30 focus:outline-none focus:border-emerald-600"
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-sm text-emerald-50">Mandatory</div>
+              <div className="text-[10px] text-emerald-200/50 mt-0.5">Auto-enroll players on event join</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPotDefault((p) => ({ ...p, is_mandatory: !p.is_mandatory }))}
+              className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${potDefault.is_mandatory ? "bg-emerald-600" : "bg-emerald-900/60"}`}
+            >
+              <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${potDefault.is_mandatory ? "translate-x-5" : ""}`} />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>,
+
+    /* Step 4: Confirm */
+    <div key="step4" className="space-y-4">
       <div className="text-sm font-semibold text-emerald-50">Confirm Competition Details</div>
       <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4 space-y-2">
         {[

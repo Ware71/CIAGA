@@ -170,6 +170,34 @@ export async function POST(req: Request, { params }: { params: Promise<{ potId: 
         break;
       }
 
+      case "season_standings_winner": {
+        // 100% to position 1 in season standings; ties split equally
+        if (!(pot as any).group_season_id) {
+          return NextResponse.json({ error: "season_standings_winner is only valid for season-level pots." }, { status: 400 });
+        }
+        const { data: topStandings } = await supabaseAdmin
+          .from("group_season_standings_entries")
+          .select("profile_id, position, profile:profiles!profile_id(id, name, avatar_url)")
+          .eq("group_season_id", (pot as any).group_season_id)
+          .eq("position", 1);
+
+        if (!topStandings || topStandings.length === 0) {
+          return NextResponse.json({ error: "No players at position 1 in the season standings." }, { status: 400 });
+        }
+        const share = Math.round((totalPot / topStandings.length) * 100) / 100;
+        const note = topStandings.length > 1
+          ? `Tied 1st place (${topStandings.length}-way split)`
+          : "Season standings winner";
+        proposed = (topStandings as any[]).map((row) => ({
+          profile_id: row.profile_id,
+          profile: row.profile ?? null,
+          position: 1,
+          amount: share,
+          note,
+        }));
+        break;
+      }
+
       default:
         return NextResponse.json({ error: `Unknown distribution_type: ${distributionType}` }, { status: 400 });
     }

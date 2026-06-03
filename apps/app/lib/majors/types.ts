@@ -145,6 +145,13 @@ export type Competition = {
   template_rules_text: string | null;
   template_settings: Record<string, unknown>;
   template_num_rounds: number;
+  default_prize_pots: Array<{
+    name: string;
+    distribution_type: string;
+    entry_fee_amount: number | null;
+    is_mandatory: boolean;
+    is_monetary: boolean;
+  }> | null;
   created_by_profile_id: string | null;
   created_at: string;
   updated_at: string;
@@ -873,12 +880,13 @@ export type SeasonFinancialSummary = {
 // ─── Prize Pots ───────────────────────────────────────────────────────────────
 
 export type PrizePotDistributionType =
-  | "position_based"    // 1st/2nd/3rd splits from prize_table
-  | "metric_weighted"   // proportional to metric value (e.g. 3 twos → 3× share)
-  | "metric_equal"      // equal share to each player with metric_value >= 1
-  | "equal_split"       // split equally among all enrolled players
-  | "non_monetary"      // no cash; prize_description only
-  | "entry_only";       // entry fee charged, no distribution
+  | "position_based"           // 1st/2nd/3rd splits from prize_table
+  | "metric_weighted"          // proportional to metric value (e.g. 3 twos → 3× share)
+  | "metric_equal"             // equal share to each player with metric_value >= 1
+  | "equal_split"              // split equally among all enrolled players
+  | "non_monetary"             // no cash; prize_description only
+  | "entry_only"               // entry fee charged, no distribution
+  | "season_standings_winner"; // 100% to season standings leader when season completes; ties split equally
 
 export type PrizePotMetricType =
   | "twos"          // auto-calculated from hole scores

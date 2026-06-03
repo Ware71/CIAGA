@@ -68,7 +68,7 @@ export default function GroupSeasonDetailClient({ groupSeasonId }: { groupSeason
   const [seasonPots, setSeasonPots] = useState<PrizePotWithDetails[]>([]);
   const [potError, setPotError] = useState<string | null>(null);
   const [addPotForm, setAddPotForm] = useState<{
-    name: string; description: string; distribution_type: PrizePotDistributionType;
+    name: string; description: string; distribution_type: PrizePotDistributionType | "winner_takes_all";
     entry_fee_amount: string; entry_fee_notes: string; is_monetary: boolean; prize_description: string;
   } | null>(null);
   const [addingPot, setAddingPot] = useState(false);
@@ -161,7 +161,8 @@ export default function GroupSeasonDetailClient({ groupSeasonId }: { groupSeason
         body: JSON.stringify({
           name: addPotForm.name.trim(),
           description: addPotForm.description.trim() || null,
-          distribution_type: addPotForm.distribution_type,
+          distribution_type: addPotForm.distribution_type === "winner_takes_all" ? "position_based" : addPotForm.distribution_type,
+          prize_table: addPotForm.distribution_type === "winner_takes_all" ? [{ position: 1, pct: 100 }] : null,
           entry_fee_amount: addPotForm.entry_fee_amount ? parseFloat(addPotForm.entry_fee_amount) : null,
           entry_fee_notes: addPotForm.entry_fee_notes.trim() || null,
           is_monetary: addPotForm.is_monetary,
@@ -241,9 +242,14 @@ export default function GroupSeasonDetailClient({ groupSeasonId }: { groupSeason
 
   const inputCls = "w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600";
   const distTypeLabel: Record<string, string> = {
-    position_based: "Position-Based", metric_weighted: "Metric (Weighted)",
-    metric_equal: "Metric (Equal Split)", equal_split: "Equal Split",
-    non_monetary: "Non-Monetary", entry_only: "Entry Only",
+    season_standings_winner: "Season Standings Winner",
+    winner_takes_all: "Winner Takes All",
+    position_based: "By Finishing Position",
+    metric_weighted: "Proportional to Metric",
+    metric_equal: "Equal Split (Qualifiers)",
+    equal_split: "Equal Split (All Players)",
+    non_monetary: "Non-Cash Prize",
+    entry_only: "Entry Only",
   };
   const potStatusColour: Record<string, string> = {
     active: "text-emerald-400 bg-emerald-900/30 border-emerald-700/40",
@@ -454,7 +460,7 @@ export default function GroupSeasonDetailClient({ groupSeasonId }: { groupSeason
                 {!addPotForm && (
                   <button
                     type="button"
-                    onClick={() => setAddPotForm({ name: "", description: "", distribution_type: "position_based", entry_fee_amount: "", entry_fee_notes: "", is_monetary: true, prize_description: "" })}
+                    onClick={() => setAddPotForm({ name: "", description: "", distribution_type: "season_standings_winner", entry_fee_amount: "", entry_fee_notes: "", is_monetary: true, prize_description: "" })}
                     className="text-[10px] text-emerald-300/70 hover:text-emerald-300 border border-emerald-800/50 rounded-full px-2.5 py-1"
                   >
                     + Add Pot
@@ -586,12 +592,14 @@ export default function GroupSeasonDetailClient({ groupSeasonId }: { groupSeason
                   <input type="text" placeholder="Name (e.g. Season Points Pot)" value={addPotForm.name}
                     onChange={(e) => setAddPotForm((f) => f && { ...f, name: e.target.value })} className={inputCls} />
                   <select value={addPotForm.distribution_type}
-                    onChange={(e) => setAddPotForm((f) => f && { ...f, distribution_type: e.target.value as PrizePotDistributionType })}
+                    onChange={(e) => setAddPotForm((f) => f && { ...f, distribution_type: e.target.value as PrizePotDistributionType | "winner_takes_all" })}
                     className={inputCls}>
-                    <option value="position_based">Position-Based (1st/2nd/3rd splits)</option>
-                    <option value="equal_split">Equal Split</option>
-                    <option value="non_monetary">Non-Monetary</option>
-                    <option value="entry_only">Entry Fee Only</option>
+                    <option value="season_standings_winner">Season standings winner (FedEx / points race)</option>
+                    <option value="winner_takes_all">Winner takes all (event result)</option>
+                    <option value="position_based">By finishing position (custom splits)</option>
+                    <option value="equal_split">Equal split (all enrolled players)</option>
+                    <option value="non_monetary">Non-cash prize (trophy, voucher, etc.)</option>
+                    <option value="entry_only">Entry collected, no payout</option>
                   </select>
                   {addPotForm.distribution_type === "non_monetary" && (
                     <input type="text" placeholder="Prize description" value={addPotForm.prize_description}

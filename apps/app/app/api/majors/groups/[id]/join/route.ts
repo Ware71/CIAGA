@@ -18,10 +18,22 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // Check not already a member
     const { data: existing } = await supabaseAdmin
       .from("major_group_memberships")
-      .select("status")
+      .select("id, status")
       .eq("group_id", id)
       .eq("profile_id", profileId)
       .maybeSingle();
+
+    // Accept a pending invite
+    if (existing && (existing as any).status === "invited") {
+      const { data: updated, error: upErr } = await supabaseAdmin
+        .from("major_group_memberships")
+        .update({ status: "active" })
+        .eq("id", (existing as any).id)
+        .select("*")
+        .single();
+      if (upErr) throw upErr;
+      return NextResponse.json({ membership: updated });
+    }
 
     if (existing) {
       return NextResponse.json({ error: "Already a member or pending" }, { status: 409 });

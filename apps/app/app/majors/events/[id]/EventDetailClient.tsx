@@ -1458,7 +1458,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
   const [addPotForm, setAddPotForm] = useState<{
     name: string;
     description: string;
-    distribution_type: PrizePotDistributionType;
+    distribution_type: PrizePotDistributionType | "winner_takes_all";
     entry_fee_amount: string;
     entry_fee_notes: string;
     prize_table: PrizeTableEntry[];
@@ -3081,10 +3081,12 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
             body: JSON.stringify({
               name: addPotForm.name.trim(),
               description: addPotForm.description.trim() || null,
-              distribution_type: addPotForm.distribution_type,
+              distribution_type: addPotForm.distribution_type === "winner_takes_all" ? "position_based" : addPotForm.distribution_type,
               entry_fee_amount: addPotForm.entry_fee_amount ? parseFloat(addPotForm.entry_fee_amount) : null,
               entry_fee_notes: addPotForm.entry_fee_notes.trim() || null,
-              prize_table: addPotForm.distribution_type === "position_based" && addPotForm.prize_table.length > 0 ? addPotForm.prize_table : null,
+              prize_table: addPotForm.distribution_type === "winner_takes_all"
+                ? [{ position: 1, pct: 100 }]
+                : (addPotForm.distribution_type === "position_based" && addPotForm.prize_table.length > 0 ? addPotForm.prize_table : null),
               metric_type: addPotForm.metric_type || null,
               metric_description: addPotForm.metric_description.trim() || null,
               is_monetary: addPotForm.is_monetary,
@@ -3217,11 +3219,13 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
       };
 
       const distTypeLabel: Record<string, string> = {
-        position_based: "Position-Based",
-        metric_weighted: "Metric (Weighted)",
-        metric_equal: "Metric (Equal Split)",
-        equal_split: "Equal Split",
-        non_monetary: "Non-Monetary",
+        winner_takes_all: "Winner Takes All",
+        position_based: "By Finishing Position",
+        metric_weighted: "Proportional to Metric",
+        metric_equal: "Equal Split (Qualifiers)",
+        equal_split: "Equal Split (All Players)",
+        non_monetary: "Non-Cash Prize",
+        season_standings_winner: "Season Standings Winner",
         entry_only: "Entry Only",
       };
 
@@ -3242,7 +3246,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
       const emptyAddPotForm = () => ({
         name: "",
         description: "",
-        distribution_type: "position_based" as PrizePotDistributionType,
+        distribution_type: "winner_takes_all" as PrizePotDistributionType | "winner_takes_all",
         entry_fee_amount: "",
         entry_fee_notes: "",
         prize_table: [{ position: 1, pct: 50 }, { position: 2, pct: 30 }, { position: 3, pct: 20 }] as PrizeTableEntry[],
@@ -3837,16 +3841,24 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                   />
                   <select
                     value={addPotForm.distribution_type}
-                    onChange={(e) => setAddPotForm((f) => f && { ...f, distribution_type: e.target.value as PrizePotDistributionType })}
+                    onChange={(e) => setAddPotForm((f) => f && { ...f, distribution_type: e.target.value as PrizePotDistributionType | "winner_takes_all" })}
                     className={inputCls}
                   >
-                    <option value="position_based">Position-Based (1st/2nd/3rd splits)</option>
-                    <option value="metric_weighted">Metric — Weighted (e.g. proportional to two's count)</option>
-                    <option value="metric_equal">Metric — Equal Split (e.g. anyone with a two)</option>
-                    <option value="equal_split">Equal Split (all enrolled players)</option>
-                    <option value="non_monetary">Non-Monetary (voucher, trophy, etc.)</option>
-                    <option value="entry_only">Entry Fee Only (no distribution)</option>
+                    <option value="winner_takes_all">Winner Takes All</option>
+                    <option value="position_based">By finishing position (custom splits)</option>
+                    <option value="metric_weighted">Proportional to metric (e.g. number of twos)</option>
+                    <option value="metric_equal">Equal split among qualifiers (e.g. anyone with a two)</option>
+                    <option value="equal_split">Equal split (all enrolled players)</option>
+                    <option value="non_monetary">Non-cash prize (trophy, voucher, etc.)</option>
+                    <option value="entry_only">Entry collected, no payout</option>
                   </select>
+
+                  {/* Winner Takes All info */}
+                  {addPotForm.distribution_type === "winner_takes_all" && (
+                    <div className="rounded-xl border border-emerald-900/40 bg-emerald-950/20 px-3 py-2">
+                      <div className="text-[11px] text-emerald-200/60">100% of the pot goes to 1st place.</div>
+                    </div>
+                  )}
 
                   {/* Position-based prize table editor */}
                   {addPotForm.distribution_type === "position_based" && (
@@ -3881,9 +3893,11 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                       ))}
                       {(() => {
                         const total = addPotForm.prize_table.reduce((s, r) => s + r.pct, 0);
+                        const remainder = 100 - total;
                         return (
-                          <div className={`text-[10px] font-semibold ${total === 100 ? "text-emerald-400" : "text-amber-400"}`}>
-                            Total: {total}% {total !== 100 && "(must equal 100%)"}
+                          <div className={`text-[10px] font-semibold ${total <= 100 ? "text-emerald-400" : "text-red-400"}`}>
+                            Paying out: {total}%{remainder > 0 ? ` · ${remainder}% retained by group` : ""}
+                            {total > 100 && " (over 100%)"}
                           </div>
                         );
                       })()}

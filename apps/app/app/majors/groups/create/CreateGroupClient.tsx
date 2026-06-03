@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { getViewerSession } from "@/lib/auth/viewerSession";
@@ -114,6 +114,13 @@ export default function CreateGroupClient() {
     { name: `${currentYear} Season`, start_date: `${currentYear}-01-01`, end_date: `${currentYear}-12-31`, mode: "annual" },
   ]);
 
+  // Post-creation invite state
+  const [createdGroupId, setCreatedGroupId] = useState<string | null>(null);
+  const [memberSearchQuery, setMemberSearchQuery] = useState("");
+  const [memberSearchResults, setMemberSearchResults] = useState<{ id: string; name: string | null; avatar_url: string | null }[]>([]);
+  const [invitedMembers, setInvitedMembers] = useState<{ id: string; name: string | null }[]>([]);
+  const [inviting, setInviting] = useState<string | null>(null);
+
   const update = (field: keyof FormState, value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
@@ -140,7 +147,7 @@ export default function CreateGroupClient() {
     setSeasons((prev) => prev.filter((_, idx) => idx !== i));
   };
 
-  const totalSteps = 5;
+  const totalSteps = 6;
 
   const canNext = (): boolean => {
     if (step === 0) return form.name.trim().length > 0;
@@ -162,6 +169,42 @@ export default function CreateGroupClient() {
       points_model: (defaultPointsModel as any) ?? null,
       standings_contribution: hasDefaults ? "both" : null,
     };
+  };
+
+  // Debounced member search when on invite step
+  useEffect(() => {
+    if (!memberSearchQuery.trim() || !createdGroupId) { setMemberSearchResults([]); return; }
+    const t = setTimeout(async () => {
+      const session = await getViewerSession();
+      if (!session) return;
+      const res = await fetch(`/api/profiles/search?q=${encodeURIComponent(memberSearchQuery)}&exclude_group_id=${createdGroupId}`, {
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+      });
+      if (res.ok) {
+        const j = await res.json();
+        const alreadyInvitedIds = new Set(invitedMembers.map((m) => m.id));
+        setMemberSearchResults((j.profiles ?? []).filter((p: any) => !alreadyInvitedIds.has(p.id)));
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [memberSearchQuery, createdGroupId, invitedMembers]);
+
+  const handleInviteMember = async (profile: { id: string; name: string | null }) => {
+    if (!createdGroupId) return;
+    setInviting(profile.id);
+    try {
+      const session = await getViewerSession();
+      if (!session) return;
+      await fetch(`/api/majors/groups/${createdGroupId}/members`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ profile_id: profile.id }),
+      });
+      setInvitedMembers((prev) => [...prev, profile]);
+      setMemberSearchResults((prev) => prev.filter((p) => p.id !== profile.id));
+    } finally {
+      setInviting(null);
+    }
   };
 
   const handleSubmit = async () => {
@@ -186,7 +229,8 @@ export default function CreateGroupClient() {
       });
       const json = await res.json();
       if (!res.ok) { setError(json.error ?? "Failed to create group"); return; }
-      router.push(`/majors/groups/${json.group.id}`);
+      setCreatedGroupId(json.group.id);
+      setStep((s) => s + 1); // advance to invite step
     } finally {
       setSubmitting(false);
     }
@@ -531,6 +575,63 @@ export default function CreateGroupClient() {
       </div>
       {error && <div className="text-sm text-red-400">{error}</div>}
     </div>,
+
+    /* Step 5: Invite Members */
+    <div key="step5" className="space-y-4">
+      <div className="text-sm font-semibold text-emerald-50">Group Created! Invite Members</div>
+      <p className="text-[12px] text-emerald-200/55">Search for players to invite. They&apos;ll see a notification on their Majors Hub.</p>
+
+      <div className="space-y-2">
+        <input
+          type="text"
+          placeholder="Search by name…"
+          value={memberSearchQuery}
+          onChange={(e) => setMemberSearchQuery(e.target.value)}
+          className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
+          autoFocus
+        />
+
+        {memberSearchResults.length > 0 && (
+          <div className="rounded-xl border border-emerald-900/50 bg-[#042713] overflow-hidden divide-y divide-emerald-900/40">
+            {memberSearchResults.map((profile) => (
+              <div key={profile.id} className="flex items-center gap-3 px-3 py-2.5">
+                <div className="h-8 w-8 rounded-full bg-emerald-900/60 flex items-center justify-center text-[11px] font-bold text-emerald-200 shrink-0">
+                  {profile.name?.slice(0, 2).toUpperCase() ?? "??"}
+                </div>
+                <span className="flex-1 text-sm text-emerald-50 truncate">{profile.name ?? "Unknown"}</span>
+                <button
+                  type="button"
+                  onClick={() => handleInviteMember(profile)}
+                  disabled={inviting === profile.id}
+                  className="shrink-0 text-[11px] font-semibold text-emerald-300 border border-emerald-700/50 rounded-full px-3 py-1 hover:bg-emerald-900/40 disabled:opacity-50"
+                >
+                  {inviting === profile.id ? "…" : "Invite"}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {memberSearchQuery.length >= 2 && memberSearchResults.length === 0 && (
+          <div className="text-[11px] text-emerald-200/40 text-center py-2">No players found</div>
+        )}
+      </div>
+
+      {invitedMembers.length > 0 && (
+        <div className="space-y-1.5">
+          <div className="text-[10px] uppercase tracking-wider text-emerald-200/45">Invited</div>
+          {invitedMembers.map((m) => (
+            <div key={m.id} className="flex items-center gap-3 rounded-xl border border-emerald-700/30 bg-emerald-900/20 px-3 py-2">
+              <div className="h-7 w-7 rounded-full bg-emerald-900/60 flex items-center justify-center text-[10px] font-bold text-emerald-200 shrink-0">
+                {m.name?.slice(0, 2).toUpperCase() ?? "??"}
+              </div>
+              <span className="flex-1 text-sm text-emerald-200/80 truncate">{m.name ?? "Unknown"}</span>
+              <span className="text-[10px] text-emerald-400/70">Invited ✓</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>,
   ];
 
   return (
@@ -539,7 +640,7 @@ export default function CreateGroupClient() {
       <div className="flex items-center justify-between mb-6">
         <button
           type="button"
-          onClick={() => (step === 0 ? router.back() : setStep((s) => s - 1))}
+          onClick={() => step === 0 ? router.back() : step === totalSteps - 1 && createdGroupId ? router.push(`/majors/groups/${createdGroupId}`) : setStep((s) => s - 1)}
           className="text-[11px] text-emerald-100/70 hover:text-emerald-50"
         >
           ← {step === 0 ? "Back" : "Previous"}
@@ -579,16 +680,17 @@ export default function CreateGroupClient() {
 
       {/* Navigation */}
       <div className="mt-6 pb-2">
-        {step < totalSteps - 1 ? (
+        {step === totalSteps - 1 ? (
+          // Last step (Invite Members) — Done navigates to the group
           <button
             type="button"
-            onClick={() => setStep((s) => s + 1)}
-            disabled={!canNext()}
-            className="w-full py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-40"
+            onClick={() => createdGroupId && router.push(`/majors/groups/${createdGroupId}`)}
+            className="w-full py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600"
           >
-            Next
+            {invitedMembers.length > 0 ? "Done" : "Skip & Go to Group"}
           </button>
-        ) : (
+        ) : step === totalSteps - 2 ? (
+          // Confirm step — creates the group
           <button
             type="button"
             onClick={handleSubmit}
@@ -596,6 +698,16 @@ export default function CreateGroupClient() {
             className="w-full py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
           >
             {submitting ? "Creating…" : "Create Group"}
+          </button>
+        ) : (
+          // Earlier steps — advance
+          <button
+            type="button"
+            onClick={() => setStep((s) => s + 1)}
+            disabled={!canNext()}
+            className="w-full py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-40"
+          >
+            Next
           </button>
         )}
       </div>

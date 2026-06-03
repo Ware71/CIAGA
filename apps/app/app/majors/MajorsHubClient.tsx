@@ -7,21 +7,33 @@ import type { MajorGroup } from "@/lib/majors/types";
 
 type GroupSummary = MajorGroup & { member_count: number; role?: string };
 
+type PendingInvite = {
+  id: string;
+  group_id: string;
+  joined_at: string;
+  group: { id: string; name: string; type: string; image_url: string | null } | null;
+  inviter: { id: string; name: string | null } | null;
+};
+
 export default function MajorsHubClient() {
   const router = useRouter();
   const [myGroups, setMyGroups] = useState<GroupSummary[]>([]);
   const [discoverGroups, setDiscoverGroups] = useState<GroupSummary[]>([]);
+  const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
   const [loading, setLoading] = useState(true);
   const [joiningId, setJoiningId] = useState<string | null>(null);
   const [joinedIds, setJoinedIds] = useState<Record<string, "active" | "pending">>({});
+  const [acceptingInviteId, setAcceptingInviteId] = useState<string | null>(null);
+  const [decliningInviteId, setDecliningInviteId] = useState<string | null>(null);
 
   const fetchGroups = useCallback(async () => {
     const session = await getViewerSession();
     if (!session) return;
     const headers = { Authorization: `Bearer ${session.accessToken}` };
-    const [mineRes, discoverRes] = await Promise.all([
+    const [mineRes, discoverRes, invitesRes] = await Promise.all([
       fetch("/api/majors/groups", { headers }),
       fetch("/api/majors/groups?mode=discover", { headers }),
+      fetch("/api/majors/groups/invites", { headers }),
     ]);
     if (mineRes.ok) {
       const j = await mineRes.json();
@@ -30,6 +42,10 @@ export default function MajorsHubClient() {
     if (discoverRes.ok) {
       const j = await discoverRes.json();
       setDiscoverGroups(j.groups ?? []);
+    }
+    if (invitesRes.ok) {
+      const j = await invitesRes.json();
+      setPendingInvites(j.invites ?? []);
     }
   }, []);
 
@@ -45,6 +61,40 @@ export default function MajorsHubClient() {
     })();
     return () => { cancelled = true; };
   }, [fetchGroups]);
+
+  const handleAcceptInvite = async (invite: PendingInvite) => {
+    setAcceptingInviteId(invite.id);
+    try {
+      const session = await getViewerSession();
+      if (!session) return;
+      const res = await fetch(`/api/majors/groups/${invite.group_id}/join`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (res.ok) {
+        setPendingInvites((prev) => prev.filter((i) => i.id !== invite.id));
+        await fetchGroups();
+      }
+    } finally {
+      setAcceptingInviteId(null);
+    }
+  };
+
+  const handleDeclineInvite = async (invite: PendingInvite) => {
+    setDecliningInviteId(invite.id);
+    try {
+      const session = await getViewerSession();
+      if (!session) return;
+      await fetch(`/api/majors/groups/${invite.group_id}/members?profile_id=${session.profileId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+      });
+      setPendingInvites((prev) => prev.filter((i) => i.id !== invite.id));
+    } finally {
+      setDecliningInviteId(null);
+    }
+  };
 
   const handleJoin = async (group: GroupSummary) => {
     setJoiningId(group.id);
@@ -100,6 +150,56 @@ export default function MajorsHubClient() {
         <div className="text-sm text-emerald-100/60 text-center py-20">Loading…</div>
       ) : (
         <div className="px-4 space-y-8 pb-12">
+          {/* Pending Invitations */}
+          {pendingInvites.length > 0 && (
+            <section className="space-y-2">
+              <h2 className="text-[10px] uppercase tracking-[0.18em] text-amber-300/70">Invitations</h2>
+              {pendingInvites.map((invite) => (
+                <div
+                  key={invite.id}
+                  className="rounded-2xl border border-amber-700/40 bg-amber-950/20 px-3 py-3 space-y-2"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-amber-800/60 to-amber-950 flex items-center justify-center text-sm font-bold text-amber-200 shrink-0">
+                      {invite.group?.name.slice(0, 2).toUpperCase() ?? "?"}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold text-emerald-50 truncate">{invite.group?.name ?? "Unknown Group"}</div>
+                      <div className="text-[10px] text-emerald-200/50 mt-0.5">
+                        Invited by {invite.inviter?.name ?? "someone"}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => invite.group && router.push(`/majors/groups/${invite.group_id}`)}
+                      className="text-[11px] text-amber-300/70 hover:text-amber-300 shrink-0"
+                    >
+                      View →
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleAcceptInvite(invite)}
+                      disabled={acceptingInviteId === invite.id}
+                      className="flex-1 py-1.5 rounded-full bg-emerald-700 text-xs font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
+                    >
+                      {acceptingInviteId === invite.id ? "Joining…" : "Accept"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeclineInvite(invite)}
+                      disabled={decliningInviteId === invite.id}
+                      className="flex-1 py-1.5 rounded-full border border-emerald-800/50 text-xs text-emerald-200/60 hover:text-emerald-200 disabled:opacity-50"
+                    >
+                      Decline
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </section>
+          )}
+
           {/* My Groups */}
           <section className="space-y-3">
             <div className="flex items-center justify-between">

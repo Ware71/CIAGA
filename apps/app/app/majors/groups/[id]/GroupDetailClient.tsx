@@ -864,6 +864,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       : "text-emerald-200/50 border-emerald-900/50 bg-transparent";
 
   const pendingMembers = members.filter((m) => m.status === "pending");
+  const invitedMembers = members.filter((m) => m.status === "invited");
   const activeMembers = members.filter((m) => m.status === "active");
 
   const tabContent: Record<Tab, React.ReactNode> = {
@@ -1442,6 +1443,26 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                     Decline
                   </button>
                 </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Invited members — visible to admins */}
+        {invitedMembers.length > 0 && isAdminOrOwner && (
+          <div className="rounded-2xl border border-emerald-800/30 bg-emerald-950/30 p-3 space-y-2">
+            <div className="text-[10px] uppercase tracking-wider text-emerald-200/40 font-semibold">
+              {invitedMembers.length} Invited
+            </div>
+            {invitedMembers.map((m) => (
+              <div key={m.id} className="flex items-center gap-3 px-1 py-1">
+                <div className="h-8 w-8 rounded-full bg-emerald-900/60 flex items-center justify-center text-[10px] font-bold text-emerald-200 shrink-0">
+                  {m.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
+                </div>
+                <span className="flex-1 text-[13px] text-emerald-200/70 truncate">{m.profile?.name ?? m.profile_id}</span>
+                <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full border border-amber-700/40 text-amber-300/70 bg-amber-900/20">
+                  Invited
+                </span>
               </div>
             ))}
           </div>
@@ -3025,9 +3046,9 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
               }`}
             >
               {t.label}
-              {t.id === "members" && pendingMembers.length > 0 && isAdminOrOwner && (
+              {t.id === "members" && (pendingMembers.length + invitedMembers.length) > 0 && isAdminOrOwner && (
                 <span className="ml-1 inline-flex items-center justify-center h-4 w-4 rounded-full bg-amber-500 text-[9px] font-bold text-white">
-                  {pendingMembers.length}
+                  {pendingMembers.length + invitedMembers.length}
                 </span>
               )}
             </button>

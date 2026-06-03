@@ -104,6 +104,7 @@ export async function POST(req: Request) {
       template_points_model,
       template_rules_text,
       template_settings,
+      default_prize_pots,
     } = body;
 
     if (!name?.trim()) {
@@ -142,6 +143,7 @@ export async function POST(req: Request) {
         template_points_model: template_points_model ?? "none",
         template_rules_text: template_rules_text ?? null,
         template_settings: template_settings ?? {},
+        default_prize_pots: default_prize_pots ?? null,
         created_by_profile_id: profileId,
       })
       .select("*")

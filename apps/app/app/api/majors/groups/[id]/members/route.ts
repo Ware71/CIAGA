@@ -50,6 +50,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         profile_id: body.profile_id,
         role: "member",
         status: "invited",
+        invited_by: profileId,
       }, { onConflict: "group_id,profile_id", ignoreDuplicates: false })
       .select("*")
       .single();
