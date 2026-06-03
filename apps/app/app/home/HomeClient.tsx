@@ -99,6 +99,7 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
   const [majorsPreload, setMajorsPreload] = useState<MajorHubSummary | null>(initialMajors ?? null);
   const [retryKey, setRetryKey] = useState(0);
   const [showInviteSheet, setShowInviteSheet] = useState(false);
+  const [actioningInvite, setActioningInvite] = useState<Record<string, "declining">>({});
 
   useEffect(() => {
     const updateViewport = () => {
@@ -356,10 +357,7 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
                 type="button"
                 className="relative h-14 w-14 rounded-full grid place-items-center text-emerald-100/75 hover:text-emerald-50 hover:bg-emerald-900/25"
                 onClick={() => {
-                  const invites = majorsPreload?.pending_invites ?? [];
-                  if (invites.length === 1) {
-                    router.push(`/majors/groups/${invites[0].group_id}`);
-                  } else if (invites.length > 1) {
+                  if ((majorsPreload?.pending_invites?.length ?? 0) > 0) {
                     setShowInviteSheet(true);
                   }
                 }}
@@ -377,8 +375,8 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
               </div>
             </div>
 
-            {/* Invite sheet — multiple pending invites */}
-            {showInviteSheet && (majorsPreload?.pending_invites?.length ?? 0) > 1 && (
+            {/* Invite sheet */}
+            {showInviteSheet && (majorsPreload?.pending_invites?.length ?? 0) > 0 && (
               <div
                 className="fixed inset-0 z-50 flex items-end"
                 onClick={() => setShowInviteSheet(false)}
@@ -388,26 +386,71 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
                   className="relative w-full rounded-t-3xl bg-[#071c10] border-t border-emerald-900/60 px-4 pt-4 pb-10 space-y-2"
                   onClick={(e) => e.stopPropagation()}
                 >
+                  <div className="w-10 h-1 rounded-full bg-emerald-800/60 mx-auto mb-3" />
                   <div className="text-[11px] uppercase tracking-widest text-emerald-200/50 font-semibold mb-3">Group Invites</div>
-                  {(majorsPreload?.pending_invites ?? []).map((inv) => (
-                    <button
-                      key={inv.group_id}
-                      type="button"
-                      onClick={() => { setShowInviteSheet(false); router.push(`/majors/groups/${inv.group_id}`); }}
-                      className="w-full flex items-center gap-3 rounded-2xl border border-emerald-900/50 bg-emerald-950/40 px-4 py-3 text-left hover:bg-emerald-900/30"
-                    >
-                      <div className="h-9 w-9 rounded-full bg-emerald-900/60 grid place-items-center text-[11px] font-bold text-emerald-200 shrink-0 overflow-hidden">
-                        {inv.group.image_url
-                          ? <img src={inv.group.image_url} alt="" className="h-full w-full object-cover" />
-                          : inv.group.name.slice(0, 2).toUpperCase()}
+                  {(majorsPreload?.pending_invites ?? []).map((inv) => {
+                    const isActioning = !!actioningInvite[inv.group_id];
+                    return (
+                      <div
+                        key={inv.group_id}
+                        className="w-full flex items-center gap-3 rounded-2xl border border-emerald-900/50 bg-emerald-950/40 px-4 py-3"
+                      >
+                        <div className="h-9 w-9 rounded-full bg-emerald-900/60 grid place-items-center text-[11px] font-bold text-emerald-200 shrink-0 overflow-hidden">
+                          {inv.group.image_url
+                            ? <img src={inv.group.image_url} alt="" className="h-full w-full object-cover" />
+                            : inv.group.name.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-semibold text-emerald-50 truncate">{inv.group.name}</div>
+                          <div className="text-[11px] text-emerald-200/50">You&apos;ve been invited</div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            disabled={isActioning}
+                            onClick={() => {
+                              setShowInviteSheet(false);
+                              router.push(`/majors/groups/${inv.group_id}?autoJoin=1`);
+                            }}
+                            className="text-[11px] font-semibold text-emerald-900 bg-emerald-400 hover:bg-emerald-300 disabled:opacity-50 rounded-full px-3 py-1.5 leading-none"
+                          >
+                            Accept
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isActioning}
+                            onClick={async () => {
+                              if (!myProfileId) return;
+                              setActioningInvite((prev) => ({ ...prev, [inv.group_id]: "declining" }));
+                              try {
+                                const session = await getViewerSession();
+                                if (!session) return;
+                                await fetch(`/api/majors/groups/${inv.group_id}/members?profile_id=${myProfileId}`, {
+                                  method: "DELETE",
+                                  headers: { Authorization: `Bearer ${session.accessToken}` },
+                                });
+                                setMajorsPreload((prev) => {
+                                  if (!prev) return prev;
+                                  const updated = prev.pending_invites.filter((i) => i.group_id !== inv.group_id);
+                                  if (updated.length === 0) setShowInviteSheet(false);
+                                  return { ...prev, pending_invites: updated };
+                                });
+                              } finally {
+                                setActioningInvite((prev) => {
+                                  const next = { ...prev };
+                                  delete next[inv.group_id];
+                                  return next;
+                                });
+                              }
+                            }}
+                            className="text-[11px] font-semibold text-emerald-200/60 hover:text-emerald-200 disabled:opacity-50 rounded-full border border-emerald-900/60 px-3 py-1.5 leading-none"
+                          >
+                            {isActioning ? "…" : "Decline"}
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-semibold text-emerald-50 truncate">{inv.group.name}</div>
-                        <div className="text-[11px] text-emerald-200/50">You&apos;ve been invited</div>
-                      </div>
-                      <span className="text-[11px] text-emerald-400/80 shrink-0">View →</span>
-                    </button>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}

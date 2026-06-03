@@ -50,18 +50,22 @@ export async function GET(req: Request) {
       const groupTxs = txList.filter((t) => t.group_id === groupId);
       const balance = groupTxs.reduce((s: number, t: any) => s + (t.amount ?? 0), 0);
 
-      // Aggregate by event
-      const eventMap = new Map<string | null, { event_id: string | null; event_name: string | null; net: number }>();
+      // Aggregate by event, collecting individual transactions
+      type TxRow = { id: string; type: string; amount: number; note: string | null };
+      const eventMap = new Map<string, { event_id: string | null; event_name: string | null; net: number; transactions: TxRow[] }>();
       for (const tx of groupTxs) {
         const key = tx.event_id ?? "__no_event__";
         const existing = eventMap.get(key);
+        const row: TxRow = { id: tx.id, type: tx.type ?? "", amount: tx.amount ?? 0, note: tx.note ?? null };
         if (existing) {
           existing.net += tx.amount ?? 0;
+          existing.transactions.push(row);
         } else {
           eventMap.set(key, {
             event_id: tx.event_id ?? null,
             event_name: (tx.event as any)?.name ?? null,
             net: tx.amount ?? 0,
+            transactions: [row],
           });
         }
       }

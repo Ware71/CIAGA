@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 import { supabase } from "@/lib/supabaseClient";
 import { InvitePlayerSheet } from "@/app/majors/groups/InvitePlayerSheet";
@@ -390,6 +390,8 @@ function MemberRow({
 
 export default function GroupDetailClient({ groupId }: { groupId: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const autoJoinFired = useRef(false);
   const [tab, setTab] = useState<Tab>("overview");
   const [compSubTab, setCompSubTab] = useState<"active" | "completed">("active");
   const [showCancelled, setShowCancelled] = useState(false);
@@ -557,6 +559,15 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     })();
     return () => { cancelled = true; };
   }, [groupId]);
+
+  // Auto-trigger join when navigated from bell notification with ?autoJoin=1
+  useEffect(() => {
+    if (autoJoinFired.current) return;
+    if (searchParams?.get("autoJoin") !== "1") return;
+    if (joinedStatus !== "invited") return;
+    autoJoinFired.current = true;
+    handleJoin();
+  }, [joinedStatus]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Lazy-load finances when the tab is first opened
   useEffect(() => {

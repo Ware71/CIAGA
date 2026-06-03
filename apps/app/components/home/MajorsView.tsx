@@ -117,11 +117,12 @@ function GroupCard({ group, onClick }: { group: MajorGroup & { member_count: num
   );
 }
 
+type Transaction = { id: string; type: string; amount: number; note: string | null };
 type GroupBalance = {
   group_id: string;
   group_name: string;
   balance: number;
-  by_event: { event_id: string | null; event_name: string | null; net: number }[];
+  by_event: { event_id: string | null; event_name: string | null; net: number; transactions: Transaction[] }[];
 };
 type BalanceData = {
   total_balance: number;
@@ -141,10 +142,25 @@ function PurseIcon({ size = 18, className }: { size?: number; className?: string
   );
 }
 
+function fmtAbs(n: number) { return `£${Math.abs(n).toFixed(2)}`; }
+function fmtSigned(n: number) { return n > 0 ? `-${fmtAbs(n)}` : `+${fmtAbs(n)}`; }
+function humaniseType(t: string) {
+  return t.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+function isPrize(type: string) {
+  return type.toLowerCase().includes("prize") || type.toLowerCase().includes("winning");
+}
+
 function BalanceDrawer({ balance, onClose }: { balance: BalanceData; onClose: () => void }) {
-  const fmt = (n: number) => `£${Math.abs(n).toFixed(2)}`;
   const debtGroups = balance.groups.filter((g) => g.balance > 0);
   const creditGroups = balance.groups.filter((g) => g.balance < 0);
+
+  const totalDisplay = balance.total_balance === 0
+    ? <span className="text-lg font-bold text-emerald-400">Settled</span>
+    : balance.has_debt
+    ? <span className="text-lg font-bold text-red-400">owe {fmtSigned(balance.total_balance)}</span>
+    : <span className="text-lg font-bold text-emerald-400">{fmtSigned(balance.total_balance)}</span>;
+
   const content = (
     <div className="fixed inset-0 z-[200]" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60" />
@@ -165,9 +181,7 @@ function BalanceDrawer({ balance, onClose }: { balance: BalanceData; onClose: ()
         <div className="mx-4 mb-3 rounded-2xl border bg-[#0b3b21]/80 p-4 flex items-center justify-between"
           style={{ borderColor: balance.has_debt ? "rgba(239,68,68,0.3)" : "rgba(16,185,129,0.3)" }}>
           <div className="text-[11px] uppercase tracking-widest text-emerald-200/50">Total</div>
-          <div className={`text-lg font-bold ${balance.has_debt ? "text-red-400" : "text-emerald-400"}`}>
-            {balance.has_debt ? `Owes ${fmt(balance.total_balance)}` : balance.total_balance < 0 ? `Credit ${fmt(balance.total_balance)}` : "Settled"}
-          </div>
+          {totalDisplay}
         </div>
 
         <div className="px-4 pb-4 space-y-3">
@@ -179,14 +193,29 @@ function BalanceDrawer({ balance, onClose }: { balance: BalanceData; onClose: ()
                 <div key={g.group_id} className="rounded-2xl border border-red-900/30 bg-red-950/20 p-3 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-semibold text-emerald-50 truncate">{g.group_name}</span>
-                    <span className="text-sm font-bold text-red-400 shrink-0 ml-2">Owes {fmt(g.balance)}</span>
+                    <span className="text-sm font-bold text-red-400 shrink-0 ml-2">owe {fmtSigned(g.balance)}</span>
                   </div>
                   {g.by_event.filter((e) => e.net !== 0).map((e, i) => (
-                    <div key={e.event_id ?? i} className="flex items-center justify-between text-[11px] pl-1">
-                      <span className="text-emerald-200/60 truncate">{e.event_name ?? "General"}</span>
-                      <span className={`shrink-0 ml-2 ${e.net > 0 ? "text-red-400/80" : "text-emerald-400/80"}`}>
-                        {e.net > 0 ? `+${fmt(e.net)}` : `-${fmt(e.net)}`}
-                      </span>
+                    <div key={e.event_id ?? i} className="pl-1 space-y-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-emerald-200/70 truncate font-medium">{e.event_name ?? "General"}</span>
+                        <span className={`shrink-0 ml-2 font-semibold ${e.net > 0 ? "text-red-400/80" : "text-emerald-400/80"}`}>
+                          {fmtSigned(e.net)}
+                        </span>
+                      </div>
+                      {(e.transactions ?? []).map((tx) => (
+                        <div key={tx.id} className="flex items-center justify-between text-[10px] pl-2">
+                          <span className="text-emerald-200/50 truncate flex items-center gap-1.5">
+                            {tx.note || humaniseType(tx.type)}
+                            {isPrize(tx.type) && tx.amount < 0 && (
+                              <span className="text-[9px] font-semibold text-emerald-300 border border-emerald-700/50 rounded-full px-1.5 py-0.5 leading-none">won</span>
+                            )}
+                          </span>
+                          <span className={`shrink-0 ml-2 ${tx.amount > 0 ? "text-red-400/70" : "text-emerald-400/70"}`}>
+                            {fmtSigned(tx.amount)}
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   ))}
                 </div>
@@ -202,14 +231,29 @@ function BalanceDrawer({ balance, onClose }: { balance: BalanceData; onClose: ()
                 <div key={g.group_id} className="rounded-2xl border border-emerald-800/30 bg-emerald-950/20 p-3 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-semibold text-emerald-50 truncate">{g.group_name}</span>
-                    <span className="text-sm font-bold text-emerald-400 shrink-0 ml-2">Credit {fmt(g.balance)}</span>
+                    <span className="text-sm font-bold text-emerald-400 shrink-0 ml-2">{fmtSigned(g.balance)}</span>
                   </div>
                   {g.by_event.filter((e) => e.net !== 0).map((e, i) => (
-                    <div key={e.event_id ?? i} className="flex items-center justify-between text-[11px] pl-1">
-                      <span className="text-emerald-200/60 truncate">{e.event_name ?? "General"}</span>
-                      <span className={`shrink-0 ml-2 ${e.net > 0 ? "text-red-400/80" : "text-emerald-400/80"}`}>
-                        {e.net > 0 ? `+${fmt(e.net)}` : `-${fmt(e.net)}`}
-                      </span>
+                    <div key={e.event_id ?? i} className="pl-1 space-y-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-emerald-200/70 truncate font-medium">{e.event_name ?? "General"}</span>
+                        <span className={`shrink-0 ml-2 font-semibold ${e.net > 0 ? "text-red-400/80" : "text-emerald-400/80"}`}>
+                          {fmtSigned(e.net)}
+                        </span>
+                      </div>
+                      {(e.transactions ?? []).map((tx) => (
+                        <div key={tx.id} className="flex items-center justify-between text-[10px] pl-2">
+                          <span className="text-emerald-200/50 truncate flex items-center gap-1.5">
+                            {tx.note || humaniseType(tx.type)}
+                            {isPrize(tx.type) && tx.amount < 0 && (
+                              <span className="text-[9px] font-semibold text-emerald-300 border border-emerald-700/50 rounded-full px-1.5 py-0.5 leading-none">won</span>
+                            )}
+                          </span>
+                          <span className={`shrink-0 ml-2 ${tx.amount > 0 ? "text-red-400/70" : "text-emerald-400/70"}`}>
+                            {fmtSigned(tx.amount)}
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   ))}
                 </div>
@@ -231,8 +275,6 @@ function MajorsHubPreview({ open, initialHub }: { open: boolean; initialHub?: Ma
   const router = useRouter();
   const [hub, setHub] = useState<MajorHubSummary | null>(initialHub ?? null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [balanceData, setBalanceData] = useState<BalanceData | null>(null);
-  const [balanceDrawerOpen, setBalanceDrawerOpen] = useState(false);
 
   // Sync if the parent finishes preloading after we already mounted
   useEffect(() => {
@@ -259,27 +301,6 @@ function MajorsHubPreview({ open, initialHub }: { open: boolean; initialHub?: Ma
     })();
     return () => { cancelled = true; };
   }, [initialHub]);
-
-  // Fetch aggregate balance for purse display
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const session = await getViewerSession();
-        if (!session || cancelled) return;
-        const res = await fetch("/api/majors/balance", {
-          headers: { Authorization: `Bearer ${session.accessToken}` },
-        });
-        if (res.ok && !cancelled) {
-          const data = await res.json();
-          setBalanceData(data);
-        }
-      } catch {
-        // silently ignore
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
 
   return (
     <motion.div
@@ -324,9 +345,6 @@ function MajorsHubPreview({ open, initialHub }: { open: boolean; initialHub?: Ma
           {drawerOpen && <SeasonStatsDrawer hub={hub} onClose={() => setDrawerOpen(false)} />}
         </>
       )}
-      {balanceDrawerOpen && balanceData && (
-        <BalanceDrawer balance={balanceData} onClose={() => setBalanceDrawerOpen(false)} />
-      )}
 
       {/* Live events */}
       {hub && hub.active_events.length > 0 && (
@@ -355,30 +373,7 @@ function MajorsHubPreview({ open, initialHub }: { open: boolean; initialHub?: Ma
       {hub && hub.my_groups.length > 0 && (
         <div className="space-y-1.5">
           <div className="flex items-center justify-between gap-2">
-            {/* Purse icon + balance */}
-            <button
-              type="button"
-              onClick={() => balanceData && setBalanceDrawerOpen(true)}
-              className="relative flex items-center gap-1.5 shrink-0"
-              aria-label="My balance"
-            >
-              <div className="relative">
-                <PurseIcon size={18} className="text-emerald-300/70" />
-                {balanceData?.has_debt && (
-                  <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-red-500 border border-[#042713]" />
-                )}
-              </div>
-              {balanceData != null && (
-                <span className={`text-[11px] font-semibold ${balanceData.has_debt ? "text-red-400" : "text-emerald-300/70"}`}>
-                  {balanceData.total_balance === 0
-                    ? "£0"
-                    : balanceData.has_debt
-                    ? `-£${Math.abs(balanceData.total_balance).toFixed(2)}`
-                    : `£${Math.abs(balanceData.total_balance).toFixed(2)}`}
-                </span>
-              )}
-            </button>
-            <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/55 flex-1 text-center">My Groups</div>
+            <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/55">My Groups</div>
             <button
               type="button"
               onClick={() => router.push("/majors/groups/create")}
@@ -567,6 +562,26 @@ export function MajorsView({
   const [majorsFallbackY, setMajorsFallbackY] = useState<number>(-200);
   const majorsNudge = clamp(vh * 0.018, 8, 20);
 
+  const [balanceData, setBalanceData] = useState<BalanceData | null>(null);
+  const [balanceDrawerOpen, setBalanceDrawerOpen] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const session = await getViewerSession();
+        if (!session || cancelled) return;
+        const res = await fetch("/api/majors/balance", {
+          headers: { Authorization: `Bearer ${session.accessToken}` },
+        });
+        if (res.ok && !cancelled) setBalanceData(await res.json());
+      } catch {
+        // silently ignore
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   const computeMajorsClosedY = useCallback(() => {
     const el = majorsHeaderAnchorRef.current;
     if (!el || typeof window === "undefined") return;
@@ -639,7 +654,27 @@ export function MajorsView({
       }}
     >
       <header className="w-full max-w-sm flex items-center justify-between relative z-50 overflow-visible">
-        <div className="h-10 w-[132px]" />
+        {/* Purse / balance button */}
+        <button
+          type="button"
+          onClick={() => balanceData && setBalanceDrawerOpen(true)}
+          className="relative flex items-center gap-1.5 h-10 shrink-0"
+          aria-label="My balance"
+        >
+          <div className="relative">
+            <PurseIcon size={24} className="text-emerald-300/70" />
+            {balanceData?.has_debt && (
+              <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-red-500 border border-[#042713]" />
+            )}
+          </div>
+          {balanceData != null && (
+            <span className={`text-[11px] font-semibold ${balanceData.has_debt ? "text-red-400" : "text-emerald-300/70"}`}>
+              {balanceData.total_balance === 0
+                ? "£0"
+                : fmtSigned(balanceData.total_balance)}
+            </span>
+          )}
+        </button>
 
         <div
           ref={majorsHeaderAnchorRef}
@@ -657,6 +692,9 @@ export function MajorsView({
           <AuthUser />
         </div>
       </header>
+      {balanceDrawerOpen && balanceData && (
+        <BalanceDrawer balance={balanceData} onClose={() => setBalanceDrawerOpen(false)} />
+      )}
 
       <div className="relative flex-1 w-full max-w-sm">
         {renderRadialMenu(majorsMenuItems, handleMajorsSelect)}
