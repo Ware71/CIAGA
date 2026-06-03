@@ -317,7 +317,7 @@ export type MajorGroupMembershipWithProfile = MajorGroupMembership & {
     name: string | null;
     avatar_url: string | null;
     gender: string | null;
-  };
+  } | null;
 };
 
 export type PrizeTableEntry = {

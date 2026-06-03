@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 import { supabase } from "@/lib/supabaseClient";
+import { InvitePlayerSheet } from "@/app/majors/groups/InvitePlayerSheet";
 import type {
   MajorGroup,
   MajorGroupMembershipWithProfile,
@@ -399,6 +400,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   const [loading, setLoading] = useState(true);
   const [myRole, setMyRole] = useState<string | null>(null);
   const [myProfileId, setMyProfileId] = useState<string | null>(null);
+  const [showInvite, setShowInvite] = useState(false);
   const [joining, setJoining] = useState(false);
   const [joinedStatus, setJoinedStatus] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -1490,7 +1492,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           <button
             type="button"
             className="w-full py-2 rounded-full border border-emerald-700/50 text-sm text-emerald-200/70 hover:text-emerald-200 hover:bg-emerald-900/20 mt-2"
-            onClick={() => {/* TODO: open invite sheet */}}
+            onClick={() => setShowInvite(true)}
           >
             + Invite Member
           </button>
@@ -2331,6 +2333,20 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                       {withdrawalSubmitting ? "Saving…" : "Confirm Withdrawal"}
                     </button>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* Invite member sheet */}
+            {showInvite && group && (
+              <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60" onClick={() => setShowInvite(false)}>
+                <div className="w-full max-w-sm rounded-t-2xl bg-[#0b3b21] border border-emerald-800/60 px-4 py-5 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                  <InvitePlayerSheet
+                    groupId={group.id}
+                    excludedProfileIds={new Set(members.map((m) => m.profile_id))}
+                    onInvited={() => refreshMembers()}
+                    onClose={() => setShowInvite(false)}
+                  />
                 </div>
               </div>
             )}

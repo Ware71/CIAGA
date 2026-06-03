@@ -17,14 +17,12 @@ export async function GET(req: Request) {
       return NextResponse.json({ profiles: [] });
     }
 
-    let query = supabaseAdmin
+    const { data: profiles, error } = await supabaseAdmin
       .from("profiles")
-      .select("id, name, avatar_url")
-      .ilike("name", `%${q}%`)
-      .neq("id", profileId) // exclude self
+      .select("id, name, email, avatar_url")
+      .or(`name.ilike.%${q}%,email.ilike.%${q}%`)
+      .neq("id", profileId)
       .limit(10);
-
-    const { data: profiles, error } = await query;
     if (error) throw error;
 
     // Exclude profiles already in the group (as active, invited, or pending members)
