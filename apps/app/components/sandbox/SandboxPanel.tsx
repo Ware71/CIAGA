@@ -34,6 +34,9 @@ export function SandboxPanel() {
   const [confirmReset, setConfirmReset] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [resetDone, setResetDone] = useState(false);
+  const [confirmClearGroups, setConfirmClearGroups] = useState(false);
+  const [clearingGroups, setClearingGroups] = useState(false);
+  const [clearGroupsDone, setClearGroupsDone] = useState(false);
   const [confirmPull, setConfirmPull] = useState(false);
   const [pulling, setPulling] = useState(false);
   const [pullLog, setPullLog] = useState<PullEvent[]>([]);
@@ -149,6 +152,28 @@ export function SandboxPanel() {
       setError("Network error");
     } finally {
       setPulling(false);
+    }
+  };
+
+  const handleClearGroups = async () => {
+    setClearingGroups(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/sandbox/clear-groups", {
+        method: "POST",
+        headers: await authHeaders(),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setClearGroupsDone(true);
+        setConfirmClearGroups(false);
+      } else {
+        setError(data.error ?? "Clear failed");
+      }
+    } catch {
+      setError("Network error");
+    } finally {
+      setClearingGroups(false);
     }
   };
 
@@ -334,6 +359,54 @@ export function SandboxPanel() {
               )}
 
               {error && <p className="mt-2 text-[10px] text-red-400">{error}</p>}
+            </div>
+
+            {/* Divider */}
+            <div className="mx-4 my-4 border-t border-[#f5e6b0]/10" />
+
+            {/* ── Clear Groups ── */}
+            <div className="px-4 pb-8">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[#f5e6b0]/50">
+                Clear Groups
+              </p>
+              <p className="mb-3 text-[10px] leading-relaxed text-slate-400">
+                Deletes all major groups, memberships, standings, seasons, series, prize pots, and
+                balances. Profiles, courses, and rounds are preserved.
+              </p>
+
+              {clearGroupsDone && (
+                <p className="mb-2 text-xs text-emerald-400">✓ Groups cleared</p>
+              )}
+
+              {!confirmClearGroups ? (
+                <button
+                  onClick={() => setConfirmClearGroups(true)}
+                  className="w-full rounded-md border border-amber-700/50 bg-amber-900/30 py-2 text-xs font-medium text-amber-300 transition-colors hover:bg-amber-900/50"
+                >
+                  Clear Groups
+                </button>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-[10px] font-semibold text-amber-400">
+                    This cannot be undone. Confirm?
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setConfirmClearGroups(false)}
+                      className="flex-1 rounded-md border border-white/10 bg-white/5 py-1.5 text-xs text-slate-300 transition-colors hover:bg-white/10"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleClearGroups}
+                      disabled={clearingGroups}
+                      className="flex-1 rounded-md bg-amber-700 py-1.5 text-xs font-medium text-white transition-colors hover:bg-amber-600 disabled:opacity-50"
+                    >
+                      {clearingGroups ? "Clearing…" : "Yes, Clear"}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Divider */}
