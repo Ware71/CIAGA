@@ -5,12 +5,112 @@ import { getEventById } from "@/lib/majors/queries";
 
 export const runtime = "nodejs";
 
+/** Assign a single charge to a player, creating the debit transaction. Skips if already assigned. */
+async function assignChargeToPlayer(
+  charge: any,
+  profileId: string,
+  groupId: string,
+  eventId: string,
+  recordedBy: string
+) {
+  const { data: existing } = await supabaseAdmin
+    .from("event_player_charges")
+    .select("id")
+    .eq("charge_id", charge.id)
+    .eq("profile_id", profileId)
+    .maybeSingle();
+  if (existing) return;
+
+  const txType = charge.category === "green_fee" ? "green_fee" : "extra_charge";
+  const { data: tx } = await supabaseAdmin
+    .from("group_balance_transactions")
+    .insert({
+      group_id: groupId,
+      profile_id: profileId,
+      event_id: eventId,
+      type: txType,
+      amount: charge.amount,
+      note: charge.name,
+      recorded_by: recordedBy,
+    })
+    .select("id")
+    .single();
+
+  await supabaseAdmin.from("event_player_charges").insert({
+    event_id: eventId,
+    charge_id: charge.id,
+    profile_id: profileId,
+    name: charge.name,
+    amount: charge.amount,
+    category: charge.category,
+    charge_transaction_id: tx ? (tx as any).id : null,
+    created_by: recordedBy,
+  });
+}
+
+/** Enroll a single player in a prize pot. Skips if already enrolled or pot is distributed. */
+async function enrollPlayerInPot(
+  pot: any,
+  profileId: string,
+  eventId: string | null,
+  recordedBy: string
+) {
+  if (pot.status === "distributed") return;
+
+  const { data: existing } = await supabaseAdmin
+    .from("prize_pot_entries")
+    .select("id")
+    .eq("prize_pot_id", pot.id)
+    .eq("profile_id", profileId)
+    .maybeSingle();
+  if (existing) return;
+
+  const entryFee: number = pot.entry_fee_amount ?? 0;
+  let txId: string | null = null;
+
+  if (entryFee > 0) {
+    const { data: tx } = await supabaseAdmin
+      .from("group_balance_transactions")
+      .insert({
+        group_id: pot.group_id,
+        profile_id: profileId,
+        event_id: eventId,
+        type: "entry_fee",
+        amount: entryFee,
+        note: `Entry fee: ${pot.name}`,
+        recorded_by: recordedBy,
+      })
+      .select("id")
+      .single();
+    txId = tx ? (tx as any).id : null;
+  }
+
+  await supabaseAdmin.from("prize_pot_entries").insert({
+    prize_pot_id: pot.id,
+    profile_id: profileId,
+    amount_contributed: entryFee,
+    transaction_id: txId,
+  });
+}
+
 // POST /api/majors/competitions/[id]/enter
 // Enters the authenticated user into an event, snapshotting their handicap index.
+// Body (optional): { optional_charge_ids?, optional_pot_ids?, optional_group_charge_ids? }
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { profileId } = await getAuthedProfileOrThrow(req);
     const { id } = await params;
+
+    const body = await req.json().catch(() => ({}));
+    const {
+      optional_charge_ids = [],
+      optional_pot_ids = [],
+      optional_group_charge_ids = [],
+    } = body as {
+      optional_charge_ids?: string[];
+      optional_pot_ids?: string[];
+      optional_group_charge_ids?: string[];
+    };
 
     const event = await getEventById(id);
     if (!event) return NextResponse.json({ error: "Event not found" }, { status: 404 });
@@ -31,7 +131,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: "Entry window has closed" }, { status: 400 });
     }
 
-    // Check if group membership required
+    // Check group membership
     if (event.group_id) {
       const { data: membership } = await supabaseAdmin
         .from("major_group_memberships")
@@ -70,7 +170,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         .eq("event_id", id);
 
       if ((count ?? 0) >= maxEntries) {
-        // Event is full — direct to waitlist if enabled
         if ((event as any).waitlist_enabled) {
           return NextResponse.json(
             { error: "This event is full. You can join the waitlist instead.", full: true, waitlist_available: true },
@@ -81,7 +180,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
     }
 
-    // Check allow_credit policy: if group disallows credit, player must have zero or positive balance
+    // Check allow_credit policy
     if (event.group_id) {
       const { data: group } = await supabaseAdmin
         .from("major_groups")
@@ -90,7 +189,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         .maybeSingle();
 
       if (group && (group as any).allow_credit === false) {
-        // Calculate current balance
         const { data: txRows } = await supabaseAdmin
           .from("group_balance_transactions")
           .select("amount")
@@ -107,6 +205,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
     }
 
+    // ── Create entry ──────────────────────────────────────────────────────────
     const { data: entry, error } = await supabaseAdmin
       .from("event_entries")
       .insert({
@@ -121,7 +220,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     if (error) throw error;
 
-    // Auto-charge entry fee if one is set
+    // ── Auto-charge event entry fee (legacy field) ────────────────────────────
     const entryFee = (event as any).entry_fee_amount as number | null;
     if (entryFee && entryFee > 0 && event.group_id) {
       await supabaseAdmin.from("group_balance_transactions").insert({
@@ -129,12 +228,96 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         profile_id: profileId,
         event_id: id,
         type: "entry_fee",
-        amount: entryFee, // positive = charged to player
+        amount: entryFee,
         note: `Entry fee — ${event.name}`,
       });
     }
 
-    // Mark as joined if player was on the waitlist with 'offered' status
+    // ── Auto-assign mandatory event charges ───────────────────────────────────
+    if (event.group_id) {
+      const { data: allCharges } = await supabaseAdmin
+        .from("event_charges")
+        .select("*")
+        .eq("event_id", id);
+
+      const mandatoryCharges = (allCharges ?? []).filter((c: any) => c.is_mandatory);
+      const optionalCharges = (allCharges ?? []).filter(
+        (c: any) => !c.is_mandatory && optional_charge_ids.includes(c.id)
+      );
+
+      for (const charge of [...mandatoryCharges, ...optionalCharges]) {
+        await assignChargeToPlayer(charge, profileId, event.group_id, id, profileId);
+      }
+
+      // ── Auto-enroll in mandatory/selected event prize pots ─────────────────
+      const { data: eventPots } = await supabaseAdmin
+        .from("prize_pots")
+        .select("*")
+        .eq("event_id", id)
+        .in("status", ["active", "locked"]);
+
+      const mandatoryEventPots = (eventPots ?? []).filter((p: any) => p.is_mandatory);
+      const optionalEventPots = (eventPots ?? []).filter(
+        (p: any) => !p.is_mandatory && optional_pot_ids.includes(p.id)
+      );
+
+      for (const pot of [...mandatoryEventPots, ...optionalEventPots]) {
+        await enrollPlayerInPot(pot, profileId, id, profileId);
+      }
+
+      // ── Auto-enroll in mandatory/selected season prize pots ────────────────
+      const seasonFilters: string[] = [];
+      if ((event as any).season_id) {
+        seasonFilters.push(`competition_season_id.eq.${(event as any).season_id}`);
+      }
+      if ((event as any).group_season_id) {
+        seasonFilters.push(`group_season_id.eq.${(event as any).group_season_id}`);
+      }
+
+      if (seasonFilters.length > 0) {
+        const { data: seasonPots } = await supabaseAdmin
+          .from("prize_pots")
+          .select("*")
+          .eq("group_id", event.group_id)
+          .in("status", ["active", "locked"])
+          .or(seasonFilters.join(","));
+
+        const mandatorySeasonPots = (seasonPots ?? []).filter((p: any) => p.is_mandatory);
+        const optionalSeasonPots = (seasonPots ?? []).filter(
+          (p: any) => !p.is_mandatory && optional_pot_ids.includes(p.id)
+        );
+
+        for (const pot of [...mandatorySeasonPots, ...optionalSeasonPots]) {
+          await enrollPlayerInPot(pot, profileId, id, profileId);
+        }
+      }
+
+      // ── Apply mandatory/selected group-level charges ───────────────────────
+      const { data: allGroupCharges } = await supabaseAdmin
+        .from("group_charges")
+        .select("*")
+        .eq("group_id", event.group_id)
+        .eq("is_active", true);
+
+      const mandatoryGroupCharges = (allGroupCharges ?? []).filter((c: any) => c.is_mandatory);
+      const optionalGroupCharges = (allGroupCharges ?? []).filter(
+        (c: any) => !c.is_mandatory && optional_group_charge_ids.includes(c.id)
+      );
+
+      for (const gc of [...mandatoryGroupCharges, ...optionalGroupCharges]) {
+        await supabaseAdmin.from("group_balance_transactions").insert({
+          group_id: event.group_id,
+          profile_id: profileId,
+          event_id: id,
+          type: "extra_charge",
+          amount: gc.amount,
+          note: gc.name,
+          recorded_by: profileId,
+        });
+      }
+    }
+
+    // ── Mark as joined if was on waitlist with 'offered' status ──────────────
     if ((event as any).waitlist_enabled) {
       await supabaseAdmin
         .from("event_waitlist")

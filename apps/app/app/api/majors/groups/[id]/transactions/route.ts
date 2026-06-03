@@ -27,14 +27,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const body = await req.json();
     const { profile_id, type, amount, event_id, event_extra_id, note } = body as {
       profile_id: string;
-      type: "entry_fee" | "extra_charge" | "payment" | "winnings" | "adjustment";
+      type: "entry_fee" | "extra_charge" | "payment" | "winnings" | "adjustment" | "withdrawal";
       amount: number;
       event_id?: string;
       event_extra_id?: string;
       note?: string;
     };
 
-    const VALID_TYPES = ["entry_fee", "extra_charge", "payment", "winnings", "adjustment"];
+    const VALID_TYPES = ["entry_fee", "extra_charge", "payment", "winnings", "adjustment", "withdrawal"];
     if (!profile_id || !type || amount == null) {
       return NextResponse.json({ error: "profile_id, type, and amount are required." }, { status: 400 });
     }

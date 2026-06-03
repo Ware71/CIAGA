@@ -89,6 +89,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       metric_description,
       is_monetary = true,
       prize_description,
+      is_mandatory = false,
     } = body as {
       name: string;
       description?: string;
@@ -101,6 +102,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       metric_description?: string;
       is_monetary?: boolean;
       prize_description?: string;
+      is_mandatory?: boolean;
     };
 
     if (!name?.trim()) {
@@ -128,6 +130,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         metric_description: metric_description ?? null,
         is_monetary,
         prize_description: prize_description ?? null,
+        is_mandatory,
         created_by: profileId,
       })
       .select("*")

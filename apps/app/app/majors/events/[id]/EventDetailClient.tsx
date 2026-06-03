@@ -1403,6 +1403,13 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
   const [isEntered, setIsEntered] = useState(false);
   const [entering, setEntering] = useState(false);
   const [enterError, setEnterError] = useState<string | null>(null);
+  // Join drawer
+  const [showJoinDrawer, setShowJoinDrawer] = useState(false);
+  const [joinPreview, setJoinPreview] = useState<any | null>(null);
+  const [joinPreviewLoading, setJoinPreviewLoading] = useState(false);
+  const [selectedOptionalChargeIds, setSelectedOptionalChargeIds] = useState<string[]>([]);
+  const [selectedOptionalPotIds, setSelectedOptionalPotIds] = useState<string[]>([]);
+  const [selectedOptionalGroupChargeIds, setSelectedOptionalGroupChargeIds] = useState<string[]>([]);
   const [showAddTeeTime, setShowAddTeeTime] = useState(false);
   const [editingTeeTime, setEditingTeeTime] = useState<EventTeeTime | null>(null);
   const [myProfileId, setMyProfileId] = useState<string | null>(null);
@@ -1443,7 +1450,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
   const [prizePots, setPrizePots] = useState<PrizePotWithDetails[]>([]);
   const [financesLoaded, setFinancesLoaded] = useState(false);
   const [addingCharge, setAddingCharge] = useState(false);
-  const [addChargeForm, setAddChargeForm] = useState<{ name: string; amount: string; category: string; description: string; round_id: string } | null>(null);
+  const [addChargeForm, setAddChargeForm] = useState<{ name: string; amount: string; category: string; description: string; round_id: string; is_mandatory: boolean } | null>(null);
   const [chargeError, setChargeError] = useState<string | null>(null);
   const [chargesViewMode, setChargesViewMode] = useState<"list" | "matrix">("list");
   // Prize pot state
@@ -1459,6 +1466,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
     metric_description: string;
     is_monetary: boolean;
     prize_description: string;
+    is_mandatory: boolean;
   } | null>(null);
   const [addingPot, setAddingPot] = useState(false);
   const [expandedPotId, setExpandedPotId] = useState<string | null>(null);
@@ -1682,6 +1690,33 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
     setFinancesLoaded(true);
   };
 
+  const openJoinDrawer = async () => {
+    setJoinPreviewLoading(true);
+    setShowJoinDrawer(true);
+    setSelectedOptionalChargeIds([]);
+    setSelectedOptionalPotIds([]);
+    setSelectedOptionalGroupChargeIds([]);
+    try {
+      const session = await getViewerSession();
+      if (!session) return;
+      const res = await fetch(`/api/majors/events/${eventId}/join-preview`, {
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+      });
+      if (res.ok) {
+        const j = await res.json();
+        setJoinPreview(j);
+        // Pre-select all optional pots by default
+        setSelectedOptionalPotIds((j.optional_prize_pots ?? []).map((p: any) => p.id));
+        setSelectedOptionalPotIds((prev) => [
+          ...prev,
+          ...(j.season_optional_pots ?? []).map((p: any) => p.id),
+        ]);
+      }
+    } finally {
+      setJoinPreviewLoading(false);
+    }
+  };
+
   const handleEnter = async () => {
     setEntering(true);
     setEnterError(null);
@@ -1691,10 +1726,15 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
       const res = await fetch(`/api/majors/events/${eventId}/enter`, {
         method: "POST",
         headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({
+          optional_charge_ids: selectedOptionalChargeIds,
+          optional_pot_ids: selectedOptionalPotIds,
+          optional_group_charge_ids: selectedOptionalGroupChargeIds,
+        }),
       });
       if (res.ok) {
         setIsEntered(true);
+        setShowJoinDrawer(false);
         // Refresh participants so the leaderboard shows the new entrant
         const pRes = await fetch(`/api/majors/events/${eventId}/participants`, {
           headers: { Authorization: `Bearer ${session.accessToken}` },
@@ -1979,14 +2019,225 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
           <>
             <button
               type="button"
-              onClick={handleEnter}
+              onClick={openJoinDrawer}
               disabled={entering}
               className="w-full py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
             >
-              {entering ? "Entering…" : "Enter Event"}
+              Enter Event
             </button>
             {enterError && (
               <div className="text-sm text-red-400 text-center">{enterError}</div>
+            )}
+
+            {/* Join Drawer */}
+            {showJoinDrawer && (
+              <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70" onClick={() => setShowJoinDrawer(false)}>
+                <div
+                  className="w-full max-w-sm rounded-t-2xl bg-[#071f12] border border-emerald-800/60 flex flex-col max-h-[90vh]"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* Header */}
+                  <div className="px-4 py-4 border-b border-emerald-900/40 flex items-center justify-between shrink-0">
+                    <div className="text-sm font-semibold text-emerald-100">Join {event?.name}</div>
+                    <button type="button" onClick={() => setShowJoinDrawer(false)} className="text-emerald-200/40 text-xl leading-none">✕</button>
+                  </div>
+
+                  {/* Scrollable content */}
+                  <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+                    {joinPreviewLoading ? (
+                      <div className="text-sm text-emerald-200/50 text-center py-6">Loading…</div>
+                    ) : joinPreview ? (
+                      <>
+                        {/* Entry fee */}
+                        {joinPreview.entry_fee_amount > 0 && (
+                          <div>
+                            <div className="text-[10px] uppercase text-emerald-200/40 mb-1">Entry Fee</div>
+                            <div className="flex justify-between text-sm text-emerald-100 py-1">
+                              <span>Event Entry Fee</span>
+                              <span className="font-semibold">£{joinPreview.entry_fee_amount?.toFixed(2)}</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Mandatory section */}
+                        {(joinPreview.mandatory_charges?.length > 0 || joinPreview.mandatory_prize_pots?.length > 0 || joinPreview.season_mandatory_pots?.length > 0 || joinPreview.group_mandatory_charges?.length > 0) && (
+                          <div>
+                            <div className="text-[10px] uppercase text-emerald-200/40 mb-1">Mandatory</div>
+                            <div className="rounded-xl border border-red-900/30 bg-red-950/10 px-3 py-2 space-y-2">
+                              {joinPreview.group_mandatory_charges?.map((c: any) => (
+                                <div key={c.id} className="flex justify-between items-start text-sm">
+                                  <div>
+                                    <div className="text-emerald-100">{c.name}</div>
+                                    {c.description && <div className="text-[10px] text-emerald-200/40">{c.description}</div>}
+                                    <div className="text-[10px] text-red-400/60">Group charge</div>
+                                  </div>
+                                  <span className="font-semibold text-emerald-100">£{c.amount?.toFixed(2)}</span>
+                                </div>
+                              ))}
+                              {joinPreview.mandatory_charges?.map((c: any) => (
+                                <div key={c.id} className="flex justify-between items-start text-sm">
+                                  <div>
+                                    <div className="text-emerald-100">{c.name}</div>
+                                    {c.description && <div className="text-[10px] text-emerald-200/40">{c.description}</div>}
+                                  </div>
+                                  <span className="font-semibold text-emerald-100">£{c.amount?.toFixed(2)}</span>
+                                </div>
+                              ))}
+                              {[...joinPreview.mandatory_prize_pots ?? [], ...joinPreview.season_mandatory_pots ?? []].map((p: any) => (
+                                <div key={p.id} className="flex justify-between items-start text-sm">
+                                  <div>
+                                    <div className="text-emerald-100">{p.name}</div>
+                                    <div className="text-[10px] text-emerald-200/40">
+                                      {p.distribution_type === "position_based" ? "Position-based prize pot" :
+                                       p.distribution_type === "metric_weighted" ? "Proportionally split by metric" :
+                                       p.distribution_type === "metric_equal" ? "Equal split on metric" :
+                                       p.distribution_type === "equal_split" ? "Equal split" :
+                                       p.distribution_type === "non_monetary" ? "Non-monetary prize" : "Entry only"}
+                                      {p.group_season_id || p.competition_season_id ? " · Season Pot" : ""}
+                                    </div>
+                                  </div>
+                                  <span className="font-semibold text-emerald-100">
+                                    {p.entry_fee_amount > 0 ? `£${p.entry_fee_amount.toFixed(2)}` : "Free"}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Optional prize pots */}
+                        {((joinPreview.optional_prize_pots?.length ?? 0) + (joinPreview.season_optional_pots?.length ?? 0)) > 0 && (
+                          <div>
+                            <div className="text-[10px] uppercase text-emerald-200/40 mb-1">Optional Prize Pots</div>
+                            <div className="rounded-xl border border-emerald-900/40 bg-emerald-950/20 px-3 py-2 space-y-3">
+                              {[...joinPreview.optional_prize_pots ?? [], ...joinPreview.season_optional_pots ?? []].map((p: any) => (
+                                <button
+                                  key={p.id}
+                                  type="button"
+                                  onClick={() => setSelectedOptionalPotIds((prev) =>
+                                    prev.includes(p.id) ? prev.filter((x) => x !== p.id) : [...prev, p.id]
+                                  )}
+                                  className="w-full flex justify-between items-start text-sm text-left"
+                                >
+                                  <div className="flex items-start gap-2">
+                                    <div className={`mt-0.5 w-4 h-4 rounded border shrink-0 flex items-center justify-center text-xs ${selectedOptionalPotIds.includes(p.id) ? "bg-emerald-600 border-emerald-600" : "border-emerald-700/50"}`}>
+                                      {selectedOptionalPotIds.includes(p.id) && "✓"}
+                                    </div>
+                                    <div>
+                                      <div className="text-emerald-100">{p.name}</div>
+                                      <div className="text-[10px] text-emerald-200/40">
+                                        {p.distribution_type === "metric_weighted" ? "Proportionally split" :
+                                         p.distribution_type === "metric_equal" ? "Equal split on metric" :
+                                         p.distribution_type === "equal_split" ? "Equal split" :
+                                         p.distribution_type === "position_based" ? "Position-based" : ""}
+                                        {p.metric_type === "twos" ? " · Two's Club" :
+                                         p.metric_type === "nearest_pin" ? " · Nearest Pin" :
+                                         p.metric_type === "longest_drive" ? " · Longest Drive" : ""}
+                                        {(p.group_season_id || p.competition_season_id) ? " · Season Pot" : ""}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <span className="font-semibold text-emerald-100 shrink-0">
+                                    {p.entry_fee_amount > 0 ? `£${p.entry_fee_amount.toFixed(2)}` : "Free"}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Optional charges */}
+                        {((joinPreview.optional_charges?.length ?? 0) + (joinPreview.group_optional_charges?.length ?? 0)) > 0 && (
+                          <div>
+                            <div className="text-[10px] uppercase text-emerald-200/40 mb-1">Optional Extras</div>
+                            <div className="rounded-xl border border-emerald-900/40 bg-emerald-950/20 px-3 py-2 space-y-3">
+                              {[...joinPreview.group_optional_charges ?? [], ...joinPreview.optional_charges ?? []].map((c: any) => (
+                                <button
+                                  key={c.id}
+                                  type="button"
+                                  onClick={() => setSelectedOptionalChargeIds((prev) =>
+                                    prev.includes(c.id) ? prev.filter((x) => x !== c.id) : [...prev, c.id]
+                                  )}
+                                  className="w-full flex justify-between items-center text-sm text-left"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <div className={`w-4 h-4 rounded border shrink-0 flex items-center justify-center text-xs ${selectedOptionalChargeIds.includes(c.id) ? "bg-emerald-600 border-emerald-600" : "border-emerald-700/50"}`}>
+                                      {selectedOptionalChargeIds.includes(c.id) && "✓"}
+                                    </div>
+                                    <span className="text-emerald-100">{c.name}</span>
+                                  </div>
+                                  <span className="font-semibold text-emerald-100">£{c.amount?.toFixed(2)}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* No charges at all */}
+                        {!joinPreview.entry_fee_amount &&
+                          !joinPreview.mandatory_charges?.length &&
+                          !joinPreview.optional_charges?.length &&
+                          !joinPreview.mandatory_prize_pots?.length &&
+                          !joinPreview.optional_prize_pots?.length &&
+                          !joinPreview.season_mandatory_pots?.length &&
+                          !joinPreview.season_optional_pots?.length &&
+                          !joinPreview.group_mandatory_charges?.length &&
+                          !joinPreview.group_optional_charges?.length && (
+                          <div className="text-sm text-emerald-200/50 text-center py-2">No charges for this event — entry is free!</div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="text-sm text-red-400 text-center py-4">Could not load entry details. You can still join.</div>
+                    )}
+                  </div>
+
+                  {/* Sticky balance preview + confirm */}
+                  <div className="px-4 py-3 border-t border-emerald-900/40 space-y-3 shrink-0">
+                    {joinPreview && (
+                      <div className="flex justify-between text-[11px]">
+                        <div>
+                          <span className="text-emerald-200/50">Current balance: </span>
+                          <span className={joinPreview.current_balance > 0 ? "text-red-400" : joinPreview.current_balance < 0 ? "text-emerald-400" : "text-emerald-200/60"}>
+                            {joinPreview.current_balance < 0 ? "£" + Math.abs(joinPreview.current_balance).toFixed(2) + " credit" :
+                             joinPreview.current_balance > 0 ? "£" + joinPreview.current_balance.toFixed(2) + " owed" : "Settled"}
+                          </span>
+                        </div>
+                        <div>
+                          {(() => {
+                            const optPotCost = selectedOptionalPotIds.reduce((s, id) => {
+                              const p = [...(joinPreview.optional_prize_pots ?? []), ...(joinPreview.season_optional_pots ?? [])].find((x: any) => x.id === id);
+                              return s + (p?.entry_fee_amount ?? 0);
+                            }, 0);
+                            const optChargeCost = selectedOptionalChargeIds.reduce((s, id) => {
+                              const c = [...(joinPreview.optional_charges ?? []), ...(joinPreview.group_optional_charges ?? [])].find((x: any) => x.id === id);
+                              return s + (c?.amount ?? 0);
+                            }, 0);
+                            const total = joinPreview.projected_balance + optPotCost + optChargeCost;
+                            return (
+                              <>
+                                <span className="text-emerald-200/50">After joining: </span>
+                                <span className={total > 0 ? "text-red-400 font-semibold" : total < 0 ? "text-emerald-400 font-semibold" : "text-emerald-200/60"}>
+                                  {total < 0 ? "£" + Math.abs(total).toFixed(2) + " credit" :
+                                   total > 0 ? "£" + total.toFixed(2) + " owed" : "Settled"}
+                                </span>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleEnter}
+                      disabled={entering}
+                      className="w-full py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
+                    >
+                      {entering ? "Joining…" : "Confirm & Join"}
+                    </button>
+                    {enterError && <div className="text-sm text-red-400 text-center">{enterError}</div>}
+                  </div>
+                </div>
+              </div>
             )}
           </>
         )}
@@ -2722,6 +2973,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
               category: addChargeForm.category,
               description: addChargeForm.description.trim() || null,
               round_id: addChargeForm.round_id || null,
+              is_mandatory: addChargeForm.is_mandatory,
             }),
           });
           if (!res.ok) {
@@ -2832,11 +3084,12 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
               distribution_type: addPotForm.distribution_type,
               entry_fee_amount: addPotForm.entry_fee_amount ? parseFloat(addPotForm.entry_fee_amount) : null,
               entry_fee_notes: addPotForm.entry_fee_notes.trim() || null,
-              prize_table: addPotForm.prize_table.length > 0 ? addPotForm.prize_table : null,
+              prize_table: addPotForm.distribution_type === "position_based" && addPotForm.prize_table.length > 0 ? addPotForm.prize_table : null,
               metric_type: addPotForm.metric_type || null,
               metric_description: addPotForm.metric_description.trim() || null,
               is_monetary: addPotForm.is_monetary,
               prize_description: addPotForm.prize_description.trim() || null,
+              is_mandatory: addPotForm.is_mandatory,
             }),
           });
           if (!res.ok) {
@@ -2992,11 +3245,12 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
         distribution_type: "position_based" as PrizePotDistributionType,
         entry_fee_amount: "",
         entry_fee_notes: "",
-        prize_table: [] as PrizeTableEntry[],
+        prize_table: [{ position: 1, pct: 50 }, { position: 2, pct: 30 }, { position: 3, pct: 20 }] as PrizeTableEntry[],
         metric_type: "",
         metric_description: "",
         is_monetary: true,
         prize_description: "",
+        is_mandatory: false,
       });
 
       const inputCls = "w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600";
@@ -3134,6 +3388,20 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                     ))}
                   </select>
                 )}
+                {/* Mandatory toggle */}
+                <button
+                  type="button"
+                  onClick={() => setAddChargeForm((f) => f && { ...f, is_mandatory: !f.is_mandatory })}
+                  className="flex items-center gap-2 w-full py-2 px-2 rounded-lg border border-emerald-900/40 hover:bg-emerald-900/20"
+                >
+                  <div className={`relative w-8 h-5 rounded-full transition-colors ${addChargeForm.is_mandatory ? "bg-emerald-600" : "bg-emerald-900/50"}`}>
+                    <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${addChargeForm.is_mandatory ? "translate-x-3.5" : "translate-x-0.5"}`} />
+                  </div>
+                  <div className="text-left">
+                    <div className="text-[11px] font-semibold text-emerald-100">Mandatory</div>
+                    <div className="text-[10px] text-emerald-200/40">Auto-charged when a player joins this event</div>
+                  </div>
+                </button>
                 <div className="flex gap-2">
                   <button type="button" onClick={() => setAddChargeForm(null)}
                     className="flex-1 py-1.5 rounded-full border border-emerald-900/60 text-[11px] text-emerald-200/60">
@@ -3148,7 +3416,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
             ) : (
               <button
                 type="button"
-                onClick={() => setAddChargeForm({ name: "", amount: "", category: "green_fee", description: "", round_id: "" })}
+                onClick={() => setAddChargeForm({ name: "", amount: "", category: "green_fee", description: "", round_id: "", is_mandatory: false })}
                 className="w-full py-2 rounded-full border border-emerald-700/50 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-900/30"
               >
                 + Add Charge
@@ -3580,6 +3848,55 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                     <option value="entry_only">Entry Fee Only (no distribution)</option>
                   </select>
 
+                  {/* Position-based prize table editor */}
+                  {addPotForm.distribution_type === "position_based" && (
+                    <div className="rounded-xl border border-emerald-900/40 bg-emerald-950/20 px-3 py-2 space-y-2">
+                      <div className="text-[10px] uppercase text-emerald-200/50">Payout Percentages</div>
+                      {addPotForm.prize_table.map((row, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <span className="text-[11px] text-emerald-200/60 w-8 shrink-0">
+                            {i === 0 ? "1st" : i === 1 ? "2nd" : i === 2 ? "3rd" : `${i + 1}th`}
+                          </span>
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="1"
+                            value={row.pct}
+                            onChange={(e) => {
+                              const updated = addPotForm.prize_table.map((r, j) =>
+                                j === i ? { ...r, pct: parseFloat(e.target.value) || 0 } : r
+                              );
+                              setAddPotForm((f) => f && { ...f, prize_table: updated });
+                            }}
+                            className="w-20 rounded-lg border border-emerald-900/60 bg-[#0b3b21]/60 px-2 py-1 text-sm text-emerald-50 text-center focus:outline-none"
+                          />
+                          <span className="text-[11px] text-emerald-200/40">%</span>
+                          <button
+                            type="button"
+                            onClick={() => setAddPotForm((f) => f && { ...f, prize_table: f.prize_table.filter((_, j) => j !== i) })}
+                            className="ml-auto text-emerald-200/30 hover:text-red-400 text-sm"
+                          >✕</button>
+                        </div>
+                      ))}
+                      {(() => {
+                        const total = addPotForm.prize_table.reduce((s, r) => s + r.pct, 0);
+                        return (
+                          <div className={`text-[10px] font-semibold ${total === 100 ? "text-emerald-400" : "text-amber-400"}`}>
+                            Total: {total}% {total !== 100 && "(must equal 100%)"}
+                          </div>
+                        );
+                      })()}
+                      <button
+                        type="button"
+                        onClick={() => setAddPotForm((f) => f && { ...f, prize_table: [...f.prize_table, { position: f.prize_table.length + 1, pct: 0 }] })}
+                        className="text-[11px] text-emerald-300/60 hover:text-emerald-300"
+                      >
+                        + Add position
+                      </button>
+                    </div>
+                  )}
+
                   {(addPotForm.distribution_type === "metric_weighted" || addPotForm.distribution_type === "metric_equal") && (
                     <select
                       value={addPotForm.metric_type}
@@ -3630,6 +3947,20 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                     onChange={(e) => setAddPotForm((f) => f && { ...f, description: e.target.value })}
                     className={inputCls}
                   />
+                  {/* Mandatory toggle */}
+                  <button
+                    type="button"
+                    onClick={() => setAddPotForm((f) => f && { ...f, is_mandatory: !f.is_mandatory })}
+                    className="flex items-center gap-2 w-full py-2 px-2 rounded-lg border border-emerald-900/40 hover:bg-emerald-900/20"
+                  >
+                    <div className={`relative w-8 h-5 rounded-full transition-colors ${addPotForm.is_mandatory ? "bg-emerald-600" : "bg-emerald-900/50"}`}>
+                      <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${addPotForm.is_mandatory ? "translate-x-3.5" : "translate-x-0.5"}`} />
+                    </div>
+                    <div className="text-left">
+                      <div className="text-[11px] font-semibold text-emerald-100">Mandatory</div>
+                      <div className="text-[10px] text-emerald-200/40">Players are auto-enrolled when joining this event</div>
+                    </div>
+                  </button>
                   <div className="flex gap-2">
                     <button type="button" onClick={() => { setAddPotForm(null); setPotError(null); }}
                       className="flex-1 py-1.5 rounded-full border border-emerald-900/60 text-[11px] text-emerald-200/60">

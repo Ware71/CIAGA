@@ -755,7 +755,9 @@ export type BalanceTransactionType =
   | "extra_charge"
   | "payment"
   | "winnings"
-  | "adjustment";
+  | "adjustment"
+  /** Admin physically hands prize money to the player. Reduces balance but excluded from winnings stats. */
+  | "withdrawal";
 
 export type EventChargeCategory = "green_fee" | "buggy" | "food" | "drink" | "other";
 
@@ -769,6 +771,8 @@ export type EventCharge = {
   category: EventChargeCategory;
   description: string | null;
   applies_to_all_entries: boolean;
+  /** If true, automatically charged to players when they join the event */
+  is_mandatory: boolean;
   created_by: string;
   created_at: string;
 };
@@ -946,6 +950,8 @@ export type PrizePot = {
   metric_description: string | null;
   is_monetary: boolean;
   prize_description: string | null;
+  /** If true, players are automatically enrolled when joining an event in this pot's scope */
+  is_mandatory: boolean;
   status: PrizePotStatus;
   created_by: string;
   created_at: string;
@@ -988,4 +994,69 @@ export type PrizePotWithDetails = PrizePot & {
   payouts: PrizePotPayoutWithProfile[];
   /** Sum of all entry contributions */
   total_pot: number;
+};
+
+// ─── Group Charges ────────────────────────────────────────────────────────────
+
+/** Standalone group-level charge not tied to any event or season */
+export type GroupCharge = {
+  id: string;
+  group_id: string;
+  name: string;
+  amount: number;
+  description: string | null;
+  category: string;
+  is_mandatory: boolean;
+  is_active: boolean;
+  created_by: string;
+  created_at: string;
+};
+
+// ─── Join Preview ─────────────────────────────────────────────────────────────
+
+/** Returned by GET /api/majors/events/[id]/join-preview */
+export type EventJoinPreview = {
+  mandatory_charges: EventCharge[];
+  optional_charges: EventCharge[];
+  mandatory_prize_pots: PrizePot[];
+  optional_prize_pots: PrizePot[];
+  season_mandatory_pots: PrizePot[];
+  season_optional_pots: PrizePot[];
+  group_mandatory_charges: GroupCharge[];
+  group_optional_charges: GroupCharge[];
+  entry_fee_amount: number | null;
+  current_balance: number;
+  projected_balance: number;
+};
+
+// ─── Winnings Summary ─────────────────────────────────────────────────────────
+
+export type PotTransaction = {
+  pot_id: string;
+  pot_name: string;
+  event_id: string | null;
+  event_name: string | null;
+  season_id: string | null;
+  season_name: string | null;
+  entry_fee: number;
+  payout_amount: number | null;
+  payout_position: number | null;
+  date: string;
+};
+
+export type PlayerWinningSummary = {
+  profile_id: string;
+  profile: { id: string; name: string | null; avatar_url: string | null };
+  all_time_spent: number;
+  all_time_won: number;
+  all_time_net: number;
+  undrawn_winnings: number;
+  by_season: Array<{
+    group_season_id: string | null;
+    competition_season_id: string | null;
+    season_name: string;
+    spent: number;
+    won: number;
+  }>;
+  pot_history: PotTransaction[];
 };

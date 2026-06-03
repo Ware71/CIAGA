@@ -406,6 +406,24 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   const [balanceMembers, setBalanceMembers] = useState<MemberBalanceSummary[]>([]);
   const [myBalance, setMyBalance] = useState<{ balance: number; total_charged: number; total_paid: number; transactions: GroupBalanceTransactionWithDetails[] } | null>(null);
   const [expandedMember, setExpandedMember] = useState<string | null>(null);
+  // Payment record modal
+  const [paymentModal, setPaymentModal] = useState<{ profileId: string; name: string } | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentNote, setPaymentNote] = useState("");
+  const [paymentSubmitting, setPaymentSubmitting] = useState(false);
+  // Withdrawal modal
+  const [withdrawalModal, setWithdrawalModal] = useState<{ profileId: string; name: string; maxAmount: number } | null>(null);
+  const [withdrawalAmount, setWithdrawalAmount] = useState("");
+  const [withdrawalSubmitting, setWithdrawalSubmitting] = useState(false);
+  // Winnings summary
+  const [winningSummaries, setWinningSummaries] = useState<any[]>([]);
+  const [winningsLoaded, setWinningsLoaded] = useState(false);
+  const [winningsPlayer, setWinningsPlayer] = useState<any | null>(null);
+  // Group charges (for settings tab)
+  const [groupCharges, setGroupCharges] = useState<any[]>([]);
+  const [groupChargesLoaded, setGroupChargesLoaded] = useState(false);
+  const [addGroupChargeForm, setAddGroupChargeForm] = useState<{ name: string; amount: string; category: string; description: string; is_mandatory: boolean } | null>(null);
+  const [savingGroupCharge, setSavingGroupCharge] = useState(false);
   const [standingsMetric, setStandingsMetric] = useState<"points" | "strokes" | "avg">("points");
   const [sortField, setSortField] = useState<"net" | "gross">("net");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -542,10 +560,18 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       const isAdmin = myRole === "owner" || myRole === "admin";
 
       if (isAdmin) {
-        const res = await fetch(`/api/majors/groups/${groupId}/balances`, { headers });
-        if (!cancelled && res.ok) {
-          const j = await res.json();
+        const [balRes, winRes] = await Promise.all([
+          fetch(`/api/majors/groups/${groupId}/balances`, { headers }),
+          fetch(`/api/majors/groups/${groupId}/winnings`, { headers }),
+        ]);
+        if (!cancelled && balRes.ok) {
+          const j = await balRes.json();
           setBalanceMembers(j.members ?? []);
+        }
+        if (!cancelled && winRes.ok) {
+          const j = await winRes.json();
+          setWinningSummaries(j.members ?? []);
+          setWinningsLoaded(true);
         }
       } else {
         const res = await fetch(`/api/majors/groups/${groupId}/balance`, { headers });
@@ -557,6 +583,25 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     })();
     return () => { cancelled = true; };
   }, [tab, groupId, myRole]);
+
+  // Lazy-load group charges when settings tab is first opened
+  useEffect(() => {
+    if (tab !== "settings" || groupChargesLoaded) return;
+    let cancelled = false;
+    (async () => {
+      const session = await getViewerSession();
+      if (!session || cancelled) return;
+      const res = await fetch(`/api/majors/groups/${groupId}/group-charges`, {
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+      });
+      if (!cancelled && res.ok) {
+        const j = await res.json();
+        setGroupCharges(j.charges ?? []);
+        setGroupChargesLoaded(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [tab, groupId, groupChargesLoaded]);
 
   const refreshMembers = async () => {
     const session = await getViewerSession();
@@ -1975,6 +2020,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           payment: "Payment",
           winnings: "Winnings",
           adjustment: "Adjustment",
+          withdrawal: "Withdrawal",
         };
         return labels[type] ?? type.replace(/_/g, " ");
       };
@@ -2081,34 +2127,257 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                               </div>
                             ))
                           )}
-                          {/* Record payment button */}
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              const amtStr = prompt(`Record payment from ${m.profile?.name ?? "player"} (enter amount in £):`);
-                              if (!amtStr) return;
-                              const amt = parseFloat(amtStr);
-                              if (isNaN(amt) || amt <= 0) return;
-                              const session = await getViewerSession();
-                              if (!session) return;
-                              await fetch(`/api/majors/groups/${groupId}/transactions`, {
-                                method: "POST",
-                                headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
-                                body: JSON.stringify({ profile_id: m.profile_id, type: "payment", amount: -amt }),
-                              });
-                              // Refresh
-                              const res = await fetch(`/api/majors/groups/${groupId}/balances`, { headers: { Authorization: `Bearer ${session.accessToken}` } });
-                              if (res.ok) { const j = await res.json(); setBalanceMembers(j.members ?? []); }
-                            }}
-                            className="w-full py-1.5 rounded-full border border-emerald-700/50 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-900/30"
-                          >
-                            + Record Payment
-                          </button>
+                          {/* Record payment / Withdraw buttons */}
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPaymentAmount("");
+                                setPaymentNote("");
+                                setPaymentModal({ profileId: m.profile_id, name: m.profile?.name ?? "Player" });
+                              }}
+                              className="flex-1 py-1.5 rounded-full border border-emerald-700/50 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-900/30"
+                            >
+                              + Record Payment
+                            </button>
+                            {(() => {
+                              const ws = winningSummaries.find((w: any) => w.profile_id === m.profile_id);
+                              const undrawn = ws?.undrawn_winnings ?? 0;
+                              if (undrawn <= 0) return null;
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setWithdrawalAmount(undrawn.toFixed(2));
+                                    setWithdrawalModal({ profileId: m.profile_id, name: m.profile?.name ?? "Player", maxAmount: undrawn });
+                                  }}
+                                  className="flex-1 py-1.5 rounded-full border border-amber-700/50 text-[11px] font-semibold text-amber-200 hover:bg-amber-900/20"
+                                >
+                                  Withdraw {currencySymbol}{undrawn.toFixed(2)}
+                                </button>
+                              );
+                            })()}
+                          </div>
                         </div>
                       )}
                     </div>
                   );
                 })}
+              </div>
+            )}
+
+            {/* Prize Pot P&L — Winnings Summary */}
+            {winningsLoaded && winningSummaries.length > 0 && (
+              <div className="rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-3 space-y-2">
+                <div className="text-[10px] uppercase tracking-wider text-emerald-200/50 font-semibold">Prize Pot P&L</div>
+                <div className="space-y-1">
+                  {winningSummaries
+                    .filter((w: any) => w.all_time_spent > 0 || w.all_time_won > 0)
+                    .map((w: any) => (
+                      <button
+                        key={w.profile_id}
+                        type="button"
+                        onClick={() => setWinningsPlayer(w)}
+                        className="w-full flex items-center justify-between py-2 px-2 rounded-xl hover:bg-emerald-900/20 text-left"
+                      >
+                        <span className="text-sm text-emerald-100">{w.profile?.name ?? "Unknown"}</span>
+                        <div className="flex gap-4 text-[11px]">
+                          <span className="text-emerald-200/50">In: {currencySymbol}{w.all_time_spent.toFixed(2)}</span>
+                          <span className="text-emerald-400">Won: {currencySymbol}{w.all_time_won.toFixed(2)}</span>
+                          <span className={w.all_time_net >= 0 ? "text-emerald-300 font-semibold" : "text-red-400 font-semibold"}>
+                            Net: {w.all_time_net >= 0 ? "+" : ""}{currencySymbol}{w.all_time_net.toFixed(2)}
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* Payment record modal */}
+            {paymentModal && (
+              <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60" onClick={() => setPaymentModal(null)}>
+                <div className="w-full max-w-sm rounded-t-2xl bg-[#0b3b21] border border-emerald-800/60 px-4 py-5 space-y-3" onClick={(e) => e.stopPropagation()}>
+                  <div className="text-sm font-semibold text-emerald-100">Record Payment — {paymentModal.name}</div>
+                  <div>
+                    <label className="text-[10px] uppercase text-emerald-200/50">Amount ({currencySymbol})</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={paymentAmount}
+                      onChange={(e) => setPaymentAmount(e.target.value)}
+                      className="mt-1 w-full rounded-lg bg-emerald-950/60 border border-emerald-800/50 text-emerald-100 px-3 py-2 text-sm focus:outline-none"
+                      placeholder="0.00"
+                      autoFocus
+                    />
+                    {(() => {
+                      const amt = parseFloat(paymentAmount);
+                      const member = balanceMembers.find((m) => m.profile_id === paymentModal.profileId);
+                      if (!isNaN(amt) && amt > 0 && member) {
+                        const newBal = member.balance - amt;
+                        return (
+                          <div className="mt-1 text-[11px] text-emerald-200/60">
+                            Balance: {currencySymbol}{member.balance.toFixed(2)} → <span className={newBal < 0 ? "text-emerald-400" : "text-emerald-200"}>{currencySymbol}{newBal.toFixed(2)}</span>
+                            {newBal < 0 && <span className="text-emerald-400 ml-1">(credit)</span>}
+                          </div>
+                        );
+                      }
+                    })()}
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase text-emerald-200/50">Note (optional)</label>
+                    <input
+                      type="text"
+                      value={paymentNote}
+                      onChange={(e) => setPaymentNote(e.target.value)}
+                      className="mt-1 w-full rounded-lg bg-emerald-950/60 border border-emerald-800/50 text-emerald-100 px-3 py-2 text-sm focus:outline-none"
+                      placeholder="e.g. Cash received at club"
+                    />
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    <button type="button" onClick={() => setPaymentModal(null)} className="flex-1 py-2 rounded-full border border-emerald-800/50 text-sm text-emerald-200">Cancel</button>
+                    <button
+                      type="button"
+                      disabled={paymentSubmitting || !paymentAmount || parseFloat(paymentAmount) <= 0}
+                      onClick={async () => {
+                        const amt = parseFloat(paymentAmount);
+                        if (isNaN(amt) || amt <= 0) return;
+                        setPaymentSubmitting(true);
+                        const session = await getViewerSession();
+                        if (!session) { setPaymentSubmitting(false); return; }
+                        await fetch(`/api/majors/groups/${groupId}/transactions`, {
+                          method: "POST",
+                          headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+                          body: JSON.stringify({ profile_id: paymentModal.profileId, type: "payment", amount: -amt, note: paymentNote || null }),
+                        });
+                        const [balRes, winRes] = await Promise.all([
+                          fetch(`/api/majors/groups/${groupId}/balances`, { headers: { Authorization: `Bearer ${session.accessToken}` } }),
+                          fetch(`/api/majors/groups/${groupId}/winnings`, { headers: { Authorization: `Bearer ${session.accessToken}` } }),
+                        ]);
+                        if (balRes.ok) { const j = await balRes.json(); setBalanceMembers(j.members ?? []); }
+                        if (winRes.ok) { const j = await winRes.json(); setWinningSummaries(j.members ?? []); }
+                        setPaymentSubmitting(false);
+                        setPaymentModal(null);
+                      }}
+                      className="flex-1 py-2 rounded-full bg-emerald-700 text-sm font-semibold text-white disabled:opacity-50"
+                    >
+                      {paymentSubmitting ? "Saving…" : "Record"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Withdrawal modal */}
+            {withdrawalModal && (
+              <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60" onClick={() => setWithdrawalModal(null)}>
+                <div className="w-full max-w-sm rounded-t-2xl bg-[#0b3b21] border border-emerald-800/60 px-4 py-5 space-y-3" onClick={(e) => e.stopPropagation()}>
+                  <div className="text-sm font-semibold text-emerald-100">Mark Winnings as Withdrawn — {withdrawalModal.name}</div>
+                  <p className="text-[11px] text-emerald-200/60">Records that winnings have been physically handed to the player. Reduces their balance but does not affect their winnings stats.</p>
+                  <div>
+                    <label className="text-[10px] uppercase text-emerald-200/50">Amount ({currencySymbol}) — Max: {currencySymbol}{withdrawalModal.maxAmount.toFixed(2)}</label>
+                    <input
+                      type="number"
+                      min="0.01"
+                      max={withdrawalModal.maxAmount}
+                      step="0.01"
+                      value={withdrawalAmount}
+                      onChange={(e) => setWithdrawalAmount(e.target.value)}
+                      className="mt-1 w-full rounded-lg bg-emerald-950/60 border border-emerald-800/50 text-emerald-100 px-3 py-2 text-sm focus:outline-none"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    <button type="button" onClick={() => setWithdrawalModal(null)} className="flex-1 py-2 rounded-full border border-emerald-800/50 text-sm text-emerald-200">Cancel</button>
+                    <button
+                      type="button"
+                      disabled={withdrawalSubmitting || !withdrawalAmount || parseFloat(withdrawalAmount) <= 0}
+                      onClick={async () => {
+                        const amt = parseFloat(withdrawalAmount);
+                        if (isNaN(amt) || amt <= 0) return;
+                        setWithdrawalSubmitting(true);
+                        const session = await getViewerSession();
+                        if (!session) { setWithdrawalSubmitting(false); return; }
+                        await fetch(`/api/majors/groups/${groupId}/withdraw`, {
+                          method: "POST",
+                          headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+                          body: JSON.stringify({ profile_id: withdrawalModal.profileId, amount: amt, note: "Winnings withdrawn" }),
+                        });
+                        const [balRes, winRes] = await Promise.all([
+                          fetch(`/api/majors/groups/${groupId}/balances`, { headers: { Authorization: `Bearer ${session.accessToken}` } }),
+                          fetch(`/api/majors/groups/${groupId}/winnings`, { headers: { Authorization: `Bearer ${session.accessToken}` } }),
+                        ]);
+                        if (balRes.ok) { const j = await balRes.json(); setBalanceMembers(j.members ?? []); }
+                        if (winRes.ok) { const j = await winRes.json(); setWinningSummaries(j.members ?? []); }
+                        setWithdrawalSubmitting(false);
+                        setWithdrawalModal(null);
+                      }}
+                      className="flex-1 py-2 rounded-full bg-amber-700 text-sm font-semibold text-white disabled:opacity-50"
+                    >
+                      {withdrawalSubmitting ? "Saving…" : "Confirm Withdrawal"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Winnings detail drawer */}
+            {winningsPlayer && (
+              <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60" onClick={() => setWinningsPlayer(null)}>
+                <div className="w-full max-w-sm rounded-t-2xl bg-[#0b3b21] border border-emerald-800/60 px-4 py-5 space-y-3 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-semibold text-emerald-100">{winningsPlayer.profile?.name} — Prize Pot History</div>
+                    <button type="button" onClick={() => setWinningsPlayer(null)} className="text-emerald-200/40 text-xl">✕</button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="rounded-xl bg-emerald-950/40 border border-emerald-900/40 py-2">
+                      <div className="text-[9px] text-emerald-200/40 uppercase">Spent</div>
+                      <div className="text-sm font-bold text-emerald-200">{currencySymbol}{winningsPlayer.all_time_spent.toFixed(2)}</div>
+                    </div>
+                    <div className="rounded-xl bg-emerald-950/40 border border-emerald-900/40 py-2">
+                      <div className="text-[9px] text-emerald-200/40 uppercase">Won</div>
+                      <div className="text-sm font-bold text-emerald-400">{currencySymbol}{winningsPlayer.all_time_won.toFixed(2)}</div>
+                    </div>
+                    <div className={`rounded-xl border py-2 ${winningsPlayer.all_time_net >= 0 ? "bg-emerald-900/20 border-emerald-700/30" : "bg-red-950/30 border-red-900/30"}`}>
+                      <div className="text-[9px] text-emerald-200/40 uppercase">Net</div>
+                      <div className={`text-sm font-bold ${winningsPlayer.all_time_net >= 0 ? "text-emerald-300" : "text-red-400"}`}>
+                        {winningsPlayer.all_time_net >= 0 ? "+" : ""}{currencySymbol}{winningsPlayer.all_time_net.toFixed(2)}
+                      </div>
+                    </div>
+                  </div>
+                  {winningsPlayer.by_season?.length > 0 && (
+                    <div>
+                      <div className="text-[10px] uppercase text-emerald-200/40 mb-1">By Season</div>
+                      {winningsPlayer.by_season.map((s: any, i: number) => (
+                        <div key={i} className="flex justify-between text-[11px] py-1 border-b border-emerald-900/30">
+                          <span className="text-emerald-200/70">{s.season_name}</span>
+                          <span className="text-emerald-200/50">In: {currencySymbol}{s.spent.toFixed(2)} · Won: <span className="text-emerald-400">{currencySymbol}{s.won.toFixed(2)}</span></span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div>
+                    <div className="text-[10px] uppercase text-emerald-200/40 mb-1">Pot History</div>
+                    {winningsPlayer.pot_history?.length === 0 ? (
+                      <div className="text-[11px] text-emerald-200/30 py-2">No prize pot transactions yet</div>
+                    ) : winningsPlayer.pot_history?.map((ph: any, i: number) => (
+                      <div key={i} className="py-2 border-b border-emerald-900/20 space-y-0.5">
+                        <div className="flex justify-between">
+                          <span className="text-sm text-emerald-100">{ph.pot_name}</span>
+                          {ph.payout_amount != null && (
+                            <span className="text-sm font-semibold text-emerald-400">+{currencySymbol}{ph.payout_amount.toFixed(2)}</span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-emerald-200/40">
+                          {ph.event_name ?? ph.season_name ?? "Group"} · Entry: {currencySymbol}{ph.entry_fee.toFixed(2)}
+                          {ph.payout_position && ` · ${ph.payout_position === 1 ? "1st" : ph.payout_position === 2 ? "2nd" : ph.payout_position === 3 ? "3rd" : `${ph.payout_position}th`}`}
+                          {" · "}{new Date(ph.date).toLocaleDateString()}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -2525,6 +2794,159 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
               </div>
             );
           })()}
+        </div>
+
+        {/* Group Charges */}
+        <div className="space-y-2">
+          <div className="text-[10px] uppercase tracking-wider text-emerald-200/50">Group Charges</div>
+          <p className="text-[10px] text-emerald-200/40">Charges that appear in the event join drawer. Mandatory charges are auto-applied; optional charges can be selected by the player.</p>
+          <div className="rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-3 space-y-2">
+            {groupCharges.length === 0 && !addGroupChargeForm ? (
+              <div className="text-[11px] text-emerald-200/40 text-center py-2">No group charges defined</div>
+            ) : (
+              groupCharges.map((gc: any) => (
+                <div key={gc.id} className="flex items-center justify-between py-1.5 border-b border-emerald-900/20">
+                  <div>
+                    <div className="text-sm text-emerald-100">{gc.name}</div>
+                    <div className="text-[10px] text-emerald-200/40">
+                      {gc.is_mandatory ? "Mandatory" : "Optional"} · {gc.is_active ? "Active" : "Inactive"}
+                      {gc.description && ` · ${gc.description}`}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-emerald-200">£{Number(gc.amount).toFixed(2)}</span>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const session = await getViewerSession();
+                        if (!session) return;
+                        await fetch(`/api/majors/groups/${groupId}/group-charges/${gc.id}`, {
+                          method: "PATCH",
+                          headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+                          body: JSON.stringify({ is_active: !gc.is_active }),
+                        });
+                        setGroupCharges((prev) => prev.map((c) => c.id === gc.id ? { ...c, is_active: !c.is_active } : c));
+                      }}
+                      className={`text-[10px] px-2 py-0.5 rounded-full border ${gc.is_active ? "border-emerald-700/50 text-emerald-300" : "border-emerald-900/40 text-emerald-200/30"}`}
+                    >
+                      {gc.is_active ? "Active" : "Inactive"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const session = await getViewerSession();
+                        if (!session) return;
+                        await fetch(`/api/majors/groups/${groupId}/group-charges/${gc.id}`, {
+                          method: "DELETE",
+                          headers: { Authorization: `Bearer ${session.accessToken}` },
+                        });
+                        setGroupCharges((prev) => prev.filter((c) => c.id !== gc.id));
+                      }}
+                      className="text-red-400/50 hover:text-red-400 text-sm"
+                    >✕</button>
+                  </div>
+                </div>
+              ))
+            )}
+
+            {addGroupChargeForm ? (
+              <div className="space-y-2 pt-2">
+                <input
+                  type="text"
+                  placeholder="Charge name"
+                  value={addGroupChargeForm.name}
+                  onChange={(e) => setAddGroupChargeForm((f) => f && { ...f, name: e.target.value })}
+                  className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2 text-sm text-emerald-50 focus:outline-none"
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="number"
+                    placeholder="Amount (£)"
+                    min="0"
+                    step="0.01"
+                    value={addGroupChargeForm.amount}
+                    onChange={(e) => setAddGroupChargeForm((f) => f && { ...f, amount: e.target.value })}
+                    className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2 text-sm text-emerald-50 focus:outline-none"
+                  />
+                  <select
+                    value={addGroupChargeForm.category}
+                    onChange={(e) => setAddGroupChargeForm((f) => f && { ...f, category: e.target.value })}
+                    className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2 text-sm text-emerald-50 focus:outline-none"
+                  >
+                    <option value="other">Other</option>
+                    <option value="green_fee">Green Fee</option>
+                    <option value="membership">Membership</option>
+                    <option value="admin">Admin Fee</option>
+                  </select>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Description (optional)"
+                  value={addGroupChargeForm.description}
+                  onChange={(e) => setAddGroupChargeForm((f) => f && { ...f, description: e.target.value })}
+                  className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2 text-sm text-emerald-50 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setAddGroupChargeForm((f) => f && { ...f, is_mandatory: !f.is_mandatory })}
+                  className="flex items-center gap-2 w-full py-2 px-2 rounded-lg border border-emerald-900/40 hover:bg-emerald-900/20"
+                >
+                  <div className={`relative w-8 h-5 rounded-full transition-colors ${addGroupChargeForm.is_mandatory ? "bg-emerald-600" : "bg-emerald-900/50"}`}>
+                    <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${addGroupChargeForm.is_mandatory ? "translate-x-3.5" : "translate-x-0.5"}`} />
+                  </div>
+                  <div className="text-left">
+                    <div className="text-[11px] font-semibold text-emerald-100">Mandatory</div>
+                    <div className="text-[10px] text-emerald-200/40">Auto-charged to all players when joining an event</div>
+                  </div>
+                </button>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setAddGroupChargeForm(null)}
+                    className="flex-1 py-1.5 rounded-full border border-emerald-900/60 text-[11px] text-emerald-200/60">
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={savingGroupCharge || !addGroupChargeForm.name || !addGroupChargeForm.amount}
+                    onClick={async () => {
+                      const amt = parseFloat(addGroupChargeForm.amount);
+                      if (!addGroupChargeForm.name || isNaN(amt) || amt <= 0) return;
+                      setSavingGroupCharge(true);
+                      const session = await getViewerSession();
+                      if (!session) { setSavingGroupCharge(false); return; }
+                      const res = await fetch(`/api/majors/groups/${groupId}/group-charges`, {
+                        method: "POST",
+                        headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          name: addGroupChargeForm.name.trim(),
+                          amount: amt,
+                          category: addGroupChargeForm.category,
+                          description: addGroupChargeForm.description.trim() || null,
+                          is_mandatory: addGroupChargeForm.is_mandatory,
+                        }),
+                      });
+                      if (res.ok) {
+                        const j = await res.json();
+                        setGroupCharges((prev) => [...prev, j.charge]);
+                        setAddGroupChargeForm(null);
+                      }
+                      setSavingGroupCharge(false);
+                    }}
+                    className="flex-1 py-1.5 rounded-full bg-emerald-700 text-[11px] font-semibold text-white disabled:opacity-50"
+                  >
+                    {savingGroupCharge ? "Saving…" : "Add Charge"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setAddGroupChargeForm({ name: "", amount: "", category: "other", description: "", is_mandatory: false })}
+                className="w-full py-1.5 rounded-full border border-emerald-700/50 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-900/30"
+              >
+                + Add Group Charge
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Danger zone — owner only */}

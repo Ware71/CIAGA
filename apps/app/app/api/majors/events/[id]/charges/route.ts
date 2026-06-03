@@ -50,13 +50,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (!event) return NextResponse.json({ error: "Not authorised or event not found." }, { status: 403 });
 
     const body = await req.json();
-    const { name, amount, category = "other", description, applies_to_all_entries = false, round_id } = body as {
+    const { name, amount, category = "other", description, applies_to_all_entries = false, round_id, is_mandatory = false } = body as {
       name: string;
       amount: number;
       category?: string;
       description?: string;
       applies_to_all_entries?: boolean;
       round_id?: string | null;
+      is_mandatory?: boolean;
     };
 
     if (!name || amount == null) {
@@ -70,7 +71,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const { data, error } = await supabaseAdmin
       .from("event_charges")
-      .insert({ event_id: id, name, amount, category, description: description ?? null, applies_to_all_entries, round_id: round_id ?? null, created_by: profileId })
+      .insert({ event_id: id, name, amount, category, description: description ?? null, applies_to_all_entries, round_id: round_id ?? null, is_mandatory, created_by: profileId })
       .select("*")
       .single();
 
