@@ -282,14 +282,38 @@ export type MajorGroup = {
   allow_credit: boolean;
 };
 
+export type GroupSeasonStatus = "upcoming" | "active" | "completed";
+
 export type GroupSeason = {
   id: string;
   group_id: string;
   name: string;
   start_date: string;
   end_date: string;
-  status: "upcoming" | "active" | "completed";
+  status: GroupSeasonStatus;
+  season_type: SeasonType;
+  season_year: number | null;
+  season_label: string | null;
+  standings_model: StandingsModel;
+  config_snapshot: Record<string, unknown> | null;
   created_at: string;
+  updated_at: string;
+};
+
+export type GroupSeasonStandingsEntry = {
+  group_season_id: string;
+  profile_id: string;
+  position: number | null;
+  season_points: number;
+  events_played: number;
+  wins: number;
+  top_3s: number;
+  best_finish: number | null;
+  last_computed_at: string;
+};
+
+export type GroupSeasonStandingsEntryWithProfile = GroupSeasonStandingsEntry & {
+  profile: { id: string; name: string | null; avatar_url: string | null };
 };
 
 export type MajorGroupMembership = {

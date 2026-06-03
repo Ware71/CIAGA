@@ -420,6 +420,11 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   const [seasonStandings, setSeasonStandings] = useState<SeasonStandingEntry[]>([]);
   const [seasonStandingsLoading, setSeasonStandingsLoading] = useState(false);
   const [seasonMetric, setSeasonMetric] = useState<"outrights" | "points" | "strokes" | "avg">("outrights");
+  // Create season modal
+  const [showCreateSeason, setShowCreateSeason] = useState(false);
+  const [createSeasonForm, setCreateSeasonForm] = useState<{ season_type: "calendar_year" | "custom"; year: string; name: string; start_date: string; end_date: string; standings_model: string }>({ season_type: "calendar_year", year: String(new Date().getFullYear()), name: "", start_date: "", end_date: "", standings_model: "none" });
+  const [creatingSeason, setCreatingSeason] = useState(false);
+  const [createSeasonError, setCreateSeasonError] = useState<string | null>(null);
   // League settings
   const [leagueSettingsForm, setLeagueSettingsForm] = useState<GroupScoringPrefs | null>(null);
   const [savingLeagueSettings, setSavingLeagueSettings] = useState(false);
@@ -452,7 +457,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     try {
       const session = await getViewerSession();
       if (!session) return;
-      const res = await fetch(`/api/majors/seasons/${id}/standings`, {
+      const res = await fetch(`/api/majors/group-seasons/${id}/standings`, {
         headers: { Authorization: `Bearer ${session.accessToken}` },
       });
       if (res.ok) {
@@ -481,7 +486,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           fetch(`/api/majors/groups/${groupId}/live-standings`, { headers }),
           fetch(`/api/majors/groups/${groupId}/members`, { headers }),
           fetch(`/api/majors/competitions?group_id=${groupId}`, { headers }),
-          fetch(`/api/majors/seasons?group_id=${groupId}`, { headers }),
+          fetch(`/api/majors/groups/${groupId}/seasons`, { headers }),
           fetch(`/api/majors/groups/${groupId}/event-results`, { headers }),
         ]);
 
@@ -1452,7 +1457,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         try {
           const session = await getViewerSession();
           if (!session) return;
-          const res = await fetch(`/api/majors/seasons/${id}/standings`, {
+          const res = await fetch(`/api/majors/group-seasons/${id}/standings`, {
             headers: { Authorization: `Bearer ${session.accessToken}` },
           });
           if (res.ok) {
@@ -1622,12 +1627,12 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           profileId: s.profile_id,
           name: s.profile?.name ?? "Unknown",
           avatarUrl: s.profile?.avatar_url ?? null,
-          currentSeasonId: selectedSeasonId === "all" ? null : selectedSeasonId,
+          currentSeasonId: null,
           seasonLabel,
         });
 
         const viewFull = selectedSeasonObj && (
-          <button type="button" onClick={() => router.push(`/majors/seasons/${selectedSeasonId}`)} className="w-full text-right text-[11px] text-emerald-400/70 hover:text-emerald-300 pb-1">
+          <button type="button" onClick={() => router.push(`/majors/group-seasons/${selectedSeasonId}`)} className="w-full text-right text-[11px] text-emerald-400/70 hover:text-emerald-300 pb-1">
             View full season →
           </button>
         );
@@ -1735,8 +1740,88 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         }
       };
 
+      const handleCreateSeason = async () => {
+        setCreatingSeason(true); setCreateSeasonError(null);
+        try {
+          const session = await getViewerSession();
+          if (!session) return;
+          const res = await fetch(`/api/majors/groups/${groupId}/seasons`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify(createSeasonForm),
+          });
+          const j = await res.json();
+          if (!res.ok) { setCreateSeasonError(j.error ?? "Failed to create season"); return; }
+          setGroupSeasons((prev) => [...prev, j.season]);
+          setShowCreateSeason(false);
+          setCreateSeasonForm({ season_type: "calendar_year", year: String(new Date().getFullYear()), name: "", start_date: "", end_date: "", standings_model: "none" });
+        } finally { setCreatingSeason(false); }
+      };
+
+      const inputCls = "w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]";
+
       return (
         <div className="space-y-4">
+          {/* Create season button + modal */}
+          {isAdminOrOwner && !showCreateSeason && (
+            <button
+              type="button"
+              onClick={() => setShowCreateSeason(true)}
+              className="w-full py-2.5 rounded-full border border-emerald-700/60 text-sm font-semibold text-emerald-200 hover:bg-emerald-900/30"
+            >
+              + Create Season
+            </button>
+          )}
+          {showCreateSeason && (
+            <div className="rounded-xl border border-emerald-700/40 bg-[#0b3b21]/50 px-3 py-3 space-y-2">
+              <div className="text-[11px] font-semibold text-emerald-200">New Season</div>
+              <select
+                value={createSeasonForm.season_type}
+                onChange={(e) => setCreateSeasonForm((f) => ({ ...f, season_type: e.target.value as "calendar_year" | "custom" }))}
+                className={inputCls}
+              >
+                <option value="calendar_year">Calendar Year (Jan – Dec)</option>
+                <option value="custom">Custom Date Range</option>
+              </select>
+              {createSeasonForm.season_type === "calendar_year" ? (
+                <input type="number" placeholder="Year (e.g. 2026)" value={createSeasonForm.year}
+                  onChange={(e) => setCreateSeasonForm((f) => ({ ...f, year: e.target.value }))}
+                  className={inputCls} min="2020" max="2099" />
+              ) : (
+                <>
+                  <input type="text" placeholder="Season name" value={createSeasonForm.name}
+                    onChange={(e) => setCreateSeasonForm((f) => ({ ...f, name: e.target.value }))}
+                    className={inputCls} />
+                  <div className="flex gap-2">
+                    <input type="date" value={createSeasonForm.start_date}
+                      onChange={(e) => setCreateSeasonForm((f) => ({ ...f, start_date: e.target.value }))}
+                      className={inputCls} />
+                    <input type="date" value={createSeasonForm.end_date}
+                      onChange={(e) => setCreateSeasonForm((f) => ({ ...f, end_date: e.target.value }))}
+                      className={inputCls} />
+                  </div>
+                </>
+              )}
+              <select value={createSeasonForm.standings_model}
+                onChange={(e) => setCreateSeasonForm((f) => ({ ...f, standings_model: e.target.value }))}
+                className={inputCls}>
+                <option value="none">No season standings</option>
+                <option value="season_points">Season Points</option>
+              </select>
+              {createSeasonError && (
+                <div className="text-[11px] text-red-400">{createSeasonError}</div>
+              )}
+              <div className="flex gap-2">
+                <button type="button" onClick={() => { setShowCreateSeason(false); setCreateSeasonError(null); }}
+                  className="flex-1 py-1.5 rounded-full border border-emerald-900/60 text-[11px] text-emerald-200/60">Cancel</button>
+                <button type="button" onClick={handleCreateSeason} disabled={creatingSeason}
+                  className="flex-1 py-1.5 rounded-full bg-emerald-700 text-[11px] font-semibold text-white disabled:opacity-50">
+                  {creatingSeason ? "Creating…" : "Create"}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Season + metric selectors */}
           <div className="flex gap-2">
             <select
@@ -1868,9 +1953,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                     }}
                     className="w-full py-2 rounded-full bg-emerald-700/80 text-[11px] font-semibold text-white hover:bg-emerald-600"
                   >
-                    {(s.event_templates?.length ?? 0) > 0
-                      ? `+ Create ${new Date().getFullYear()} Season`
-                      : `+ New ${new Date().getFullYear()} Instance`}
+                    {`+ Schedule ${new Date().getFullYear()} Events`}
                   </button>
                 )}
               </div>
