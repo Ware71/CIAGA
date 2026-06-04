@@ -11,6 +11,24 @@ import { BestBallConfig, BestBallScoringType } from "./BestBallConfig";
 import { MatchupEditor } from "./MatchupEditor";
 import { supabase } from "@/lib/supabaseClient";
 
+/** WHS recommended handicap allowances per format */
+function getWHSDefaultAllowance(format: RoundFormatType): number {
+  switch (format) {
+    case "strokeplay":       return 95;
+    case "stableford":       return 95;
+    case "matchplay":        return 100;
+    case "pairs_stableford": return 85;
+    case "team_strokeplay":  return 85;
+    case "team_stableford":  return 85;
+    case "team_bestball":    return 85;
+    // Single-ball team formats — team handicap handles allowance
+    case "scramble":
+    case "greensomes":
+    case "foursomes":        return 100;
+    default:                 return 95;
+  }
+}
+
 type MatchupParticipant = {
   id: string;
   displayName: string;
@@ -156,7 +174,14 @@ export function RoundFormatSectionEnhanced({
           value={formatType}
           onChange={async (format) => {
             setFormatType(format);
-            await handleUpdateSettings({ format_type: format });
+            // Auto-apply WHS recommended allowance when format changes
+            const updates: Parameters<typeof handleUpdateSettings>[0] = { format_type: format };
+            if (handicapMode === "allowance_pct") {
+              const suggested = getWHSDefaultAllowance(format);
+              setHandicapValue(suggested);
+              updates.default_playing_handicap_value = suggested;
+            }
+            await handleUpdateSettings(updates);
           }}
           disabled={!isEditable}
           isOwner={isOwner}

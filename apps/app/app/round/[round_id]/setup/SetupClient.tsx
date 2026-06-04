@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, Lock } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { getViewerSession } from "@/lib/auth/viewerSession";
@@ -17,6 +18,11 @@ import {
 } from "@/lib/rounds/setupHelpers";
 import type { Round, Participant, ProfileLite } from "@/lib/rounds/setupHelpers";
 import { formatHI } from "@/lib/rounds/handicapUtils";
+import { TeamBuilderSheet } from "@/components/rounds/TeamBuilderSheet";
+import type { TeamBuilderTeam, TeamBuilderParticipant } from "@/components/rounds/TeamBuilderSheet";
+import { isTeamFormat } from "@/components/rounds/FormatSelector";
+import { PlayerTeeRow } from "@/components/rounds/PlayerTeeRow";
+import type { TeeBoxOption } from "@/components/rounds/PlayerTeeRow";
 
 
 function Avatar({
@@ -47,6 +53,33 @@ function Avatar({
       ) : (
         <div className="text-[11px] font-semibold text-emerald-100/80">{initials}</div>
       )}
+    </div>
+  );
+}
+
+function SectionCard({
+  title,
+  children,
+  defaultOpen = true,
+}: {
+  title: string;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/40 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between px-4 py-3 text-left"
+      >
+        <span className="text-sm font-semibold text-emerald-50">{title}</span>
+        <ChevronDown
+          className={`h-4 w-4 text-emerald-100/60 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open && <div className="px-4 pb-4 pt-1">{children}</div>}
     </div>
   );
 }
@@ -98,6 +131,7 @@ type SetupParticipantRow = {
   profile_name: string | null;
   profile_email: string | null;
   profile_avatar_url: string | null;
+  team_id?: string | null;
   // Handicap fields
   handicap_index?: number | null;
   assigned_playing_handicap?: number | null;
@@ -240,9 +274,20 @@ type SetupClientProps = {
   roundId: string;
   initialSnapshot?: any;
   viewerProfileId?: string;
+  isNew?: boolean;
 };
 
-export default function SetupClient({ roundId, initialSnapshot, viewerProfileId }: SetupClientProps) {
+type NearbyCourseLite = {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  distance_m: number;
+  website: string | null;
+  phone: string | null;
+};
+
+export default function SetupClient({ roundId, initialSnapshot, viewerProfileId, isNew }: SetupClientProps) {
   const router = useRouter();
 
   const [loading, setLoading] = useState(!initialSnapshot);
@@ -253,6 +298,12 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId 
 
   const [round, setRound] = useState<Round | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const [teams, setTeams] = useState<TeamBuilderTeam[]>([]);
+
+  // Nearby courses preloaded at page load for instant picker open
+  const [nearbyForPicker, setNearbyForPicker] = useState<NearbyCourseLite[] | null>(null);
+  const nearbyGpsPosRef = useRef<{ lat: number; lng: number } | null>(null);
+  const nearbyAutoDetectDoneRef = useRef(false);
   const [nameEdit, setNameEdit] = useState<string>("");
   const [nameSaving, setNameSaving] = useState(false);
   const [scheduledEdit, setScheduledEdit] = useState<string>("");
@@ -286,6 +337,10 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId 
   const [hiByProfileId, setHiByProfileId] = useState<Record<string, number>>({});
   const [chByProfileId, setChByProfileId] = useState<Record<string, number>>({});
 
+  // Per-player tee assignments
+  const [teeBoxes, setTeeBoxes] = useState<TeeBoxOption[]>([]);
+  const [pendingTeeByParticipantId, setPendingTeeByParticipantId] = useState<Record<string, string | null>>({});
+
   const participantProfileIds = useMemo(() => {
     return new Set(participants.map((p) => p.profile_id).filter(Boolean) as string[]);
   }, [participants]);
@@ -295,6 +350,74 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId 
     const me = participants.find((p) => p.profile_id === meId);
     return me?.role === "owner";
   }, [participants, meId]);
+
+  const setupLocked = !!(round as any)?.setup_locked;
+
+  // GPS + nearby courses fetch at page load (for instant picker + auto-detect)
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        nearbyGpsPosRef.current = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        try {
+          const res = await fetch(
+            `/api/courses/nearby?lat=${pos.coords.latitude}&lng=${pos.coords.longitude}&radius=5000`,
+            { cache: "no-store" }
+          );
+          const data = await res.json();
+          if (res.ok) setNearbyForPicker(Array.isArray(data?.items) ? data.items : []);
+        } catch {}
+      },
+      () => {},
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  }, []);
+
+  // Fetch tee boxes when course changes
+  useEffect(() => {
+    const courseId = round?.course_id;
+    if (!courseId) { setTeeBoxes([]); return; }
+    fetch(`/api/courses/tee-boxes?course_id=${courseId}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((j) => { if (j) setTeeBoxes(j.tee_boxes ?? []); })
+      .catch(() => {});
+  }, [round?.course_id]);
+
+  // Auto-detect nearest course once nearby data + round are available (new rounds only)
+  useEffect(() => {
+    if (!isNew) return;
+    if (nearbyAutoDetectDoneRef.current) return;
+    if (!nearbyForPicker || nearbyForPicker.length === 0) return;
+    if (!round) return;
+    if (round.course_id) return;
+    if (!isOwner) return;
+
+    nearbyAutoDetectDoneRef.current = true;
+    const nearest = nearbyForPicker[0];
+
+    (async () => {
+      try {
+        const resolveRes = await fetch("/api/courses/resolve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ osm_id: nearest.id, name: nearest.name, lat: nearest.lat, lng: nearest.lng }),
+        });
+        const resolved = await resolveRes.json();
+        if (resolved.course_id) {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const token = sessionData.session?.access_token;
+          if (!token) return;
+          await fetch("/api/rounds/set-course", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ round_id: roundId, course_id: resolved.course_id, pending_tee_box_id: null }),
+          });
+          fetchAll();
+        }
+      } catch {}
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nearbyForPicker, round?.course_id, isOwner]);
 
   // Sync name and scheduled date from round state (skip during saves to prevent reset loops)
   useEffect(() => {
@@ -392,6 +515,20 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId 
     return { name, avatar_url };
   }
 
+  async function fetchParticipantTees() {
+    const { data } = await supabase
+      .from("round_participants")
+      .select("id, pending_tee_box_id")
+      .eq("round_id", roundId);
+    if (data) {
+      const map: Record<string, string | null> = {};
+      for (const row of data) {
+        map[row.id] = (row as any).pending_tee_box_id ?? null;
+      }
+      setPendingTeeByParticipantId(map);
+    }
+  }
+
   async function fetchAll() {
     setErr(null);
     // Use a ref (not `round` state) to determine if this is the initial load.
@@ -421,6 +558,17 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId 
         return;
       }
 
+      // Competition rounds: when setup is unlocked, non-owners have no business here —
+      // the organiser is still configuring. When locked, all participants see the read-only view.
+      if (snap.round?.event_tee_time_id && !snap.round?.setup_locked) {
+        const viewerId = snap.viewer_profile_id;
+        const myRow = (snap.participants ?? []).find((p: any) => p.profile_id === viewerId);
+        if (!myRow || myRow.role !== "owner") {
+          router.replace(`/round/${roundId}`);
+          return;
+        }
+      }
+
       // Map participants
       const rows = (snap.participants ?? []) as SetupParticipantRow[];
       const mapped = rows.map((row) => {
@@ -431,6 +579,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId 
           is_guest: !!row.is_guest,
           display_name: row.display_name,
           role,
+          team_id: row.team_id ?? null,
           profiles: row.profile_id
             ? {
                 id: row.profile_id ?? undefined,
@@ -450,8 +599,10 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId 
       hasInitialDataRef.current = true;
       setRound(snap.round);
       setParticipants(mapped);
+      setTeams((snap.teams ?? []) as TeamBuilderTeam[]);
       setHiByProfileId(snap.handicap_indexes ?? {});
       setChByProfileId(snap.course_handicaps ?? {});
+      fetchParticipantTees();
     } catch (e: any) {
       setErr(e?.message || "Failed to load setup");
     } finally {
@@ -490,6 +641,15 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId 
         return;
       }
 
+      // Competition rounds: only redirect non-owners when setup is not yet locked.
+      if (snap.round?.event_tee_time_id && !snap.round?.setup_locked) {
+        const myRow = (snap.participants ?? []).find((p: any) => p.profile_id === viewerProfileId);
+        if (!myRow || myRow.role !== "owner") {
+          router.replace(`/round/${roundId}`);
+          return;
+        }
+      }
+
       const rows = (snap.participants ?? []) as SetupParticipantRow[];
       const mapped = rows.map((row: SetupParticipantRow) => {
         const role = (row.role as any) as "owner" | "scorer" | "player";
@@ -499,6 +659,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId 
           is_guest: !!row.is_guest,
           display_name: row.display_name,
           role,
+          team_id: row.team_id ?? null,
           profiles: row.profile_id
             ? {
                 id: row.profile_id ?? undefined,
@@ -518,9 +679,11 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId 
       hasInitialDataRef.current = true;
       setRound(snap.round);
       setParticipants(mapped);
+      setTeams((snap.teams ?? []) as TeamBuilderTeam[]);
       setHiByProfileId(snap.handicap_indexes ?? {});
       setChByProfileId(snap.course_handicaps ?? {});
       if (viewerProfileId) setMeId(viewerProfileId);
+      fetchParticipantTees();
       return;
     }
 
@@ -684,10 +847,38 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId 
     }
   }
 
+  async function lockSetup() {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) return;
+      await fetch("/api/rounds/update-settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ round_id: roundId, setup_locked: true }),
+      });
+      await fetchAll();
+    } catch {}
+  }
+
+  async function unlockSetup() {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) return;
+      await fetch("/api/rounds/update-settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ round_id: roundId, setup_locked: false }),
+      });
+      await fetchAll();
+    } catch {}
+  }
+
   async function startRound() {
     if (starting) return;
-    if (!isOwner) {
-      setErr("Only the round owner can start the round.");
+    if (!isOwner && !setupLocked) {
+      setErr("Only the round owner can start this round.");
       return;
     }
     if (!round?.pending_tee_box_id) {
@@ -792,8 +983,9 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId 
             disabled={starting}
           />
 
-          <div className="text-center flex-1">
+          <div className="text-center flex-1 flex items-center justify-center gap-1.5">
             <div className="text-lg font-semibold tracking-wide text-[#f5e6b0]">Round setup</div>
+            {setupLocked && <Lock className="h-4 w-4 text-[#f5e6b0]/70" />}
           </div>
 
           <div className="w-[60px]" />
@@ -823,105 +1015,239 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId 
           </div>
         ) : null}
 
-        {/* Round Details */}
-        {!loading && round && round.status !== "live" ? (
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 space-y-4">
-            <div className="text-sm font-semibold text-emerald-50">Round Details</div>
+        {/* ====== Locked View ====== */}
+        {!loading && round && round.status !== "live" && setupLocked ? (
+          <div className="space-y-3">
+            {/* Course & Tee (read-only) */}
+            <SectionCard title="Course & Tee">
+              <CourseAndTeeSection
+                roundId={roundId}
+                courseId={round.course_id}
+                pendingTeeBoxId={round.pending_tee_box_id}
+                isOwner={false}
+                isEditable={false}
+                onUpdate={fetchAll}
+                preloadedNearby={null}
+                nearbyGpsPos={null}
+              />
+            </SectionCard>
 
-            {/* Round Name */}
-            <div>
-              <label className="text-[11px] text-emerald-100/70 block mb-1">Round name</label>
-              <div className="relative">
-                <input
-                  value={nameEdit}
-                  onChange={(e) => setNameEdit(e.target.value)}
-                  onBlur={() => saveNameOnBlur()}
-                  placeholder={courseNameFromJoin(round) || "Round name"}
-                  className="w-full px-3 py-2 rounded-xl bg-[#042713] border border-emerald-900/70 text-sm text-emerald-100 outline-none focus:border-emerald-600 transition-colors"
-                  disabled={!canEdit}
-                />
-                {nameSaving ? (
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-emerald-100/50">Saving...</span>
-                ) : null}
-              </div>
-            </div>
+            {/* Format (read-only) */}
+            <SectionCard title="Format & Handicap">
+              <RoundFormatSectionEnhanced
+                roundId={roundId}
+                initialFormat={(round.format_type as any) || "strokeplay"}
+                initialFormatConfig={round.format_config || {}}
+                initialSideGames={round.side_games || []}
+                initialHandicapMode={(round.default_playing_handicap_mode as any) || "allowance_pct"}
+                initialHandicapValue={round.default_playing_handicap_value || 100}
+                isOwner={false}
+                isEditable={false}
+                onUpdate={fetchAll}
+                participants={participants.map((p) => ({
+                  id: p.id,
+                  displayName: displayParticipant(p).name,
+                }))}
+              />
+            </SectionCard>
 
-            {/* Scheduled Date */}
-            <div>
-              <label className="text-[11px] text-emerald-100/70 block mb-1">Scheduled date & time</label>
-              <div className="overflow-hidden rounded-xl border border-emerald-900/70 bg-[#042713]">
-                <input
-                  type="datetime-local"
-                  value={scheduledEdit}
-                  onChange={(e) => {
-                    setScheduledEdit(e.target.value);
-                    saveSchedule(e.target.value);
-                  }}
-                  className="w-full px-3 py-2 bg-transparent text-sm text-emerald-100 outline-none [color-scheme:dark]"
-                  disabled={!canEdit}
-                />
+            {/* Players roster (read-only) */}
+            <SectionCard title={`Players (${participants.length})`}>
+              <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
+                <div className="space-y-2">
+                  {participants.map((p) => {
+                    const d = displayParticipant(p);
+                    const hi = p.profile_id ? hiByProfileId[p.profile_id] : null;
+                    const ch = p.profile_id ? chByProfileId[p.profile_id] : null;
+                    return (
+                      <div key={p.id} className="p-3 flex items-center gap-3 rounded-2xl border border-emerald-900/70 bg-[#042713]">
+                        <Avatar name={d.name} url={d.avatar_url} size={36} />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-semibold text-emerald-50 truncate">{d.name}</div>
+                          <div className="text-[11px] text-emerald-100/60">
+                            {p.is_guest ? "Guest" : p.profile_id === meId ? "You" : "Player"}
+                            {!p.is_guest ? (
+                              <span className="ml-2 text-[10px] text-emerald-100/70 tabular-nums">
+                                HI {typeof hi === "number" ? formatHI(hi) : "—"} · CH {typeof ch === "number" ? ch : "—"}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {participants.length === 0 && (
+                    <div className="text-[11px] text-emerald-100/60">No players added yet.</div>
+                  )}
+                </div>
               </div>
-              {scheduledEdit ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setScheduledEdit("");
-                    saveSchedule("");
-                  }}
-                  className="mt-1 text-[10px] text-emerald-100/50 hover:text-emerald-100/80"
-                  disabled={!canEdit}
+            </SectionCard>
+
+            {/* Actions */}
+            <div className="space-y-2 pt-1">
+              {isOwner && (
+                <Button
+                  variant="ghost"
+                  className="w-full rounded-2xl border border-emerald-700/60 text-emerald-100/80 hover:bg-emerald-900/20"
+                  onClick={unlockSetup}
+                  disabled={starting}
                 >
-                  Clear schedule (revert to draft)
-                </button>
-              ) : null}
+                  Unlock Setup
+                </Button>
+              )}
+              <Button
+                className="w-full rounded-2xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c] disabled:opacity-60"
+                onClick={startRound}
+                disabled={starting || participants.length === 0}
+              >
+                {starting ? "Starting…" : "Start Match"}
+              </Button>
+              {!round?.pending_tee_box_id && (
+                <div className="text-center text-[11px] text-amber-400/80 px-2">
+                  No tee box selected — {isOwner ? "unlock setup to configure before starting." : "waiting for the organiser to configure."}
+                </div>
+              )}
             </div>
           </div>
         ) : null}
 
-        {/* Course & Tee Selection */}
-        {!loading && round && round.status !== "live" ? (
-          <CourseAndTeeSection
-            roundId={roundId}
-            courseId={round.course_id}
-            pendingTeeBoxId={round.pending_tee_box_id}
-            isOwner={isOwner}
-            isEditable={round.status === "draft" || round.status === "scheduled"}
-            onUpdate={fetchAll}
-          />
-        ) : null}
+        {/* Round Details */}
+        {!loading && round && round.status !== "live" && !setupLocked ? (
+          <SectionCard title="Round Details">
+            {/* Round Name */}
+            <div className="space-y-4">
+              <div>
+                <label className="text-[11px] text-emerald-100/70 block mb-1">Round name</label>
+                <div className="relative">
+                  <input
+                    value={nameEdit}
+                    onChange={(e) => setNameEdit(e.target.value)}
+                    onBlur={() => saveNameOnBlur()}
+                    placeholder={courseNameFromJoin(round) || "Round name"}
+                    className="w-full px-3 py-2 rounded-xl bg-[#042713] border border-emerald-900/70 text-sm text-emerald-100 outline-none focus:border-emerald-600 transition-colors"
+                    disabled={!canEdit}
+                  />
+                  {nameSaving ? (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-emerald-100/50">Saving...</span>
+                  ) : null}
+                </div>
+              </div>
 
-        {/* Round Format & Handicap Settings */}
-        {!loading && round && round.status !== "live" ? (
-          <RoundFormatSectionEnhanced
-            roundId={roundId}
-            initialFormat={(round.format_type as any) || "strokeplay"}
-            initialFormatConfig={round.format_config || {}}
-            initialSideGames={round.side_games || []}
-            initialHandicapMode={(round.default_playing_handicap_mode as any) || "allowance_pct"}
-            initialHandicapValue={round.default_playing_handicap_value || 100}
-            isOwner={isOwner}
-            isEditable={round.status === "draft" || round.status === "scheduled"}
-            onUpdate={fetchAll}
-            participants={participants.map((p) => ({
-              id: p.id,
-              displayName: displayParticipant(p).name,
-            }))}
-          />
-        ) : null}
-
-        {/* ====== Players Section ====== */}
-        {!loading && round && round.status !== "live" ? (
-          <div className="space-y-3">
-            {/* Section heading */}
-            <div className="px-1">
-              <div className="text-sm font-semibold text-[#f5e6b0]">Players</div>
-              <div className="text-[10px] text-emerald-100/50">
-                {participants.length}/4 player{participants.length !== 1 ? "s" : ""} in this round
-                {participants.length >= 4 ? (
-                  <span className="ml-1 text-amber-200/80">· Round is full</span>
+              {/* Scheduled Date */}
+              <div>
+                <label className="text-[11px] text-emerald-100/70 block mb-1">Scheduled date & time</label>
+                <div className="overflow-hidden rounded-xl border border-emerald-900/70 bg-[#042713]">
+                  <input
+                    type="datetime-local"
+                    value={scheduledEdit}
+                    onChange={(e) => {
+                      setScheduledEdit(e.target.value);
+                      saveSchedule(e.target.value);
+                    }}
+                    className="w-full px-3 py-2 bg-transparent text-sm text-emerald-100 outline-none [color-scheme:dark]"
+                    disabled={!canEdit}
+                  />
+                </div>
+                {scheduledEdit ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setScheduledEdit("");
+                      saveSchedule("");
+                    }}
+                    className="mt-1 text-[10px] text-emerald-100/50 hover:text-emerald-100/80"
+                    disabled={!canEdit}
+                  >
+                    Clear schedule (revert to draft)
+                  </button>
                 ) : null}
               </div>
             </div>
+          </SectionCard>
+        ) : null}
+
+        {/* Course & Tee Selection */}
+        {!loading && round && round.status !== "live" && !setupLocked ? (
+          <SectionCard title="Course & Tee">
+            <CourseAndTeeSection
+              roundId={roundId}
+              courseId={round.course_id}
+              pendingTeeBoxId={round.pending_tee_box_id}
+              isOwner={isOwner}
+              isEditable={round.status === "draft" || round.status === "scheduled"}
+              onUpdate={fetchAll}
+              preloadedNearby={nearbyForPicker}
+              nearbyGpsPos={nearbyGpsPosRef.current}
+            />
+          </SectionCard>
+        ) : null}
+
+        {/* Round Format & Handicap Settings */}
+        {!loading && round && round.status !== "live" && !setupLocked ? (
+          <SectionCard title="Format & Handicap">
+            <RoundFormatSectionEnhanced
+              roundId={roundId}
+              initialFormat={(round.format_type as any) || "strokeplay"}
+              initialFormatConfig={round.format_config || {}}
+              initialSideGames={round.side_games || []}
+              initialHandicapMode={(round.default_playing_handicap_mode as any) || "allowance_pct"}
+              initialHandicapValue={round.default_playing_handicap_value || 100}
+              isOwner={isOwner}
+              isEditable={round.status === "draft" || round.status === "scheduled"}
+              onUpdate={fetchAll}
+              participants={participants.map((p) => ({
+                id: p.id,
+                displayName: displayParticipant(p).name,
+              }))}
+            />
+          </SectionCard>
+        ) : null}
+
+        {/* Team Setup (team formats only) */}
+        {!loading && round && round.status !== "live" && !setupLocked && isTeamFormat(round.format_type as any) ? (
+          <SectionCard title="Teams">
+            <div className="space-y-3">
+              <div className="text-[11px] text-emerald-100/60">
+                {teams.length === 0 ? "No teams set up yet" : `${teams.length} team${teams.length !== 1 ? "s" : ""} · ${participants.filter((p) => p.team_id).length}/${participants.length} assigned`}
+              </div>
+              {isOwner && (round.status === "draft" || round.status === "scheduled") ? (
+                <TeamBuilderSheet
+                  roundId={roundId}
+                  format={round.format_type as any}
+                  teams={teams}
+                  participants={participants.map((p) => ({
+                    id: p.id,
+                    name: displayParticipant(p).name,
+                    avatarUrl: displayParticipant(p).avatar_url,
+                    team_id: p.team_id ?? null,
+                  }))}
+                  onMutated={async () => { await fetchAll(); }}
+                  getToken={async () => {
+                    const { data } = await supabase.auth.getSession();
+                    return data.session?.access_token ?? null;
+                  }}
+                />
+              ) : teams.length > 0 ? (
+                <div className="space-y-1">
+                  {teams.map((t) => {
+                    const members = participants.filter((p) => p.team_id === t.id);
+                    return (
+                      <div key={t.id} className="text-[11px] text-emerald-100/80">
+                        <span className="font-semibold text-[#f5e6b0]">{t.name}:</span>{" "}
+                        {members.length === 0 ? "No players" : members.map((p) => displayParticipant(p).name).join(", ")}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+          </SectionCard>
+        ) : null}
+
+        {/* ====== Players Section ====== */}
+        {!loading && round && round.status !== "live" && !setupLocked ? (
+          <SectionCard title={`Players (${participants.length}/4)`}>
+          <div className="space-y-3">
 
             {/* Roster */}
             <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
@@ -1124,21 +1450,68 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId 
               />
             ) : null}
 
+            {/* Player Tees */}
+            {isOwner && teeBoxes.length > 0 && participants.filter((p) => !p.is_guest).length > 0 ? (
+              <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
+                <div className="mb-3">
+                  <div className="text-sm font-semibold text-emerald-50">Player Tees</div>
+                  <div className="text-[11px] text-emerald-100/70">
+                    {round.status === "draft" || round.status === "scheduled"
+                      ? "Override tee per player — affects WHS handicap calculation"
+                      : "Tee assignments"}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {participants
+                    .filter((p) => !p.is_guest)
+                    .map((p) => (
+                      <PlayerTeeRow
+                        key={p.id}
+                        participantId={p.id}
+                        roundId={roundId}
+                        participantName={displayParticipant(p).name}
+                        currentTeeBoxId={pendingTeeByParticipantId[p.id] ?? null}
+                        defaultTeeBoxId={round.pending_tee_box_id}
+                        teeBoxes={teeBoxes}
+                        canEdit={isOwner}
+                        disabled={round.status !== "draft" && round.status !== "scheduled"}
+                        onUpdated={fetchParticipantTees}
+                      />
+                    ))}
+                </div>
+              </div>
+            ) : null}
+
             {!isOwner ? (
               <div className="text-center text-[10px] text-emerald-100/60">
                 Only the round owner can add players and start the round.
               </div>
             ) : null}
           </div>
+          </SectionCard>
         ) : null}
 
-        <Button
-          className="w-full rounded-2xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c] disabled:opacity-60"
-          onClick={startRound}
-          disabled={!isOwner || starting || participants.length === 0}
-        >
-          {starting ? "Starting…" : "Start round"}
-        </Button>
+        {/* Edit mode bottom actions (shown only when unlocked) */}
+        {!setupLocked ? (
+          <div className="space-y-2">
+            {isOwner && !starting ? (
+              <Button
+                variant="ghost"
+                className="w-full rounded-2xl border border-emerald-700/60 text-emerald-100/80 hover:bg-emerald-900/20"
+                onClick={lockSetup}
+              >
+                Lock Setup
+              </Button>
+            ) : null}
+            <Button
+              className="w-full rounded-2xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c] disabled:opacity-60"
+              onClick={startRound}
+              disabled={!isOwner || starting || participants.length === 0}
+            >
+              {starting ? "Starting…" : "Start round"}
+            </Button>
+          </div>
+        ) : null}
       </div>
     </div>
   );

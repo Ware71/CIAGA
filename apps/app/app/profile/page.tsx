@@ -20,6 +20,7 @@ type ProfileRow = {
   name?: string | null;
   email?: string | null;
   avatar_url?: string | null;
+  gender?: string | null;
 };
 
 export default function ProfilePage() {
@@ -56,7 +57,7 @@ export default function ProfilePage() {
         // ✅ Load profile row by ownership (Model B)
         const { data: p0, error: pErr } = await supabase
           .from("profiles")
-          .select("id, owner_user_id, name, email, avatar_url")
+          .select("id, owner_user_id, name, email, avatar_url, gender")
           .eq("owner_user_id", u.id)
           .maybeSingle();
 

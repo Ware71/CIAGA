@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/auto-complete-rounds",
+      "schedule": "0 3 * * *"
+    }
+  ]
+}

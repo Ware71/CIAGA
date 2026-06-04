@@ -26,10 +26,10 @@ export async function emitRoundPlayedFeedItem(params: {
   const { roundId, actorProfileId } = params;
   if (!roundId || !actorProfileId) throw new Error("Missing roundId/actorProfileId");
 
-  // Round lookup
+  // Round lookup (include event_tee_time_id for freeze lookup)
   const { data: round, error: roundErr } = await supabaseAdmin
     .from("rounds")
-    .select("id, status, finished_at")
+    .select("id, status, finished_at, format_type, event_tee_time_id")
     .eq("id", roundId)
     .single();
 
@@ -61,12 +61,14 @@ export async function emitRoundPlayedFeedItem(params: {
 
   const { data: teeSnaps, error: tsErr } = await supabaseAdmin
     .from("round_tee_snapshots")
-    .select("name, created_at")
+    .select("name, par_total, created_at")
     .eq("round_course_snapshot_id", courseSnap?.id ?? "00000000-0000-0000-0000-000000000000")
     .order("created_at", { ascending: false })
     .limit(1);
   if (tsErr) throw tsErr;
   const teeSnap = (teeSnaps ?? [])[0] as any | undefined;
+  const parTotal: number | null =
+    typeof teeSnap?.par_total === "number" ? teeSnap.par_total : null;
 
   const occurred_at =
     (round as any).finished_at ??
@@ -78,17 +80,35 @@ export async function emitRoundPlayedFeedItem(params: {
   // Participants (profiles + guests)
   const { data: participants, error: pErr } = await supabaseAdmin
     .from("round_participants")
-    .select("id, profile_id, is_guest, display_name")
+    .select("id, profile_id, is_guest, display_name, team_id")
     .eq("round_id", roundId)
     .order("created_at", { ascending: true });
   if (pErr) throw pErr;
 
   const participantIds = (participants ?? []).map((r: any) => r.id).filter(Boolean);
+
+  // Teams (for single-ball formats)
+  const SINGLE_BALL_FORMATS = ["scramble", "greensomes", "foursomes"];
+  const roundFormatType = String((round as any).format_type ?? "");
+  const isSingleBall = SINGLE_BALL_FORMATS.includes(roundFormatType);
+
+  const teamsByRound: Array<{ id: string; name: string; team_number: number }> = [];
+  if (isSingleBall) {
+    const { data: teamRows } = await supabaseAdmin
+      .from("round_teams")
+      .select("id, name, team_number")
+      .eq("round_id", roundId)
+      .order("team_number", { ascending: true });
+    for (const t of teamRows ?? []) {
+      teamsByRound.push({ id: (t as any).id, name: (t as any).name ?? `Team ${(t as any).team_number}`, team_number: (t as any).team_number });
+    }
+  }
   const profileIds = Array.from(new Set((participants ?? []).map((r: any) => r.profile_id as string).filter(Boolean)));
 
   // --- FIX: TRUE gross strokes from round_current_scores ----------------------
-  // We compute gross_total = SUM(strokes) for each participant in this round.
+  // We compute gross_total = SUM(strokes) and holes_completed = COUNT(rows) per participant.
   const grossByParticipantId = new Map<string, number>();
+  const holesCompletedByParticipantId = new Map<string, number>();
 
   if (participantIds.length) {
     const { data: scores, error: scErr } = await supabaseAdmin
@@ -104,6 +124,34 @@ export async function emitRoundPlayedFeedItem(params: {
       const n = typeof strokes === "number" ? strokes : Number(strokes);
       if (!pid || !Number.isFinite(n)) continue;
       grossByParticipantId.set(pid, (grossByParticipantId.get(pid) ?? 0) + n);
+      holesCompletedByParticipantId.set(pid, (holesCompletedByParticipantId.get(pid) ?? 0) + 1);
+    }
+  }
+
+  // Look up event freeze state if this round is part of an event
+  let competitionHolesShown: number | null = null;
+  const eventTeeTimeId = (round as any).event_tee_time_id as string | null;
+  if (eventTeeTimeId) {
+    try {
+      const { data: teeTime } = await supabaseAdmin
+        .from("event_tee_times")
+        .select("event_id")
+        .eq("id", eventTeeTimeId)
+        .maybeSingle();
+      const evtId = (teeTime as any)?.event_id as string | null;
+      if (evtId) {
+        const { data: evt } = await supabaseAdmin
+          .from("events")
+          .select("leaderboard_freeze_state, leaderboard_freeze_last_holes, num_rounds")
+          .eq("id", evtId)
+          .maybeSingle();
+        if (evt && (evt as any).leaderboard_freeze_state === "frozen" && (evt as any).leaderboard_freeze_last_holes != null) {
+          const numRounds = (evt as any).num_rounds ?? 1;
+          competitionHolesShown = numRounds * 18 - (evt as any).leaderboard_freeze_last_holes;
+        }
+      }
+    } catch {
+      // Non-fatal: proceed without freeze context
     }
   }
 
@@ -148,7 +196,7 @@ export async function emitRoundPlayedFeedItem(params: {
   }
 
   // Build players[] payload
-  const players = (participants ?? []).map((rp: any) => {
+  const buildIndividualPlayers = () => (participants ?? []).map((rp: any) => {
     const pid = rp.id as string;
     const profile_id = (rp.profile_id as string | null) ?? null;
 
@@ -167,7 +215,11 @@ export async function emitRoundPlayedFeedItem(params: {
     const ch = courseHandicapByParticipantId.get(pid) ?? null;
     const net_total = typeof gross_total === "number" && typeof ch === "number" ? gross_total - ch : null;
 
+    const gross_to_par = typeof gross_total === "number" && typeof parTotal === "number" ? gross_total - parTotal : null;
+    const net_to_par = typeof net_total === "number" && typeof parTotal === "number" ? net_total - parTotal : null;
+
     const format_score = formatSummary?.player_scores.get(pid) ?? null;
+    const holes_completed = holesCompletedByParticipantId.get(pid) ?? null;
 
     return {
       profile_id,
@@ -175,9 +227,37 @@ export async function emitRoundPlayedFeedItem(params: {
       avatar_url,
       gross_total,
       net_total,
+      gross_to_par,
+      net_to_par,
+      par_total: parTotal,
       format_score,
+      holes_completed,
+      ...(competitionHolesShown != null ? { competition_holes_shown: competitionHolesShown } : {}),
     };
   });
+
+  const buildTeamPlayers = () => teamsByRound.map((t) => {
+    const members = (participants ?? []).filter((p: any) => p.team_id === t.id);
+    const firstMember = members[0] as any | undefined;
+
+    // Gross total = first member's gross (single-ball team shares one score)
+    const gross_total = firstMember ? (grossByParticipantId.get(firstMember.id) ?? null) : null;
+    const gross_to_par = typeof gross_total === "number" && typeof parTotal === "number" ? gross_total - parTotal : null;
+
+    return {
+      profile_id: null as string | null,
+      name: t.name,
+      avatar_url: null as string | null,
+      gross_total,
+      net_total: null as number | null,
+      gross_to_par,
+      net_to_par: null as number | null,
+      par_total: parTotal,
+      format_score: formatSummary?.player_scores.get(t.id) ?? null,
+    };
+  });
+
+  const players = isSingleBall && teamsByRound.length > 0 ? buildTeamPlayers() : buildIndividualPlayers();
 
   const subjectProfileIds = players
     .map((p: any) => (typeof p.profile_id === "string" ? p.profile_id : null))

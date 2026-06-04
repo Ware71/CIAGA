@@ -29,16 +29,21 @@ function formatDistance(meters: number) {
 type Props = {
   open: boolean;
   onClose: () => void;
-  onSelect: (courseId: string) => void;
+  onSelect: (courseId: string, courseName?: string) => void;
+  preloadedNearby?: Course[] | null;
+  nearbyGpsPos?: { lat: number; lng: number } | null;
 };
 
-export function CoursePickerModal({ open, onClose, onSelect }: Props) {
+export function CoursePickerModal({ open, onClose, onSelect, preloadedNearby, nearbyGpsPos }: Props) {
   const [mode, setMode] = useState<"nearby" | "world">("nearby");
 
   // ── Nearby state ──
   const [nearbyLoading, setNearbyLoading] = useState(false);
+  const [nearbyExpandLoading, setNearbyExpandLoading] = useState(false);
   const [nearbyError, setNearbyError] = useState<string | null>(null);
-  const [nearbyCourses, setNearbyCourses] = useState<Course[]>([]);
+  const [nearbyLoadStep, setNearbyLoadStep] = useState<0 | 1 | 2>(0);
+  const [nearbyAll5km, setNearbyAll5km] = useState<Course[]>([]);
+  const [nearbyExpanded, setNearbyExpanded] = useState<Course[]>([]);
   const [nearbyFilter, setNearbyFilter] = useState("");
 
   // ── Worldwide state ──
@@ -56,24 +61,39 @@ export function CoursePickerModal({ open, onClose, onSelect }: Props) {
   useEffect(() => {
     if (!open) {
       nearbyLoadedRef.current = false;
+      setNearbyLoadStep(0);
+      setNearbyAll5km([]);
+      setNearbyExpanded([]);
       return;
     }
     if (mode !== "nearby" || nearbyLoadedRef.current) return;
 
-    let cancelled = false;
     nearbyLoadedRef.current = true;
+
+    // Use preloaded data from page-load GPS fetch if available
+    if (preloadedNearby && preloadedNearby.length > 0) {
+      setNearbyAll5km(preloadedNearby);
+      setNearbyLoadStep(0);
+      if (nearbyGpsPos) lastPosRef.current = nearbyGpsPos;
+      return;
+    }
+
+    let cancelled = false;
 
     async function fetchNearby(lat: number, lng: number) {
       try {
         const res = await fetch(
-          `/api/courses/nearby?lat=${lat}&lng=${lng}&radius=30000`,
+          `/api/courses/nearby?lat=${lat}&lng=${lng}&radius=5000`,
           { cache: "no-store" }
         );
         const data = await res.json();
         if (!res.ok) throw new Error(data?.error ?? "Failed to load courses");
 
         const items: Course[] = Array.isArray(data?.items) ? data.items : [];
-        if (!cancelled) setNearbyCourses(items);
+        if (!cancelled) {
+          setNearbyAll5km(items);
+          setNearbyLoadStep(0);
+        }
       } catch (e: any) {
         if (!cancelled) setNearbyError(e?.message ?? "Unknown error");
       } finally {
@@ -114,12 +134,37 @@ export function CoursePickerModal({ open, onClose, onSelect }: Props) {
     };
   }, [open, mode]);
 
+  async function fetchExpanded() {
+    const pos = lastPosRef.current;
+    if (!pos) return;
+    setNearbyExpandLoading(true);
+    try {
+      const res = await fetch(
+        `/api/courses/nearby?lat=${pos.lat}&lng=${pos.lng}&radius=20000`,
+        { cache: "no-store" }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? "Failed to load courses");
+      const items: Course[] = Array.isArray(data?.items) ? data.items : [];
+      setNearbyExpanded(items);
+      setNearbyLoadStep(2);
+    } catch (e: any) {
+      setNearbyError(e?.message ?? "Unknown error");
+    } finally {
+      setNearbyExpandLoading(false);
+    }
+  }
+
   // ── Courses currently displayed ──
   const displayCourses: Course[] = useMemo(() => {
     if (mode === "world" && world.step === "courses") return world.courses;
-    if (mode === "nearby") return nearbyCourses;
+    if (mode === "nearby") {
+      if (nearbyLoadStep === 0) return nearbyAll5km.slice(0, 5);
+      if (nearbyLoadStep === 1) return nearbyAll5km;
+      return nearbyExpanded;
+    }
     return [];
-  }, [mode, world.step, world.courses, nearbyCourses]);
+  }, [mode, world.step, world.courses, nearbyLoadStep, nearbyAll5km, nearbyExpanded]);
 
   // ── Overrides ──
   useEffect(() => {
@@ -170,7 +215,7 @@ export function CoursePickerModal({ open, onClose, onSelect }: Props) {
   async function onSelectCourse(c: Course) {
     const ov = overrides[c.id];
     if (ov?.course_id) {
-      onSelect(ov.course_id);
+      onSelect(ov.course_id, c.name);
       return;
     }
 
@@ -192,7 +237,7 @@ export function CoursePickerModal({ open, onClose, onSelect }: Props) {
       if (!res.ok)
         throw new Error(data?.error ?? data?.reason ?? "Resolve failed");
 
-      if (data?.course_id) onSelect(data.course_id);
+      if (data?.course_id) onSelect(data.course_id, c.name);
     } catch (e: any) {
       console.error("Resolve error:", e?.message ?? e);
     } finally {
@@ -215,6 +260,12 @@ export function CoursePickerModal({ open, onClose, onSelect }: Props) {
   const showCourseList =
     (mode === "nearby" && !nearbyLoading && !nearbyError) ||
     (mode === "world" && world.step === "courses" && !world.coursesLoading);
+
+  // ── Load more button logic ──
+  const showLoadMore =
+    mode === "nearby" && !nearbyLoading && !nearbyError && showCourseList;
+  const loadMoreStep0 = showLoadMore && nearbyLoadStep === 0 && nearbyAll5km.length > 5;
+  const loadMoreStep1 = showLoadMore && nearbyLoadStep === 1;
 
   if (!open) return null;
 
@@ -416,7 +467,9 @@ export function CoursePickerModal({ open, onClose, onSelect }: Props) {
               ? "No golf courses found near this location. Try a different spot."
               : nearbyFilter.trim()
               ? "No matches found."
-              : "No courses found within 30 km."}
+              : nearbyLoadStep === 2
+              ? "No courses found within 20 km — try searching by name."
+              : "No courses found within 5 km — try searching by name."}
           </div>
         )}
 
@@ -456,6 +509,27 @@ export function CoursePickerModal({ open, onClose, onSelect }: Props) {
               );
             })}
           </ul>
+        )}
+
+        {/* Load more */}
+        {loadMoreStep0 && (
+          <button
+            type="button"
+            onClick={() => setNearbyLoadStep(1)}
+            className="w-full rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/40 py-3 text-sm text-emerald-100/70 hover:bg-emerald-900/20 hover:text-emerald-100"
+          >
+            Show all {nearbyAll5km.length} within 5 km
+          </button>
+        )}
+        {loadMoreStep1 && (
+          <button
+            type="button"
+            onClick={fetchExpanded}
+            disabled={nearbyExpandLoading}
+            className="w-full rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/40 py-3 text-sm text-emerald-100/70 hover:bg-emerald-900/20 hover:text-emerald-100 disabled:opacity-50"
+          >
+            {nearbyExpandLoading ? "Searching…" : "Search wider area (20 km)"}
+          </button>
         )}
 
         <footer className="pt-2 text-center text-[10px] text-emerald-100/50">

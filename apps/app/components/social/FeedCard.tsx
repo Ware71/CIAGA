@@ -75,8 +75,8 @@ function holeEventBadgeText(payload: any): string {
   return "HOLE EVENT";
 }
 
-function cardHeaderTitle(item: FeedItemVM): string {
-  if (item.type === "round_played") return "Round Complete";
+function cardHeaderTitle(item: FeedItemVM, isLive: boolean): string {
+  if (item.type === "round_played") return isLive ? "Round Live" : "Round Complete";
   if (item.type === "course_record") return "Course Record";
   if (item.type === "pb") return "Personal Best";
   if (item.type === "hole_event") return holeEventBadgeText(item.payload);
@@ -231,11 +231,18 @@ function UserPostBody({ payload }: { payload: any }) {
   );
 }
 
-function RoundPlayedBody({ payload }: { payload: any }) {
+function RoundPlayedBody({ payload, isLive }: { payload: any; isLive: boolean }) {
   const players = Array.isArray(payload?.players) ? payload.players : [];
   const formatLabel = typeof payload?.format_label === "string" ? payload.format_label : null;
-  const formatWinner = typeof payload?.format_winner === "string" ? payload.format_winner : null;
+  const rawFormatWinner = typeof payload?.format_winner === "string" ? payload.format_winner : null;
+  const formatWinner = isLive && rawFormatWinner
+    ? rawFormatWinner.replace(" won ", " winning ")
+    : rawFormatWinner;
   const sideGameResults = Array.isArray(payload?.side_game_results) ? payload.side_game_results : [];
+  const formatType = typeof payload?.format_type === "string" ? payload.format_type : null;
+
+  // Show +/- to par as primary for strokeplay-like formats (null format_type is also strokeplay)
+  const isStrokeplay = !formatType || formatType === "strokeplay" || formatType === "team_strokeplay";
 
   return (
     <div className="space-y-2">
@@ -244,16 +251,19 @@ function RoundPlayedBody({ payload }: { payload: any }) {
           {players.slice(0, 6).map((p: any, idx: number) => {
             const gross = safeNum(p?.gross_total);
             const net = safeNum(p?.net_total);
+            const grossToPar = safeNum(p?.gross_to_par);
             const netToPar = safeNum(p?.net_to_par);
             const parTotal = safeNum(p?.par_total);
             const holesCompleted = safeNum(p?.holes_completed);
             const formatScore = p?.format_score;
             const hasFormatScore = formatScore !== null && formatScore !== undefined;
+            const compHolesShown = safeNum(p?.competition_holes_shown);
+            const isFrozenCard = compHolesShown != null && holesCompleted != null && holesCompleted > compHolesShown;
 
             return (
               <div
                 key={`${p?.profile_id ?? p?.name ?? idx}`}
-                className="rounded-xl border border-emerald-900/40 bg-emerald-950/10 px-2 py-2"
+                className={`rounded-xl border px-2 py-2 ${isFrozenCard ? "border-cyan-700/40 bg-cyan-900/20" : "border-emerald-900/40 bg-emerald-950/10"}`}
               >
                 {/* Line 1: Avatar | Name | Gross | Net */}
                 <div className="flex items-center gap-2">
@@ -269,8 +279,15 @@ function RoundPlayedBody({ payload }: { payload: any }) {
                   )}
 
                   <div className="min-w-0 flex-1">
-                    <div className="text-sm font-extrabold text-emerald-50 truncate">{p?.name ?? "Player"}</div>
-                    {holesCompleted !== null ? (
+                    <div className="flex items-center gap-1">
+                      <div className="text-sm font-extrabold text-emerald-50 truncate">{p?.name ?? "Player"}</div>
+                      {isFrozenCard && <span className="text-[11px] leading-none shrink-0">❄️</span>}
+                    </div>
+                    {isFrozenCard ? (
+                      <div className="text-[11px] font-semibold text-cyan-300/70">
+                        Thru {compHolesShown} ({holesCompleted})
+                      </div>
+                    ) : holesCompleted !== null ? (
                       <div className="text-[11px] font-semibold text-emerald-100/55">Thru {holesCompleted}</div>
                     ) : parTotal !== null ? (
                       <div className="text-[11px] font-semibold text-emerald-100/55">Par {parTotal}</div>
@@ -279,22 +296,36 @@ function RoundPlayedBody({ payload }: { payload: any }) {
 
                   <div className="flex items-center gap-2">
                     <div className="text-right">
+                      {isStrokeplay && gross !== null ? (
+                        <div className="text-[10px] font-semibold text-emerald-100/50">{gross}</div>
+                      ) : null}
                       <div className="text-[10px] font-extrabold text-emerald-100/50">GROSS</div>
-                      <div className="text-sm font-extrabold text-[#f5e6b0]">{gross ?? "—"}</div>
+                      {isStrokeplay && grossToPar !== null ? (
+                        <div className="text-sm font-extrabold text-[#f5e6b0]">{formatToPar(grossToPar)}</div>
+                      ) : (
+                        <div className="text-sm font-extrabold text-[#f5e6b0]">{gross ?? "—"}</div>
+                      )}
                     </div>
 
                     <div className="w-px h-8 bg-emerald-900/40" />
 
                     <div className="text-right">
+                      {isStrokeplay && net !== null ? (
+                        <div className="text-[10px] font-semibold text-emerald-100/50">{net}</div>
+                      ) : null}
                       <div className="text-[10px] font-extrabold text-emerald-100/50">NET</div>
-                      <div className="text-sm font-extrabold text-emerald-50">
-                        {net ?? "—"}
-                        {typeof netToPar === "number" ? (
-                          <span className="ml-2 text-[11px] font-extrabold text-emerald-100/65">
-                            ({formatToPar(netToPar)})
-                          </span>
-                        ) : null}
-                      </div>
+                      {isStrokeplay && netToPar !== null ? (
+                        <div className="text-sm font-extrabold text-emerald-50">{formatToPar(netToPar)}</div>
+                      ) : (
+                        <div className="text-sm font-extrabold text-emerald-50">
+                          {net ?? "—"}
+                          {!isStrokeplay && typeof netToPar === "number" ? (
+                            <span className="ml-2 text-[11px] font-extrabold text-emerald-100/65">
+                              ({formatToPar(netToPar)})
+                            </span>
+                          ) : null}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -437,7 +468,7 @@ export default function FeedCard({ item }: { item: FeedItemVM }) {
 
   const isLive = item.id.startsWith("live:");
   const actionsEnabled = !isLive;
-  const headerTitle = cardHeaderTitle(item);
+  const headerTitle = cardHeaderTitle(item, isLive);
 
   const players = useMemo(() => {
     const p: any = item.payload ?? {};
@@ -449,6 +480,7 @@ export default function FeedCard({ item }: { item: FeedItemVM }) {
         avatar_url: x?.avatar_url ?? null,
         gross_total: safeNum(x?.gross_total),
         net_total: safeNum(x?.net_total),
+        gross_to_par: safeNum(x?.gross_to_par),
         net_to_par: safeNum(x?.net_to_par),
         par_total: safeNum(x?.par_total),
       }))
@@ -571,7 +603,11 @@ export default function FeedCard({ item }: { item: FeedItemVM }) {
               </div>
             </div>
           ) : primaryPerson ? (
-            <div className="mb-2 flex items-center gap-2">
+            <button
+              type="button"
+              className="mb-2 flex items-center gap-2 cursor-pointer"
+              onClick={(e) => { e.stopPropagation(); router.push(`/player/${primaryPerson.profile_id}`); }}
+            >
               {primaryPerson.avatar_url ? (
                 <img
                   src={primaryPerson.avatar_url}
@@ -584,13 +620,13 @@ export default function FeedCard({ item }: { item: FeedItemVM }) {
                   {avatarInitial(primaryPerson.display_name ?? "P")}
                 </div>
               )}
-              <div className="min-w-0">
+              <div className="min-w-0 text-left">
                 <div className="text-sm font-extrabold truncate text-emerald-50">
                   {primaryPerson.display_name ?? "Player"}
                 </div>
                 <div className="text-[11px] font-semibold text-emerald-100/60">{timeLabel}</div>
               </div>
-            </div>
+            </button>
           ) : (
             <div className="mb-2 text-[11px] font-semibold text-emerald-100/60">{timeLabel}</div>
           )}
@@ -678,7 +714,7 @@ export default function FeedCard({ item }: { item: FeedItemVM }) {
         {item.type === "user_post" ? (
           <UserPostBody payload={item.payload as any} />
         ) : item.type === "round_played" ? (
-          <RoundPlayedBody payload={item.payload as any} />
+          <RoundPlayedBody payload={item.payload as any} isLive={isLive} />
         ) : item.type === "pb" || item.type === "course_record" ? (
           <PbOrRecordBody item={item} />
         ) : item.type === "hole_event" ? (

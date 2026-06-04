@@ -18,12 +18,15 @@ export function strokesReceivedOnHole(
       : null;
   if (raw === 0 || !si) return 0;
 
-  const sign = raw < 0 ? -1 : 1;
   const abs = Math.abs(raw);
   const base = Math.floor(abs / holeCount);
   const rem = abs % holeCount;
 
-  return sign * (base + (si <= rem ? 1 : 0));
+  if (raw < 0) {
+    // Plus handicap: strokes assigned to easiest holes (highest SI)
+    return -(base + (si > holeCount - rem ? 1 : 0));
+  }
+  return base + (si <= rem ? 1 : 0);
 }
 
 /**

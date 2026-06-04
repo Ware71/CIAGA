@@ -26,6 +26,21 @@ function normalizeGender(g: any): "male" | "female" | "unisex" {
   return "unisex";
 }
 
+export async function GET(req: NextRequest) {
+  const course_id = (new URL(req.url).searchParams.get("course_id") ?? "").trim();
+  if (!course_id) return NextResponse.json({ error: "Missing course_id" }, { status: 400 });
+
+  const { data, error } = await supabaseAdmin
+    .from("course_tee_boxes")
+    .select("id, name, gender, yards, par, rating, slope, sort_order")
+    .eq("course_id", course_id)
+    .order("sort_order", { ascending: true })
+    .order("rating", { ascending: false, nullsFirst: false });
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ tee_boxes: data ?? [] });
+}
+
 export async function POST(req: NextRequest) {
   let body: CreateTeeBoxBody | null = null;
 

@@ -12,6 +12,7 @@ type Body = {
   default_playing_handicap_value?: number;
   scheduled_at?: string | null;
   name?: string;
+  setup_locked?: boolean;
 };
 
 export async function POST(req: Request) {
@@ -80,6 +81,7 @@ export async function POST(req: Request) {
           updates.status = "draft";
         }
       }
+      if (body.setup_locked !== undefined) updates.setup_locked = body.setup_locked;
     }
 
     // Name can be edited by any participant (while draft/scheduled)

@@ -12,7 +12,7 @@ export type RoundFormatType =
   | "scramble" | "greensomes" | "foursomes"
   | "skins" | "wolf";
 
-export type Team = { id: string; round_id: string; name: string; team_number: number };
+export type Team = { id: string; round_id: string; name: string; team_number: number; playing_handicap_used?: number | null };
 
 export type Participant = {
   id: string;
@@ -61,6 +61,8 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
   const [formatConfig, setFormatConfig] = useState<Record<string, any>>({});
   const [sideGames, setSideGames] = useState<SideGame[]>([]);
 
+  const [eventTeeTimeId, setEventTeeTimeId] = useState<string | null>(null);
+
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [teeSnapshotId, setTeeSnapshotId] = useState<string | null>(null);
@@ -88,6 +90,7 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
     setFormatType((r.format_type as RoundFormatType) || "strokeplay");
     setFormatConfig((r.format_config as Record<string, any>) || {});
     setSideGames((r.side_games as SideGame[]) || []);
+    setEventTeeTimeId((r.event_tee_time_id as string) ?? null);
 
     // Build extras map from participant_extras
     const extrasMap: Record<string, { playing_handicap_used: number | null; team_id: string | null; handicap_index_direct: number | null }> = {};
@@ -105,12 +108,15 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
           rating: toNumOrNull(snap.tee_snapshot.rating),
           slope: toNumOrNull(snap.tee_snapshot.slope),
           par_total: toNumOrNull(snap.tee_snapshot.par_total),
+          holes_count: (snap.tee_snapshot.holes_count as number | null) ?? 18,
         }
       : null;
 
     const computeCH = (hi: number | null): number | null => {
       if (hi === null || !teeMeta || teeMeta.rating === null || teeMeta.slope === null || teeMeta.par_total === null) return null;
-      return Math.round(hi * (teeMeta.slope! / 113) + (teeMeta.rating! - teeMeta.par_total!));
+      // For 9-hole rounds: halve the handicap index before applying the WHS formula
+      const effectiveHi = teeMeta.holes_count === 9 ? hi / 2 : hi;
+      return Math.round(effectiveHi * (teeMeta.slope! / 113) + (teeMeta.rating! - teeMeta.par_total!));
     };
 
     const mappedParticipants = ((snap.participants ?? []) as any[]).map((row: any) => {
@@ -332,6 +338,8 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
     teams,
     teeSnapshotId,
     holes,
+
+    eventTeeTimeId,
 
     scoresByKey,
     setScoresByKey,

@@ -276,12 +276,42 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     teams,
     teeSnapshotId,
     holes,
+    eventTeeTimeId,
     scoresByKey,
     setScoresByKey,
     holeStatesByKey,
     setHoleStatesByKey,
     canScore,
   } = useRoundDetail(roundId, initialSnapshot);
+
+  // Resolve event ID via the reliable FK direction: event_tee_times.round_id → rounds.id
+  // (rounds.event_tee_time_id is a back-link set without error handling and may be NULL)
+  const [eventId, setEventId] = useState<string | null>(null);
+  const [competitionPointsModel, setCompetitionPointsModel] = useState<string | undefined>(undefined);
+  const [competitionPointsTable, setCompetitionPointsTable] = useState<Record<string, number> | undefined>(undefined);
+  const [competitionGroupId, setCompetitionGroupId] = useState<string | undefined>(undefined);
+  const [competitionSeasonId, setCompetitionSeasonId] = useState<string | undefined>(undefined);
+  const [competitionScoringModel, setCompetitionScoringModel] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    supabase
+      .from("event_tee_times")
+      .select("event_id, event:events(points_model, points_table, group_id, group_season_id, scoring_model)")
+      .eq("round_id", roundId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.event_id) {
+          setEventId(data.event_id as string);
+          const comp = (data as any).event;
+          if (comp) {
+            setCompetitionPointsModel(comp.points_model ?? undefined);
+            setCompetitionPointsTable(comp.points_table ?? undefined);
+            setCompetitionGroupId(comp.group_id ?? undefined);
+            setCompetitionSeasonId(comp.group_season_id ?? undefined);
+            setCompetitionScoringModel(comp.scoring_model ?? undefined);
+          }
+        }
+      });
+  }, [roundId]);
 
   // Tracks hole keys with scores not yet confirmed by the server
   const [pendingKeys, setPendingKeys] = useState<Set<string>>(new Set());
@@ -418,6 +448,11 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     }
   }, [scoreView, formatDisplays]);
 
+  // Single-ball formats (scramble, greensomes, foursomes) play one team ball —
+  // individual gross/net tabs are meaningless; always show the format tab.
+  const SINGLE_BALL_FORMATS: RoundFormatType[] = ["scramble", "greensomes", "foursomes"];
+  const isSingleBall = SINGLE_BALL_FORMATS.includes(formatType);
+
   // For stableford-based formats, default to the format (points) tab once it's available
   useEffect(() => {
     const stablefordFormats: RoundFormatType[] = ["stableford", "pairs_stableford", "team_stableford", "team_bestball"];
@@ -426,6 +461,22 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formatType, formatDisplays.length]);
+
+  // For single-ball formats, force format:0 (never show gross/net)
+  useEffect(() => {
+    if (isSingleBall && formatDisplays.length > 0 && !isFormatView(scoreView)) {
+      setScoreView("format:0" as FormatScoreView);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSingleBall, formatDisplays.length]);
+
+  // Net tab is hidden during live competition rounds — fall back to gross if it was active
+  useEffect(() => {
+    if (scoreView === "net" && eventId && !isFinished) {
+      setScoreView("gross");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId, isFinished]);
 
   // Displayed score:
   // - not_started (non-acceptable) => null (render blank)
@@ -559,6 +610,14 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     return map;
   }, [participants, totals, metaSums.parTot]);
 
+  const holesCompletedByParticipantId = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const p of participants) {
+      map[p.id] = holesList.filter((h) => isHoleCompleteForPlayer(p.id, h.hole_number)).length;
+    }
+    return map;
+  }, [participants, holesList, isHoleCompleteForPlayer]);
+
   // Always-available gross totals for leaderboard (independent of scoreView)
   const grossTotals = useMemo(() => {
     const byPid: Record<string, { out: number; in: number; total: number }> = {};
@@ -612,6 +671,24 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     return byPid;
   }, [participants, holesList, scoreFor, holeStatesByKey]);
 
+  const parThroughByParticipantId = useMemo(() => {
+    const map: Record<string, number | null> = {};
+    for (const p of participants) {
+      let parThrough = 0;
+      let hasAny = false;
+      for (const h of holesList) {
+        const st = holeStatesByKey[`${p.id}:${h.hole_number}`] ?? "not_started";
+        const s = scoreFor(p.id, h.hole_number);
+        if ((st === "picked_up" || typeof s === "number") && typeof h.par === "number") {
+          parThrough += h.par;
+          hasAny = true;
+        }
+      }
+      map[p.id] = hasAny ? parThrough : null;
+    }
+    return map;
+  }, [participants, holesList, holeStatesByKey, scoreFor]);
+
   const landscapePlan: LandscapeCol[] = useMemo(() => {
     const front = holesList.filter((h) => h.hole_number <= 9);
     const back = holesList.filter((h) => h.hole_number >= 10);
@@ -631,6 +708,9 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     const rows = buildFinalRows(participants, totals, toParTotalByParticipant, getParticipantLabel, getParticipantAvatar);
     const primaryFormat = formatDisplays[0] ?? null;
     const hasStringTotals = rows.some((r) => typeof r.total === "string");
+    // Only apply higherIsBetter when we are actually on a format view (e.g. Stableford points).
+    // On gross/net views, always sort lower = better regardless of format type.
+    const useHigherIsBetter = isFormatView(scoreView) && (primaryFormat?.higherIsBetter ?? false);
     if (hasStringTotals) {
       // Matchplay: winners (W ...) sort before losers (L ...), then AS
       rows.sort((a, b) => {
@@ -640,13 +720,13 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
         const bWin = bStr.startsWith("W") ? 0 : bStr.startsWith("L") ? 2 : 1;
         return aWin - bWin || a.name.localeCompare(b.name);
       });
-    } else if (primaryFormat?.higherIsBetter) {
+    } else if (useHigherIsBetter) {
       rows.sort((a, b) => (b.total as number) - (a.total as number) || a.name.localeCompare(b.name));
     } else {
       rows.sort((a, b) => (a.total as number) - (b.total as number) || a.name.localeCompare(b.name));
     }
     return rows;
-  }, [participants, totals, toParTotalByParticipant, getParticipantLabel, getParticipantAvatar, formatDisplays]);
+  }, [participants, totals, toParTotalByParticipant, getParticipantLabel, getParticipantAvatar, formatDisplays, scoreView]);
 
   const winner = useMemo(() => {
     if (!finalRows.length) return null;
@@ -828,11 +908,14 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     }));
     if (typeof strokes === "number") {
       setHoleStatesByKey((prev) => ({ ...prev, [key]: "completed" }));
+    } else {
+      // Clear score: revert hole to not_started
+      setHoleStatesByKey((prev) => { const next = { ...prev }; delete next[key]; return next; });
     }
 
     // 2. If offline, queue the op and return success
     if (typeof navigator !== "undefined" && !navigator.onLine) {
-      upsertQueueOp({ key, roundId, participantId, holeNumber, strokes, enteredBy: meId, holeStatus: typeof strokes === "number" ? "completed" : null, timestamp: Date.now() });
+      upsertQueueOp({ key, roundId, participantId, holeNumber, strokes, enteredBy: meId, holeStatus: typeof strokes === "number" ? "completed" : "not_started", timestamp: Date.now() });
       setPendingKeys((prev) => { const next = new Set(prev); next.add(key); return next; });
       return true;
     }
@@ -848,15 +931,13 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
       });
       if (error) throw error;
 
-      // If user entered a number, also persist the hole state
-      if (typeof strokes === "number") {
-        await supabase
-          .from("round_hole_states")
-          .upsert(
-            { round_id: roundId, participant_id: participantId, hole_number: holeNumber, status: "completed" },
-            { onConflict: "participant_id,hole_number" }
-          );
-      }
+      // Always persist the hole state (completed or not_started)
+      await supabase
+        .from("round_hole_states")
+        .upsert(
+          { round_id: roundId, participant_id: participantId, hole_number: holeNumber, status: typeof strokes === "number" ? "completed" : "not_started" },
+          { onConflict: "participant_id,hole_number" }
+        );
 
       // Clear from pending queue if it was there
       removeQueueOp(key);
@@ -866,7 +947,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     } catch (e: any) {
       if (isNetworkError(e)) {
         // Queue for later sync; optimistic state already applied
-        upsertQueueOp({ key, roundId, participantId, holeNumber, strokes, enteredBy: meId, holeStatus: typeof strokes === "number" ? "completed" : null, timestamp: Date.now() });
+        upsertQueueOp({ key, roundId, participantId, holeNumber, strokes, enteredBy: meId, holeStatus: typeof strokes === "number" ? "completed" : "not_started", timestamp: Date.now() });
         setPendingKeys((prev) => { const next = new Set(prev); next.add(key); return next; });
         return true;
       }
@@ -1023,11 +1104,10 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     advanceAfterCompletion(pid, hole);
   }
 
-  // Scramble mode: show one column per team instead of one per player.
-  // Each team's scores map to the first team member's participant ID.
-  const isScramble = formatType === "scramble";
-  const scrambleTeamParticipants = useMemo<Participant[]>(() => {
-    if (!isScramble || !teams.length) return participants;
+  // Single-ball mode: show one column per team instead of one per player.
+  // Covers scramble, greensomes, and foursomes — all use one team score.
+  const singleBallTeamParticipants = useMemo<Participant[]>(() => {
+    if (!isSingleBall || !teams.length) return participants;
     // Build a virtual participant per team, using first member's ID
     return teams
       .map((t) => {
@@ -1040,9 +1120,9 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
         } as Participant;
       })
       .filter(Boolean) as Participant[];
-  }, [isScramble, teams, participants]);
+  }, [isSingleBall, teams, participants]);
 
-  const scorecardParticipants = isScramble ? scrambleTeamParticipants : participants;
+  const scorecardParticipants = isSingleBall ? singleBallTeamParticipants : participants;
 
   // When on a format tab with filtered participants, show only those
   const visibleParticipants = useMemo(() => {
@@ -1053,20 +1133,39 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     return scorecardParticipants;
   }, [scorecardParticipants, activeFormatDisplay]);
 
-  const scrambleGetLabel = useCallback(
+  const singleBallGetLabel = useCallback(
     (p: Participant) => {
-      if (isScramble) return p.display_name || "Team";
+      if (isSingleBall) return p.display_name || "Team";
       return getParticipantLabel(p);
     },
-    [isScramble, getParticipantLabel]
+    [isSingleBall, getParticipantLabel]
   );
 
-  const scrambleGetAvatar = useCallback(
+  const singleBallGetAvatar = useCallback(
     (p: Participant) => {
-      if (isScramble) return null; // No avatar for teams
+      if (isSingleBall) return null; // No avatar for teams
       return getParticipantAvatar(p);
     },
-    [isScramble, getParticipantAvatar]
+    [isSingleBall, getParticipantAvatar]
+  );
+
+  // Build a map from first-member participant ID → all team member avatars for the scorecard header stack
+  const teamAvatarMap = useMemo<Record<string, Array<{ name: string; url: string | null }>>>(() => {
+    if (!isSingleBall) return {};
+    const map: Record<string, Array<{ name: string; url: string | null }>> = {};
+    for (const t of teams) {
+      const members = participants.filter((p) => p.team_id === t.id);
+      const first = members[0];
+      if (first) {
+        map[first.id] = members.map((m) => ({ name: getParticipantLabel(m), url: getParticipantAvatar(m) }));
+      }
+    }
+    return map;
+  }, [isSingleBall, teams, participants, getParticipantLabel, getParticipantAvatar]);
+
+  const getParticipantAvatarList = useCallback(
+    (p: Participant) => (isSingleBall ? teamAvatarMap[p.id] ?? null : null),
+    [isSingleBall, teamAvatarMap]
   );
 
   if (loading) {
@@ -1122,6 +1221,12 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
                 router.push("/social");
               } else if (from === "player") {
                 router.back();
+              } else if (from === "competition") {
+                const eventId = sp.get("eventId");
+                if (eventId) router.replace(`/majors/events/${eventId}`);
+                else router.replace("/majors");
+              } else if (from === "milestones") {
+                router.push("/stats/milestones");
               } else {
                 router.push("/round");
               }
@@ -1137,25 +1242,31 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
                 </div>
                 <div className="mt-1 flex justify-center">
                   <div className="rounded-xl border border-emerald-900/70 bg-[#0b3b21]/50 p-1 flex items-center overflow-hidden max-w-full">
-                    <button
-                      className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 ${
-                        scoreView === "gross" ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
-                      }`}
-                      onClick={() => setScoreView("gross")}
-                    >
-                      Gross
-                    </button>
-                    <button
-                      className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 ${
-                        scoreView === "net" ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
-                      }`}
-                      onClick={() => setScoreView("net")}
-                    >
-                      Net
-                    </button>
+                    {!isSingleBall && (
+                      <>
+                        <button
+                          className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 ${
+                            scoreView === "gross" ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
+                          }`}
+                          onClick={() => setScoreView("gross")}
+                        >
+                          Gross
+                        </button>
+                        {(!eventId || isFinished) && (
+                          <button
+                            className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 ${
+                              scoreView === "net" ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
+                            }`}
+                            onClick={() => setScoreView("net")}
+                          >
+                            Net
+                          </button>
+                        )}
+                      </>
+                    )}
                     {formatDisplays.length > 0 && (
                       <>
-                        <div className="w-px h-5 bg-emerald-900/50 mx-0.5 shrink-0" />
+                        {!isSingleBall && <div className="w-px h-5 bg-emerald-900/50 mx-0.5 shrink-0" />}
                         <div className="flex overflow-x-auto min-w-0" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
                           {formatDisplays.map((fd, i) => (
                             <button
@@ -1201,25 +1312,31 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
                   <Menu className="h-5 w-5" />
                 </Button>
                 <div className="rounded-xl border border-emerald-900/70 bg-[#0b3b21]/50 p-1 flex items-center overflow-hidden max-w-full">
-                  <button
-                    className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 ${
-                      scoreView === "gross" ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
-                    }`}
-                    onClick={() => setScoreView("gross")}
-                  >
-                    Gross
-                  </button>
-                  <button
-                    className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 ${
-                      scoreView === "net" ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
-                    }`}
-                    onClick={() => setScoreView("net")}
-                  >
-                    Net
-                  </button>
+                  {!isSingleBall && (
+                    <>
+                      <button
+                        className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 ${
+                          scoreView === "gross" ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
+                        }`}
+                        onClick={() => setScoreView("gross")}
+                      >
+                        Gross
+                      </button>
+                      {(!eventId || isFinished) && (
+                        <button
+                          className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 ${
+                            scoreView === "net" ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
+                          }`}
+                          onClick={() => setScoreView("net")}
+                        >
+                          Net
+                        </button>
+                      )}
+                    </>
+                  )}
                   {formatDisplays.length > 0 && (
                     <>
-                      <div className="w-px h-5 bg-emerald-900/50 mx-0.5 shrink-0" />
+                      {!isSingleBall && <div className="w-px h-5 bg-emerald-900/50 mx-0.5 shrink-0" />}
                       <div className="flex overflow-x-auto min-w-0" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
                         {formatDisplays.map((fd, i) => (
                           <button
@@ -1288,8 +1405,9 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
               displayedScoreFor={displayedScoreFor}
               holeStateFor={holeStateFor}
               onOpenEntry={openEntry}
-              getParticipantLabel={scrambleGetLabel}
-              getParticipantAvatar={scrambleGetAvatar}
+              getParticipantLabel={singleBallGetLabel}
+              getParticipantAvatar={singleBallGetAvatar}
+              getParticipantAvatarList={getParticipantAvatarList}
             />
           ) : (
             <ScorecardLandscape
@@ -1308,8 +1426,8 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
               displayedScoreFor={displayedScoreFor}
               holeStateFor={holeStateFor}
               onOpenEntry={openEntry}
-              getParticipantLabel={scrambleGetLabel}
-              getParticipantAvatar={scrambleGetAvatar}
+              getParticipantLabel={singleBallGetLabel}
+              getParticipantAvatar={singleBallGetAvatar}
             />
           )
         ) : null}
@@ -1327,11 +1445,21 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
             formatDisplays={formatDisplays}
             grossTotals={grossTotals}
             netTotals={netTotals}
-            parTotal={metaSums.parTot}
-            getParticipantLabel={scrambleGetLabel}
-            getParticipantAvatar={scrambleGetAvatar}
+            parThroughByParticipantId={parThroughByParticipantId}
+            getParticipantLabel={singleBallGetLabel}
+            getParticipantAvatar={singleBallGetAvatar}
             courseLabel={courseLabel}
             formatType={formatType}
+            holesCompletedByParticipantId={holesCompletedByParticipantId}
+            teams={isSingleBall ? teams : undefined}
+            allParticipants={isSingleBall ? participants : undefined}
+            isTeamFormat={isSingleBall}
+            eventId={eventId ?? undefined}
+            competitionPointsModel={competitionPointsModel}
+            competitionPointsTable={competitionPointsTable}
+            groupId={competitionGroupId}
+            seasonId={competitionSeasonId}
+            scoringModel={competitionScoringModel}
           />
         )}
 

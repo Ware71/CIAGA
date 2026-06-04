@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
-import { emitRoundPlayedFeedItem } from "@/lib/feed/generators/roundPlayed";
-import { emitHoleEventFeedItems } from "@/lib/feed/generators/holeEvents";
-import { emitAchievementFeedItems } from "@/lib/feed/generators/achievements";
+import { finishRound } from "@/lib/rounds/finishRound";
 
 export async function POST(
   req: Request,
@@ -15,7 +13,8 @@ export async function POST(
 
     if (!roundId) throw new Error("Missing round_id");
 
-    // Must be owner or scorer for this round
+    // Must be a participant in this round (any role may finish — consistent with
+    // any-participant scoring policy; competition rounds add players as role="player").
     const { data: rp, error: rpErr } = await supabaseAdmin
       .from("round_participants")
       .select("role")
@@ -25,30 +24,11 @@ export async function POST(
 
     if (rpErr) throw rpErr;
 
-    const role = (rp as any)?.role as string | undefined;
-    if (!role || (role !== "owner" && role !== "scorer")) {
+    if (!rp) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Update round status
-    const { error: upErr } = await supabaseAdmin
-      .from("rounds")
-      .update({ status: "finished" })
-      .eq("id", roundId);
-
-    if (upErr) throw upErr;
-
-    // Emit feed items (best effort)
-    await emitRoundPlayedFeedItem({
-      roundId,
-      actorProfileId: profileId,
-    });
-
-    // Hole events + achievements in parallel (non-blocking)
-    await Promise.allSettled([
-      emitHoleEventFeedItems({ roundId, actorProfileId: profileId }),
-      emitAchievementFeedItems({ roundId, actorProfileId: profileId }),
-    ]);
+    await finishRound({ roundId, actorProfileId: profileId });
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {

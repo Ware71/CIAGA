@@ -27,7 +27,7 @@ function rangeToText(r: { start: number; end: number } | null) {
 
 function goRound(router: any, roundId: string | null | undefined) {
   if (!roundId) return;
-  router.push(`/round/${roundId}`);
+  router.push(`/round/${roundId}?from=milestones`);
 }
 
 // -----------------------------

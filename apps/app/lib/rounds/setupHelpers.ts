@@ -19,6 +19,8 @@ export type Round = {
   scheduled_at?: string | null;
   default_playing_handicap_mode?: PlayingHandicapMode;
   default_playing_handicap_value?: number;
+  setup_locked?: boolean;
+  event_tee_time_id?: string | null;
 };
 
 export type ProfileJoin = {
@@ -34,6 +36,7 @@ export type Participant = {
   is_guest: boolean;
   display_name: string | null;
   role: "owner" | "scorer" | "player";
+  team_id?: string | null;
   profiles?: ProfileJoin | ProfileJoin[] | null;
   handicap_index?: number | null;
   assigned_playing_handicap?: number | null;

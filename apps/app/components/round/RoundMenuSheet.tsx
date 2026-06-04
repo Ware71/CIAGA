@@ -1,11 +1,14 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import type { Participant } from "@/lib/rounds/hooks/useRoundDetail";
 import type { RoundFormatType } from "@/lib/rounds/hooks/useRoundDetail";
 import type { FormatDisplayData } from "@/lib/rounds/formatScoring";
+import { supabase } from "@/lib/supabaseClient";
+import { getViewerSession } from "@/lib/auth/viewerSession";
+import { FEDEX_POINTS } from "@/lib/events/constants";
 
 const FORMAT_LABELS: Record<RoundFormatType, string> = {
   strokeplay: "Stroke Play",
@@ -35,15 +38,96 @@ function formatToPar(toPar: number | null) {
   return toPar > 0 ? `+${toPar}` : `${toPar}`;
 }
 
-type LeaderboardTab = "gross" | "net" | `format:${number}`;
+function formatLeaderboardScore(
+  toPar: number | null,
+  rawScore: number | null,
+  scoringModel?: string
+): string {
+  if (scoringModel === "stableford_points") {
+    return rawScore != null ? String(rawScore) : "—";
+  }
+  if (toPar != null) return toPar === 0 ? "E" : toPar > 0 ? `+${toPar}` : String(toPar);
+  return rawScore != null ? String(rawScore) : "—";
+}
+
+function formatLeaderboardLabel(scoringModel?: string): string {
+  if (scoringModel === "stableford_points") return "pts";
+  return "to par";
+}
+
+function formatTeeTime(iso: string) {
+  try {
+    return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  } catch {
+    return iso;
+  }
+}
+
+type FreezeConfig = {
+  freeze_state: "live" | "frozen" | "revealed";
+  freeze_last_holes: number | null;
+  freeze_scope: "all" | "top_x";
+  freeze_top_x: number | null;
+  reveal_style: "none" | "animated";
+  reveal_top_x: number | null;
+  total_holes: number;
+};
+
+type LeaderboardTab = "gross" | "net" | `format:${number}` | "competition" | "season";
 
 type LeaderboardRow = {
   participantId: string;
+  profileId?: string;
   name: string;
   avatarUrl: string | null;
   score: number | string;
   toPar: number | null;
+  thru: number | null;
 };
+
+type CompetitionStandingEntry = {
+  profile_id: string;
+  name: string | null;
+  avatar_url: string | null;
+  gross_score: number | null;
+  net_score: number | null;
+  format_points?: number | null;
+  to_par: number | null;
+  points_earned: number | null;
+  position: number | null;
+  thru: number;
+  holes_completed: number;
+  holes_shown: number;
+  actual_holes_completed: number;
+  is_live: boolean;
+  is_submitted: boolean;
+  tee_time?: string | null;
+};
+
+type SeasonStandingEntry = {
+  profile_id: string;
+  name: string | null;
+  avatar_url: string | null;
+  season_points: number;
+  events_played: number;
+  wins: number;
+  position: number | null;
+};
+
+const FEDEX_POINTS_SCALE = FEDEX_POINTS;
+
+function projectedPoints(
+  rank: number | null,
+  pointsModel: string | undefined,
+  pointsTable: Record<string, number> | undefined
+): number | null {
+  if (!rank || !pointsModel || pointsModel === "none") return null;
+  if (pointsModel === "fedex_style") return FEDEX_POINTS_SCALE[rank - 1] ?? 0;
+  if ((pointsModel === "position_based" || pointsModel === "custom_table") && pointsTable) {
+    return pointsTable[String(rank)] ?? null;
+  }
+  return null;
+}
 
 export default function RoundMenuSheet(props: {
   onClose: () => void;
@@ -54,11 +138,21 @@ export default function RoundMenuSheet(props: {
   formatDisplays: FormatDisplayData[];
   grossTotals: Record<string, { out: number; in: number; total: number }>;
   netTotals: Record<string, { out: number; in: number; total: number }>;
-  parTotal: number | null;
+  parThroughByParticipantId: Record<string, number | null>;
   getParticipantLabel: (p: Participant) => string;
   getParticipantAvatar: (p: Participant) => string | null;
   courseLabel: string;
   formatType: RoundFormatType;
+  holesCompletedByParticipantId: Record<string, number>;
+  teams?: Array<{ id: string; name: string }>;
+  allParticipants?: Participant[];
+  isTeamFormat?: boolean;
+  eventId?: string;
+  competitionPointsModel?: string;
+  competitionPointsTable?: Record<string, number>;
+  groupId?: string;
+  seasonId?: string;
+  scoringModel?: string;
 }) {
   const {
     onClose,
@@ -69,14 +163,210 @@ export default function RoundMenuSheet(props: {
     formatDisplays,
     grossTotals,
     netTotals,
-    parTotal,
+    parThroughByParticipantId,
     getParticipantLabel,
     getParticipantAvatar,
     courseLabel,
     formatType,
+    holesCompletedByParticipantId,
+    teams,
+    allParticipants,
+    isTeamFormat,
+    eventId,
+    competitionPointsModel,
+    competitionPointsTable,
+    groupId,
+    seasonId,
+    scoringModel,
   } = props;
 
-  const [activeTab, setActiveTab] = useState<LeaderboardTab>("gross");
+  const showPts = !!competitionPointsModel && competitionPointsModel !== "none";
+
+  const [activeTab, setActiveTab] = useState<LeaderboardTab>(eventId ? "competition" : "gross");
+  // Track whether the user has explicitly clicked a tab (vs auto-selected on init).
+  // Used to auto-switch to "competition" when eventId arrives after initial render.
+  const tabUserSelected = useRef(false);
+
+  // Competition standings (realtime-synced)
+  const [compStandings, setCompStandings] = useState<CompetitionStandingEntry[] | null>(null);
+  const [compLoading, setCompLoading] = useState(false);
+  const [compFreeze, setCompFreeze] = useState<FreezeConfig | null>(null);
+
+  async function fetchCompStandings() {
+    if (!eventId) return;
+    setCompLoading(true);
+    try {
+      const session = await getViewerSession();
+      if (!session) { setCompStandings([]); return; }
+      const res = await fetch(`/api/majors/leaderboard?event_id=${eventId}`, {
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+      });
+      const data = await res.json();
+      const rows = (data.rows ?? []).map((r: any) => {
+        const holesShown = r.holes_shown ?? r.holes_completed ?? 0;
+        const actualHoles = r.actual_holes_completed ?? holesShown;
+        return {
+          profile_id: r.profile_id,
+          name: r.profile?.name ?? null,
+          avatar_url: r.profile?.avatar_url ?? null,
+          gross_score: r.gross_score,
+          net_score: r.net_score,
+          to_par: r.to_par ?? null,
+          format_points: r.format_points ?? null,
+          points_earned: r.points_earned ?? null,
+          position: r.position ?? null,
+          thru: holesShown,
+          holes_completed: r.holes_completed ?? holesShown,
+          holes_shown: holesShown,
+          actual_holes_completed: actualHoles,
+          is_live: r.is_live ?? false,
+          is_submitted: (r.rounds_submitted ?? 0) > 0,
+          tee_time: r.tee_time ?? null,
+        };
+      });
+      setCompStandings(rows);
+      if (data.freeze) setCompFreeze(data.freeze);
+    } catch {
+      setCompStandings([]);
+    } finally {
+      setCompLoading(false);
+    }
+  }
+
+  // Season/group standings (realtime-synced)
+  const [seasonStandings, setSeasonStandings] = useState<SeasonStandingEntry[] | null>(null);
+  const [seasonLoading, setSeasonLoading] = useState(false);
+
+  async function fetchSeasonStandings() {
+    if (!seasonId && !groupId) return;
+    setSeasonLoading(true);
+    try {
+      const session = await getViewerSession();
+      if (!session) { setSeasonStandings([]); return; }
+      const authHeaders = { Authorization: `Bearer ${session.accessToken}` };
+      let rows: SeasonStandingEntry[] = [];
+      if (seasonId) {
+        const res = await fetch(`/api/majors/group-seasons/${seasonId}/standings`, { headers: authHeaders });
+        const data = await res.json();
+        rows = (data.standings ?? []).map((r: any) => ({
+          profile_id: r.profile_id,
+          name: r.profile?.name ?? null,
+          avatar_url: r.profile?.avatar_url ?? null,
+          season_points: r.season_points ?? 0,
+          events_played: r.events_played ?? 0,
+          wins: r.wins ?? 0,
+          position: r.position ?? null,
+        }));
+      } else {
+        const res = await fetch(`/api/majors/leaderboard?group_id=${groupId}`, { headers: authHeaders });
+        const data = await res.json();
+        rows = (data.rows ?? []).map((r: any) => ({
+          profile_id: r.profile_id,
+          name: r.profile?.name ?? null,
+          avatar_url: r.profile?.avatar_url ?? null,
+          season_points: r.season_points ?? 0,
+          events_played: r.events_played ?? 0,
+          wins: r.wins ?? 0,
+          position: r.position ?? null,
+        }));
+      }
+      setSeasonStandings(rows);
+    } catch {
+      setSeasonStandings([]);
+    } finally {
+      setSeasonLoading(false);
+    }
+  }
+
+  // If eventId arrives after initial render (race condition), auto-switch from
+  // the default "gross" tab to "competition" so cross-tee-time data shows immediately.
+  useEffect(() => {
+    if (eventId && !tabUserSelected.current && activeTab === "gross") {
+      setActiveTab("competition");
+    }
+  }, [eventId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleTabChange(tab: LeaderboardTab) {
+    tabUserSelected.current = true;
+    setActiveTab(tab);
+    if (tab === "competition") fetchCompStandings();
+    if (tab === "season") fetchSeasonStandings();
+  }
+
+  const hasSeasonTab = !!(groupId || seasonId);
+
+  // Realtime: competition leaderboard
+  useEffect(() => {
+    if (!eventId) return;
+    fetchCompStandings();
+
+    let cancelled = false;
+    const channel = supabase
+      .channel(`round-menu:comp:${eventId}`)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "event_leaderboard_entries",
+        filter: `event_id=eq.${eventId}`,
+      }, () => { if (!cancelled) fetchCompStandings(); })
+      .on("postgres_changes", {
+        event: "UPDATE",
+        schema: "public",
+        table: "events",
+        filter: `id=eq.${eventId}`,
+      }, (payload) => {
+        if (!cancelled && payload.new) {
+          const c = payload.new as any;
+          setCompFreeze((prev) =>
+            prev ? { ...prev, freeze_state: c.leaderboard_freeze_state ?? prev.freeze_state } : prev
+          );
+          if (c.leaderboard_freeze_state === "frozen" || c.leaderboard_freeze_state === "revealed") fetchCompStandings();
+        }
+      })
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
+  }, [eventId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Realtime: season standings
+  useEffect(() => {
+    if (!seasonId && !groupId) return;
+    fetchSeasonStandings();
+
+    let cancelled = false;
+    const channelKey = seasonId ?? groupId!;
+    const table = seasonId ? "group_season_standings_entries" : "major_group_standings";
+    const filter = seasonId ? `group_season_id=eq.${seasonId}` : `group_id=eq.${groupId}`;
+    const channel = supabase
+      .channel(`round-menu:season:${channelKey}`)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table,
+        filter,
+      }, () => { if (!cancelled) fetchSeasonStandings(); })
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
+  }, [seasonId, groupId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Map from first-member participant ID → all team members (for showing players under each team row)
+  const teamMembersByFirstId = useMemo<Record<string, Participant[]>>(() => {
+    if (!isTeamFormat || !teams?.length || !allParticipants?.length) return {};
+    const map: Record<string, Participant[]> = {};
+    for (const t of teams) {
+      const members = allParticipants.filter((p) => (p as any).team_id === t.id);
+      const first = members[0];
+      if (first) map[first.id] = members;
+    }
+    return map;
+  }, [isTeamFormat, teams, allParticipants]);
 
   // Build leaderboard rows for the active tab
   function buildRows(): LeaderboardRow[] {
@@ -84,12 +374,16 @@ export default function RoundMenuSheet(props: {
       return participants.map((p) => {
         const t = grossTotals[p.id];
         const total = t?.total ?? 0;
+        const thru = holesCompletedByParticipantId[p.id] ?? null;
+        const parThru = parThroughByParticipantId[p.id] ?? null;
         return {
           participantId: p.id,
+          profileId: (p as any).profile_id ?? undefined,
           name: getParticipantLabel(p),
           avatarUrl: getParticipantAvatar(p),
           score: total,
-          toPar: typeof parTotal === "number" && total > 0 ? total - parTotal : null,
+          toPar: typeof parThru === "number" && total > 0 ? total - parThru : null,
+          thru: thru > 0 ? thru : null,
         };
       });
     }
@@ -98,12 +392,16 @@ export default function RoundMenuSheet(props: {
       return participants.map((p) => {
         const t = netTotals[p.id];
         const total = t?.total ?? 0;
+        const thru = holesCompletedByParticipantId[p.id] ?? null;
+        const parThru = parThroughByParticipantId[p.id] ?? null;
         return {
           participantId: p.id,
+          profileId: (p as any).profile_id ?? undefined,
           name: getParticipantLabel(p),
           avatarUrl: getParticipantAvatar(p),
           score: total,
-          toPar: typeof parTotal === "number" && total > 0 ? total - parTotal : null,
+          toPar: typeof parThru === "number" && total > 0 ? total - parThru : null,
+          thru: thru > 0 ? thru : null,
         };
       });
     }
@@ -117,12 +415,15 @@ export default function RoundMenuSheet(props: {
       .filter((p) => !fd.filteredParticipantIds || fd.filteredParticipantIds.includes(p.id))
       .map((p) => {
         const summary = fd.summaries.find((s) => s.participantId === p.id);
+        const thru = holesCompletedByParticipantId[p.id] ?? null;
         return {
           participantId: p.id,
+          profileId: (p as any).profile_id ?? undefined,
           name: getParticipantLabel(p),
           avatarUrl: getParticipantAvatar(p),
           score: summary?.total ?? "–",
           toPar: null,
+          thru: thru > 0 ? thru : null,
         };
       });
   }
@@ -156,14 +457,22 @@ export default function RoundMenuSheet(props: {
 
   const rows = sortRows(buildRows());
 
-  // Available tabs
+  // Available tabs — round tabs, then competition / season if applicable
   const tabs: { key: LeaderboardTab; label: string }[] = [
     { key: "gross", label: "Gross" },
-    { key: "net", label: "Net" },
+    ...(!eventId || isFinished ? [{ key: "net" as LeaderboardTab, label: "Net" }] : []),
   ];
   for (let i = 0; i < formatDisplays.length; i++) {
-    tabs.push({ key: `format:${i}` as LeaderboardTab, label: formatDisplays[i].tabLabel });
+    tabs.push({ key: `format:${i}` as LeaderboardTab, label: eventId ? "Group" : formatDisplays[i].tabLabel });
   }
+  if (eventId) {
+    tabs.push({ key: "competition", label: "Competition" });
+  }
+  if (hasSeasonTab) {
+    tabs.push({ key: "season", label: "Season" });
+  }
+
+  const isRoundTab = activeTab === "gross" || activeTab === "net" || activeTab.startsWith("format:");
 
   return (
     <div className="fixed inset-0 z-50">
@@ -212,7 +521,7 @@ export default function RoundMenuSheet(props: {
                           ? "bg-[#f5e6b0] text-[#042713]"
                           : "text-emerald-100/80 hover:bg-emerald-900/20"
                       }`}
-                      onClick={() => setActiveTab(tab.key)}
+                      onClick={() => handleTabChange(tab.key)}
                     >
                       {tab.label}
                     </button>
@@ -220,44 +529,216 @@ export default function RoundMenuSheet(props: {
                 </div>
               </div>
 
-              {/* Rows */}
-              <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/60 overflow-hidden divide-y divide-emerald-900/60">
-                {rows.map((r, idx) => {
-                  const prev = rows[idx - 1];
-                  const sameScore = prev && prev.score === r.score;
-                  const rank = idx === 0 ? 1 : sameScore ? null : idx + 1;
+              {/* Round leaderboard rows (only when a round tab is active) */}
+              {isRoundTab && (
+                <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/60 overflow-hidden divide-y divide-emerald-900/60">
+                  {rows.map((r, idx) => {
+                    const prev = rows[idx - 1];
+                    const sameScore = prev && prev.score === r.score;
+                    const rank = idx === 0 ? 1 : sameScore ? null : idx + 1;
+                    const effectiveRank = rank ?? idx + 1;
+                    // When this is a competition round, use full-field position from compStandings
+                    const compEntry = (eventId && compStandings && r.profileId)
+                      ? compStandings.find((s) => s.profile_id === r.profileId)
+                      : null;
+                    const pts = showPts
+                      ? (compEntry
+                          ? (compEntry.points_earned ?? projectedPoints(compEntry.position, competitionPointsModel, competitionPointsTable))
+                          : projectedPoints(effectiveRank, competitionPointsModel, competitionPointsTable))
+                      : null;
+                    const teamMembers = teamMembersByFirstId[r.participantId];
 
-                  return (
-                    <div key={r.participantId} className="px-3 py-2.5 flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-6 text-center text-[11px] font-bold text-emerald-100/90">
-                          {rank ?? "•"}
+                    return (
+                      <div key={r.participantId}>
+                        <div className="px-3 py-2.5 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-6 text-center text-[11px] font-bold text-emerald-100/90">
+                              {rank ?? "•"}
+                            </div>
+                            <Avatar className="h-7 w-7 border border-emerald-200/70 shrink-0">
+                              {r.avatarUrl ? <AvatarImage src={r.avatarUrl} /> : null}
+                              <AvatarFallback className="text-[9px]">{initialsFrom(r.name)}</AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-0">
+                              <div className="text-[12px] font-semibold text-emerald-50 truncate">{r.name}</div>
+                              {r.thru != null && (
+                                <div className="text-[10px] text-emerald-100/55 leading-none mt-0.5">Thru {r.thru}</div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3 shrink-0">
+                            {showPts && (
+                              <div className="text-right">
+                                <div className="text-[9px] text-emerald-200/50 uppercase tracking-wider leading-none">Pts</div>
+                                <div className="text-[11px] font-bold text-emerald-300 tabular-nums">{pts ?? "—"}</div>
+                              </div>
+                            )}
+                            <div className="text-right">
+                              <div className="text-[15px] font-extrabold tabular-nums text-[#f5e6b0]">
+                                {r.toPar != null ? formatToPar(r.toPar) : r.score}
+                              </div>
+                              {r.toPar != null && (
+                                <div className="text-[9px] text-emerald-100/50">({r.score})</div>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                        <Avatar className="h-7 w-7 border border-emerald-200/70 shrink-0">
-                          {r.avatarUrl ? <AvatarImage src={r.avatarUrl} /> : null}
-                          <AvatarFallback className="text-[9px]">{initialsFrom(r.name)}</AvatarFallback>
-                        </Avatar>
-                        <div className="text-[12px] font-semibold text-emerald-50 truncate">{r.name}</div>
+                        {isTeamFormat && teamMembers && teamMembers.length > 0 && (
+                          <div className="pl-11 pr-3 pb-2 flex flex-wrap gap-1.5">
+                            {teamMembers.map((m) => {
+                              const mName = getParticipantLabel(m);
+                              const mUrl = getParticipantAvatar(m);
+                              return (
+                                <div key={m.id} className="flex items-center gap-1 text-[10px] text-emerald-100/60">
+                                  <Avatar className="h-4 w-4 border border-emerald-200/50 shrink-0">
+                                    {mUrl ? <AvatarImage src={mUrl} /> : null}
+                                    <AvatarFallback className="text-[7px]">{initialsFrom(mName)}</AvatarFallback>
+                                  </Avatar>
+                                  <span>{mName}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
-                      <div className="shrink-0 text-right">
-                        <div className="text-[15px] font-extrabold tabular-nums text-[#f5e6b0]">
-                          {r.score}
-                          {r.toPar != null && (
-                            <span className="text-[10px] font-bold text-emerald-100/80 ml-1">
-                              ({formatToPar(r.toPar)})
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                    );
+                  })}
+                  {rows.length === 0 && (
+                    <div className="px-3 py-4 text-center text-[11px] text-emerald-100/50">
+                      No scores yet
                     </div>
-                  );
-                })}
-                {rows.length === 0 && (
-                  <div className="px-3 py-4 text-center text-[11px] text-emerald-100/50">
-                    No scores yet
+                  )}
+                </div>
+              )}
+
+              {/* Competition tab */}
+              {activeTab === "competition" && (
+                <>
+                {compFreeze?.freeze_state === "frozen" && (
+                  <div className="flex items-center gap-2 rounded-xl border border-amber-700/50 bg-amber-900/20 px-3 py-2 mb-3">
+                    <span className="text-amber-400 text-sm">🔒</span>
+                    <div>
+                      <p className="text-xs font-semibold text-amber-300">Leaderboard frozen</p>
+                      {compFreeze.freeze_last_holes != null && (
+                        <p className="text-[10px] text-amber-300/70">
+                          Last {compFreeze.freeze_last_holes} hole{compFreeze.freeze_last_holes !== 1 ? "s" : ""} hidden
+                          {compFreeze.freeze_scope === "top_x" && compFreeze.freeze_top_x != null
+                            ? ` (top ${compFreeze.freeze_top_x} positions only)`
+                            : ""}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 )}
-              </div>
+                <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/60 overflow-hidden divide-y divide-emerald-900/60">
+                  {compLoading && (
+                    <div className="px-3 py-4 text-center text-[11px] text-emerald-100/50">Loading…</div>
+                  )}
+                  {!compLoading && (compStandings ?? []).map((s) => {
+                    const freezeThreshold = compFreeze
+                      ? compFreeze.total_holes - (compFreeze.freeze_last_holes ?? 0)
+                      : Infinity;
+                    const isFrozenRow = compFreeze?.freeze_state === "frozen" &&
+                      s.holes_shown >= freezeThreshold &&
+                      (compFreeze.freeze_scope !== "top_x" || (s.position ?? 999) <= (compFreeze.freeze_top_x ?? Infinity));
+                    const thruText = (() => {
+                      if (isFrozenRow) {
+                        if (s.is_live && s.actual_holes_completed > s.holes_shown) {
+                          return `thru ${s.holes_shown} (${s.actual_holes_completed})`;
+                        }
+                        if (!s.is_live) return `thru ${s.holes_shown} (F)`;
+                        return `thru ${s.holes_shown}`;
+                      }
+                      if (s.is_live) return `Live · Thru ${s.holes_completed}`;
+                      if (s.is_submitted) return s.holes_completed > 0 ? `F (${s.holes_completed})` : "Submitted";
+                      if (s.tee_time) return formatTeeTime(s.tee_time);
+                      return "Pending";
+                    })();
+                    return (
+                      <div
+                        key={s.profile_id}
+                        className={`px-3 py-2.5 flex items-center gap-2.5 ${isFrozenRow ? "bg-cyan-900/20" : ""}`}
+                      >
+                        <div className="w-6 text-center text-[11px] font-bold text-emerald-100/90">{s.position ?? "—"}</div>
+                        <Avatar className="h-7 w-7 border border-emerald-200/70 shrink-0">
+                          {s.avatar_url ? <AvatarImage src={s.avatar_url} /> : null}
+                          <AvatarFallback className="text-[9px]">{initialsFrom(s.name ?? "")}</AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1">
+                            <div className="text-[12px] font-semibold text-emerald-50 truncate">{s.name ?? "—"}</div>
+                            {isFrozenRow && <span className="text-[10px] leading-none shrink-0">❄️</span>}
+                          </div>
+                          <div className={`text-[10px] leading-none mt-0.5 ${isFrozenRow ? "text-cyan-300/70" : "text-emerald-100/55"}`}>{thruText}</div>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <div className="text-right">
+                            {scoringModel === "stableford_points" ? (
+                              <>
+                                <div className="text-[15px] font-extrabold tabular-nums text-[#f5e6b0]">
+                                  {s.format_points != null ? `${s.format_points} pts` : "—"}
+                                </div>
+                                {s.to_par != null && (
+                                  <div className="text-[9px] text-emerald-100/50">
+                                    {s.to_par === 0 ? "E" : s.to_par > 0 ? `+${s.to_par}` : String(s.to_par)}
+                                  </div>
+                                )}
+                                {s.gross_score != null && (
+                                  <div className="text-[9px] text-emerald-100/50">({s.gross_score} gross)</div>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                <div className="text-[15px] font-extrabold tabular-nums text-[#f5e6b0]">
+                                  {s.to_par != null ? formatToPar(s.to_par) : (s.net_score ?? s.gross_score ?? "—")}
+                                </div>
+                                {s.to_par != null && s.gross_score != null && (
+                                  <div className="text-[9px] text-emerald-100/50">({s.gross_score} gross)</div>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {!compLoading && (compStandings ?? []).length === 0 && (
+                    <div className="px-3 py-4 text-center text-[11px] text-emerald-100/50">No scores yet</div>
+                  )}
+                </div>
+                </>
+              )}
+
+              {/* Season tab */}
+              {activeTab === "season" && (
+                <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/60 overflow-hidden divide-y divide-emerald-900/60">
+                  {seasonLoading && (
+                    <div className="px-3 py-4 text-center text-[11px] text-emerald-100/50">Loading…</div>
+                  )}
+                  {!seasonLoading && (seasonStandings ?? []).map((s) => (
+                    <div key={s.profile_id} className="px-3 py-2.5 flex items-center gap-2.5">
+                      <div className="w-6 text-center text-[11px] font-bold text-emerald-100/90">{s.position ?? "—"}</div>
+                      <Avatar className="h-7 w-7 border border-emerald-200/70 shrink-0">
+                        {s.avatar_url ? <AvatarImage src={s.avatar_url} /> : null}
+                        <AvatarFallback className="text-[9px]">{initialsFrom(s.name ?? "")}</AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[12px] font-semibold text-emerald-50 truncate">{s.name ?? "—"}</div>
+                        <div className="text-[10px] text-emerald-100/55 leading-none mt-0.5">
+                          {s.events_played} event{s.events_played !== 1 ? "s" : ""}{s.wins > 0 ? ` · ${s.wins}W` : ""}
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="text-[15px] font-extrabold tabular-nums text-[#f5e6b0]">{s.season_points}</div>
+                        <div className="text-[9px] text-emerald-100/50">pts</div>
+                      </div>
+                    </div>
+                  ))}
+                  {!seasonLoading && (seasonStandings ?? []).length === 0 && (
+                    <div className="px-3 py-4 text-center text-[11px] text-emerald-100/50">No standings yet</div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Round Settings */}

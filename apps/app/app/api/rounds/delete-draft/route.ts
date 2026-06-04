@@ -33,13 +33,22 @@ export async function POST(req: Request) {
     // Confirm round is draft (and not live)
     const { data: round, error: roundErr } = await supabaseAdmin
       .from("rounds")
-      .select("id, status")
+      .select("id, status, event_tee_time_id")
       .eq("id", body.round_id)
       .single();
 
     if (roundErr) return NextResponse.json({ error: roundErr.message }, { status: 500 });
     if (round.status !== "draft" && round.status !== "scheduled") {
       return NextResponse.json({ error: "Only draft or scheduled rounds can be deleted" }, { status: 400 });
+    }
+
+    // Rounds linked to a Majors tee time cannot be deleted from here —
+    // the player must withdraw via the competition page instead.
+    if (round.event_tee_time_id) {
+      return NextResponse.json(
+        { error: "This round is part of a Majors competition. To remove it, withdraw from the competition in the Majors section." },
+        { status: 403 }
+      );
     }
 
     const roundId = body.round_id;

@@ -1,8 +1,8 @@
 {
   "name": "CIAGA Golf",
   "short_name": "CIAGA",
-  "start_url": "/",
-  "id": "/",
+  "start_url": "/home",
+  "id": "/home",
   "display": "standalone",
   "orientation": "portrait",
   "description": "League management, live scorecards, rangefinder, and AI caddy.",

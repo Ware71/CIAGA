@@ -44,7 +44,7 @@ export function PlayingHandicapSettings({
         <div className="rounded-lg border border-emerald-900/70 bg-[#0b3b21]/50 p-3">
           <div className="text-sm font-semibold text-emerald-50">
             {MODE_LABELS[mode]}
-            {mode === "allowance_pct" && (
+            {(mode === "allowance_pct" || mode === "compare_against_lowest") && (
               <span className="text-emerald-200/80 ml-2">({value}%)</span>
             )}
             {mode === "fixed" && (
@@ -85,19 +85,19 @@ export function PlayingHandicapSettings({
         <option value="compare_against_lowest">{MODE_LABELS.compare_against_lowest}</option>
       </select>
 
-      {/* Value Input (only shown for allowance_pct and fixed modes) */}
-      {mode !== "none" && mode !== "compare_against_lowest" && (
+      {/* Value Input (shown for allowance_pct, compare_against_lowest, and fixed modes) */}
+      {mode !== "none" && (
         <div className="space-y-2">
           <label htmlFor="handicap-value" className="text-xs text-emerald-100/80">
-            {mode === "allowance_pct" ? "Allowance Percentage" : "Fixed Handicap Value"}
+            {mode === "allowance_pct" ? "Allowance Percentage" : mode === "compare_against_lowest" ? "Allowance % (applied to handicap difference)" : "Fixed Handicap Value"}
           </label>
           <div className="flex items-center gap-2">
             <input
               id="handicap-value"
               type="number"
               min={0}
-              max={mode === "allowance_pct" ? 100 : 54}
-              step={mode === "allowance_pct" ? 5 : 1}
+              max={mode === "fixed" ? 54 : 100}
+              step={mode === "fixed" ? 1 : 5}
               value={value}
               onChange={(e) => onValueChange(parseFloat(e.target.value) || 0)}
               disabled={disabled}
@@ -110,13 +110,13 @@ export function PlayingHandicapSettings({
 
           {/* Helper text */}
           <p className="text-xs text-emerald-100/60">
-            {mode === "allowance_pct" ? (
+            {mode === "fixed" ? (
+              <>Maximum handicap value is 54</>
+            ) : (
               <>
                 Common values: 100% (stroke play), 95% (4-ball), 90% (bogey), 85% (par/singles
                 matchplay), 75% (4-ball matchplay)
               </>
-            ) : (
-              <>Maximum handicap value is 54</>
             )}
           </p>
         </div>

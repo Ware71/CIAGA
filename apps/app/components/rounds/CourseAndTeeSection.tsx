@@ -54,6 +54,16 @@ function fmtNum(n: number | null | undefined, digits = 1) {
   return x.toFixed(digits);
 }
 
+type NearbyCourseLite = {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  distance_m: number;
+  website: string | null;
+  phone: string | null;
+};
+
 type Props = {
   roundId: string;
   courseId: string | null;
@@ -61,6 +71,8 @@ type Props = {
   isOwner: boolean;
   isEditable: boolean;
   onUpdate: () => void;
+  preloadedNearby?: NearbyCourseLite[] | null;
+  nearbyGpsPos?: { lat: number; lng: number } | null;
 };
 
 export function CourseAndTeeSection({
@@ -70,8 +82,9 @@ export function CourseAndTeeSection({
   isOwner,
   isEditable,
   onUpdate,
+  preloadedNearby,
+  nearbyGpsPos,
 }: Props) {
-  const [detecting, setDetecting] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -124,53 +137,6 @@ export function CourseAndTeeSection({
       cancelled = true;
     };
   }, [courseId, pendingTeeBoxId]);
-
-  // Auto-detect nearest course on mount
-  useEffect(() => {
-    if (!courseId && isOwner && isEditable && !detecting) {
-      autoDetectNearestCourse();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  async function autoDetectNearestCourse() {
-    setDetecting(true);
-    try {
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          timeout: 5000,
-          maximumAge: 60000,
-        });
-      });
-
-      const res = await fetch(
-        `/api/courses/nearby?lat=${position.coords.latitude}&lng=${position.coords.longitude}&radius=15000`
-      );
-      const data = await res.json();
-
-      if (data.items?.[0]) {
-        const nearest = data.items[0];
-
-        // Resolve OSM ID to database course_id
-        const resolveRes = await fetch("/api/courses/resolve", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ osm_id: nearest.id }),
-        });
-        const resolved = await resolveRes.json();
-
-        if (resolved.course_id) {
-          await updateCourse(resolved.course_id, null);
-          onUpdate();
-        }
-      }
-    } catch (e) {
-      // Silently fail - user can manually select
-      console.warn("Auto-detect nearest course failed:", e);
-    } finally {
-      setDetecting(false);
-    }
-  }
 
   async function updateCourse(newCourseId: string | null, newTeeId: string | null) {
     setError(null);
@@ -264,6 +230,8 @@ export function CourseAndTeeSection({
         setPickerOpen(false);
         await updateCourse(selectedCourseId, null);
       }}
+      preloadedNearby={preloadedNearby}
+      nearbyGpsPos={nearbyGpsPos}
     />
   );
 
@@ -285,9 +253,7 @@ export function CourseAndTeeSection({
             <div className="text-2xl mb-2">🏌️</div>
             <div className="text-sm text-emerald-100/70 mb-3">No course selected yet</div>
 
-            {detecting ? (
-              <div className="text-xs text-emerald-100/60">Detecting nearest course...</div>
-            ) : canEdit ? (
+            {canEdit ? (
               <Button
                 size="sm"
                 className="rounded-xl bg-emerald-700/80 hover:bg-emerald-700"
@@ -365,13 +331,23 @@ export function CourseAndTeeSection({
             <>
               <div className="mt-2 text-xs text-emerald-100/60">No tee selected</div>
               {canEdit && (
-                <Button
-                  size="sm"
-                  className="mt-2 rounded-xl bg-emerald-700/80 hover:bg-emerald-700"
-                  onClick={() => setShowTeeSelector(true)}
-                >
-                  Select Tee
-                </Button>
+                <div className="mt-2 flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1 rounded-xl border-emerald-900/70 bg-[#042713]/60 hover:bg-emerald-900/20"
+                    onClick={() => setPickerOpen(true)}
+                  >
+                    Change Course
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="flex-1 rounded-xl bg-emerald-700/80 hover:bg-emerald-700"
+                    onClick={() => setShowTeeSelector(true)}
+                  >
+                    Select Tee
+                  </Button>
+                </div>
               )}
             </>
           )}

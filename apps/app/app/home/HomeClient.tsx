@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useLayoutEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { AuthUser } from "@/components/ui/auth-user";
@@ -9,19 +9,19 @@ import { AuthUser } from "@/components/ui/auth-user";
 import type { FeedItemVM } from "@/lib/feed/types";
 import type { HomeSummary } from "@/lib/home/getHomeSummary";
 
-import {
-  clamp,
-  formatSigned,
-} from "@/lib/feed/feedItemUtils";
+import { clamp, formatSigned } from "@/lib/feed/feedItemUtils";
 import { formatHI } from "@/lib/rounds/handicapUtils";
 import { MiniFeedTeaserCard } from "@/components/social/MiniFeedTeaser";
 import { MajorsView } from "@/components/home/MajorsView";
+import type { MajorHubSummary } from "@/lib/majors/types";
 import { getViewerSession } from "@/lib/auth/viewerSession";
+import { LoadingScreen } from "@/components/ui/loading-screen";
+import { getCachedHomeData, setCachedHomeData } from "@/lib/home/homeDataCache";
 
 type MenuItem = { id: string; label: string };
 
 const homeMenuItemsBase: MenuItem[] = [
-  { id: "round", label: "New Round" }, // label will be overridden dynamically
+  { id: "round", label: "New Round" },
   { id: "history", label: "Round History" },
   { id: "stats", label: "Stats" },
   { id: "social", label: "Social" },
@@ -38,45 +38,51 @@ const majorsMenuItems: MenuItem[] = [
 
 type ViewMode = "home" | "majors";
 
-function EnvelopeIcon(props: { size?: number; className?: string }) {
+function BellIcon(props: { size?: number; className?: string }) {
   const s = props.size ?? 28;
   return (
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none" className={props.className} aria-hidden="true">
       <path
-        d="M4.5 7.5h15v9a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2v-9Z"
+        d="M15 17h5l-1.405-1.405A2.032 2.032 0 0 1 18 14.158V11a6.002 6.002 0 0 0-4-5.659V5a2 2 0 1 0-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 1 1-6 0v-1m6 0H9"
         stroke="currentColor"
-        strokeWidth="2"
+        strokeWidth="1.8"
+        strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <path d="M5.2 8.2 12 13.2l6.8-5" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
     </svg>
   );
 }
 
 type Props = {
   initialData?: HomeSummary;
+  initialMajors?: MajorHubSummary | null;
 };
 
-export default function CIAGAStarter({ initialData }: Props) {
+export default function HomeClient({ initialData, initialMajors }: Props) {
   const router = useRouter();
+
+  const seed = initialData;
+
+  // Show splash on first visit; skip on back navigation (splash_shown persists in sessionStorage).
+  // useLayoutEffect runs before paint so returning users never see the overlay flash.
+  const [showSplash, setShowSplash] = useState(true);
+  const [dataReady, setDataReady] = useState(false);
+  useLayoutEffect(() => {
+    if (sessionStorage.getItem("splash_shown") === "1") setShowSplash(false);
+  }, []);
 
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<ViewMode>("home");
 
-  // viewport-driven layout values
   const [vw, setVw] = useState(390);
   const [vh, setVh] = useState(844);
 
-  // ✅ Live round detection (for "Resume Round")
-  const [liveRoundId, setLiveRoundId] = useState<string | null>(initialData?.live_round_id ?? null);
-
-  // ✅ Profile id (used for handicap + last round)
+  const [liveRoundId, setLiveRoundId] = useState<string | null>(seed?.live_round_id ?? null);
   const [myProfileId, setMyProfileId] = useState<string | null>(null);
 
-  // ✅ Subtle home summary
-  const [handicapIndex, setHandicapIndex] = useState<number | null>(initialData?.handicap?.current ?? null);
-  const [handicapDelta30, setHandicapDelta30] = useState<number>(initialData?.handicap?.delta_30d ?? 0);
-  const [roundsPlayed, setRoundsPlayed] = useState<number | null>(initialData?.rounds_played ?? null);
+  const [handicapIndex, setHandicapIndex] = useState<number | null>(seed?.handicap?.current ?? null);
+  const [handicapDelta30, setHandicapDelta30] = useState<number>(seed?.handicap?.delta_30d ?? 0);
+  const [roundsPlayed, setRoundsPlayed] = useState<number | null>(seed?.rounds_played ?? null);
 
   const [lastRound, setLastRound] = useState<{
     course: string | null;
@@ -85,11 +91,15 @@ export default function CIAGAStarter({ initialData }: Props) {
     net: number | null;
     diff: number | null;
     played_at: string | null;
-  } | null>(initialData?.last_round ?? null);
+  } | null>(seed?.last_round ?? null);
 
-  const [miniFeed, setMiniFeed] = useState<FeedItemVM[]>(initialData?.mini_feed ?? []);
+  const [miniFeed, setMiniFeed] = useState<FeedItemVM[]>(seed?.mini_feed ?? []);
   const [miniFeedLoading, setMiniFeedLoading] = useState(false);
   const [miniFeedError, setMiniFeedError] = useState<string | null>(null);
+  const [majorsPreload, setMajorsPreload] = useState<MajorHubSummary | null>(initialMajors ?? null);
+  const [retryKey, setRetryKey] = useState(0);
+  const [showInviteSheet, setShowInviteSheet] = useState(false);
+  const [actioningInvite, setActioningInvite] = useState<Record<string, "declining">>({});
 
   useEffect(() => {
     const updateViewport = () => {
@@ -113,14 +123,44 @@ export default function CIAGAStarter({ initialData }: Props) {
     };
   }, []);
 
-  // ✅ Consolidated home data fetch (skipped when server-provided initialData exists)
+  // Home data fetch — uses module cache on back navigation, fetches fresh otherwise
   useEffect(() => {
-    if (initialData) return; // Already hydrated from server component
+    if (initialData) return;
+
+    const applyData = (data: HomeSummary) => {
+      setLiveRoundId(data.live_round_id ?? null);
+      setHandicapIndex(data.handicap?.current ?? null);
+      setHandicapDelta30(data.handicap?.delta_30d ?? 0);
+      setRoundsPlayed(data.rounds_played ?? null);
+      setLastRound(data.last_round ?? null);
+      setMiniFeed((data.mini_feed as FeedItemVM[]) ?? []);
+    };
+
+    // Serve cached data instantly on back navigation (no network, no loading state)
+    const cached = getCachedHomeData();
+    if (cached) {
+      applyData(cached.home);
+      setMajorsPreload(cached.majors);
+      setDataReady(true);
+      setMiniFeedLoading(false);
+      return;
+    }
 
     let cancelled = false;
+    let onlineRetryCleanup: (() => void) | null = null;
+
+    const scheduleRetry = () => {
+      if (onlineRetryCleanup) return;
+      const handler = () => {
+        if (!cancelled) setRetryKey((k) => k + 1);
+      };
+      window.addEventListener("online", handler, { once: true });
+      onlineRetryCleanup = () => window.removeEventListener("online", handler);
+    };
 
     (async () => {
       setMiniFeedLoading(true);
+      setMiniFeedError(null);
       try {
         const session = await getViewerSession();
         if (!session || cancelled) {
@@ -129,31 +169,44 @@ export default function CIAGAStarter({ initialData }: Props) {
         }
         if (!cancelled) setMyProfileId(session.profileId);
 
-        const res = await fetch("/api/home/summary", {
-          headers: { Authorization: `Bearer ${session.accessToken}` },
-        });
-        if (!res.ok || cancelled) return;
-        const data = await res.json();
+        const [homeRes, majorsRes] = await Promise.all([
+          fetch("/api/home/summary", { headers: { Authorization: `Bearer ${session.accessToken}` } }),
+          fetch("/api/majors/hub", { headers: { Authorization: `Bearer ${session.accessToken}` } }),
+        ]);
+        if (cancelled) return;
+        if (!homeRes.ok) {
+          setDataReady(true);
+          scheduleRetry();
+          return;
+        }
+        const [homeData, majorsData] = await Promise.all([
+          homeRes.json() as Promise<HomeSummary>,
+          majorsRes.ok ? majorsRes.json() as Promise<MajorHubSummary> : Promise.resolve(null),
+        ]);
 
         if (!cancelled) {
-          setLiveRoundId(data.live_round_id ?? null);
-          setHandicapIndex(data.handicap?.current ?? null);
-          setHandicapDelta30(data.handicap?.delta_30d ?? 0);
-          setRoundsPlayed(data.rounds_played ?? null);
-          setLastRound(data.last_round ?? null);
-          setMiniFeed((data.mini_feed as FeedItemVM[]) ?? []);
+          setCachedHomeData(homeData, majorsData);
+          applyData(homeData);
+          setMajorsPreload(majorsData);
+          setDataReady(true);
         }
       } catch (e: any) {
         if (!cancelled) {
           setMiniFeedError(e?.message ?? "Failed to load");
+          setDataReady(true);
+          scheduleRetry();
         }
       } finally {
         if (!cancelled) setMiniFeedLoading(false);
       }
     })();
 
-    return () => { cancelled = true; };
-  }, [initialData]);
+    return () => {
+      cancelled = true;
+      onlineRetryCleanup?.();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [retryKey]);
 
   const homeMenuItems: MenuItem[] = useMemo(() => {
     return homeMenuItemsBase.map((it) =>
@@ -176,56 +229,25 @@ export default function CIAGAStarter({ initialData }: Props) {
   const handleHomeSelect = (id: string) => {
     setOpen(false);
 
-    if (id === "courses") {
-      router.push("/courses");
-      return;
-    }
-
+    if (id === "courses") { router.push("/courses"); return; }
     if (id === "round") {
       if (liveRoundId) router.push(`/round/${liveRoundId}`);
       else router.push("/round");
       return;
     }
-
-    if (id === "history") {
-      router.push("/history");
-      return;
-    }
-
-    if (id === "stats") {
-      router.push("/stats");
-      return;
-    }
-
-    if (id === "social") {
-      router.push("/social");
-      return;
-    }
+    if (id === "history") { router.push("/history"); return; }
+    if (id === "stats") { router.push("/stats"); return; }
+    if (id === "social") { router.push("/social"); return; }
   };
 
   const handleMajorsSelect = (id: string) => {
     setOpen(false);
 
-    if (id === "majors-hub") {
-      router.push("/majors");
-      return;
-    }
-    if (id === "schedule") {
-      router.push("/majors/schedule");
-      return;
-    }
-    if (id === "leaderboard") {
-      router.push("/majors/leaderboard");
-      return;
-    }
-    if (id === "history") {
-      router.push("/majors/history");
-      return;
-    }
-    if (id === "profile") {
-      router.push("/majors/profile");
-      return;
-    }
+    if (id === "majors-hub") { router.push("/majors"); return; }
+    if (id === "schedule") { router.push("/majors/schedule"); return; }
+    if (id === "leaderboard") { router.push("/majors/leaderboard"); return; }
+    if (id === "history") { router.push("/majors/history"); return; }
+    if (id === "profile") { router.push("/majors/profile"); return; }
   };
 
   const wheelRadius = clamp(Math.min(vw, vh) * 0.38, 115, 170);
@@ -278,12 +300,21 @@ export default function CIAGAStarter({ initialData }: Props) {
     </AnimatePresence>
   );
 
-  // Exactly 5 teaser cards; no scrolling needed.
-  const MINI_CARD_H = 44; // teaser height approx
-  const MINI_GAP = 8; // space-y-2
+  const MINI_CARD_H = 44;
+  const MINI_GAP = 8;
   const miniFeedMaxH = MINI_CARD_H * 5 + MINI_GAP * 4;
 
   return (
+    <>
+      {showSplash && (
+        <LoadingScreen
+          isReady={dataReady}
+          onDone={() => {
+            setShowSplash(false);
+            window.dispatchEvent(new CustomEvent("splash:done"));
+          }}
+        />
+      )}
     <AnimatePresence initial={false} mode="wait">
       {view === "home" ? (
         <motion.div
@@ -321,24 +352,108 @@ export default function CIAGAStarter({ initialData }: Props) {
               </div>
             </div>
 
-            {/* Envelope + avatar */}
             <div className="flex items-center gap-4">
               <button
                 type="button"
-                className="h-14 w-14 rounded-full grid place-items-center text-emerald-100/75 hover:text-emerald-50 hover:bg-emerald-900/25"
+                className="relative h-14 w-14 rounded-full grid place-items-center text-emerald-100/75 hover:text-emerald-50 hover:bg-emerald-900/25"
                 onClick={() => {
-                  // TODO: wire mailbox/notifications
+                  if ((majorsPreload?.pending_invites?.length ?? 0) > 0) {
+                    setShowInviteSheet(true);
+                  }
                 }}
                 aria-label="Notifications"
                 title="Notifications"
               >
-                <EnvelopeIcon size={38} className="opacity-90" />
+                <BellIcon size={28} className="opacity-90" />
+                {(majorsPreload?.pending_invites?.length ?? 0) > 0 && (
+                  <span className="absolute top-2.5 right-2.5 h-2.5 w-2.5 rounded-full bg-red-500 border border-[#071c10]" />
+                )}
               </button>
 
               <div className="scale-[1.4] origin-top-right -translate-y-[4px]">
                 <AuthUser />
               </div>
             </div>
+
+            {/* Invite sheet */}
+            {showInviteSheet && (majorsPreload?.pending_invites?.length ?? 0) > 0 && (
+              <div
+                className="fixed inset-0 z-50 flex items-end"
+                onClick={() => setShowInviteSheet(false)}
+              >
+                <div className="absolute inset-0 bg-black/60" />
+                <div
+                  className="relative w-full rounded-t-3xl bg-[#071c10] border-t border-emerald-900/60 px-4 pt-4 pb-10 space-y-2"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="w-10 h-1 rounded-full bg-emerald-800/60 mx-auto mb-3" />
+                  <div className="text-[11px] uppercase tracking-widest text-emerald-200/50 font-semibold mb-3">Group Invites</div>
+                  {(majorsPreload?.pending_invites ?? []).map((inv) => {
+                    const isActioning = !!actioningInvite[inv.group_id];
+                    return (
+                      <div
+                        key={inv.group_id}
+                        className="w-full flex items-center gap-3 rounded-2xl border border-emerald-900/50 bg-emerald-950/40 px-4 py-3"
+                      >
+                        <div className="h-9 w-9 rounded-full bg-emerald-900/60 grid place-items-center text-[11px] font-bold text-emerald-200 shrink-0 overflow-hidden">
+                          {inv.group.image_url
+                            ? <img src={inv.group.image_url} alt="" className="h-full w-full object-cover" />
+                            : inv.group.name.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-semibold text-emerald-50 truncate">{inv.group.name}</div>
+                          <div className="text-[11px] text-emerald-200/50">You&apos;ve been invited</div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            disabled={isActioning}
+                            onClick={() => {
+                              setShowInviteSheet(false);
+                              router.push(`/majors/groups/${inv.group_id}?autoJoin=1`);
+                            }}
+                            className="text-[11px] font-semibold text-emerald-900 bg-emerald-400 hover:bg-emerald-300 disabled:opacity-50 rounded-full px-3 py-1.5 leading-none"
+                          >
+                            Accept
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isActioning}
+                            onClick={async () => {
+                              if (!myProfileId) return;
+                              setActioningInvite((prev) => ({ ...prev, [inv.group_id]: "declining" }));
+                              try {
+                                const session = await getViewerSession();
+                                if (!session) return;
+                                await fetch(`/api/majors/groups/${inv.group_id}/members?profile_id=${myProfileId}`, {
+                                  method: "DELETE",
+                                  headers: { Authorization: `Bearer ${session.accessToken}` },
+                                });
+                                setMajorsPreload((prev) => {
+                                  if (!prev) return prev;
+                                  const updated = prev.pending_invites.filter((i) => i.group_id !== inv.group_id);
+                                  if (updated.length === 0) setShowInviteSheet(false);
+                                  return { ...prev, pending_invites: updated };
+                                });
+                              } finally {
+                                setActioningInvite((prev) => {
+                                  const next = { ...prev };
+                                  delete next[inv.group_id];
+                                  return next;
+                                });
+                              }
+                            }}
+                            className="text-[11px] font-semibold text-emerald-200/60 hover:text-emerald-200 disabled:opacity-50 rounded-full border border-emerald-900/60 px-3 py-1.5 leading-none"
+                          >
+                            {isActioning ? "…" : "Decline"}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </header>
 
           {/* Subtle summary */}
@@ -437,7 +552,9 @@ export default function CIAGAStarter({ initialData }: Props) {
               {miniFeedLoading ? (
                 <div className="text-sm font-semibold text-emerald-100/70">Loading…</div>
               ) : miniFeed.length ? (
-                miniFeed.map((it) => <MiniFeedTeaserCard key={it.id} item={it} onOpen={() => router.push("/social")} />)
+                miniFeed.map((it) => (
+                  <MiniFeedTeaserCard key={it.id} item={it} onOpen={() => router.push("/social")} />
+                ))
               ) : miniFeedError ? (
                 <div className="text-sm font-semibold text-red-200/90">{miniFeedError}</div>
               ) : (
@@ -485,8 +602,10 @@ export default function CIAGAStarter({ initialData }: Props) {
           handleMajorsSelect={handleMajorsSelect}
           renderRadialMenu={renderRadialMenu}
           vh={vh}
+          initialHub={majorsPreload}
         />
       )}
     </AnimatePresence>
+    </>
   );
 }

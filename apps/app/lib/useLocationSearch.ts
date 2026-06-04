@@ -23,7 +23,8 @@ export type NearbyCourse = {
 
 export type WorldStep = "search" | "locations" | "courses";
 
-export function useLocationSearch() {
+export function useLocationSearch(options?: { radius?: number }) {
+  const radius = options?.radius ?? 5000;
   const [step, setStep] = useState<WorldStep>("search");
 
   // Location search
@@ -78,15 +79,13 @@ export function useLocationSearch() {
 
     try {
       const res = await fetch(
-        `/api/courses/nearby?lat=${lat}&lng=${lng}&radius=30000`,
+        `/api/courses/nearby?lat=${lat}&lng=${lng}&radius=${radius}`,
         { cache: "no-store" }
       );
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Failed to load courses");
 
-      const items: NearbyCourse[] = Array.isArray(data?.items)
-        ? data.items
-        : [];
+      const items: NearbyCourse[] = Array.isArray(data) ? data : [];
       setCourses(items);
       setStep("courses");
     } catch (e: any) {
@@ -94,7 +93,7 @@ export function useLocationSearch() {
     } finally {
       setCoursesLoading(false);
     }
-  }, []);
+  }, [radius]);
 
   const selectLocation = useCallback(
     (loc: LocationResult) => {

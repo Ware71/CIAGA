@@ -23,8 +23,9 @@ function formatToPar(toPar: number | null) {
 
 type BadgeType = "eagle" | "birdie" | "bogey" | "double" | null;
 
-function scoreBadgeType(s: string | number | null, par: number | null, scoreView: FormatScoreView): BadgeType {
-  if (isFormatView(scoreView) || typeof s !== "number" || typeof par !== "number") return null;
+function scoreBadgeType(s: string | number | null, par: number | null, scoreView: FormatScoreView, formatIsBadgeable = false): BadgeType {
+  if (isFormatView(scoreView) && !formatIsBadgeable) return null;
+  if (typeof s !== "number" || typeof par !== "number") return null;
   const diff = s - par;
   if (diff <= -2) return "eagle";
   if (diff === -1) return "birdie";
@@ -112,6 +113,7 @@ export default function ScorecardPortrait(props: {
 
   getParticipantLabel: (p: Participant) => string;
   getParticipantAvatar: (p: Participant) => string | null;
+  getParticipantAvatarList?: (p: Participant) => Array<{ name: string; url: string | null }> | null;
 }) {
   const {
     participants,
@@ -132,6 +134,7 @@ export default function ScorecardPortrait(props: {
     onOpenEntry,
     getParticipantLabel,
     getParticipantAvatar,
+    getParticipantAvatarList,
   } = props;
 
   const portraitTag = (text: string) => <div className="text-[10px] font-semibold leading-none">{text}</div>;
@@ -143,6 +146,9 @@ export default function ScorecardPortrait(props: {
   const suppressToPar = isFormatView(scoreView) && formatDisplay != null && (
     formatDisplay.higherIsBetter || formatDisplay.summaries.some(s => typeof s.total === "string")
   );
+
+  // Format views that are stroke-based — show birdie/bogey badges and stroke dots
+  const formatIsBadgeable = isFormatView(scoreView) && formatDisplay != null && !formatDisplay.higherIsBetter && !formatDisplay.summaries.some(s => typeof s.total === "string");
 
   return (
     <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 overflow-hidden">
@@ -165,6 +171,7 @@ export default function ScorecardPortrait(props: {
           {participants.map((p) => {
             const name = getParticipantLabel(p);
             const avatarUrl = getParticipantAvatar(p);
+            const avatarList = getParticipantAvatarList?.(p) ?? null;
             const hi = typeof p.handicap_index === "number" ? formatHI(p.handicap_index) : "–";
             const ch = typeof p.course_handicap === "number" ? String(p.course_handicap) : "–";
 
@@ -180,6 +187,39 @@ export default function ScorecardPortrait(props: {
                 : "";
 
             const title = `${name} · HI ${hi} · CH ${ch}${ph != null ? ` · PH ${ph}` : ""}`;
+
+            // Team avatar stack rendering (scramble and other team formats)
+            if (avatarList && avatarList.length > 0) {
+              return (
+                <div
+                  key={`ph-${p.id}`}
+                  className="min-h-[28px] py-1 px-1 flex items-center justify-center border-b border-r border-emerald-900/60 bg-[#0b3b21]/60 min-w-0"
+                  title={title}
+                >
+                  <div className="flex flex-col items-center gap-0.5">
+                    <div className="flex items-center">
+                      {avatarList.slice(0, 4).map((a, i) => (
+                        <div key={i} className={i === 0 ? "" : "-ml-1.5"}>
+                          {a.url ? (
+                            <img src={a.url} alt="" className="h-5 w-5 rounded-full border border-emerald-200/60 object-cover" />
+                          ) : (
+                            <div className="h-5 w-5 rounded-full border border-emerald-200/60 bg-[#0b3b21]/60 flex items-center justify-center text-[8px] font-semibold text-emerald-50">
+                              {initialsFrom(a.name)}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      {avatarList.length > 4 && (
+                        <div className="-ml-1.5 h-5 w-5 rounded-full bg-emerald-950/20 border border-emerald-900/60 flex items-center justify-center text-[8px] font-bold text-emerald-50">
+                          +{avatarList.length - 4}
+                        </div>
+                      )}
+                    </div>
+                    {ph ? <div className="text-[9px] text-emerald-100/60 leading-none">PH {ph}</div> : null}
+                  </div>
+                </div>
+              );
+            }
 
             return (
               <div
@@ -248,6 +288,12 @@ export default function ScorecardPortrait(props: {
               const recv =
                 scoreView === "net" && !puLabel
                   ? strokesReceivedOnHole(p.course_handicap ?? null, h.stroke_index ?? null, holesList.length)
+                  : isFormatView(scoreView) && formatDisplay && !puLabel
+                  ? strokesReceivedOnHole(
+                      formatDisplay.playingHandicaps?.[p.id] ?? p.course_handicap ?? null,
+                      h.stroke_index ?? null,
+                      holesList.length
+                    )
                   : 0;
 
               const fmtHint =
@@ -263,7 +309,7 @@ export default function ScorecardPortrait(props: {
                 fmtHint === "halved" ? "text-emerald-100/70" :
                 "";
 
-              const badge = savingKey !== key ? scoreBadgeType(s, h.par, scoreView) : null;
+              const badge = savingKey !== key ? scoreBadgeType(s, h.par, scoreView, formatIsBadgeable) : null;
 
             nodes.push(
                 <button

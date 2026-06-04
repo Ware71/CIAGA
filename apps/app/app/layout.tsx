@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { OrientationManager } from "@/components/OrientationManager";
+import { SandboxDevTools } from "@/components/sandbox/SandboxDevTools";
 import NextTopLoader from "nextjs-toploader";
 
 const geistSans = Geist({
@@ -79,6 +80,7 @@ export default function RootLayout({
         <NextTopLoader color="#f5e6b0" height={3} showSpinner={false} shadow="0 0 10px #f5e6b080" />
         <OrientationManager />
         {children}
+        <SandboxDevTools />
       </body>
     </html>
   );

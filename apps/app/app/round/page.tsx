@@ -10,6 +10,12 @@ import { Button } from "@/components/ui/button";
 import { BackButton } from "@/components/ui/BackButton";
 import { Skeleton } from "@/components/ui/skeleton";
 
+type LinkedEvent = {
+  id: string;
+  name: string;
+  event_type: string;
+} | null;
+
 type RoundRow = {
   id: string;
   name: string | null;
@@ -18,7 +24,10 @@ type RoundRow = {
   created_at: string;
   course_id: string | null;
   scheduled_at: string | null;
+  event_tee_time_id: string | null;
   courses?: { name: string | null } | null;
+  /** Populated when the round is linked to a Majors tee time */
+  linked_event?: LinkedEvent;
 };
 
 type ParticipantRow = {
@@ -232,7 +241,15 @@ export default function RoundHomePage() {
 
       const { data, error } = await supabase
         .from("round_participants")
-        .select("id, role, round:rounds!round_id(id,name,status,started_at,created_at,course_id,scheduled_at, courses(name))")
+        .select(`id, role, round:rounds!round_id(
+          id, name, status, started_at, created_at, course_id, scheduled_at,
+          event_tee_time_id,
+          courses(name),
+          event_tee_time:event_tee_times!event_tee_time_id(
+            event_id,
+            events!event_id(id, name, event_type)
+          )
+        )`)
         .eq("profile_id", myProfileId)
         .not("rounds.status", "in", "(finished)") // Exclude finished rounds
         .order("created_at", { ascending: false, referencedTable: "rounds" as any });
@@ -255,9 +272,16 @@ export default function RoundHomePage() {
 
   const rounds = useMemo(() => {
     return rows
-      .map((r) => r.round)
+      .map((r) => {
+        const round = r.round as any;
+        if (!round) return null;
+        // Flatten the nested event join into a top-level field
+        const teeTimeJoin = round.event_tee_time;
+        const linked_event: LinkedEvent = teeTimeJoin?.events ?? null;
+        return { ...round, linked_event } as RoundRow;
+      })
       .filter(Boolean)
-      .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
+      .sort((a, b) => ((b as RoundRow).created_at ?? "").localeCompare((a as RoundRow).created_at ?? "")) as RoundRow[];
   }, [rows]);
 
   async function handleCreateNewRound() {
@@ -288,8 +312,8 @@ export default function RoundHomePage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || "Failed to create round");
 
-      // Navigate directly to setup
-      router.push(`/round/${json.round_id}/setup`);
+      // Navigate directly to setup, flagging this as a brand-new round
+      router.push(`/round/${json.round_id}/setup?new=1`);
     } catch (e: any) {
       setErr(e?.message || "Failed to create round");
       setCreatingRound(false);
@@ -367,8 +391,21 @@ export default function RoundHomePage() {
             {rounds.map((r) => {
               const isDraft = r.status === "draft";
               const isScheduled = r.status === "scheduled";
-              const isDeletable = isDraft || isScheduled;
+              const isMajorsRound = !!r.event_tee_time_id;
+              // Majors-linked rounds must not be deleted from here
+              const isDeletable = (isDraft || isScheduled) && !isMajorsRound;
               const isDeleting = deletingId === r.id;
+
+              // Label shown under the round title
+              const competitionType = r.linked_event?.event_type ?? null;
+              const competitionLabel = competitionType
+                ? competitionType.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+                : null;
+              const statusLabel =
+                r.status === "live" ? "Live" :
+                r.status === "finished" ? "Finished" :
+                r.status === "scheduled" ? (competitionLabel ?? "Scheduled") :
+                "Draft";
 
               const card = (
                 <Link
@@ -379,11 +416,11 @@ export default function RoundHomePage() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="text-sm font-semibold text-emerald-50">
-                        {r.name || r.courses?.name || "Round"}
+                        {r.linked_event?.name ?? r.name ?? r.courses?.name ?? "Round"}
                       </div>
                       <div className="text-[11px] text-emerald-100/70">
-                        {(r.courses?.name && r.name ? r.courses?.name : null) ||
-                          (r.status === "live" ? "Live" : r.status === "finished" ? "Finished" : r.status === "scheduled" ? "Scheduled" : "Draft")}
+                        {(r.courses?.name && (r.linked_event?.name ?? r.name) ? r.courses?.name : null) ||
+                          statusLabel}
                       </div>
                       {r.scheduled_at ? (
                         <div className="text-[10px] text-emerald-100/50 mt-0.5">
@@ -397,15 +434,27 @@ export default function RoundHomePage() {
                         </div>
                       ) : null}
                       {isDeletable ? (
-                        <div className="mt-1 text-[10px] text-emerald-100/50">Swipe left to delete {isScheduled ? "scheduled round" : "draft"}</div>
+                        <div className="mt-1 text-[10px] text-emerald-100/50">
+                          Swipe left to delete {isScheduled ? "scheduled round" : "draft"}
+                        </div>
+                      ) : isMajorsRound && isScheduled ? (
+                        <Link
+                          href={`/majors/events/${r.linked_event?.id ?? ""}`}
+                          className="mt-1 text-[10px] text-amber-400/80 underline-offset-2 underline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          Withdraw in Majors to remove
+                        </Link>
                       ) : null}
                     </div>
-                    <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/70">{r.status}</div>
+                    <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/70">
+                      {isMajorsRound ? "Majors" : r.status}
+                    </div>
                   </div>
                 </Link>
               );
 
-              // Drafts and scheduled rounds get swipe delete
+              // Drafts and scheduled rounds get swipe delete (Majors rounds do not)
               return (
                 <SwipeToDeleteRow
                   key={r.id}
