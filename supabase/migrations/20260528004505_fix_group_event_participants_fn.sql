@@ -8,8 +8,8 @@ AS $$
   SELECT DISTINCT rp.profile_id
   FROM round_participants rp
   JOIN rounds r ON r.id = rp.round_id
-  JOIN competition_tee_times ett ON ett.id = r.competition_tee_time_id
-  JOIN competitions e ON e.id = ett.competition_id
+  JOIN event_tee_times ett ON ett.id = r.event_tee_time_id
+  JOIN events e ON e.id = ett.event_id
   WHERE e.group_id = p_group_id
     AND rp.profile_id IS NOT NULL;
 $$;
