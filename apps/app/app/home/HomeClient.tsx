@@ -164,7 +164,11 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
       try {
         const session = await getViewerSession();
         if (!session || cancelled) {
-          if (!cancelled) setMyProfileId(null);
+          if (!cancelled) {
+            setMyProfileId(null);
+            setDataReady(true);
+            router.replace("/auth");
+          }
           return;
         }
         if (!cancelled) setMyProfileId(session.profileId);

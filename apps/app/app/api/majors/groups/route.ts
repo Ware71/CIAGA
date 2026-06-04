@@ -26,10 +26,20 @@ export async function GET(req: Request) {
   }
 }
 
-// POST /api/majors/groups — create a new group
+// POST /api/majors/groups — create a new group (admin only)
 export async function POST(req: Request) {
   try {
     const { profileId } = await getAuthedProfileOrThrow(req);
+
+    const { data: profile, error: pErr } = await supabaseAdmin
+      .from("profiles")
+      .select("is_admin")
+      .eq("id", profileId)
+      .single();
+    if (pErr || !profile?.is_admin) {
+      return NextResponse.json({ error: "Admin only" }, { status: 403 });
+    }
+
     const body = await req.json();
 
     const { name, description, type, privacy, join_method, max_members, image_url, default_scoring_prefs } = body;
