@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { getViewerSession } from "@/lib/auth/viewerSession";
+import { supabase } from "@/lib/supabaseClient";
 import type { MajorGroup } from "@/lib/majors/types";
 
 type GroupSummary = MajorGroup & { member_count: number; role?: string };
@@ -25,6 +26,7 @@ export default function MajorsHubClient() {
   const [joinedIds, setJoinedIds] = useState<Record<string, "active" | "pending">>({});
   const [acceptingInviteId, setAcceptingInviteId] = useState<string | null>(null);
   const [decliningInviteId, setDecliningInviteId] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const fetchGroups = useCallback(async () => {
     const session = await getViewerSession();
@@ -54,7 +56,16 @@ export default function MajorsHubClient() {
     (async () => {
       setLoading(true);
       try {
+        const session = await getViewerSession();
         await fetchGroups();
+        if (session && !cancelled) {
+          const { data: prof } = await supabase
+            .from("profiles")
+            .select("is_admin")
+            .eq("id", session.profileId)
+            .single();
+          if (!cancelled) setIsAdmin(!!prof?.is_admin);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -137,13 +148,15 @@ export default function MajorsHubClient() {
           ← Home
         </button>
         <h1 className="text-lg font-bold tracking-wide text-[#f5e6b0]">Majors Hub</h1>
-        <button
-          type="button"
-          onClick={() => router.push("/majors/groups/create")}
-          className="text-[11px] text-emerald-400 hover:text-emerald-300"
-        >
-          + Create
-        </button>
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => router.push("/majors/groups/create")}
+            className="text-[11px] text-emerald-400 hover:text-emerald-300"
+          >
+            + Create
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -204,26 +217,30 @@ export default function MajorsHubClient() {
           <section className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/55">My Groups</h2>
-              <button
-                type="button"
-                onClick={() => router.push("/majors/groups/create")}
-                className="text-[11px] text-emerald-400 hover:text-emerald-300"
-              >
-                + New
-              </button>
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => router.push("/majors/groups/create")}
+                  className="text-[11px] text-emerald-400 hover:text-emerald-300"
+                >
+                  + New
+                </button>
+              )}
             </div>
 
             {myGroups.length === 0 ? (
               <div className="rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/40 p-6 text-center space-y-3">
                 <p className="text-2xl">⛳</p>
                 <p className="text-sm text-emerald-100/60">You're not in any groups yet.</p>
-                <button
-                  type="button"
-                  onClick={() => router.push("/majors/groups/create")}
-                  className="px-5 py-2.5 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600"
-                >
-                  Create a Group
-                </button>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => router.push("/majors/groups/create")}
+                    className="px-5 py-2.5 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600"
+                  >
+                    Create a Group
+                  </button>
+                )}
               </div>
             ) : (
               <div className="space-y-2">
