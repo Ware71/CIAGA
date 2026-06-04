@@ -10,10 +10,10 @@ const AMBER_FILL: Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "
 const RED_FILL:   Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFF6B6B" } };
 const LIGHT_RED:  Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFDDDD" } };
 
-// ── Column definitions (A–P) ──────────────────────────────────────────────────
+// ── Column definitions (A–Q) ──────────────────────────────────────────────────
 //   Green  = mandatory user input  (A–G)
 //   Amber  = optional              (H–K)
-//   Red    = formula / auto        (L–P)
+//   Red    = formula / auto        (L–Q)
 const IMPORT_COLS = [
   { header: "Player Name or Email", width: 26, fill: GREEN_FILL },  // A
   { header: "Course Name",          width: 28, fill: GREEN_FILL },  // B
@@ -30,7 +30,8 @@ const IMPORT_COLS = [
   { header: "display_name",         width: 22, fill: RED_FILL   }, // M  ← XLOOKUP(A)
   { header: "course_id",            width: 38, fill: RED_FILL   }, // N  ← XLOOKUP(B)
   { header: "round_name",           width: 34, fill: RED_FILL   }, // O  ← formula(B,G)
-  { header: "tee_box_id",           width: 38, fill: RED_FILL   }, // P  ← XLOOKUP(N,C)
+  { header: "tee_box_id",           width: 38, fill: RED_FILL   }, // P  ← XLOOKUP(N,C,Q)
+  { header: "player_gender",        width: 15, fill: RED_FILL   }, // Q  ← XLOOKUP(L)
 ] as const;
 
 const DATA_ROWS = 200;
@@ -78,11 +79,11 @@ export async function GET(req: Request) {
       fetchAllRows<{ id: string; name: string; city: string | null; country: string | null }>(
         () => admin.from("courses").select("id,name,city,country").order("name"),
       ),
-      fetchAllRows<{ id: string; name: string; course_id: string }>(
-        () => admin.from("course_tee_boxes").select("id,name,course_id").order("sort_order"),
+      fetchAllRows<{ id: string; name: string; course_id: string; gender: string | null }>(
+        () => admin.from("course_tee_boxes").select("id,name,course_id,gender").order("sort_order"),
       ),
-      fetchAllRows<{ id: string; name: string; email: string | null }>(
-        () => admin.from("profiles").select("id,name,email").order("name"),
+      fetchAllRows<{ id: string; name: string; email: string | null; gender: string | null }>(
+        () => admin.from("profiles").select("id,name,email,gender").order("name"),
       ),
     ]);
 
@@ -215,7 +216,8 @@ function buildGuideSheet(wb: ExcelJS.Workbook) {
     ["display_name",          "Auto-resolved display name — do not edit",                         "(auto)",         "Red"],
     ["course_id",             "Auto-resolved UUID from Course Name — do not edit",                "(auto)",         "Red"],
     ["round_name",            "Auto-generated from Course + Date — do not edit",                  "(auto)",         "Red"],
-    ["tee_box_id",            "Auto-resolved UUID from Course + Tee Name — do not edit",          "(auto)",         "Red"],
+    ["tee_box_id",            "Auto-resolved UUID from Course + Tee Name + player gender — do not edit", "(auto)",    "Red"],
+    ["player_gender",         "Auto-resolved from player profile (male/female/unisex) — used to pick the correct gendered tee", "(auto)", "Red"],
   ];
 
   for (const [name, desc, ex, colour] of colRef) {
@@ -239,6 +241,7 @@ function buildGuideSheet(wb: ExcelJS.Workbook) {
     ['"Email not found"',      "Player Name/Email in column A isn't registered in the system."],
     ["RED cell is blank",      "XLOOKUP couldn't find a match — recheck the value in the GREEN input column."],
     ["#N/A in RED cell",       "Formula cannot run — check the GREEN column isn't empty."],
+    ["Wrong tee / gender",     "tee_box_id resolved to wrong gender. Check player profile gender in the system, then re-download the template."],
   ];
   const tblHdr = ws.getRow(r);
   ["Error / Symptom", "Cause & Fix"].forEach((v, i) => {
@@ -318,7 +321,8 @@ function buildImportSheet(wb: ExcelJS.Workbook) {
       { formula: `IFERROR(XLOOKUP(A${r},Profiles!$B:$B,Profiles!$B:$B,A${r}),"")` },                                            // M display_name
       { formula: `IFERROR(XLOOKUP(B${r},Courses!$B:$B,Courses!$A:$A),"")` },                                                    // N course_id
       { formula: `IF(AND(B${r}<>"",G${r}<>""),B${r}&" — "&TEXT(G${r},"DD MMM YYYY"),"")` },                                // O round_name
-      { formula: `IFERROR(XLOOKUP(N${r}&"|"&C${r},TeeBoxes!$D:$D,TeeBoxes!$A:$A),"")` },                                       // P tee_box_id
+      { formula: `IFERROR(XLOOKUP(N${r}&"|"&C${r}&"|"&Q${r},TeeBoxes!$F:$F,TeeBoxes!$A:$A),IFERROR(XLOOKUP(N${r}&"|"&C${r},TeeBoxes!$E:$E,TeeBoxes!$A:$A),""))` }, // P tee_box_id
+      { formula: `IFERROR(XLOOKUP(L${r},Profiles!$A:$A,Profiles!$D:$D),"male")` },                                              // Q player_gender
     ]);
   }
 
@@ -342,9 +346,9 @@ function buildImportSheet(wb: ExcelJS.Workbook) {
     cell.alignment = { horizontal: "center", wrapText: false };
   });
 
-  // Light-red tint on formula data cells (cols L–P = 12–16) to signal "don't type here"
+  // Light-red tint on formula data cells (cols L–Q = 12–17) to signal "don't type here"
   for (let row = 2; row <= DATA_ROWS + 1; row++) {
-    for (let col = 12; col <= 16; col++) {
+    for (let col = 12; col <= 17; col++) {
       ws.getCell(row, col).fill = LIGHT_RED;
     }
   }
@@ -355,24 +359,36 @@ function buildImportSheet(wb: ExcelJS.Workbook) {
 
 // ── Hidden lookup sheets ──────────────────────────────────────────────────────
 
+function normalizeGender(g: string | null | undefined): string {
+  const s = (g ?? "").toLowerCase().trim();
+  if (["male", "men", "m"].includes(s)) return "male";
+  if (["female", "women", "w", "f", "ladies", "lady"].includes(s)) return "female";
+  return "unisex";
+}
+
 function buildLookupSheets(
   wb: ExcelJS.Workbook,
   courses:  { id: string; name: string; city: string | null; country: string | null }[],
-  teeBoxes: { id: string; name: string; course_id: string }[],
-  profiles: { id: string; name: string; email: string | null }[],
+  teeBoxes: { id: string; name: string; course_id: string; gender: string | null }[],
+  profiles: { id: string; name: string; email: string | null; gender: string | null }[],
 ) {
   const wsCourses = wb.addWorksheet("Courses");
   wsCourses.state = "hidden";
   wsCourses.addRow(["id", "name", "city", "country"]);
   courses.forEach(c => wsCourses.addRow([c.id, c.name, c.city ?? "", c.country ?? ""]));
 
+  // Columns: id | name | course_id | gender | key_ungendered | key_gendered
   const wsTeeBoxes = wb.addWorksheet("TeeBoxes");
   wsTeeBoxes.state = "hidden";
-  wsTeeBoxes.addRow(["id", "name", "course_id", "key"]);
-  teeBoxes.forEach(t => wsTeeBoxes.addRow([t.id, t.name, t.course_id, `${t.course_id}|${t.name}`]));
+  wsTeeBoxes.addRow(["id", "name", "course_id", "gender", "key", "key_gendered"]);
+  teeBoxes.forEach(t => {
+    const g = normalizeGender(t.gender);
+    wsTeeBoxes.addRow([t.id, t.name, t.course_id, g, `${t.course_id}|${t.name}`, `${t.course_id}|${t.name}|${g}`]);
+  });
 
+  // Columns: id | name | email | gender
   const wsProfiles = wb.addWorksheet("Profiles");
   wsProfiles.state = "hidden";
-  wsProfiles.addRow(["id", "name", "email"]);
-  profiles.forEach(p => wsProfiles.addRow([p.id, p.name, p.email ?? ""]));
+  wsProfiles.addRow(["id", "name", "email", "gender"]);
+  profiles.forEach(p => wsProfiles.addRow([p.id, p.name, p.email ?? "", normalizeGender(p.gender)]));
 }
