@@ -169,6 +169,62 @@ export async function POST(req: Request) {
 
     const { seasons: seasonRows, competitions: compRows, scores: scoreRows } = await parseXlsx(file);
 
+    // ── 0. Pre-flight validation (batch checks before any writes) ────────────
+    const compIds   = Array.from(new Set(compRows.map(c => c.competition_id).filter(Boolean)));
+    const teeBoxIds = Array.from(new Set(compRows.map(c => c.tee_box_id).filter(Boolean)));
+
+    const [preflightCompsRes, preflightTeeBoxesRes, preflightTeeHolesRes] = await Promise.all([
+      compIds.length
+        ? admin.from("events").select("id,group_id,course_id").in("id", compIds)
+        : Promise.resolve({ data: [], error: null }),
+      teeBoxIds.length
+        ? admin.from("course_tee_boxes").select("id").in("id", teeBoxIds)
+        : Promise.resolve({ data: [], error: null }),
+      teeBoxIds.length
+        ? admin.from("course_tee_holes").select("tee_box_id").in("tee_box_id", teeBoxIds)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+
+    if (preflightCompsRes.error)    throw new Error(`Pre-flight event lookup failed: ${preflightCompsRes.error.message}`);
+    if (preflightTeeBoxesRes.error) throw new Error(`Pre-flight tee box lookup failed: ${preflightTeeBoxesRes.error.message}`);
+    if (preflightTeeHolesRes.error) throw new Error(`Pre-flight tee holes lookup failed: ${preflightTeeHolesRes.error.message}`);
+
+    const preflightCompMap   = new Map((preflightCompsRes.data ?? []).map(e => [e.id, e]));
+    const preflightTeeBoxIds = new Set((preflightTeeBoxesRes.data ?? []).map(t => t.id));
+    const teeBoxHoleCounts   = new Map<string, number>();
+    for (const h of preflightTeeHolesRes.data ?? []) {
+      teeBoxHoleCounts.set(h.tee_box_id, (teeBoxHoleCounts.get(h.tee_box_id) ?? 0) + 1);
+    }
+
+    const preflightErrors: string[] = [];
+    for (const comp of compRows) {
+      if (!comp.competition_id) {
+        preflightErrors.push(`Competition "${comp.competition_name}": missing competition_id — re-run Preview first`);
+        continue;
+      }
+      const ev = preflightCompMap.get(comp.competition_id);
+      if (!ev) {
+        preflightErrors.push(`Competition "${comp.competition_name}": event not found in database`);
+        continue;
+      }
+      if (ev.group_id !== groupId) {
+        preflightErrors.push(`Competition "${comp.competition_name}": event does not belong to this group`);
+      }
+      if (!ev.course_id) {
+        preflightErrors.push(`Competition "${comp.competition_name}": event has no course — set a course on the event first`);
+      }
+      if (!comp.tee_box_id) {
+        preflightErrors.push(`Competition "${comp.competition_name}": missing tee_box_id — re-run Preview first`);
+      } else if (!preflightTeeBoxIds.has(comp.tee_box_id)) {
+        preflightErrors.push(`Competition "${comp.competition_name}": tee box not found in database`);
+      } else if ((teeBoxHoleCounts.get(comp.tee_box_id) ?? 0) === 0) {
+        preflightErrors.push(`Competition "${comp.competition_name}": tee box has no holes configured`);
+      }
+    }
+    if (preflightErrors.length) {
+      return NextResponse.json({ error: preflightErrors[0], errors: preflightErrors }, { status: 400 });
+    }
+
     // ── 1. Upsert group_seasons ───────────────────────────────────────────────
     // Build a name → season_id map (existing + newly created)
     const seasonIdByName = new Map<string, string>();
@@ -253,12 +309,22 @@ export async function POST(req: Request) {
       // Fetch competition
       const { data: competition, error: compErr } = await admin
         .from("events")
-        .select("id,name,group_id,course_id,event_date,entry_fee_amount")
+        .select("id,name,group_id,course_id,event_date,entry_fee_amount,group_season_id")
         .eq("id", comp.competition_id)
         .single();
       if (compErr || !competition) throw new Error(`Event "${comp.competition_name}" not found`);
       if (competition.group_id !== groupId) throw new Error(`Event "${comp.competition_name}" does not belong to this group`);
       if (!competition.course_id) throw new Error(`Event "${comp.competition_name}" has no course_id — set a course on the event first`);
+
+      // Link event to its season (only if not already linked to avoid overwriting deliberate assignments)
+      const resolvedSeasonId = comp.season_name ? (seasonIdByName.get(comp.season_name) ?? null) : null;
+      if (resolvedSeasonId && competition.group_season_id === null) {
+        const { error: gsiErr } = await admin
+          .from("events")
+          .update({ group_season_id: resolvedSeasonId })
+          .eq("id", comp.competition_id);
+        if (gsiErr) throw new Error(`Set group_season_id failed for "${comp.competition_name}": ${gsiErr.message}`);
+      }
 
       // Fetch course
       const { data: course, error: cErr } = await admin
@@ -460,14 +526,15 @@ export async function POST(req: Request) {
         }
 
         // ── Score events ──────────────────────────────────────────────────
+        // Use uniquePlayers (already deduped by profile_id) so a player who appears
+        // twice in the spreadsheet for the same round only gets 18 score events.
         const scoreEvents: Array<{
           round_id: string; participant_id: string; hole_number: number; strokes: number; entered_by: string;
         }> = [];
-        for (const s of roundScores) {
-          if (!s.profile_id) continue;
-          const participantId = participantIdByProfileId.get(s.profile_id);
+        for (const [profileId, playerScore] of uniquePlayers.entries()) {
+          const participantId = participantIdByProfileId.get(profileId);
           if (!participantId) continue;
-          s.holes.forEach((strokes, idx) => {
+          playerScore.holes.forEach((strokes, idx) => {
             scoreEvents.push({ round_id: round.id, participant_id: participantId, hole_number: idx + 1, strokes, entered_by: myProfile.id });
           });
         }

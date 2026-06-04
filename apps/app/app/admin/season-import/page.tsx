@@ -15,6 +15,12 @@ type SeasonPreview = {
   already_exists: boolean;
 };
 
+type RoundPreview = {
+  round_number: number;
+  round_name: string;
+  already_imported: boolean;
+};
+
 type CompetitionPreview = {
   competition_id: string;
   competition_name: string;
@@ -25,6 +31,7 @@ type CompetitionPreview = {
   player_count: number;
   score_row_count: number;
   already_imported: boolean;
+  rounds: RoundPreview[];
 };
 
 type PreviewData = {
@@ -398,22 +405,40 @@ export default function SeasonImportPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {preview.competitions.map(c => (
-                        <tr key={c.competition_id} className="border-t border-emerald-900/40">
-                          <td className="py-1 pr-3 text-emerald-100">{c.event_name}</td>
-                          <td className="py-1 pr-3 text-emerald-100/70">{c.season_name || "—"}</td>
-                          <td className="text-right py-1 pr-3 text-emerald-100/80">{c.player_count}</td>
-                          <td className="text-right py-1 pr-3 text-emerald-100/80">
-                            {c.entry_fee != null ? `£${c.entry_fee.toFixed(2)}` : "—"}
-                          </td>
-                          <td className="text-right py-1">
-                            {c.already_imported
-                              ? <span className="text-amber-400 font-medium">Skip</span>
-                              : <span className="text-emerald-400 font-medium">Ready</span>
-                            }
-                          </td>
-                        </tr>
-                      ))}
+                      {preview.competitions.map(c => {
+                        const isPartial = !c.already_imported && c.rounds.some(r => r.already_imported);
+                        return (
+                          <>
+                            <tr key={c.competition_id} className="border-t border-emerald-900/40">
+                              <td className="py-1 pr-3 text-emerald-100">{c.event_name}</td>
+                              <td className="py-1 pr-3 text-emerald-100/70">{c.season_name || "—"}</td>
+                              <td className="text-right py-1 pr-3 text-emerald-100/80">{c.player_count}</td>
+                              <td className="text-right py-1 pr-3 text-emerald-100/80">
+                                {c.entry_fee != null && c.entry_fee > 0 ? `£${c.entry_fee.toFixed(2)}` : c.entry_fee === 0 ? "Free" : "—"}
+                              </td>
+                              <td className="text-right py-1">
+                                {c.already_imported
+                                  ? <span className="text-amber-400 font-medium">Skip</span>
+                                  : isPartial
+                                    ? <span className="text-blue-400 font-medium">Partial</span>
+                                    : <span className="text-emerald-400 font-medium">Ready</span>
+                                }
+                              </td>
+                            </tr>
+                            {isPartial && c.rounds.map(r => (
+                              <tr key={`${c.competition_id}-${r.round_number}`} className="bg-black/10">
+                                <td colSpan={4} className="py-0.5 pl-5 pr-3 text-xs text-emerald-100/50">↳ {r.round_name}</td>
+                                <td className="text-right py-0.5 text-xs">
+                                  {r.already_imported
+                                    ? <span className="text-amber-400">Skip</span>
+                                    : <span className="text-emerald-400">Ready</span>
+                                  }
+                                </td>
+                              </tr>
+                            ))}
+                          </>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

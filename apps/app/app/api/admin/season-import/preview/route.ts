@@ -10,6 +10,12 @@ export type SeasonPreview = {
   already_exists: boolean;
 };
 
+export type RoundPreview = {
+  round_number: number;
+  round_name: string;
+  already_imported: boolean;
+};
+
 export type CompetitionPreview = {
   competition_id: string;
   competition_name: string;
@@ -20,6 +26,7 @@ export type CompetitionPreview = {
   player_count: number;
   score_row_count: number;
   already_imported: boolean;
+  rounds: RoundPreview[];
 };
 
 export type PreviewResponse = {
@@ -90,7 +97,7 @@ export async function POST(req: Request) {
 
     const [compsRes, profilesRes, teeBoxesRes, existingRoundsRes, existingSeasonsRes] = await Promise.all([
       compIds.length
-        ? admin.from("events").select("id,name,group_id,entry_fee_amount").in("id", compIds)
+        ? admin.from("events").select("id,name,group_id,entry_fee_amount,course_id").in("id", compIds)
         : Promise.resolve({ data: [], error: null }),
       profileIds.length
         ? admin.from("profiles").select("id").in("id", profileIds)
@@ -99,7 +106,7 @@ export async function POST(req: Request) {
         ? admin.from("course_tee_boxes").select("id").in("id", teeBoxIds)
         : Promise.resolve({ data: [], error: null }),
       compIds.length
-        ? admin.from("rounds").select("competition_id").in("competition_id", compIds).not("competition_id", "is", null)
+        ? admin.from("rounds").select("competition_id,name").in("competition_id", compIds).not("competition_id", "is", null)
         : Promise.resolve({ data: [], error: null }),
       seasonNames.length
         ? admin.from("group_seasons").select("name").eq("group_id", groupId).in("name", seasonNames)
@@ -112,12 +119,28 @@ export async function POST(req: Request) {
     if (existingRoundsRes.error) throw new Error(existingRoundsRes.error.message);
     if (existingSeasonsRes.error) throw new Error(existingSeasonsRes.error.message);
 
-    const validCompMap = new Map<string, { name: string; group_id: string | null; entry_fee_amount: number | null }>();
+    const validCompMap = new Map<string, { name: string; group_id: string | null; entry_fee_amount: number | null; course_id: string | null }>();
     for (const c of compsRes.data ?? []) validCompMap.set(c.id, c);
 
-    const validProfileIds        = new Set((profilesRes.data        ?? []).map(p => p.id));
-    const validTeeBoxIds         = new Set((teeBoxesRes.data        ?? []).map(t => t.id));
-    const alreadyImportedCompIds = new Set((existingRoundsRes.data  ?? []).map(r => r.competition_id as string));
+    const validProfileIds = new Set((profilesRes.data ?? []).map(p => p.id));
+    const validTeeBoxIds  = new Set((teeBoxesRes.data ?? []).map(t => t.id));
+
+    // Fetch all tee boxes for the courses referenced by the competitions — used to hint valid tee names on lookup failure
+    const courseIds = Array.from(new Set(
+      Array.from(validCompMap.values()).map(c => c.course_id).filter((id): id is string => !!id)
+    ));
+    const courseTeeBoxesRes = courseIds.length
+      ? await admin.from("course_tee_boxes").select("id,name,course_id").in("course_id", courseIds)
+      : { data: [], error: null };
+    if (courseTeeBoxesRes.error) throw new Error(courseTeeBoxesRes.error.message);
+    const teeNamesByCourseId = new Map<string, string[]>();
+    for (const t of courseTeeBoxesRes.data ?? []) {
+      if (!teeNamesByCourseId.has(t.course_id)) teeNamesByCourseId.set(t.course_id, []);
+      teeNamesByCourseId.get(t.course_id)!.push(t.name);
+    }
+    const alreadyImportedKeys = new Set(
+      (existingRoundsRes.data ?? []).map(r => `${r.competition_id as string}::${r.name as string}`)
+    );
     const existingSeasonNames    = new Set((existingSeasonsRes.data ?? []).map(s => s.name));
 
     // Validate competitions
@@ -135,9 +158,15 @@ export async function POST(req: Request) {
         errors.push(`Competition "${comp.competition_name}": does not belong to the selected group`);
       }
       if (!comp.tee_box_id) {
-        errors.push(`Competition "${comp.competition_name}": tee_box_id is blank — check Tee Name matches a tee for this course`);
+        const courseId = validCompMap.get(comp.competition_id)?.course_id ?? null;
+        const availableTees = courseId ? (teeNamesByCourseId.get(courseId) ?? []) : [];
+        const hint = availableTees.length ? ` Available tee names (exact match, case-sensitive): ${availableTees.join(", ")}` : "";
+        errors.push(`Competition "${comp.competition_name}": tee_box_id is blank — check Tee Name matches a tee for this course.${hint}`);
       } else if (!validTeeBoxIds.has(comp.tee_box_id)) {
-        errors.push(`Competition "${comp.competition_name}": tee_box_id "${comp.tee_box_id}" not found`);
+        const courseId = validCompMap.get(comp.competition_id)?.course_id ?? null;
+        const availableTees = courseId ? (teeNamesByCourseId.get(courseId) ?? []) : [];
+        const hint = availableTees.length ? ` Available tee names (exact match, case-sensitive): ${availableTees.join(", ")}` : "";
+        errors.push(`Competition "${comp.competition_name}": tee_box_id "${comp.tee_box_id}" not found.${hint}`);
       }
     }
 
@@ -172,21 +201,38 @@ export async function POST(req: Request) {
       const uniquePlayers = new Set(compScores.map(s => s.profile_id).filter(Boolean));
       const dbComp        = validCompMap.get(comp.competition_id);
       const entryFee      = comp.entry_fee_override != null ? comp.entry_fee_override : (dbComp?.entry_fee_amount ?? null);
+      const baseEventName = comp.event_name || comp.competition_name;
+
+      // Compute per-round status using the same round-naming logic as the import
+      const roundNumbers = Array.from(new Set(compScores.map(s => s.round_number))).sort((a, b) => a - b);
+      const effectiveRoundNumbers = roundNumbers.length > 0 ? roundNumbers : [1];
+      const multiRound = effectiveRoundNumbers.length > 1;
+      const rounds: RoundPreview[] = effectiveRoundNumbers.map(n => {
+        const roundName = multiRound ? `${baseEventName} — Round ${n}` : baseEventName;
+        return {
+          round_number:     n,
+          round_name:       roundName,
+          already_imported: alreadyImportedKeys.has(`${comp.competition_id}::${roundName}`),
+        };
+      });
+      const already_imported = rounds.length > 0 && rounds.every(r => r.already_imported);
+
       return {
-        competition_id:  comp.competition_id,
+        competition_id:   comp.competition_id,
         competition_name: comp.competition_name,
-        event_name:      comp.event_name || comp.competition_name,
-        season_name:     comp.season_name,
-        tee_box_id:      comp.tee_box_id,
-        entry_fee:       entryFee,
-        player_count:    uniquePlayers.size,
-        score_row_count: compScores.length,
-        already_imported: alreadyImportedCompIds.has(comp.competition_id),
+        event_name:       baseEventName,
+        season_name:      comp.season_name,
+        tee_box_id:       comp.tee_box_id,
+        entry_fee:        entryFee,
+        player_count:     uniquePlayers.size,
+        score_row_count:  compScores.length,
+        already_imported,
+        rounds,
       };
     });
 
-    const playersWithFee = competitionPreviews.reduce((acc, c) =>
-      acc + (c.entry_fee != null ? c.player_count : 0), 0);
+    const newComps       = competitionPreviews.filter(c => !c.already_imported);
+    const playersWithFee = newComps.reduce((acc, c) => acc + (c.entry_fee != null && c.entry_fee > 0 ? c.player_count : 0), 0);
 
     const response: PreviewResponse = {
       group_id: groupId,
@@ -194,11 +240,11 @@ export async function POST(req: Request) {
       competitions: competitionPreviews,
       errors,
       totals: {
-        seasons_to_create:  seasonPreviews.filter(s => !s.already_exists).length,
-        competitions:       parsed.competitions.length,
-        participants:       competitionPreviews.reduce((a, c) => a + c.player_count, 0),
-        score_events:       competitionPreviews.reduce((a, c) => a + c.score_row_count, 0) * 18,
-        fee_transactions:   playersWithFee,
+        seasons_to_create: seasonPreviews.filter(s => !s.already_exists).length,
+        competitions:      newComps.length,
+        participants:      newComps.reduce((a, c) => a + c.player_count, 0),
+        score_events:      newComps.reduce((a, c) => a + c.score_row_count, 0) * 18,
+        fee_transactions:  playersWithFee,
       },
     };
 

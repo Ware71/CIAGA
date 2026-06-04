@@ -46,7 +46,7 @@ export async function GET(req: Request) {
       .single();
     if (gErr || !group) return NextResponse.json({ error: "Group not found" }, { status: 404 });
 
-    const [eventsRes, allProfilesRes, teeBoxesRes, coursesRes, seasonsRes] = await Promise.all([
+    const [eventsRes, allProfilesRes, teeBoxesRes, coursesRes, seasonsRes, membershipsRes] = await Promise.all([
       admin
         .from("events")
         .select("id,name,event_date,entry_fee_amount,course_id")
@@ -61,6 +61,11 @@ export async function GET(req: Request) {
         .select("id,name,season_year,start_date,end_date")
         .eq("group_id", groupId)
         .order("season_year", { ascending: false }),
+      admin
+        .from("major_group_memberships")
+        .select("profile_id")
+        .eq("group_id", groupId)
+        .eq("status", "active"),
     ]);
 
     if (eventsRes.error)      throw new Error(eventsRes.error.message);
@@ -68,16 +73,24 @@ export async function GET(req: Request) {
     if (teeBoxesRes.error)    throw new Error(teeBoxesRes.error.message);
     if (coursesRes.error)     throw new Error(coursesRes.error.message);
     if (seasonsRes.error)     throw new Error(seasonsRes.error.message);
+    if (membershipsRes.error) throw new Error(membershipsRes.error.message);
 
     type EventRow   = { id: string; name: string; event_date: string | null; entry_fee_amount: number | null; course_id: string | null };
     type ProfileRow = { id: string; name: string | null; email: string | null };
     type SeasonRow  = { id: string; name: string; season_year: number | null; start_date: string | null; end_date: string | null };
 
-    const events     = (eventsRes.data     ?? []) as EventRow[];
+    const events      = (eventsRes.data     ?? []) as EventRow[];
     const allProfiles = (allProfilesRes.data ?? []) as ProfileRow[];
-    const teeBoxes   = teeBoxesRes.data    ?? [];
-    const courses    = coursesRes.data     ?? [];
-    const seasons    = (seasonsRes.data    ?? []) as SeasonRow[];
+    const teeBoxes    = teeBoxesRes.data    ?? [];
+    const courses     = coursesRes.data     ?? [];
+    const seasons     = (seasonsRes.data    ?? []) as SeasonRow[];
+
+    // Group members first in the player dropdown so they're easy to find
+    const memberIdSet = new Set((membershipsRes.data ?? []).map((m: { profile_id: string }) => m.profile_id));
+    const orderedProfiles: ProfileRow[] = [
+      ...allProfiles.filter(p => memberIdSet.has(p.id)),
+      ...allProfiles.filter(p => !memberIdSet.has(p.id)),
+    ];
 
     const wb = new ExcelJS.Workbook();
     wb.creator = "CIAGA Admin";
@@ -86,8 +99,8 @@ export async function GET(req: Request) {
     buildGuideSheet(wb, group.name);
     buildSeasonsSheet(wb);
     buildCompetitionsSheet(wb, events.length, courses.length);
-    buildScoresSheet(wb, allProfiles.length);
-    buildLookupSheets(wb, events, allProfiles, teeBoxes, courses, seasons);
+    buildScoresSheet(wb, orderedProfiles.length);
+    buildLookupSheets(wb, events, orderedProfiles, teeBoxes, courses, seasons);
 
     const buf = await wb.xlsx.writeBuffer();
     const safeName = group.name.replace(/[^a-z0-9]/gi, "-").toLowerCase();
@@ -497,11 +510,11 @@ function buildLookupSheets(
     wsComps.addRow([e.id, e.name, e.event_date ?? "", e.entry_fee_amount ?? "", e.course_id ?? ""])
   );
 
-  // _Members: A=id, B=name, C=email
+  // _Members: A=id, B="name (email)" display label, C=email (for direct email lookup)
   const wsMembers = wb.addWorksheet("_Members");
   wsMembers.state = "hidden";
-  wsMembers.addRow(["id", "name", "email"]);
-  allProfiles.forEach(p => wsMembers.addRow([p.id, p.name ?? "", p.email ?? ""]));
+  wsMembers.addRow(["id", "name (email)", "email"]);
+  allProfiles.forEach(p => wsMembers.addRow([p.id, `${p.name ?? ""} (${p.email ?? ""})`, p.email ?? ""]));
 
   // _TeeBoxes: A=id, B=name, C=course_id, D=key(course_id|name)
   const wsTeeBoxes = wb.addWorksheet("_TeeBoxes");
