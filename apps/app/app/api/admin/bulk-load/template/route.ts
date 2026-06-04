@@ -35,6 +35,23 @@ const IMPORT_COLS = [
 
 const DATA_ROWS = 200;
 
+async function fetchAllRows<T>(
+  query: () => ReturnType<ReturnType<typeof getSupabaseAdmin>["from"]>,
+  pageSize = 1000,
+): Promise<T[]> {
+  const rows: T[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await (query() as any).range(from, from + pageSize - 1);
+    if (error) throw new Error(error.message);
+    if (!data || data.length === 0) break;
+    rows.push(...data);
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+  return rows;
+}
+
 export async function GET(req: Request) {
   try {
     const admin = getSupabaseAdmin();
@@ -57,20 +74,18 @@ export async function GET(req: Request) {
     if (pErr) throw new Error(pErr.message);
     if (!myProfile?.is_admin) return NextResponse.json({ error: "Admin only" }, { status: 403 });
 
-    // Fetch all lookup data in parallel
-    const [coursesRes, teeBoxesRes, profilesRes] = await Promise.all([
-      admin.from("courses").select("id,name,city,country").order("name").limit(10000),
-      admin.from("course_tee_boxes").select("id,name,course_id").order("sort_order").limit(10000),
-      admin.from("profiles").select("id,name,email").order("name").limit(2000),
+    // Paginate all lookup data to bypass PostgREST's server-side max-rows cap
+    const [courses, teeBoxes, profiles] = await Promise.all([
+      fetchAllRows<{ id: string; name: string; city: string | null; country: string | null }>(
+        () => admin.from("courses").select("id,name,city,country").order("name"),
+      ),
+      fetchAllRows<{ id: string; name: string; course_id: string }>(
+        () => admin.from("course_tee_boxes").select("id,name,course_id").order("sort_order"),
+      ),
+      fetchAllRows<{ id: string; name: string; email: string | null }>(
+        () => admin.from("profiles").select("id,name,email").order("name"),
+      ),
     ]);
-
-    if (coursesRes.error) throw new Error(coursesRes.error.message);
-    if (teeBoxesRes.error) throw new Error(teeBoxesRes.error.message);
-    if (profilesRes.error) throw new Error(profilesRes.error.message);
-
-    const courses  = coursesRes.data  ?? [];
-    const teeBoxes = teeBoxesRes.data ?? [];
-    const profiles = profilesRes.data ?? [];
 
     // ── Build workbook ────────────────────────────────────────────────────────
     const wb = new ExcelJS.Workbook();
