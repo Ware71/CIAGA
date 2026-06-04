@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { BackButton } from "@/components/ui/BackButton";
@@ -68,7 +68,7 @@ export default function SeasonImportPage() {
 
   // Step 1: group selection
   const [groupQuery, setGroupQuery] = useState("");
-  const [groupResults, setGroupResults] = useState<Group[]>([]);
+  const [allGroups, setAllGroups] = useState<Group[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [groupSearching, setGroupSearching] = useState(false);
   const [templateLoading, setTemplateLoading] = useState(false);
@@ -80,13 +80,17 @@ export default function SeasonImportPage() {
   const [preview, setPreview] = useState<PreviewData | null>(null);
   const [previewErrors, setPreviewErrors] = useState<string[]>([]);
 
+  const [groupInputFocused, setGroupInputFocused] = useState(false);
+
   // Step 3: import
   const [importLoading, setImportLoading] = useState(false);
   const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [showRoundIds, setShowRoundIds] = useState(false);
 
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const filteredGroups = allGroups.filter(g =>
+    !groupQuery.trim() || g.name.toLowerCase().includes(groupQuery.trim().toLowerCase())
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -98,30 +102,24 @@ export default function SeasonImportPage() {
       if (!data?.[0]?.is_admin) { router.replace("/"); return; }
       setAdminOk(true);
       setChecking(false);
+      // Load all groups once after admin check
+      setGroupSearching(true);
+      const { data: groups } = await supabase
+        .from("major_groups")
+        .select("id,name")
+        .order("name");
+      if (!cancelled) {
+        setAllGroups((groups ?? []) as Group[]);
+        setGroupSearching(false);
+      }
     })();
     return () => { cancelled = true; };
   }, [router]);
 
-  // Group search
-  useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (!groupQuery.trim()) { setGroupResults([]); return; }
-    debounceRef.current = setTimeout(async () => {
-      setGroupSearching(true);
-      const { data } = await supabase
-        .from("major_groups")
-        .select("id,name")
-        .ilike("name", `%${groupQuery.trim()}%`)
-        .limit(10);
-      setGroupResults((data ?? []) as Group[]);
-      setGroupSearching(false);
-    }, 300);
-  }, [groupQuery]);
-
   function selectGroup(g: Group) {
     setSelectedGroup(g);
     setGroupQuery(g.name);
-    setGroupResults([]);
+    setGroupInputFocused(false);
     setFile(null);
     setPreview(null);
     setPreviewErrors([]);
@@ -248,24 +246,23 @@ export default function SeasonImportPage() {
           <div className="relative">
             <input
               className="w-full rounded-xl bg-black/30 border border-emerald-900/60 px-3 py-2 text-base outline-none placeholder:text-emerald-100/30"
-              placeholder="Search for a group by name…"
+              placeholder={groupSearching ? "Loading groups…" : "Search groups…"}
               value={groupQuery}
               onChange={(e) => { setGroupQuery(e.target.value); setSelectedGroup(null); }}
+              onFocus={() => setGroupInputFocused(true)}
+              onBlur={() => setTimeout(() => setGroupInputFocused(false), 150)}
             />
-            {groupSearching && (
-              <div className="absolute right-3 top-2.5 text-xs text-emerald-100/50">Searching…</div>
-            )}
-            {groupResults.length > 0 && (
-              <div className="absolute z-10 mt-1 w-full rounded-xl border border-emerald-900/70 bg-[#0b3b21] shadow-lg overflow-hidden">
-                {groupResults.map(g => (
+            {groupInputFocused && !selectedGroup && filteredGroups.length > 0 && (
+              <div className="absolute z-10 mt-1 w-full rounded-xl border border-emerald-900/70 bg-[#0b3b21] shadow-lg overflow-hidden max-h-64 overflow-y-auto">
+                {filteredGroups.map(g => (
                   <button
                     key={g.id}
                     type="button"
+                    onMouseDown={(e) => e.preventDefault()}
                     onClick={() => selectGroup(g)}
                     className="w-full text-left px-3 py-2 text-sm hover:bg-emerald-900/40 transition-colors"
                   >
                     {g.name}
-                    <span className="ml-2 text-xs text-emerald-100/40 font-mono">{g.id}</span>
                   </button>
                 ))}
               </div>
