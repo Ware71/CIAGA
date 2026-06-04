@@ -262,6 +262,14 @@ export default function AdminPage() {
             <div className="text-sm font-semibold text-[#f5e6b0]">Export Rounds (CSV)</div>
             <div className="text-xs text-emerald-100/50 mt-1">Download player round history as CSV</div>
           </button>
+          <button
+            type="button"
+            onClick={() => router.push("/admin/season-import")}
+            className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-left hover:bg-emerald-900/30 transition-colors"
+          >
+            <div className="text-sm font-semibold text-[#f5e6b0]">Season Import (XLSX)</div>
+            <div className="text-xs text-emerald-100/50 mt-1">Backfill past seasons with scores, fees &amp; entries</div>
+          </button>
         </div>
 
         {/* CREATE PROFILE */}
