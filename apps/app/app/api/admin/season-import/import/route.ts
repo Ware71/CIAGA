@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { TEMPLATE_VERSION } from "../template/route";
 
 type TeeHole = {
   hole_number: number;
@@ -30,15 +31,17 @@ function cellNumber(cell: ExcelJS.Cell): number | null {
 }
 
 // ── XLSX parsing ──────────────────────────────────────────────────────────────
-// Competitions sheet columns (1-indexed):
-//   1=competition_name, 2=event_name, 3=course_name, 4=tee_name, 5=season_name
-//   6=entry_fee_override, 7=notes, 8=competition_id(H), 9=course_id(I), 10=tee_box_id(J), 11=season_id(K), 12=default_entry_fee(L)
+// Competitions sheet columns (v2, 1-based):
+//   1=event_name(A), 2=event_date(B), 3=event_type(C), 4=scoring_model(D)
+//   5=season_name(E), 6=course_name(F), 7=tee_name(G), 8=entry_fee_override(H), 9=notes(I)
+//   10=event_id(J), 11=is_new(K), 12=course_id(L), 13=tee_box_id(M), 14=tee_found(N)
+//   15=season_id(O), 16=default_entry_fee(P)
 //
-// Seasons sheet columns (1-indexed):
+// Seasons sheet columns (1-based):
 //   1=season_name, 2=year, 3=start_date_override, 4=end_date_override, 5=season_id
 //
-// Scores sheet columns (1-indexed):
-//   1=competition_name, 2=player_label, 3=handicap, 4=round_number(D), 5-22=holes 1-18(E-V), 23=competition_id(W), 24=profile_id(X)
+// Scores sheet columns (1-based):
+//   1=event_name, 2=player_label, 3=handicap, 4=round_number, 5-22=holes 1-18, 23=event_id, 24=profile_id
 
 type ParsedSeason = {
   season_name: string;
@@ -49,17 +52,21 @@ type ParsedSeason = {
 };
 
 type ParsedComp = {
-  competition_name: string;
   event_name: string;
-  competition_id: string;
-  tee_box_id: string;
+  event_date: string | null;
+  event_type: string | null;
+  scoring_model: string | null;
   season_name: string;
   entry_fee_override: number | null;
+  event_id: string;
+  is_new_event: boolean;
+  course_id: string;
+  tee_box_id: string;
 };
 
 type ParsedScore = {
-  competition_name: string;
-  competition_id: string;
+  competition_name: string; // = event_name from col A
+  competition_id: string;   // resolved event_id from col W (blank for new events at parse time)
   player_label: string;
   profile_id: string;
   handicap: number | null;
@@ -70,6 +77,15 @@ type ParsedScore = {
 async function parseXlsx(file: File) {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(await file.arrayBuffer());
+
+  // Version check
+  const guideSheet = wb.getWorksheet("Guide");
+  if (guideSheet) {
+    const versionCell = cellString(guideSheet.getCell(1, 4));
+    if (versionCell !== TEMPLATE_VERSION) {
+      throw new Error(`Outdated template (version "${versionCell || "none"}") — please re-download the template from Step 1.`);
+    }
+  }
 
   const seasonSheet = wb.getWorksheet("Seasons");
   if (!seasonSheet) throw new Error("Workbook is missing the 'Seasons' sheet");
@@ -101,15 +117,20 @@ async function parseXlsx(file: File) {
   const competitions: ParsedComp[] = [];
   compSheet.eachRow((row, rowNumber) => {
     if (rowNumber === 1) return;
-    const compName = cellString(row.getCell(1));
-    if (!compName) return;
+    const eventName = cellString(row.getCell(1)); // A
+    if (!eventName) return;
+    const eventId = cellString(row.getCell(10)); // J
     competitions.push({
-      competition_name:   compName,
-      event_name:         cellString(row.getCell(2)),
-      competition_id:     cellString(row.getCell(8)),  // H
-      tee_box_id:         cellString(row.getCell(10)), // J
-      season_name:        cellString(row.getCell(5)),  // E
-      entry_fee_override: cellNumber(row.getCell(6)),  // F
+      event_name:         eventName,
+      event_date:         cellString(row.getCell(2)) || null,  // B
+      event_type:         cellString(row.getCell(3)) || null,  // C
+      scoring_model:      cellString(row.getCell(4)) || null,  // D
+      season_name:        cellString(row.getCell(5)),          // E
+      entry_fee_override: cellNumber(row.getCell(8)),          // H
+      event_id:           eventId,
+      is_new_event:       eventId === "",
+      course_id:          cellString(row.getCell(12)),         // L
+      tee_box_id:         cellString(row.getCell(13)),         // M
     });
   });
 
@@ -121,14 +142,14 @@ async function parseXlsx(file: File) {
     const playerLabel = cellString(row.getCell(2));
     if (!playerLabel) return;
     const holes: number[] = [];
-    for (let h = 0; h < 18; h++) holes.push(cellNumber(row.getCell(5 + h)) ?? 0); // E-V cols 5-22
+    for (let h = 0; h < 18; h++) holes.push(cellNumber(row.getCell(5 + h)) ?? 0);
     scores.push({
       competition_name: compName,
       competition_id:   cellString(row.getCell(23)), // W
       player_label:     playerLabel,
       profile_id:       cellString(row.getCell(24)), // X
       handicap:         cellNumber(row.getCell(3)),
-      round_number:     cellNumber(row.getCell(4)) ?? 1, // D, default 1
+      round_number:     cellNumber(row.getCell(4)) ?? 1,
       holes,
     });
   });
@@ -169,19 +190,32 @@ export async function POST(req: Request) {
 
     const { seasons: seasonRows, competitions: compRows, scores: scoreRows } = await parseXlsx(file);
 
-    // ── 0. Pre-flight validation (batch checks before any writes) ────────────
-    const compIds   = Array.from(new Set(compRows.map(c => c.competition_id).filter(Boolean)));
-    const teeBoxIds = Array.from(new Set(compRows.map(c => c.tee_box_id).filter(Boolean)));
+    // ── 0. Pre-flight validation ──────────────────────────────────────────────
+    const existingCompRows = compRows.filter(c => !c.is_new_event);
+    const newCompRows      = compRows.filter(c => c.is_new_event);
+
+    const existingCompIds = Array.from(new Set(existingCompRows.map(c => c.event_id).filter(Boolean)));
+    const allTeeBoxIds    = Array.from(new Set(compRows.map(c => c.tee_box_id).filter(Boolean)));
+
+    // Validate new event required fields
+    const preflightErrors: string[] = [];
+    for (const comp of newCompRows) {
+      if (!comp.event_date) preflightErrors.push(`New event "${comp.event_name}": Event Date is required`);
+      if (!comp.event_type) preflightErrors.push(`New event "${comp.event_name}": Event Type is required`);
+      if (!comp.scoring_model) preflightErrors.push(`New event "${comp.event_name}": Scoring Model is required`);
+      if (!comp.course_id)  preflightErrors.push(`New event "${comp.event_name}": Course did not resolve`);
+      if (!comp.tee_box_id) preflightErrors.push(`New event "${comp.event_name}": Tee did not resolve — check column N shows ✓`);
+    }
 
     const [preflightCompsRes, preflightTeeBoxesRes, preflightTeeHolesRes] = await Promise.all([
-      compIds.length
-        ? admin.from("events").select("id,group_id,course_id").in("id", compIds)
+      existingCompIds.length
+        ? admin.from("events").select("id,group_id,course_id,group_season_id").in("id", existingCompIds)
         : Promise.resolve({ data: [], error: null }),
-      teeBoxIds.length
-        ? admin.from("course_tee_boxes").select("id").in("id", teeBoxIds)
+      allTeeBoxIds.length
+        ? admin.from("course_tee_boxes").select("id").in("id", allTeeBoxIds)
         : Promise.resolve({ data: [], error: null }),
-      teeBoxIds.length
-        ? admin.from("course_tee_holes").select("tee_box_id").in("tee_box_id", teeBoxIds)
+      allTeeBoxIds.length
+        ? admin.from("course_tee_holes").select("tee_box_id").in("tee_box_id", allTeeBoxIds)
         : Promise.resolve({ data: [], error: null }),
     ]);
 
@@ -196,46 +230,44 @@ export async function POST(req: Request) {
       teeBoxHoleCounts.set(h.tee_box_id, (teeBoxHoleCounts.get(h.tee_box_id) ?? 0) + 1);
     }
 
-    const preflightErrors: string[] = [];
+    for (const comp of existingCompRows) {
+      const ev = preflightCompMap.get(comp.event_id);
+      if (!ev) { preflightErrors.push(`Competition "${comp.event_name}": event not found`); continue; }
+      if (ev.group_id !== groupId) preflightErrors.push(`Competition "${comp.event_name}": event does not belong to this group`);
+      if (!ev.course_id) preflightErrors.push(`Competition "${comp.event_name}": event has no course — set a course on the event first`);
+    }
     for (const comp of compRows) {
-      if (!comp.competition_id) {
-        preflightErrors.push(`Competition "${comp.competition_name}": missing competition_id — re-run Preview first`);
-        continue;
-      }
-      const ev = preflightCompMap.get(comp.competition_id);
-      if (!ev) {
-        preflightErrors.push(`Competition "${comp.competition_name}": event not found in database`);
-        continue;
-      }
-      if (ev.group_id !== groupId) {
-        preflightErrors.push(`Competition "${comp.competition_name}": event does not belong to this group`);
-      }
-      if (!ev.course_id) {
-        preflightErrors.push(`Competition "${comp.competition_name}": event has no course — set a course on the event first`);
-      }
-      if (!comp.tee_box_id) {
-        preflightErrors.push(`Competition "${comp.competition_name}": missing tee_box_id — re-run Preview first`);
-      } else if (!preflightTeeBoxIds.has(comp.tee_box_id)) {
-        preflightErrors.push(`Competition "${comp.competition_name}": tee box not found in database`);
+      if (!comp.tee_box_id) continue;
+      if (!preflightTeeBoxIds.has(comp.tee_box_id)) {
+        preflightErrors.push(`Competition "${comp.event_name}": tee box not found in database`);
       } else if ((teeBoxHoleCounts.get(comp.tee_box_id) ?? 0) === 0) {
-        preflightErrors.push(`Competition "${comp.competition_name}": tee box has no holes configured`);
+        preflightErrors.push(`Competition "${comp.event_name}": tee box has no holes configured`);
       }
     }
+
     if (preflightErrors.length) {
       return NextResponse.json({ error: preflightErrors[0], errors: preflightErrors }, { status: 400 });
     }
 
+    // ── Build round-count map keyed by event_name (before IDs are resolved) ──
+    // This is needed so new event creation knows how many event_rounds to create.
+    const roundsPerEventName = new Map<string, Set<number>>();
+    for (const s of scoreRows) {
+      if (!s.competition_name) continue;
+      if (!roundsPerEventName.has(s.competition_name)) roundsPerEventName.set(s.competition_name, new Set());
+      roundsPerEventName.get(s.competition_name)!.add(s.round_number);
+    }
+
     // ── 1. Upsert group_seasons ───────────────────────────────────────────────
-    // Build a name → season_id map (existing + newly created)
     const seasonIdByName = new Map<string, string>();
 
-    const existingSeasonNames = Array.from(new Set(seasonRows.map(s => s.season_name)));
-    if (existingSeasonNames.length) {
+    const allSeasonNames = Array.from(new Set(seasonRows.map(s => s.season_name)));
+    if (allSeasonNames.length) {
       const { data: existingSeasons, error: esErr } = await admin
         .from("group_seasons")
         .select("id,name")
         .eq("group_id", groupId)
-        .in("name", existingSeasonNames);
+        .in("name", allSeasonNames);
       if (esErr) throw new Error(`Season lookup failed: ${esErr.message}`);
       for (const s of existingSeasons ?? []) seasonIdByName.set(s.name, s.id);
     }
@@ -243,7 +275,7 @@ export async function POST(req: Request) {
     const seasons_created: string[] = [];
 
     for (const season of seasonRows) {
-      if (seasonIdByName.has(season.season_name)) continue; // already exists
+      if (seasonIdByName.has(season.season_name)) continue;
 
       if (!season.start_date || !season.end_date) {
         throw new Error(`Season "${season.season_name}": missing Year or Start/End Date`);
@@ -268,26 +300,88 @@ export async function POST(req: Request) {
       seasons_created.push(season.season_name);
     }
 
-    // ── 2. Group scores by (competition_id, round_number) ────────────────────
-    // Key: "competition_id::round_number"
+    // ── 1.5. Create new events ────────────────────────────────────────────────
+    // Build event_name → event_id map for all comps (existing + newly created)
+    const eventIdByName = new Map<string, string>();
+    for (const comp of existingCompRows) eventIdByName.set(comp.event_name, comp.event_id);
+
+    const events_created: string[] = [];
+
+    for (const comp of newCompRows) {
+      const resolvedSeasonId = comp.season_name ? (seasonIdByName.get(comp.season_name) ?? null) : null;
+      const roundNumbers     = Array.from(roundsPerEventName.get(comp.event_name) ?? new Set([1])).sort((a, b) => a - b);
+      const multiRound       = roundNumbers.length > 1;
+
+      // Normalise event_type to DB enum value
+      const eventTypeNorm = (comp.event_type ?? "stroke")
+        .toLowerCase().replace(/\s+/g, "") === "bestball" ? "bestball"
+        : (comp.event_type ?? "stroke").toLowerCase().replace(/\s+/g, "");
+
+      const { data: newEvent, error: neErr } = await admin
+        .from("events")
+        .insert({
+          name:             comp.event_name,
+          group_id:         groupId,
+          group_season_id:  resolvedSeasonId,
+          event_date:       comp.event_date,
+          event_year:       new Date(comp.event_date!).getFullYear(),
+          event_type:       eventTypeNorm,
+          event_structure:  multiRound ? "multi_round" : "standalone",
+          scoring_model:    (comp.scoring_model ?? "net").toLowerCase(),
+          num_rounds:       roundNumbers.length,
+          course_id:        comp.course_id || null,
+          entry_fee_amount: comp.entry_fee_override,
+          majors_status:    "completed",
+        })
+        .select("id")
+        .single();
+      if (neErr || !newEvent) throw new Error(`Create event "${comp.event_name}" failed: ${neErr?.message}`);
+
+      // Create event_rounds (one per unique round_number)
+      const { error: erErr } = await admin.from("event_rounds").insert(
+        roundNumbers.map(n => ({
+          event_id:                  newEvent.id,
+          round_number:              n,
+          name:                      multiRound ? `Round ${n}` : comp.event_name,
+          scheduled_date:            comp.event_date,
+          course_id:                 comp.course_id || null,
+          status:                    "completed",
+          default_tee_box_id_male:   comp.tee_box_id || null,
+          default_tee_box_id_female: comp.tee_box_id || null,
+        }))
+      );
+      if (erErr) {
+        // Surface the newly created event_id so it can be cleaned up if needed
+        throw new Error(`Create event_rounds for "${comp.event_name}" (event_id: ${newEvent.id}) failed: ${erErr.message}`);
+      }
+
+      eventIdByName.set(comp.event_name, newEvent.id);
+      events_created.push(comp.event_name);
+    }
+
+    // ── 2. Re-key scores by (resolved_event_id, round_number) ────────────────
     const scoresByRound = new Map<string, typeof scoreRows>();
     for (const s of scoreRows) {
-      if (!s.competition_id) continue;
-      const key = `${s.competition_id}::${s.round_number}`;
+      const resolvedId = eventIdByName.get(s.competition_name) ?? s.competition_id;
+      if (!resolvedId) continue;
+      const key = `${resolvedId}::${s.round_number}`;
       if (!scoresByRound.has(key)) scoresByRound.set(key, []);
-      scoresByRound.get(key)!.push(s);
+      scoresByRound.get(key)!.push({ ...s, competition_id: resolvedId });
     }
 
-    // Determine how many distinct rounds each competition has
+    // Determine distinct round numbers per resolved event_id
     const roundsPerComp = new Map<string, Set<number>>();
     for (const s of scoreRows) {
-      if (!s.competition_id) continue;
-      if (!roundsPerComp.has(s.competition_id)) roundsPerComp.set(s.competition_id, new Set());
-      roundsPerComp.get(s.competition_id)!.add(s.round_number);
+      const resolvedId = eventIdByName.get(s.competition_name) ?? s.competition_id;
+      if (!resolvedId) continue;
+      if (!roundsPerComp.has(resolvedId)) roundsPerComp.set(resolvedId, new Set());
+      roundsPerComp.get(resolvedId)!.add(s.round_number);
     }
 
+    // ── Summary ───────────────────────────────────────────────────────────────
     const summary = {
       seasons_created,
+      events_created,
       rounds_created: 0,
       participants_created: 0,
       members_enrolled: 0,
@@ -298,41 +392,47 @@ export async function POST(req: Request) {
       competition_round_ids: [] as Array<{ competition_name: string; event_name: string; competition_id: string; round_id: string }>,
     };
 
+    // ── 3. Create rounds + scores per competition ─────────────────────────────
     for (const comp of compRows) {
-      if (!comp.competition_id || !comp.tee_box_id) {
-        throw new Error(`Competition "${comp.competition_name}": missing competition_id or tee_box_id — run Preview first`);
+      const resolvedEventId = eventIdByName.get(comp.event_name);
+      if (!resolvedEventId) {
+        throw new Error(`No resolved event_id for "${comp.event_name}" — this should not happen after pre-flight`);
       }
 
-      const roundNumbers = Array.from(roundsPerComp.get(comp.competition_id) ?? new Set([1])).sort();
+      const roundNumbers = Array.from(roundsPerComp.get(resolvedEventId) ?? new Set([1])).sort((a, b) => a - b);
       const multiRound   = roundNumbers.length > 1;
 
-      // Fetch competition
+      // Fetch event data (for course, entry_fee, event_date, name)
       const { data: competition, error: compErr } = await admin
         .from("events")
         .select("id,name,group_id,course_id,event_date,entry_fee_amount,group_season_id")
-        .eq("id", comp.competition_id)
+        .eq("id", resolvedEventId)
         .single();
-      if (compErr || !competition) throw new Error(`Event "${comp.competition_name}" not found`);
-      if (competition.group_id !== groupId) throw new Error(`Event "${comp.competition_name}" does not belong to this group`);
-      if (!competition.course_id) throw new Error(`Event "${comp.competition_name}" has no course_id — set a course on the event first`);
+      if (compErr || !competition) throw new Error(`Event "${comp.event_name}" not found`);
+      if (competition.group_id !== groupId) throw new Error(`Event "${comp.event_name}" does not belong to this group`);
 
-      // Link event to its season (only if not already linked to avoid overwriting deliberate assignments)
-      const resolvedSeasonId = comp.season_name ? (seasonIdByName.get(comp.season_name) ?? null) : null;
-      if (resolvedSeasonId && competition.group_season_id === null) {
-        const { error: gsiErr } = await admin
-          .from("events")
-          .update({ group_season_id: resolvedSeasonId })
-          .eq("id", comp.competition_id);
-        if (gsiErr) throw new Error(`Set group_season_id failed for "${comp.competition_name}": ${gsiErr.message}`);
+      // Set group_season_id on existing events if not already set
+      if (!comp.is_new_event) {
+        const resolvedSeasonId = comp.season_name ? (seasonIdByName.get(comp.season_name) ?? null) : null;
+        if (resolvedSeasonId && competition.group_season_id === null) {
+          const { error: gsiErr } = await admin
+            .from("events")
+            .update({ group_season_id: resolvedSeasonId })
+            .eq("id", resolvedEventId);
+          if (gsiErr) throw new Error(`Set group_season_id failed for "${comp.event_name}": ${gsiErr.message}`);
+        }
       }
+
+      const courseId = comp.course_id || competition.course_id;
+      if (!courseId) throw new Error(`Event "${comp.event_name}" has no course — set a course on the event first`);
 
       // Fetch course
       const { data: course, error: cErr } = await admin
         .from("courses")
         .select("id,name,city,country,lat,lng")
-        .eq("id", competition.course_id)
+        .eq("id", courseId)
         .single();
-      if (cErr || !course) throw new Error(`Course lookup failed for "${comp.competition_name}"`);
+      if (cErr || !course) throw new Error(`Course lookup failed for "${comp.event_name}"`);
 
       // Fetch tee box + holes
       const { data: teeBox, error: tbErr } = await admin
@@ -340,7 +440,7 @@ export async function POST(req: Request) {
         .select("id,name,gender,yards,par,rating,slope,holes_count")
         .eq("id", comp.tee_box_id)
         .single();
-      if (tbErr || !teeBox) throw new Error(`Tee box lookup failed for "${comp.competition_name}"`);
+      if (tbErr || !teeBox) throw new Error(`Tee box lookup failed for "${comp.event_name}"`);
 
       const { data: holes, error: hErr } = await admin
         .from("course_tee_holes")
@@ -355,26 +455,25 @@ export async function POST(req: Request) {
       const basePlayedAt  = competition.event_date
         ? new Date(competition.event_date).toISOString()
         : new Date().toISOString();
-      const baseEventName = comp.event_name || competition.name;
+      const baseEventName = comp.event_name;
       const entryFee      = comp.entry_fee_override != null
         ? comp.entry_fee_override
         : (competition.entry_fee_amount ?? null);
       const yardsTotal    = teeHoles.reduce((a, h) => a + (h.yardage ?? 0), 0);
       const parTotal      = teeHoles.reduce((a, h) => a + (h.par    ?? 0), 0);
 
-      // Track enrolment + entry/fee creation per event (not per round)
       const enrolledProfileIds   = new Set<string>();
       const entryCreatedProfiles = new Set<string>();
 
       for (const roundNumber of roundNumbers) {
-        const roundKey  = `${comp.competition_id}::${roundNumber}`;
+        const roundKey  = `${resolvedEventId}::${roundNumber}`;
         const roundName = multiRound ? `${baseEventName} — Round ${roundNumber}` : baseEventName;
 
-        // Idempotency: skip if a round with this name already exists for this event
+        // Idempotency: skip if round already exists by name
         const { data: existingRound } = await admin
           .from("rounds")
           .select("id")
-          .eq("competition_id", comp.competition_id)
+          .eq("competition_id", resolvedEventId)
           .eq("name", roundName)
           .maybeSingle();
 
@@ -499,7 +598,7 @@ export async function POST(req: Request) {
           // Event entry + fee — once per event, not per round
           if (!entryCreatedProfiles.has(profileId)) {
             const { error: ceErr } = await admin.from("event_entries").upsert({
-              event_id:                comp.competition_id,
+              event_id:                resolvedEventId,
               profile_id:              profileId,
               assigned_handicap_index: playerScore.handicap,
               source:                  "manual",
@@ -512,7 +611,7 @@ export async function POST(req: Request) {
               const { error: txErr } = await admin.from("group_balance_transactions").insert({
                 group_id:    groupId,
                 profile_id:  profileId,
-                event_id:    comp.competition_id,
+                event_id:    resolvedEventId,
                 type:        "entry_fee",
                 amount:      entryFee,
                 note:        `Entry fee for ${baseEventName}`,
@@ -525,9 +624,7 @@ export async function POST(req: Request) {
           }
         }
 
-        // ── Score events ──────────────────────────────────────────────────
-        // Use uniquePlayers (already deduped by profile_id) so a player who appears
-        // twice in the spreadsheet for the same round only gets 18 score events.
+        // ── Score events (use uniquePlayers to avoid duplicates) ──────────
         const scoreEvents: Array<{
           round_id: string; participant_id: string; hole_number: number; strokes: number; entered_by: string;
         }> = [];
@@ -550,9 +647,9 @@ export async function POST(req: Request) {
 
         summary.rounds_created++;
         summary.competition_round_ids.push({
-          competition_name: comp.competition_name,
+          competition_name: comp.event_name,
           event_name:       roundName,
-          competition_id:   comp.competition_id,
+          competition_id:   resolvedEventId,
           round_id:         round.id,
         });
       }

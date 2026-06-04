@@ -32,6 +32,10 @@ type CompetitionPreview = {
   score_row_count: number;
   already_imported: boolean;
   rounds: RoundPreview[];
+  is_new_event: boolean;
+  event_date: string | null;
+  event_type: string | null;
+  scoring_model: string | null;
 };
 
 type PreviewData = {
@@ -50,6 +54,7 @@ type PreviewData = {
 
 type ImportSummary = {
   seasons_created: string[];
+  events_created: string[];
   rounds_created: number;
   participants_created: number;
   members_enrolled: number;
@@ -409,8 +414,13 @@ export default function SeasonImportPage() {
                         const isPartial = !c.already_imported && c.rounds.some(r => r.already_imported);
                         return (
                           <>
-                            <tr key={c.competition_id} className="border-t border-emerald-900/40">
-                              <td className="py-1 pr-3 text-emerald-100">{c.event_name}</td>
+                            <tr key={c.competition_id || c.event_name} className="border-t border-emerald-900/40">
+                              <td className="py-1 pr-3 text-emerald-100">
+                                {c.event_name}
+                                {c.is_new_event && (
+                                  <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-wide text-blue-300 bg-blue-900/40 px-1.5 py-0.5 rounded">New</span>
+                                )}
+                              </td>
                               <td className="py-1 pr-3 text-emerald-100/70">{c.season_name || "—"}</td>
                               <td className="text-right py-1 pr-3 text-emerald-100/80">{c.player_count}</td>
                               <td className="text-right py-1 pr-3 text-emerald-100/80">
@@ -475,6 +485,9 @@ export default function SeasonImportPage() {
             <div className="flex flex-wrap gap-4 text-sm">
               {importSummary.seasons_created.length > 0 && (
                 <span><span className="font-semibold text-white">{importSummary.seasons_created.length}</span> seasons created</span>
+              )}
+              {(importSummary.events_created?.length ?? 0) > 0 && (
+                <span><span className="font-semibold text-white">{importSummary.events_created.length}</span> events created</span>
               )}
               <span><span className="font-semibold text-white">{importSummary.rounds_created}</span> rounds</span>
               <span><span className="font-semibold text-white">{importSummary.participants_created}</span> participants</span>
