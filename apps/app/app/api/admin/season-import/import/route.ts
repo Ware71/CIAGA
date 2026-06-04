@@ -249,13 +249,13 @@ export async function POST(req: Request) {
 
       // Fetch competition
       const { data: competition, error: compErr } = await admin
-        .from("competitions")
-        .select("id,name,group_id,course_id,competition_date,entry_fee_amount")
+        .from("events")
+        .select("id,name,group_id,course_id,event_date,entry_fee_amount")
         .eq("id", comp.competition_id)
         .single();
-      if (compErr || !competition) throw new Error(`Competition "${comp.competition_name}" not found`);
-      if (competition.group_id !== groupId) throw new Error(`Competition "${comp.competition_name}" does not belong to this group`);
-      if (!competition.course_id) throw new Error(`Competition "${comp.competition_name}" has no course_id — set a course on the competition first`);
+      if (compErr || !competition) throw new Error(`Event "${comp.competition_name}" not found`);
+      if (competition.group_id !== groupId) throw new Error(`Event "${comp.competition_name}" does not belong to this group`);
+      if (!competition.course_id) throw new Error(`Event "${comp.competition_name}" has no course_id — set a course on the event first`);
 
       // Fetch course
       const { data: course, error: cErr } = await admin
@@ -283,8 +283,8 @@ export async function POST(req: Request) {
       const teeHoles: TeeHole[] = (holes ?? []) as TeeHole[];
       if (!teeHoles.length) throw new Error(`Tee box "${teeBox.name}" has no holes configured`);
 
-      const playedAtIso  = competition.competition_date
-        ? new Date(competition.competition_date).toISOString()
+      const playedAtIso  = competition.event_date
+        ? new Date(competition.event_date).toISOString()
         : new Date().toISOString();
 
       const roundName = comp.event_name || competition.name;
@@ -407,23 +407,23 @@ export async function POST(req: Request) {
         summary.participants_created++;
 
         // Competition entry
-        const { error: ceErr } = await admin.from("competition_entries").upsert({
-          competition_id:         comp.competition_id,
+        const { error: ceErr } = await admin.from("event_entries").upsert({
+          event_id:               comp.competition_id,
           profile_id:             profileId,
           assigned_handicap_index: playerScore.handicap,
           source:                 "manual",
           locked:                 true,
-        }, { onConflict: "competition_id,profile_id" });
+        }, { onConflict: "event_id,profile_id" });
         if (ceErr) throw new Error(`Create competition entry failed: ${ceErr.message}`);
         summary.competition_entries_created++;
 
         // Entry fee transaction
         if (entryFee != null && entryFee > 0) {
           const { error: txErr } = await admin.from("group_balance_transactions").insert({
-            group_id:       groupId,
-            profile_id:     profileId,
-            competition_id: comp.competition_id,
-            type:           "entry_fee",
+            group_id:   groupId,
+            profile_id: profileId,
+            event_id:   comp.competition_id,
+            type:       "entry_fee",
             amount:         entryFee,
             note:           `Entry fee for ${roundName}`,
             recorded_by:    myProfile.id,

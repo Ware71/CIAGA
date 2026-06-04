@@ -90,7 +90,7 @@ export async function POST(req: Request) {
 
     const [compsRes, profilesRes, teeBoxesRes, existingRoundsRes, existingSeasonsRes] = await Promise.all([
       compIds.length
-        ? admin.from("competitions").select("id,name,group_id,entry_fee_amount").in("id", compIds)
+        ? admin.from("events").select("id,name,group_id,entry_fee_amount").in("id", compIds)
         : Promise.resolve({ data: [], error: null }),
       profileIds.length
         ? admin.from("profiles").select("id").in("id", profileIds)

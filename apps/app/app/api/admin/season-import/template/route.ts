@@ -48,10 +48,10 @@ export async function GET(req: Request) {
 
     const [compsRes, allProfilesRes, teeBoxesRes, coursesRes, seasonsRes] = await Promise.all([
       admin
-        .from("competitions")
-        .select("id,name,competition_date,entry_fee_amount,course_id")
+        .from("events")
+        .select("id,name,event_date,entry_fee_amount,course_id")
         .eq("group_id", groupId)
-        .order("competition_date", { ascending: false })
+        .order("event_date", { ascending: false })
         .limit(500),
       admin.from("profiles").select("id,name,email").order("name").limit(2000),
       admin.from("course_tee_boxes").select("id,name,course_id").order("sort_order"),
@@ -69,7 +69,7 @@ export async function GET(req: Request) {
     if (coursesRes.error)     throw new Error(coursesRes.error.message);
     if (seasonsRes.error)     throw new Error(seasonsRes.error.message);
 
-    type CompRow    = { id: string; name: string; competition_date: string | null; entry_fee_amount: number | null; course_id: string | null };
+    type CompRow    = { id: string; name: string; event_date: string | null; entry_fee_amount: number | null; course_id: string | null };
     type ProfileRow = { id: string; name: string | null; email: string | null };
     type SeasonRow  = { id: string; name: string; season_year: number | null; start_date: string | null; end_date: string | null };
 
@@ -443,7 +443,7 @@ function buildScoresSheet(wb: ExcelJS.Workbook) {
 
 function buildLookupSheets(
   wb: ExcelJS.Workbook,
-  competitions: Array<{ id: string; name: string; competition_date: string | null; entry_fee_amount: number | null; course_id: string | null }>,
+  competitions: Array<{ id: string; name: string; event_date: string | null; entry_fee_amount: number | null; course_id: string | null }>,
   allProfiles:  Array<{ id: string; name: string | null; email: string | null }>,
   teeBoxes:     Array<{ id: string; name: string; course_id: string }>,
   courses:      Array<{ id: string; name: string; city: string | null; country: string | null }>,
@@ -452,9 +452,9 @@ function buildLookupSheets(
   // _Competitions: A=id, B=name, C=competition_date, D=entry_fee_amount, E=course_id
   const wsComps = wb.addWorksheet("_Competitions");
   wsComps.state = "hidden";
-  wsComps.addRow(["id", "name", "competition_date", "entry_fee_amount", "course_id"]);
+  wsComps.addRow(["id", "name", "event_date", "entry_fee_amount", "course_id"]);
   competitions.forEach(c =>
-    wsComps.addRow([c.id, c.name, c.competition_date ?? "", c.entry_fee_amount ?? "", c.course_id ?? ""])
+    wsComps.addRow([c.id, c.name, c.event_date ?? "", c.entry_fee_amount ?? "", c.course_id ?? ""])
   );
 
   // _Members: A=id, B=name, C=email  (all profiles, not just group members)
