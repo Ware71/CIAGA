@@ -197,7 +197,7 @@ export async function POST(req: Request) {
         seasons_to_create:  seasonPreviews.filter(s => !s.already_exists).length,
         competitions:       parsed.competitions.length,
         participants:       competitionPreviews.reduce((a, c) => a + c.player_count, 0),
-        score_events:       competitionPreviews.reduce((a, c) => a + c.score_row_count * 18, 0),
+        score_events:       competitionPreviews.reduce((a, c) => a + c.score_row_count, 0) * 18,
         fee_transactions:   playersWithFee,
       },
     };
@@ -217,7 +217,7 @@ export async function POST(req: Request) {
 //   1=season_name, 2=year, 3=start_date_override, 4=end_date_override, 5=season_id
 //
 // Scores sheet column indices (1-based):
-//   1=competition_name, 2=player_label, 3=handicap, 4-21=holes 1-18, 22=competition_id, 23=profile_id
+//   1=competition_name, 2=player_label, 3=handicap, 4=round_number, 5-22=holes 1-18, 23=competition_id, 24=profile_id
 
 type ParsedSeason = {
   season_name: string;
@@ -241,6 +241,7 @@ type ParsedScore = {
   player_label: string;
   profile_id: string;
   handicap: number | null;
+  round_number: number;
   holes: number[];
 };
 
@@ -299,13 +300,14 @@ async function parseXlsx(file: File): Promise<{
     const playerLabel = cellString(row.getCell(2));
     if (!playerLabel) return;
     const holes: number[] = [];
-    for (let h = 0; h < 18; h++) holes.push(cellNumber(row.getCell(4 + h)) ?? 0);
+    for (let h = 0; h < 18; h++) holes.push(cellNumber(row.getCell(5 + h)) ?? 0); // E-V = cols 5-22
     scores.push({
       competition_name: compName,
-      competition_id:   cellString(row.getCell(22)),
+      competition_id:   cellString(row.getCell(23)), // W
       player_label:     playerLabel,
-      profile_id:       cellString(row.getCell(23)),
+      profile_id:       cellString(row.getCell(24)), // X
       handicap:         cellNumber(row.getCell(3)),
+      round_number:     cellNumber(row.getCell(4)) ?? 1, // D, default 1
       holes,
     });
   });

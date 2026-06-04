@@ -38,7 +38,7 @@ function cellNumber(cell: ExcelJS.Cell): number | null {
 //   1=season_name, 2=year, 3=start_date_override, 4=end_date_override, 5=season_id
 //
 // Scores sheet columns (1-indexed):
-//   1=competition_name, 2=player_label, 3=handicap, 4-21=holes 1-18, 22=competition_id(V), 23=profile_id(W)
+//   1=competition_name, 2=player_label, 3=handicap, 4=round_number(D), 5-22=holes 1-18(E-V), 23=competition_id(W), 24=profile_id(X)
 
 type ParsedSeason = {
   season_name: string;
@@ -63,6 +63,7 @@ type ParsedScore = {
   player_label: string;
   profile_id: string;
   handicap: number | null;
+  round_number: number;
   holes: number[];
 };
 
@@ -120,13 +121,14 @@ async function parseXlsx(file: File) {
     const playerLabel = cellString(row.getCell(2));
     if (!playerLabel) return;
     const holes: number[] = [];
-    for (let h = 0; h < 18; h++) holes.push(cellNumber(row.getCell(4 + h)) ?? 0);
+    for (let h = 0; h < 18; h++) holes.push(cellNumber(row.getCell(5 + h)) ?? 0); // E-V cols 5-22
     scores.push({
       competition_name: compName,
-      competition_id:   cellString(row.getCell(22)),
+      competition_id:   cellString(row.getCell(23)), // W
       player_label:     playerLabel,
-      profile_id:       cellString(row.getCell(23)),
+      profile_id:       cellString(row.getCell(24)), // X
       handicap:         cellNumber(row.getCell(3)),
+      round_number:     cellNumber(row.getCell(4)) ?? 1, // D, default 1
       holes,
     });
   });
@@ -210,12 +212,22 @@ export async function POST(req: Request) {
       seasons_created.push(season.season_name);
     }
 
-    // ── 2. Group scores by competition_id ─────────────────────────────────────
-    const scoresByComp = new Map<string, typeof scoreRows>();
+    // ── 2. Group scores by (competition_id, round_number) ────────────────────
+    // Key: "competition_id::round_number"
+    const scoresByRound = new Map<string, typeof scoreRows>();
     for (const s of scoreRows) {
       if (!s.competition_id) continue;
-      if (!scoresByComp.has(s.competition_id)) scoresByComp.set(s.competition_id, []);
-      scoresByComp.get(s.competition_id)!.push(s);
+      const key = `${s.competition_id}::${s.round_number}`;
+      if (!scoresByRound.has(key)) scoresByRound.set(key, []);
+      scoresByRound.get(key)!.push(s);
+    }
+
+    // Determine how many distinct rounds each competition has
+    const roundsPerComp = new Map<string, Set<number>>();
+    for (const s of scoreRows) {
+      if (!s.competition_id) continue;
+      if (!roundsPerComp.has(s.competition_id)) roundsPerComp.set(s.competition_id, new Set());
+      roundsPerComp.get(s.competition_id)!.add(s.round_number);
     }
 
     const summary = {
@@ -235,17 +247,8 @@ export async function POST(req: Request) {
         throw new Error(`Competition "${comp.competition_name}": missing competition_id or tee_box_id — run Preview first`);
       }
 
-      // Idempotency check
-      const { data: existingRound } = await admin
-        .from("rounds")
-        .select("id")
-        .eq("competition_id", comp.competition_id)
-        .maybeSingle();
-
-      if (existingRound) {
-        summary.skipped_already_imported.push(comp.competition_name);
-        continue;
-      }
+      const roundNumbers = Array.from(roundsPerComp.get(comp.competition_id) ?? new Set([1])).sort();
+      const multiRound   = roundNumbers.length > 1;
 
       // Fetch competition
       const { data: competition, error: compErr } = await admin
@@ -283,200 +286,209 @@ export async function POST(req: Request) {
       const teeHoles: TeeHole[] = (holes ?? []) as TeeHole[];
       if (!teeHoles.length) throw new Error(`Tee box "${teeBox.name}" has no holes configured`);
 
-      const playedAtIso  = competition.event_date
+      const basePlayedAt  = competition.event_date
         ? new Date(competition.event_date).toISOString()
         : new Date().toISOString();
-
-      const roundName = comp.event_name || competition.name;
-
-      // ── Create round ──────────────────────────────────────────────────────
-      const { data: round, error: rErr } = await admin
-        .from("rounds")
-        .insert({
-          created_by:   myProfile.id,
-          status:       "live",
-          visibility:   "private",
-          course_id:    course.id,
-          competition_id: competition.id,
-          name:         roundName,
-          started_at:   playedAtIso,
-          finished_at:  playedAtIso,
-        })
-        .select("id")
-        .single();
-      if (rErr || !round) throw new Error(`Create round failed for "${comp.competition_name}": ${rErr?.message}`);
-
-      // ── Course snapshot ───────────────────────────────────────────────────
-      const { data: courseSnap, error: csErr } = await admin
-        .from("round_course_snapshots")
-        .insert({
-          round_id:        round.id,
-          source_course_id: course.id,
-          course_name:     course.name,
-          city:            course.city,
-          country:         course.country,
-          lat:             course.lat,
-          lng:             course.lng,
-        })
-        .select("id")
-        .single();
-      if (csErr || !courseSnap) throw new Error(`Create course snapshot failed: ${csErr?.message}`);
-
-      // ── Tee snapshot + hole snapshots ─────────────────────────────────────
-      const yardsTotal = teeHoles.reduce((a, h) => a + (h.yardage ?? 0), 0);
-      const parTotal   = teeHoles.reduce((a, h) => a + (h.par    ?? 0), 0);
-
-      const { data: teeSnap, error: tsErr } = await admin
-        .from("round_tee_snapshots")
-        .insert({
-          round_course_snapshot_id: courseSnap.id,
-          source_tee_box_id: teeBox.id,
-          name:        teeBox.name,
-          gender:      teeBox.gender,
-          holes_count: teeBox.holes_count ?? teeHoles.length,
-          yards_total: teeBox.yards ?? yardsTotal,
-          par_total:   teeBox.par   ?? parTotal,
-          rating:      teeBox.rating,
-          slope:       teeBox.slope,
-        })
-        .select("id")
-        .single();
-      if (tsErr || !teeSnap) throw new Error(`Create tee snapshot failed: ${tsErr?.message}`);
-
-      const { error: hsErr } = await admin.from("round_hole_snapshots").insert(
-        teeHoles.map(h => ({
-          round_tee_snapshot_id: teeSnap.id,
-          hole_number:   h.hole_number,
-          par:           h.par,
-          yardage:       h.yardage,
-          stroke_index:  h.handicap,
-        }))
-      );
-      if (hsErr) throw new Error(`Create hole snapshots failed: ${hsErr.message}`);
-
-      // ── Per-player: enrol, participant, entry, fee ────────────────────────
-      const compScores    = scoresByComp.get(comp.competition_id) ?? [];
-      const uniquePlayers = new Map<string, typeof compScores[number]>();
-      for (const s of compScores) {
-        if (s.profile_id && !uniquePlayers.has(s.profile_id)) uniquePlayers.set(s.profile_id, s);
-      }
-
-      const entryFee = comp.entry_fee_override != null
+      const baseEventName = comp.event_name || competition.name;
+      const entryFee      = comp.entry_fee_override != null
         ? comp.entry_fee_override
         : (competition.entry_fee_amount ?? null);
+      const yardsTotal    = teeHoles.reduce((a, h) => a + (h.yardage ?? 0), 0);
+      const parTotal      = teeHoles.reduce((a, h) => a + (h.par    ?? 0), 0);
 
-      const participantIdByProfileId = new Map<string, string>();
+      // Track enrolment + entry/fee creation per event (not per round)
+      const enrolledProfileIds   = new Set<string>();
+      const entryCreatedProfiles = new Set<string>();
 
-      for (const [profileId, playerScore] of uniquePlayers.entries()) {
-        // Auto-enrol if not already a member
-        const { data: membership } = await admin
-          .from("major_group_memberships")
+      for (const roundNumber of roundNumbers) {
+        const roundKey  = `${comp.competition_id}::${roundNumber}`;
+        const roundName = multiRound ? `${baseEventName} — Round ${roundNumber}` : baseEventName;
+
+        // Idempotency: skip if a round with this name already exists for this event
+        const { data: existingRound } = await admin
+          .from("rounds")
           .select("id")
-          .eq("group_id", groupId)
-          .eq("profile_id", profileId)
+          .eq("competition_id", comp.competition_id)
+          .eq("name", roundName)
           .maybeSingle();
 
-        if (!membership) {
-          const { error: enrollErr } = await admin.from("major_group_memberships").insert({
-            group_id:   groupId,
-            profile_id: profileId,
-            role:       "member",
-            status:     "active",
-            joined_at:  playedAtIso,
-          });
-          if (enrollErr) throw new Error(`Enrol member ${profileId} failed: ${enrollErr.message}`);
-          summary.members_enrolled++;
+        if (existingRound) {
+          summary.skipped_already_imported.push(roundName);
+          continue;
         }
 
-        // Round participant
-        const { data: part, error: rpErr } = await admin
-          .from("round_participants")
+        // ── Create round ──────────────────────────────────────────────────
+        const { data: round, error: rErr } = await admin
+          .from("rounds")
           .insert({
-            round_id:       round.id,
-            profile_id:     profileId,
-            is_guest:       false,
-            role:           "player",
-            handicap_index: playerScore.handicap,
-            tee_snapshot_id: teeSnap.id,
+            created_by:     myProfile.id,
+            status:         "live",
+            visibility:     "private",
+            course_id:      course.id,
+            competition_id: competition.id,
+            name:           roundName,
+            started_at:     basePlayedAt,
+            finished_at:    basePlayedAt,
           })
           .select("id")
           .single();
-        if (rpErr || !part) throw new Error(`Create participant failed for ${profileId}: ${rpErr?.message}`);
+        if (rErr || !round) throw new Error(`Create round failed for "${roundName}": ${rErr?.message}`);
 
-        participantIdByProfileId.set(profileId, part.id);
-        summary.participants_created++;
+        // ── Course snapshot ───────────────────────────────────────────────
+        const { data: courseSnap, error: csErr } = await admin
+          .from("round_course_snapshots")
+          .insert({
+            round_id:         round.id,
+            source_course_id: course.id,
+            course_name:      course.name,
+            city:             course.city,
+            country:          course.country,
+            lat:              course.lat,
+            lng:              course.lng,
+          })
+          .select("id")
+          .single();
+        if (csErr || !courseSnap) throw new Error(`Create course snapshot failed: ${csErr?.message}`);
 
-        // Competition entry
-        const { error: ceErr } = await admin.from("event_entries").upsert({
-          event_id:               comp.competition_id,
-          profile_id:             profileId,
-          assigned_handicap_index: playerScore.handicap,
-          source:                 "manual",
-          locked:                 true,
-        }, { onConflict: "event_id,profile_id" });
-        if (ceErr) throw new Error(`Create competition entry failed: ${ceErr.message}`);
-        summary.competition_entries_created++;
+        // ── Tee snapshot + hole snapshots ─────────────────────────────────
+        const { data: teeSnap, error: tsErr } = await admin
+          .from("round_tee_snapshots")
+          .insert({
+            round_course_snapshot_id: courseSnap.id,
+            source_tee_box_id: teeBox.id,
+            name:        teeBox.name,
+            gender:      teeBox.gender,
+            holes_count: teeBox.holes_count ?? teeHoles.length,
+            yards_total: teeBox.yards ?? yardsTotal,
+            par_total:   teeBox.par   ?? parTotal,
+            rating:      teeBox.rating,
+            slope:       teeBox.slope,
+          })
+          .select("id")
+          .single();
+        if (tsErr || !teeSnap) throw new Error(`Create tee snapshot failed: ${tsErr?.message}`);
 
-        // Entry fee transaction
-        if (entryFee != null && entryFee > 0) {
-          const { error: txErr } = await admin.from("group_balance_transactions").insert({
-            group_id:   groupId,
-            profile_id: profileId,
-            event_id:   comp.competition_id,
-            type:       "entry_fee",
-            amount:         entryFee,
-            note:           `Entry fee for ${roundName}`,
-            recorded_by:    myProfile.id,
-          });
-          if (txErr) throw new Error(`Create fee transaction failed: ${txErr.message}`);
-          summary.fee_transactions_created++;
+        const { error: hsErr } = await admin.from("round_hole_snapshots").insert(
+          teeHoles.map(h => ({
+            round_tee_snapshot_id: teeSnap.id,
+            hole_number:  h.hole_number,
+            par:          h.par,
+            yardage:      h.yardage,
+            stroke_index: h.handicap,
+          }))
+        );
+        if (hsErr) throw new Error(`Create hole snapshots failed: ${hsErr.message}`);
+
+        // ── Per-player ────────────────────────────────────────────────────
+        const roundScores   = scoresByRound.get(roundKey) ?? [];
+        const uniquePlayers = new Map<string, typeof roundScores[number]>();
+        for (const s of roundScores) {
+          if (s.profile_id && !uniquePlayers.has(s.profile_id)) uniquePlayers.set(s.profile_id, s);
         }
-      }
 
-      // ── Score events ──────────────────────────────────────────────────────
-      const scoreEvents: Array<{
-        round_id: string;
-        participant_id: string;
-        hole_number: number;
-        strokes: number;
-        entered_by: string;
-      }> = [];
+        const participantIdByProfileId = new Map<string, string>();
 
-      for (const s of compScores) {
-        if (!s.profile_id) continue;
-        const participantId = participantIdByProfileId.get(s.profile_id);
-        if (!participantId) continue;
-        s.holes.forEach((strokes, idx) => {
-          scoreEvents.push({
-            round_id:       round.id,
-            participant_id: participantId,
-            hole_number:    idx + 1,
-            strokes,
-            entered_by:     myProfile.id,
+        for (const [profileId, playerScore] of uniquePlayers.entries()) {
+          // Auto-enrol once per event
+          if (!enrolledProfileIds.has(profileId)) {
+            const { data: membership } = await admin
+              .from("major_group_memberships")
+              .select("id")
+              .eq("group_id", groupId)
+              .eq("profile_id", profileId)
+              .maybeSingle();
+
+            if (!membership) {
+              const { error: enrollErr } = await admin.from("major_group_memberships").insert({
+                group_id:   groupId,
+                profile_id: profileId,
+                role:       "member",
+                status:     "active",
+                joined_at:  basePlayedAt,
+              });
+              if (enrollErr) throw new Error(`Enrol member ${profileId} failed: ${enrollErr.message}`);
+              summary.members_enrolled++;
+            }
+            enrolledProfileIds.add(profileId);
+          }
+
+          // Round participant
+          const { data: part, error: rpErr } = await admin
+            .from("round_participants")
+            .insert({
+              round_id:        round.id,
+              profile_id:      profileId,
+              is_guest:        false,
+              role:            "player",
+              handicap_index:  playerScore.handicap,
+              tee_snapshot_id: teeSnap.id,
+            })
+            .select("id")
+            .single();
+          if (rpErr || !part) throw new Error(`Create participant failed for ${profileId}: ${rpErr?.message}`);
+
+          participantIdByProfileId.set(profileId, part.id);
+          summary.participants_created++;
+
+          // Event entry + fee — once per event, not per round
+          if (!entryCreatedProfiles.has(profileId)) {
+            const { error: ceErr } = await admin.from("event_entries").upsert({
+              event_id:                comp.competition_id,
+              profile_id:              profileId,
+              assigned_handicap_index: playerScore.handicap,
+              source:                  "manual",
+              locked:                  true,
+            }, { onConflict: "event_id,profile_id" });
+            if (ceErr) throw new Error(`Create event entry failed: ${ceErr.message}`);
+            summary.competition_entries_created++;
+
+            if (entryFee != null && entryFee > 0) {
+              const { error: txErr } = await admin.from("group_balance_transactions").insert({
+                group_id:    groupId,
+                profile_id:  profileId,
+                event_id:    comp.competition_id,
+                type:        "entry_fee",
+                amount:      entryFee,
+                note:        `Entry fee for ${baseEventName}`,
+                recorded_by: myProfile.id,
+              });
+              if (txErr) throw new Error(`Create fee transaction failed: ${txErr.message}`);
+              summary.fee_transactions_created++;
+            }
+            entryCreatedProfiles.add(profileId);
+          }
+        }
+
+        // ── Score events ──────────────────────────────────────────────────
+        const scoreEvents: Array<{
+          round_id: string; participant_id: string; hole_number: number; strokes: number; entered_by: string;
+        }> = [];
+        for (const s of roundScores) {
+          if (!s.profile_id) continue;
+          const participantId = participantIdByProfileId.get(s.profile_id);
+          if (!participantId) continue;
+          s.holes.forEach((strokes, idx) => {
+            scoreEvents.push({ round_id: round.id, participant_id: participantId, hole_number: idx + 1, strokes, entered_by: myProfile.id });
           });
+        }
+        if (scoreEvents.length) {
+          const { error: seErr } = await admin.from("round_score_events").insert(scoreEvents);
+          if (seErr) throw new Error(`Create score events failed for "${roundName}": ${seErr.message}`);
+          summary.score_events_created += scoreEvents.length;
+        }
+
+        // ── Finish round ──────────────────────────────────────────────────
+        const { error: finErr } = await admin.from("rounds").update({ status: "finished" }).eq("id", round.id);
+        if (finErr) throw new Error(`Finish round failed: ${finErr.message}`);
+
+        summary.rounds_created++;
+        summary.competition_round_ids.push({
+          competition_name: comp.competition_name,
+          event_name:       roundName,
+          competition_id:   comp.competition_id,
+          round_id:         round.id,
         });
       }
-
-      if (scoreEvents.length) {
-        const { error: seErr } = await admin.from("round_score_events").insert(scoreEvents);
-        if (seErr) throw new Error(`Create score events failed for "${comp.competition_name}": ${seErr.message}`);
-        summary.score_events_created += scoreEvents.length;
-      }
-
-      // ── Finish round (fires handicap triggers) ────────────────────────────
-      const { error: finErr } = await admin
-        .from("rounds")
-        .update({ status: "finished" })
-        .eq("id", round.id);
-      if (finErr) throw new Error(`Finish round failed: ${finErr.message}`);
-
-      summary.rounds_created++;
-      summary.competition_round_ids.push({
-        competition_name: comp.competition_name,
-        event_name:       roundName,
-        competition_id:   comp.competition_id,
-        round_id:         round.id,
-      });
     }
 
     return NextResponse.json({ ok: true, summary });
