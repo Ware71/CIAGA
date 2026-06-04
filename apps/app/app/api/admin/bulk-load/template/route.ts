@@ -59,8 +59,8 @@ export async function GET(req: Request) {
 
     // Fetch all lookup data in parallel
     const [coursesRes, teeBoxesRes, profilesRes] = await Promise.all([
-      admin.from("courses").select("id,name,city,country").order("name"),
-      admin.from("course_tee_boxes").select("id,name,course_id").order("sort_order"),
+      admin.from("courses").select("id,name,city,country").order("name").limit(10000),
+      admin.from("course_tee_boxes").select("id,name,course_id").order("sort_order").limit(10000),
       admin.from("profiles").select("id,name,email").order("name").limit(2000),
     ]);
 
