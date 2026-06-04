@@ -3396,14 +3396,14 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                 <button
                   type="button"
                   onClick={() => setAddChargeForm((f) => f && { ...f, is_mandatory: !f.is_mandatory })}
-                  className="flex items-center gap-2 w-full py-2 px-2 rounded-lg border border-emerald-900/40 hover:bg-emerald-900/20"
+                  className="flex items-center justify-between w-full py-2 px-2 rounded-lg border border-emerald-900/40 hover:bg-emerald-900/20"
                 >
-                  <div className={`relative w-8 h-5 rounded-full transition-colors ${addChargeForm.is_mandatory ? "bg-emerald-600" : "bg-emerald-900/50"}`}>
-                    <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${addChargeForm.is_mandatory ? "translate-x-3.5" : "translate-x-0.5"}`} />
-                  </div>
                   <div className="text-left">
                     <div className="text-[11px] font-semibold text-emerald-100">Mandatory</div>
                     <div className="text-[10px] text-emerald-200/40">Auto-charged when a player joins this event</div>
+                  </div>
+                  <div className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${addChargeForm.is_mandatory ? "bg-emerald-600" : "bg-emerald-900/50"}`}>
+                    <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${addChargeForm.is_mandatory ? "translate-x-5" : ""}`} />
                   </div>
                 </button>
                 <div className="flex gap-2">
@@ -3965,14 +3965,14 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                   <button
                     type="button"
                     onClick={() => setAddPotForm((f) => f && { ...f, is_mandatory: !f.is_mandatory })}
-                    className="flex items-center gap-2 w-full py-2 px-2 rounded-lg border border-emerald-900/40 hover:bg-emerald-900/20"
+                    className="flex items-center justify-between w-full py-2 px-2 rounded-lg border border-emerald-900/40 hover:bg-emerald-900/20"
                   >
-                    <div className={`relative w-8 h-5 rounded-full transition-colors ${addPotForm.is_mandatory ? "bg-emerald-600" : "bg-emerald-900/50"}`}>
-                      <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${addPotForm.is_mandatory ? "translate-x-3.5" : "translate-x-0.5"}`} />
-                    </div>
                     <div className="text-left">
                       <div className="text-[11px] font-semibold text-emerald-100">Mandatory</div>
                       <div className="text-[10px] text-emerald-200/40">Players are auto-enrolled when joining this event</div>
+                    </div>
+                    <div className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${addPotForm.is_mandatory ? "bg-emerald-600" : "bg-emerald-900/50"}`}>
+                      <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${addPotForm.is_mandatory ? "translate-x-5" : ""}`} />
                     </div>
                   </button>
                   <div className="flex gap-2">
