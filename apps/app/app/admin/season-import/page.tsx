@@ -102,15 +102,19 @@ export default function SeasonImportPage() {
       if (!data?.[0]?.is_admin) { router.replace("/"); return; }
       setAdminOk(true);
       setChecking(false);
-      // Load all groups once after admin check
+      // Load all groups via admin API (bypasses RLS)
       setGroupSearching(true);
-      const { data: groups } = await supabase
-        .from("major_groups")
-        .select("id,name")
-        .order("name");
-      if (!cancelled) {
-        setAllGroups((groups ?? []) as Group[]);
-        setGroupSearching(false);
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (token && !cancelled) {
+        const res = await fetch("/api/admin/season-import/groups", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const json = await res.json();
+        if (!cancelled) {
+          setAllGroups((json.groups ?? []) as Group[]);
+          setGroupSearching(false);
+        }
       }
     })();
     return () => { cancelled = true; };
