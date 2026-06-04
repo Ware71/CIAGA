@@ -35,14 +35,15 @@ const IMPORT_COLS = [
 
 const DATA_ROWS = 200;
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function fetchAllRows<T>(
-  query: () => ReturnType<ReturnType<typeof getSupabaseAdmin>["from"]>,
+  query: () => { range: (from: number, to: number) => Promise<{ data: T[] | null; error: any }> },
   pageSize = 1000,
 ): Promise<T[]> {
   const rows: T[] = [];
   let from = 0;
   while (true) {
-    const { data, error } = await (query() as any).range(from, from + pageSize - 1);
+    const { data, error } = await query().range(from, from + pageSize - 1);
     if (error) throw new Error(error.message);
     if (!data || data.length === 0) break;
     rows.push(...data);
