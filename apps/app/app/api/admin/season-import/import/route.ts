@@ -258,6 +258,62 @@ export async function POST(req: Request) {
       roundsPerEventName.get(s.competition_name)!.add(s.round_number);
     }
 
+    // ── 1a. Auto-resolve blank handicaps ─────────────────────────────────────
+    // For any score row where the handicap column was left blank, look up the
+    // player's WHS handicap index as of the day before the event using the
+    // ciaga_true_hi_as_of DB function. This mirrors how the handicap replay
+    // system snapshots HI (it uses round_date - 1).
+    {
+      // Build a map from competition_name → event_date for quick lookup
+      const eventDateByName = new Map<string, string>();
+      for (const comp of compRows) {
+        if (comp.event_date) eventDateByName.set(comp.event_name, comp.event_date);
+      }
+
+      // Collect unique (profile_id, as_of_date) pairs that need resolution
+      type HiKey = `${string}::${string}`;
+      const needed = new Map<HiKey, { profileId: string; asOfDate: string }>();
+      for (const score of scoreRows) {
+        if (score.handicap !== null) continue;
+        if (!score.profile_id) continue;
+        const eventDate = eventDateByName.get(score.competition_name);
+        if (!eventDate) continue;
+        // Day before the event (matches ciaga_refresh_handicaps_from logic)
+        const asOf = new Date(eventDate);
+        asOf.setDate(asOf.getDate() - 1);
+        const asOfStr = asOf.toISOString().slice(0, 10);
+        const key: HiKey = `${score.profile_id}::${asOfStr}`;
+        if (!needed.has(key)) needed.set(key, { profileId: score.profile_id, asOfDate: asOfStr });
+      }
+
+      if (needed.size > 0) {
+        const resolvedHi = new Map<HiKey, number | null>();
+        await Promise.all(
+          Array.from(needed.entries()).map(async ([key, { profileId, asOfDate }]) => {
+            const { data, error } = await admin.rpc("ciaga_true_hi_as_of", {
+              p_profile_id: profileId,
+              p_as_of:      asOfDate,
+            });
+            resolvedHi.set(key, error || data == null ? null : Number(data));
+          })
+        );
+
+        // Patch score rows in place
+        for (const score of scoreRows) {
+          if (score.handicap !== null) continue;
+          if (!score.profile_id) continue;
+          const eventDate = eventDateByName.get(score.competition_name);
+          if (!eventDate) continue;
+          const asOf = new Date(eventDate);
+          asOf.setDate(asOf.getDate() - 1);
+          const asOfStr = asOf.toISOString().slice(0, 10);
+          const key: HiKey = `${score.profile_id}::${asOfStr}`;
+          const hi = resolvedHi.get(key);
+          if (hi !== null && hi !== undefined) score.handicap = hi;
+        }
+      }
+    }
+
     // ── 1. Upsert group_seasons ───────────────────────────────────────────────
     const seasonIdByName = new Map<string, string>();
 
