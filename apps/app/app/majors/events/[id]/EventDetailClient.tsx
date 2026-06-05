@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 import type {
   EventWithGroup,
@@ -31,6 +31,11 @@ import { supabase } from "@/lib/supabaseClient";
 import { LeaderboardReveal } from "@/components/majors/LeaderboardReveal";
 
 const FEDEX_POINTS_SCALE = FEDEX_POINTS;
+
+function fmtPts(n: number | null | undefined): string {
+  if (n == null) return "—";
+  return String(Math.round(n));
+}
 
 function formatToPar(n: number): string {
   if (n === 0) return "E";
@@ -1402,6 +1407,8 @@ function PositionBadge({ position }: { position: number | null }) {
 
 export default function EventDetailClient({ eventId }: { eventId: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const fromHome = searchParams.get("from") === "home";
   const [tab, setTab] = useState<Tab>("overview");
   const [event, setCompetition] = useState<EventWithGroup | null>(null);
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
@@ -1969,7 +1976,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
         </div>
 
         {/* Date / course */}
-        {(event.event_date || event.course) && (
+        {(event.event_date || event.course || eventRounds.length > 0) && (
           <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 space-y-1">
             {event.event_date && (
               <div className="flex items-center gap-2 text-[12px] text-emerald-100/70">
@@ -1977,12 +1984,31 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                 {new Date(event.event_date).toLocaleDateString([], { weekday: "short", year: "numeric", month: "long", day: "numeric" })}
               </div>
             )}
-            {event.course && (
+            {eventRounds.length > 0 ? (
+              <div className="space-y-0.5">
+                {eventRounds.map((r) => (
+                  <div key={r.id} className="flex items-start gap-2 text-[12px] text-emerald-100/70">
+                    <span className="text-emerald-200/40 shrink-0">⛳</span>
+                    <div className="min-w-0">
+                      <span className="text-emerald-200/50 text-[11px] mr-1">{r.name}:</span>
+                      <span>{r.course?.name ?? "TBC"}</span>
+                      {(r.tee_male?.name || r.tee_female?.name) && (
+                        <span className="text-emerald-200/40 text-[11px] ml-1">
+                          {r.tee_male?.name && `♂ ${r.tee_male.name}`}
+                          {r.tee_male?.name && r.tee_female?.name && " · "}
+                          {r.tee_female?.name && `♀ ${r.tee_female.name}`}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : event.course ? (
               <div className="flex items-center gap-2 text-[12px] text-emerald-100/70">
                 <span className="text-emerald-200/40">⛳</span>
                 {event.course.name}
               </div>
-            )}
+            ) : null}
           </div>
         )}
 
@@ -2477,7 +2503,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                 {showPts && (
                   <div className="text-right shrink-0 mr-1">
                     <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider leading-none">Pts</div>
-                    <div className="text-xs font-bold text-emerald-300">{pts ?? "—"}</div>
+                    <div className="text-xs font-bold text-emerald-300">{fmtPts(pts)}</div>
                   </div>
                 )}
                 <div className="text-right shrink-0">
@@ -4089,7 +4115,17 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
     <div className="min-h-[100dvh] pb-[env(safe-area-inset-bottom)] max-w-sm mx-auto">
       {/* Header */}
       <div className="px-4 pt-8 flex items-center justify-between mb-3">
-        <button type="button" onClick={() => router.back()} className="text-[11px] text-emerald-100/70 hover:text-emerald-50">
+        <button
+          type="button"
+          onClick={() => {
+            if (fromHome && event?.group_id) {
+              router.replace(`/majors/groups/${event.group_id}`);
+            } else {
+              router.back();
+            }
+          }}
+          className="text-[11px] text-emerald-100/70 hover:text-emerald-50"
+        >
           ← Back
         </button>
         <div className="w-14" />

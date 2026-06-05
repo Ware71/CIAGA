@@ -429,6 +429,7 @@ export async function getMajorHubSummary(profileId: string): Promise<MajorHubSum
   ]);
 
   const myGroupIds = myGroupRows.map((g) => g.id);
+  const myGroupMemberCounts = await Promise.all(myGroupRows.map((g) => getGroupMemberCount(g.id)));
 
   // Active and upcoming events across my groups
   let activeEvents: EventWithGroup[] = [];
@@ -552,7 +553,7 @@ export async function getMajorHubSummary(profileId: string): Promise<MajorHubSum
     group_stats,
     active_events: activeEvents,
     upcoming_events: upcomingEvents,
-    my_groups: myGroupRows.map((g) => ({ ...g, member_count: 0 })),
+    my_groups: myGroupRows.map((g, i) => ({ ...g, member_count: myGroupMemberCounts[i] })),
     discover_groups: filteredDiscover,
     pending_invites,
   };

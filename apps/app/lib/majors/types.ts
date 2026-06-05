@@ -403,7 +403,8 @@ export type EventFull = {
 
 export type EventWithGroup = EventFull & {
   group: Pick<MajorGroup, "id" | "name" | "type" | "ciaga_tag"> | null;
-  course: { id: string; name: string } | null;
+  course: { id: string; name: string; city: string | null; country: string | null } | null;
+  rounds?: { course_id: string | null; course: { city: string | null; country: string | null } | null }[] | null;
 };
 
 export type EventWithCompetition = EventWithGroup & {
