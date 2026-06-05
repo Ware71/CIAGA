@@ -1,0 +1,68 @@
+-- Remove competition_seasons and season_standings_entries from the reset
+-- function — both tables were dropped in 20260603000001.
+CREATE OR REPLACE FUNCTION sandbox_full_reset_database()
+RETURNS void
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  TRUNCATE TABLE
+    user_notifications,
+    profile_event_stats,
+    event_history_summaries,
+    matchplay_league_table_entries,
+    matchplay_bracket_slots,
+    matchplay_fixtures,
+    matchplay_stages,
+    prize_pot_payouts,
+    prize_pot_entries,
+    prize_pots,
+    group_season_standings_entries,
+    competition_player_freeze_snapshots,
+    competition_winnings,
+    competition_event_templates,
+    competitions,
+    major_group_standings,
+    major_group_memberships,
+    group_balance_transactions,
+    group_charges,
+    group_seasons,
+    major_groups,
+    event_waitlist,
+    event_extras,
+    event_audit_log,
+    event_leaderboard_entries,
+    event_round_submissions,
+    event_rounds,
+    event_player_charges,
+    event_charges,
+    event_tee_times,
+    event_entries,
+    events,
+    handicap_round_results,
+    handicap_index_history,
+    invites,
+    feed_comment_votes,
+    feed_reports,
+    feed_reactions,
+    feed_item_subjects,
+    feed_item_targets,
+    feed_comments,
+    feed_items,
+    follows,
+    round_sidegame_results,
+    round_format_results,
+    round_teams,
+    round_hole_snapshots,
+    round_tee_snapshots,
+    round_course_snapshots,
+    round_score_events,
+    round_hole_states,
+    round_participants,
+    rounds,
+    profiles,
+    course_tee_holes,
+    course_tee_boxes,
+    courses
+  CASCADE;
+END;
+$$;
