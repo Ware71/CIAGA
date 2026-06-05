@@ -23,7 +23,8 @@ import type {
   PrizePotDistributionType,
   PrizeTableEntry,
 } from "@/lib/majors/types";
-import { EVENT_TYPES, SCORING_MODELS, POINTS_MODELS, FEDEX_POINTS } from "@/lib/events/constants";
+import { EVENT_TYPES, SCORING_MODELS, POINTS_MODELS, FEDEX_POINTS, computeFormulaPoints } from "@/lib/events/constants";
+import type { PointsConfig } from "@/lib/majors/types";
 import { HandicapRulesEditor } from "@/components/competitions/HandicapRulesEditor";
 import { CoursePickerModal } from "@/components/rounds/CoursePickerModal";
 import { supabase } from "@/lib/supabaseClient";
@@ -39,7 +40,9 @@ function formatToPar(n: number): string {
 function getPointsForPosition(
   position: number | null,
   pointsModel: string,
-  pointsTable: Record<string, unknown>
+  pointsTable: Record<string, unknown>,
+  pointsConfig?: PointsConfig | null,
+  numRounds?: number,
 ): number | null {
   if (!position || pointsModel === "none") return null;
   if (pointsModel === "fedex_style") {
@@ -48,6 +51,11 @@ function getPointsForPosition(
   if (pointsModel === "position_based" || pointsModel === "custom_table") {
     const val = pointsTable[String(position)];
     return typeof val === "number" ? val : null;
+  }
+  if (pointsModel === "ciaga_formula" || pointsModel === "custom_formula") {
+    if (!pointsConfig) return null;
+    const F = pointsConfig.num_participants ?? 12;
+    return computeFormulaPoints(position, F, numRounds ?? 1, pointsConfig);
   }
   return null;
 }
@@ -2429,7 +2437,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
           )}
           {displayRows.map((row) => {
             const pts = showPts
-              ? (row.points_earned ?? getPointsForPosition(row.position ?? null, event.points_model, event.points_table as Record<string, unknown>))
+              ? (row.points_earned ?? getPointsForPosition(row.position ?? null, event.points_model, event.points_table as Record<string, unknown>, event.points_config, event.num_rounds))
               : null;
             const thru = getThruLabel(row);
             const isFrozenRow = isFrozen && (

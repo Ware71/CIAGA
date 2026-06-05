@@ -14,7 +14,8 @@ import type {
   MajorGroup,
 } from "@/lib/majors/types";
 import type { PlayingHandicapMode } from "@/components/rounds/PlayingHandicapSettings";
-import { EVENT_TYPES, SCORING_MODELS, POINTS_MODELS, FORMAT_DEFAULT_SCORING, FORMAT_ALLOWS_SCORING_CHOICE, FEDEX_POINTS } from "@/lib/events/constants";
+import { EVENT_TYPES, SCORING_MODELS, POINTS_MODELS, FORMAT_DEFAULT_SCORING, FORMAT_ALLOWS_SCORING_CHOICE, FEDEX_POINTS, FORMULA_DEFAULTS, computeFormulaPoints } from "@/lib/events/constants";
+import type { PointsConfig } from "@/lib/majors/types";
 import { HandicapRulesEditor } from "@/components/competitions/HandicapRulesEditor";
 import { CoursePickerModal } from "@/components/rounds/CoursePickerModal";
 
@@ -50,6 +51,14 @@ type FormState = {
   scoring_model: EventScoringModel;
   points_model: EventPointsModel;
   points_table: Record<string, number>;
+  // Formula model config (ciaga_formula / custom_formula)
+  formula_num_participants: string;
+  formula_base: string;
+  formula_scale: string;
+  formula_compression: string;
+  formula_field_sensitivity: string;
+  formula_win_bonus_scale: string;
+  formula_round_coefficient: string;
   num_rounds: string;
   standings_contribution: string;
   season_id: string;
@@ -91,6 +100,13 @@ const INITIAL: FormState = {
   scoring_model: "net",
   points_model: "none",
   points_table: {},
+  formula_num_participants: "",
+  formula_base: "",
+  formula_scale: "",
+  formula_compression: "",
+  formula_field_sensitivity: "",
+  formula_win_bonus_scale: "",
+  formula_round_coefficient: "",
   num_rounds: "1",
   standings_contribution: "both",
   season_id: "",
@@ -116,6 +132,100 @@ const INITIAL: FormState = {
 
 
 
+function FormulaConfigEditor({
+  pointsModel,
+  form,
+  update,
+  numRounds,
+}: {
+  pointsModel: "ciaga_formula" | "custom_formula";
+  form: FormState;
+  update: (key: keyof FormState, value: string | boolean) => void;
+  numRounds: number;
+}) {
+  const F = parseInt(form.formula_num_participants, 10) || 12;
+  const config: PointsConfig = {
+    num_participants: parseInt(form.formula_num_participants, 10) || undefined,
+    base: form.formula_base ? parseFloat(form.formula_base) : undefined,
+    scale: form.formula_scale ? parseFloat(form.formula_scale) : undefined,
+    compression: form.formula_compression ? parseFloat(form.formula_compression) : undefined,
+    field_sensitivity: form.formula_field_sensitivity ? parseFloat(form.formula_field_sensitivity) : undefined,
+    win_bonus_scale: form.formula_win_bonus_scale ? parseFloat(form.formula_win_bonus_scale) : undefined,
+    round_coefficient: form.formula_round_coefficient ? parseFloat(form.formula_round_coefficient) : undefined,
+  };
+
+  const previewRows = Math.min(F, 10);
+  const previewPositions = Array.from({ length: previewRows }, (_, i) => i + 1);
+
+  return (
+    <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 p-4 space-y-4">
+      <div className="text-[10px] uppercase tracking-wider text-emerald-200/55 font-semibold">Formula Settings</div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <label className="text-[10px] text-emerald-200/60">Field size override</label>
+          <input
+            type="number"
+            min={2}
+            max={200}
+            placeholder="Auto (actual finishers)"
+            value={form.formula_num_participants}
+            onChange={(e) => update("formula_num_participants", e.target.value)}
+            className="w-full rounded-lg border border-emerald-900/60 bg-[#042713] px-2 py-1.5 text-[12px] text-emerald-50 placeholder:text-emerald-100/30 focus:outline-none focus:border-emerald-600"
+          />
+          <div className="text-[9px] text-emerald-200/40">Leave blank to use actual finisher count</div>
+        </div>
+      </div>
+
+      {pointsModel === "custom_formula" && (
+        <div className="space-y-3">
+          <div className="text-[10px] text-emerald-200/50 font-semibold uppercase tracking-wider">Custom coefficients</div>
+          <div className="grid grid-cols-2 gap-3">
+            {([
+              { key: "formula_base",              label: "Floor pts",        placeholder: String(FORMULA_DEFAULTS.base) },
+              { key: "formula_scale",             label: "Scale",            placeholder: String(FORMULA_DEFAULTS.scale) },
+              { key: "formula_compression",       label: "Compression",      placeholder: String(FORMULA_DEFAULTS.compression) },
+              { key: "formula_field_sensitivity", label: "Field sensitivity",placeholder: String(FORMULA_DEFAULTS.field_sensitivity) },
+              { key: "formula_win_bonus_scale",   label: "Win bonus scale",  placeholder: String(FORMULA_DEFAULTS.win_bonus_scale) },
+              { key: "formula_round_coefficient", label: "Round step",       placeholder: String(FORMULA_DEFAULTS.round_coefficient) },
+            ] as { key: keyof FormState; label: string; placeholder: string }[]).map(({ key, label, placeholder }) => (
+              <div key={key} className="space-y-1">
+                <label className="text-[10px] text-emerald-200/60">{label}</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder={placeholder}
+                  value={form[key] as string}
+                  onChange={(e) => update(key, e.target.value)}
+                  className="w-full rounded-lg border border-emerald-900/60 bg-[#042713] px-2 py-1.5 text-[12px] text-emerald-50 placeholder:text-emerald-100/30 focus:outline-none focus:border-emerald-600"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Live preview */}
+      <div className="space-y-2">
+        <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider">Preview (F={F}, R={numRounds})</div>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+          {previewPositions.map((pos) => {
+            const pts = computeFormulaPoints(pos, F, numRounds, config);
+            return (
+              <div key={pos} className="flex items-center justify-between py-0.5">
+                <span className="text-[11px] text-emerald-200/60">
+                  {pos}{pos === 1 ? "st" : pos === 2 ? "nd" : pos === 3 ? "rd" : "th"}
+                </span>
+                <span className="text-[11px] font-semibold text-[#f5e6b0]">{pts}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PointsTableEditor({
   pointsModel,
   pointsTable,
@@ -126,6 +236,7 @@ function PointsTableEditor({
   onChange: (table: Record<string, number>) => void;
 }) {
   if (pointsModel === "none") return null;
+  if (pointsModel === "ciaga_formula" || pointsModel === "custom_formula") return null;
 
   if (pointsModel === "fedex_style") {
     return (
@@ -1140,6 +1251,19 @@ export default function CreateEventClient() {
           scoring_model: form.scoring_model,
           points_model: form.points_model,
           points_table: form.points_model !== "none" ? form.points_table : {},
+          points_config: (form.points_model === "ciaga_formula" || form.points_model === "custom_formula")
+            ? {
+                ...(form.formula_num_participants ? { num_participants: parseInt(form.formula_num_participants, 10) } : {}),
+                ...(form.points_model === "custom_formula" ? {
+                  ...(form.formula_base ? { base: parseFloat(form.formula_base) } : {}),
+                  ...(form.formula_scale ? { scale: parseFloat(form.formula_scale) } : {}),
+                  ...(form.formula_compression ? { compression: parseFloat(form.formula_compression) } : {}),
+                  ...(form.formula_field_sensitivity ? { field_sensitivity: parseFloat(form.formula_field_sensitivity) } : {}),
+                  ...(form.formula_win_bonus_scale ? { win_bonus_scale: parseFloat(form.formula_win_bonus_scale) } : {}),
+                  ...(form.formula_round_coefficient ? { round_coefficient: parseFloat(form.formula_round_coefficient) } : {}),
+                } : {}),
+              }
+            : null,
           num_rounds: parseInt(form.num_rounds, 10) || 1,
           standings_contribution: form.standings_contribution,
           competition_id: form.competition_id || null,
@@ -1648,7 +1772,17 @@ export default function CreateEventClient() {
         </div>
       </div>
 
-      {/* Points table — visible when a points model is active */}
+      {/* Formula config — visible for formula-based models */}
+      {(form.points_model === "ciaga_formula" || form.points_model === "custom_formula") && (
+        <FormulaConfigEditor
+          pointsModel={form.points_model}
+          form={form}
+          update={update}
+          numRounds={parseInt(form.num_rounds, 10) || 1}
+        />
+      )}
+
+      {/* Points table — visible for table-based models */}
       <PointsTableEditor
         pointsModel={form.points_model}
         pointsTable={form.points_table}
