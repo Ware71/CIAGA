@@ -38,9 +38,11 @@ export async function getGroupsByProfile(
   if (error) throw error;
 
   const rows = (data ?? []) as any[];
-  return rows
+  const groups = rows
     .filter((r) => r.group)
-    .map((r) => ({ ...(r.group as MajorGroup), role: r.role as string, member_count: 0 }));
+    .map((r) => ({ ...(r.group as MajorGroup), role: r.role as string }));
+  const counts = await Promise.all(groups.map((g) => getGroupMemberCount(g.id)));
+  return groups.map((g, i) => ({ ...g, member_count: counts[i] }));
 }
 
 export async function getGroupMemberCount(groupId: string): Promise<number> {
@@ -63,7 +65,9 @@ export async function getDiscoverGroups(
     .order("created_at", { ascending: false })
     .limit(limit);
   if (error) throw error;
-  return ((data ?? []) as MajorGroup[]).map((g) => ({ ...g, member_count: 0 }));
+  const groups = (data ?? []) as MajorGroup[];
+  const counts = await Promise.all(groups.map((g) => getGroupMemberCount(g.id)));
+  return groups.map((g, i) => ({ ...g, member_count: counts[i] }));
 }
 
 export async function getGroupMembers(groupId: string): Promise<MajorGroupMembershipWithProfile[]> {
