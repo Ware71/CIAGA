@@ -3,7 +3,9 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getProductionReaderClient } from "@/lib/supabaseProductionReader";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-async function readAllRows(client: SupabaseClient, table: string): Promise<any[]> {
+type ProductionReaderClient = ReturnType<typeof getProductionReaderClient>;
+
+async function readAllRows(client: ProductionReaderClient, table: string): Promise<any[]> {
   const rows: any[] = [];
   const pageSize = 1000;
   let from = 0;
@@ -134,8 +136,8 @@ const TABLE_PLAN: Array<{ table: string; transform?: (row: any) => any; onConfli
   { table: "group_season_standings_entries", onConflict: "group_season_id,profile_id" },
   { table: "competitions" },
   { table: "competition_event_templates" },
-  { table: "competition_winnings" },
-  { table: "competition_player_freeze_snapshots", onConflict: "competition_id,profile_id" },
+  { table: "event_winnings" },
+  { table: "event_player_freeze_snapshots", onConflict: "event_id,profile_id" },
   { table: "prize_pots" },
   { table: "prize_pot_entries" },
   { table: "prize_pot_payouts" },
@@ -162,7 +164,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let prodClient: SupabaseClient;
+  let prodClient: ProductionReaderClient;
   try {
     prodClient = getProductionReaderClient();
   } catch (e: any) {
