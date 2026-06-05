@@ -62,7 +62,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       "prize_table", "entry_fee_amount", "entry_fee_currency", "entry_fee_notes",
       // Leaderboard freeze / ceremony reveal config
       "leaderboard_freeze_last_holes", "leaderboard_freeze_scope", "leaderboard_freeze_top_x",
-      "leaderboard_freeze_auto_reveal", "leaderboard_reveal_style", "leaderboard_reveal_top_x"];
+      "leaderboard_freeze_auto_reveal", "leaderboard_reveal_style", "leaderboard_reveal_top_x",
+      "points_config"];
     const updates: Record<string, unknown> = {};
     for (const field of allowedFields) {
       if (field in body) updates[field] = body[field];

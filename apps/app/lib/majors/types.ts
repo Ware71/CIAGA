@@ -78,7 +78,22 @@ export type EventPointsModel =
   | "none"
   | "fedex_style"
   | "custom_table"
-  | "position_based";
+  | "position_based"
+  | "ciaga_formula"
+  | "custom_formula";
+
+/** Stored in events.points_config for formula-based points models. */
+export type PointsConfig = {
+  /** Optional field size override (F). If omitted, SQL counts actual finishers. */
+  num_participants?: number;
+  // custom_formula overrides — ciaga_formula uses the defaults shown below
+  base?: number;              // floor points (default: 18)
+  scale?: number;             // peak spread above floor (default: 32)
+  compression?: number;       // position curve exponent (default: 0.7)
+  field_sensitivity?: number; // field size scaling exponent (default: 0.2)
+  win_bonus_scale?: number;   // win bonus coefficient (default: 5)
+  round_coefficient?: number; // round multiplier step (default: 0.2)
+};
 
 export type EventStatus =
   | "upcoming"
@@ -346,6 +361,7 @@ export type EventFull = {
   scoring_model: EventScoringModel;
   points_model: EventPointsModel;
   points_table: Record<string, unknown>;
+  points_config: PointsConfig | null;
   eligibility_rules: Record<string, unknown>;
   handicap_rules: Record<string, unknown>;
   num_rounds: number;
