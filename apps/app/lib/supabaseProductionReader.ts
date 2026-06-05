@@ -6,10 +6,19 @@ function requireEnv(name: string) {
   return v.trim();
 }
 
-export function getProductionReaderClient(): SupabaseClient {
+// Only select() is exposed — insert/update/upsert/delete are not callable on this type.
+type SelectOnlyQueryBuilder = Pick<
+  ReturnType<SupabaseClient["from"]>,
+  "select"
+>;
+type ProductionReaderClient = Omit<SupabaseClient, "from"> & {
+  from(relation: string): SelectOnlyQueryBuilder;
+};
+
+export function getProductionReaderClient(): ProductionReaderClient {
   const url = requireEnv("PROD_SUPABASE_URL");
   const key = requireEnv("PROD_SUPABASE_SERVICE_ROLE_KEY");
   return createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
-  });
+  }) as unknown as ProductionReaderClient;
 }
