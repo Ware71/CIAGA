@@ -2491,7 +2491,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
               row.gross_score != null && row.course_par != null
                 ? row.gross_score - row.course_par
                 : null;
-            const mainToPar = lbView === "gross" ? grossToPar : netToPar;
+            const mainToPar = (lbView === "gross" || scoringModel === "gross") ? grossToPar : netToPar;
             const mainTotal = lbView === "gross" ? row.gross_score : displayScore(row);
             const mainScoreText = mainToPar != null
               ? formatToPar(mainToPar)
