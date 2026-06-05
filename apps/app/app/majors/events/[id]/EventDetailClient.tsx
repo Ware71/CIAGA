@@ -1487,6 +1487,21 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
   const [expandedPotId, setExpandedPotId] = useState<string | null>(null);
   const [potActionLoading, setPotActionLoading] = useState<string | null>(null);
   const [proposedDistribution, setProposedDistribution] = useState<{ potId: string; total_pot: number; proposed: Array<{ profile_id: string; profile: { name: string | null } | null; position: number | null; amount: number | null; note: string }> } | null>(null);
+  const [editPotId, setEditPotId] = useState<string | null>(null);
+  const [editPotForm, setEditPotForm] = useState<{
+    name: string;
+    description: string;
+    distribution_type: PrizePotDistributionType | "winner_takes_all";
+    entry_fee_amount: string;
+    entry_fee_notes: string;
+    prize_table: PrizeTableEntry[];
+    metric_type: string;
+    metric_description: string;
+    is_monetary: boolean;
+    prize_description: string;
+    is_mandatory: boolean;
+  } | null>(null);
+  const [savingPot, setSavingPot] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -3162,6 +3177,68 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
         }
       };
 
+      const handleEditPotClick = (pot: PrizePotWithDetails) => {
+        const isWinnerTakesAll =
+          pot.distribution_type === "position_based" &&
+          pot.prize_table?.length === 1 &&
+          pot.prize_table[0].position === 1 &&
+          pot.prize_table[0].pct === 100;
+        setEditPotForm({
+          name: pot.name,
+          description: pot.description ?? "",
+          distribution_type: isWinnerTakesAll ? "winner_takes_all" : pot.distribution_type,
+          entry_fee_amount: pot.entry_fee_amount != null ? String(pot.entry_fee_amount) : "",
+          entry_fee_notes: pot.entry_fee_notes ?? "",
+          prize_table: (!isWinnerTakesAll && pot.prize_table) ? pot.prize_table : [],
+          metric_type: pot.metric_type ?? "",
+          metric_description: pot.metric_description ?? "",
+          is_monetary: pot.is_monetary,
+          prize_description: pot.prize_description ?? "",
+          is_mandatory: pot.is_mandatory,
+        });
+        setEditPotId(pot.id);
+        setPotError(null);
+      };
+
+      const handleSavePot = async () => {
+        if (!editPotForm || !editPotId || !editPotForm.name.trim()) return;
+        setSavingPot(true);
+        setPotError(null);
+        try {
+          const session = await getViewerSession();
+          if (!session) return;
+          const res = await fetch(`/api/majors/prize-pots/${editPotId}`, {
+            method: "PATCH",
+            headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: editPotForm.name.trim(),
+              description: editPotForm.description.trim() || null,
+              distribution_type: editPotForm.distribution_type === "winner_takes_all" ? "position_based" : editPotForm.distribution_type,
+              entry_fee_amount: editPotForm.entry_fee_amount ? parseFloat(editPotForm.entry_fee_amount) : null,
+              entry_fee_notes: editPotForm.entry_fee_notes.trim() || null,
+              prize_table: editPotForm.distribution_type === "winner_takes_all"
+                ? [{ position: 1, pct: 100 }]
+                : (editPotForm.distribution_type === "position_based" && editPotForm.prize_table.length > 0 ? editPotForm.prize_table : null),
+              metric_type: editPotForm.metric_type || null,
+              metric_description: editPotForm.metric_description.trim() || null,
+              is_monetary: editPotForm.is_monetary,
+              prize_description: editPotForm.prize_description.trim() || null,
+              is_mandatory: editPotForm.is_mandatory,
+            }),
+          });
+          if (!res.ok) {
+            const j = await res.json();
+            setPotError(j.error ?? "Failed to save prize pot");
+            return;
+          }
+          setEditPotId(null);
+          setEditPotForm(null);
+          await refreshFinances();
+        } finally {
+          setSavingPot(false);
+        }
+      };
+
       const handleEnrollAllPot = async (potId: string) => {
         setPotActionLoading(potId + ":enroll");
         setPotError(null);
@@ -3756,6 +3833,14 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                           )}
                           <button
                             type="button"
+                            onClick={() => handleEditPotClick(pot)}
+                            disabled={editPotId === pot.id}
+                            className="text-[10px] px-2.5 py-1 rounded-full border border-emerald-700/50 text-emerald-200/70 hover:bg-emerald-900/30 disabled:opacity-50"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => handleDeletePot(pot.id)}
                             disabled={actionPrefix === "delete"}
                             className="text-[10px] px-2 py-1 text-red-400/50 hover:text-red-400 disabled:opacity-50"
@@ -3776,6 +3861,182 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                         </button>
                       )}
                     </div>
+
+                    {/* Inline edit form */}
+                    {editPotId === pot.id && editPotForm && (
+                      <div className="border-t border-emerald-900/50 px-3 py-3 space-y-2">
+                        <div className="text-[11px] font-semibold text-emerald-200">Edit Prize Pot</div>
+
+                        {/* Payment warning */}
+                        {pot.entries.length > 0 && (pot.entry_fee_amount ?? 0) > 0 && (
+                          <div className="rounded-xl border border-amber-800/40 bg-amber-900/20 px-3 py-2 text-[11px] text-amber-300/80">
+                            ⚠ {pot.entries.length} player{pot.entries.length !== 1 ? "s have" : " has"} already contributed to this pot. Changing the entry fee or payout structure will not retroactively affect existing contributions.
+                          </div>
+                        )}
+
+                        <input
+                          type="text"
+                          placeholder="Name (e.g. Two's Club, Season FedEx Pot)"
+                          value={editPotForm.name}
+                          onChange={(e) => setEditPotForm((f) => f && { ...f, name: e.target.value })}
+                          className={inputCls}
+                        />
+                        <select
+                          value={editPotForm.distribution_type}
+                          onChange={(e) => setEditPotForm((f) => f && { ...f, distribution_type: e.target.value as PrizePotDistributionType | "winner_takes_all" })}
+                          className={inputCls}
+                        >
+                          <option value="winner_takes_all">Winner Takes All</option>
+                          <option value="position_based">By finishing position (custom splits)</option>
+                          <option value="metric_weighted">Proportional to metric (e.g. number of twos)</option>
+                          <option value="metric_equal">Equal split among qualifiers (e.g. anyone with a two)</option>
+                          <option value="equal_split">Equal split (all enrolled players)</option>
+                          <option value="non_monetary">Non-cash prize (trophy, voucher, etc.)</option>
+                          <option value="entry_only">Entry collected, no payout</option>
+                        </select>
+
+                        {editPotForm.distribution_type === "winner_takes_all" && (
+                          <div className="rounded-xl border border-emerald-900/40 bg-emerald-950/20 px-3 py-2">
+                            <div className="text-[11px] text-emerald-200/60">100% of the pot goes to 1st place.</div>
+                          </div>
+                        )}
+
+                        {editPotForm.distribution_type === "position_based" && (
+                          <div className="rounded-xl border border-emerald-900/40 bg-emerald-950/20 px-3 py-2 space-y-2">
+                            <div className="text-[10px] uppercase text-emerald-200/50">Payout Percentages</div>
+                            {editPotForm.prize_table.map((row, i) => (
+                              <div key={i} className="flex items-center gap-2">
+                                <span className="text-[11px] text-emerald-200/60 w-8 shrink-0">
+                                  {i === 0 ? "1st" : i === 1 ? "2nd" : i === 2 ? "3rd" : `${i + 1}th`}
+                                </span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  step="1"
+                                  value={row.pct}
+                                  onChange={(e) => {
+                                    const updated = editPotForm.prize_table.map((r, j) =>
+                                      j === i ? { ...r, pct: parseFloat(e.target.value) || 0 } : r
+                                    );
+                                    setEditPotForm((f) => f && { ...f, prize_table: updated });
+                                  }}
+                                  className="w-20 rounded-lg border border-emerald-900/60 bg-[#0b3b21]/60 px-2 py-1 text-sm text-emerald-50 text-center focus:outline-none"
+                                />
+                                <span className="text-[11px] text-emerald-200/40">%</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditPotForm((f) => f && { ...f, prize_table: f.prize_table.filter((_, j) => j !== i) })}
+                                  className="ml-auto text-emerald-200/30 hover:text-red-400 text-sm"
+                                >✕</button>
+                              </div>
+                            ))}
+                            {(() => {
+                              const total = editPotForm.prize_table.reduce((s, r) => s + r.pct, 0);
+                              const remainder = 100 - total;
+                              return (
+                                <div className={`text-[10px] font-semibold ${total <= 100 ? "text-emerald-400" : "text-red-400"}`}>
+                                  Paying out: {total}%{remainder > 0 ? ` · ${remainder}% retained by group` : ""}
+                                  {total > 100 && " (over 100%)"}
+                                </div>
+                              );
+                            })()}
+                            <button
+                              type="button"
+                              onClick={() => setEditPotForm((f) => f && { ...f, prize_table: [...f.prize_table, { position: f.prize_table.length + 1, pct: 0 }] })}
+                              className="text-[11px] text-emerald-300/60 hover:text-emerald-300"
+                            >
+                              + Add position
+                            </button>
+                          </div>
+                        )}
+
+                        {(editPotForm.distribution_type === "metric_weighted" || editPotForm.distribution_type === "metric_equal") && (
+                          <select
+                            value={editPotForm.metric_type}
+                            onChange={(e) => setEditPotForm((f) => f && { ...f, metric_type: e.target.value })}
+                            className={inputCls}
+                          >
+                            <option value="">Select metric type…</option>
+                            <option value="twos">Two&apos;s Club (auto-calculated from scores)</option>
+                            <option value="nearest_pin">Nearest Pin (manually recorded)</option>
+                            <option value="longest_drive">Longest Drive (manually recorded)</option>
+                            <option value="season_points">Season Points</option>
+                            <option value="custom">Custom (manually recorded)</option>
+                          </select>
+                        )}
+
+                        {editPotForm.distribution_type === "non_monetary" && (
+                          <input
+                            type="text"
+                            placeholder="Prize description (e.g. Callaway Driver, £50 Voucher)"
+                            value={editPotForm.prize_description}
+                            onChange={(e) => setEditPotForm((f) => f && { ...f, prize_description: e.target.value, is_monetary: false })}
+                            className={inputCls}
+                          />
+                        )}
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            type="number"
+                            placeholder="Entry fee per player (£, optional)"
+                            value={editPotForm.entry_fee_amount}
+                            onChange={(e) => setEditPotForm((f) => f && { ...f, entry_fee_amount: e.target.value })}
+                            className={inputCls}
+                            min="0"
+                            step="0.01"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Entry fee notes (optional)"
+                            value={editPotForm.entry_fee_notes}
+                            onChange={(e) => setEditPotForm((f) => f && { ...f, entry_fee_notes: e.target.value })}
+                            className={inputCls}
+                          />
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="Description (optional)"
+                          value={editPotForm.description}
+                          onChange={(e) => setEditPotForm((f) => f && { ...f, description: e.target.value })}
+                          className={inputCls}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setEditPotForm((f) => f && { ...f, is_mandatory: !f.is_mandatory })}
+                          className="flex items-center justify-between w-full py-2 px-2 rounded-lg border border-emerald-900/40 hover:bg-emerald-900/20"
+                        >
+                          <div className="text-left">
+                            <div className="text-[11px] font-semibold text-emerald-100">Mandatory</div>
+                            <div className="text-[10px] text-emerald-200/40">Players are auto-enrolled when joining this event</div>
+                          </div>
+                          <div className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${editPotForm.is_mandatory ? "bg-emerald-600" : "bg-emerald-900/50"}`}>
+                            <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${editPotForm.is_mandatory ? "translate-x-5" : ""}`} />
+                          </div>
+                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => { setEditPotId(null); setEditPotForm(null); setPotError(null); }}
+                            className="flex-1 py-1.5 rounded-full border border-emerald-900/60 text-[11px] text-emerald-200/60"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSavePot}
+                            disabled={
+                              savingPot ||
+                              !editPotForm.name.trim() ||
+                              (editPotForm.distribution_type === "position_based" && editPotForm.prize_table.reduce((s, r) => s + r.pct, 0) > 100)
+                            }
+                            className="flex-1 py-1.5 rounded-full bg-emerald-700 text-[11px] font-semibold text-white disabled:opacity-50"
+                          >
+                            {savingPot ? "Saving…" : "Save Changes"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Proposed distribution banner */}
                     {proposedDistribution?.potId === pot.id && (
