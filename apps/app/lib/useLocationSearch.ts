@@ -85,7 +85,7 @@ export function useLocationSearch(options?: { radius?: number }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? "Failed to load courses");
 
-      const items: NearbyCourse[] = Array.isArray(data) ? data : [];
+      const items: NearbyCourse[] = Array.isArray(data?.items) ? data.items : [];
       setCourses(items);
       setStep("courses");
     } catch (e: any) {
