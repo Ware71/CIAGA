@@ -604,7 +604,7 @@ export async function getCompetitionHistory(competitionId: string): Promise<Comp
   // Fetch all events in this competition with their group/course
   const { data: evts, error: evtsErr } = await supabaseAdmin
     .from("events")
-    .select("*, group:major_groups(id, name, ciaga_tag), course:courses(id, name), event_template:competition_event_templates(id, name, sort_order)")
+    .select("*, group:major_groups(id, name, type, ciaga_tag), course:courses(id, name), event_template:competition_event_templates(id, name, sort_order)")
     .eq("competition_id", competitionId)
     .order("event_date", { ascending: true });
   if (evtsErr) throw evtsErr;

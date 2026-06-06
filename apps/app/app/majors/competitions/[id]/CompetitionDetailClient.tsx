@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 import type {
   CompetitionWithEventTemplates,
-  CompetitionEventTemplate,
   EventWithGroup,
   EventTypeV2,
   EventScoringModel,
@@ -50,7 +49,7 @@ type EnrichedCompetition = {
   event: EventWithGroup;
   event_template: { id: string; name: string; sort_order: number } | null;
   winner: { profile_id: string; name: string | null; avatar_url: string | null; net_score: number | null } | null;
-  viewer_entry: { position: number | null; net_score: number | null } | null;
+  viewer_entry: { position: number | null; net_score: number | null; gross_score: number | null; course_par: number | null; to_par: number | null } | null;
 };
 
 type EnrichedYearGroup = { year: number; events: EnrichedCompetition[] };
@@ -279,199 +278,6 @@ function CompetitionEditModal({
   );
 }
 
-// ─── Add / Edit Event Template modal ─────────────────────────────────────────
-
-function EventTemplateModal({
-  competitionId,
-  existing,
-  onClose,
-  onSaved,
-}: {
-  competitionId: string;
-  existing: CompetitionEventTemplate | null;
-  onClose: () => void;
-  onSaved: (et: CompetitionEventTemplate) => void;
-}) {
-  const [name, setName] = useState(existing?.name ?? "");
-  const [description, setDescription] = useState(existing?.description ?? "");
-  const [month, setMonth] = useState(existing?.typical_month?.toString() ?? "");
-  const [compType, setCompType] = useState<EventTypeV2 | "">(existing?.template_event_type ?? "");
-  const [scoringModel, setScoringModel] = useState<EventScoringModel | "">(existing?.template_scoring_model ?? "");
-  const [pointsModel, setPointsModel] = useState<EventPointsModel | "">(existing?.template_points_model ?? "");
-  const [rulesText, setRulesText] = useState(existing?.template_rules_text ?? "");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleSave = async () => {
-    if (!name.trim()) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const session = await getViewerSession();
-      if (!session) { setError("Not signed in"); return; }
-      const headers = { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" };
-      const body = {
-        name: name.trim(),
-        description: description.trim() || null,
-        typical_month: month ? parseInt(month, 10) : null,
-        template_event_type: compType || null,
-        template_scoring_model: scoringModel || null,
-        template_points_model: pointsModel || null,
-        template_rules_text: rulesText.trim() || null,
-      };
-
-      let res: Response;
-      if (existing) {
-        res = await fetch(`/api/majors/competitions/${competitionId}/events/${existing.id}`, {
-          method: "PATCH", headers, body: JSON.stringify(body),
-        });
-      } else {
-        res = await fetch(`/api/majors/competitions/${competitionId}/events`, {
-          method: "POST", headers, body: JSON.stringify(body),
-        });
-      }
-      const json = await res.json();
-      if (!res.ok) { setError(json.error ?? "Save failed"); return; }
-      onSaved(json.event_template);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4" onClick={onClose}>
-      <div
-        className="w-full max-w-sm rounded-2xl bg-[#0a2e18] border border-emerald-800/60 max-h-[90vh] flex flex-col overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="shrink-0 px-5 pt-5 pb-3">
-          <div className="text-sm font-semibold text-emerald-50">
-            {existing ? "Edit Event" : "Add Event"}
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto px-5 pb-2 space-y-4">
-        <div className="space-y-3">
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Event Name *</label>
-            <input
-              className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none"
-              placeholder="e.g. The Masters"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Description</label>
-            <input
-              className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none"
-              placeholder="Optional"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Typical Month</label>
-            <select
-              className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 focus:outline-none"
-              value={month}
-              onChange={(e) => setMonth(e.target.value)}
-            >
-              <option value="">No preference</option>
-              {monthNames.map((m, i) => (
-                <option key={i + 1} value={i + 1}>{m}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="border-t border-emerald-900/40 pt-3 space-y-3">
-            <div className="text-[10px] uppercase tracking-wider text-emerald-200/40">Overrides (leave blank to inherit from competition)</div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Format Override</label>
-              <div className="grid grid-cols-2 gap-1.5">
-                <button type="button" onClick={() => setCompType("")}
-                  className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${compType === "" ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
-                  Inherit
-                </button>
-                {EVENT_TYPES.map((t) => (
-                  <button key={t.value} type="button" onClick={() => setCompType(t.value)}
-                    className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${compType === t.value ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Scoring Override</label>
-              <div className="grid grid-cols-2 gap-1.5">
-                <button type="button" onClick={() => setScoringModel("")}
-                  className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${scoringModel === "" ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
-                  Inherit
-                </button>
-                {SCORING_MODELS.map((s) => (
-                  <button key={s.value} type="button" onClick={() => setScoringModel(s.value)}
-                    className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${scoringModel === s.value ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Points Override</label>
-              <div className="grid grid-cols-2 gap-1.5">
-                <button type="button" onClick={() => setPointsModel("")}
-                  className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${pointsModel === "" ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
-                  Inherit
-                </button>
-                {POINTS_MODELS.map((p) => (
-                  <button key={p.value} type="button" onClick={() => setPointsModel(p.value)}
-                    className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${pointsModel === p.value ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Rules Override</label>
-              <textarea
-                className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none resize-none"
-                rows={2}
-                placeholder="Leave blank to inherit competition rules…"
-                value={rulesText}
-                onChange={(e) => setRulesText(e.target.value)}
-              />
-            </div>
-          </div>
-        </div>
-        {error && <div className="text-xs text-red-400">{error}</div>}
-        </div>
-        <div className="shrink-0 px-5 py-4 border-t border-emerald-900/50">
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 py-2 rounded-full border border-emerald-700/50 text-sm text-emerald-200 hover:bg-emerald-900/30"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={!name.trim() || saving}
-              className="flex-1 py-2 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-40"
-            >
-              {saving ? "Saving…" : "Save"}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function CompetitionDetailClient({ competitionId }: { competitionId: string }) {
@@ -481,10 +287,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
   const [viewerStats, setViewerStats] = useState<CompetitionViewerStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [myRole, setMyRole] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"history" | "events">("history");
-  const [showAddEvent, setShowAddEvent] = useState(false);
-  const [editingEvent, setEditingEvent] = useState<CompetitionEventTemplate | null>(null);
-  const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"upcoming" | "history">("upcoming");
   const [showEditCompetition, setShowEditCompetition] = useState(false);
 
   const isAdminOrOwner = myRole === "owner" || myRole === "admin";
@@ -533,71 +336,6 @@ export default function CompetitionDetailClient({ competitionId }: { competition
 
   useEffect(() => { load(); }, [competitionId]);
 
-  const handleEventSaved = (et: CompetitionEventTemplate) => {
-    setCompetition((prev) => {
-      if (!prev) return prev;
-      const exists = prev.event_templates.find((e) => e.id === et.id);
-      const updated = exists
-        ? prev.event_templates.map((e) => (e.id === et.id ? et : e))
-        : [...prev.event_templates, et];
-      return { ...prev, event_templates: updated.sort((a, b) => a.sort_order - b.sort_order) };
-    });
-    setShowAddEvent(false);
-    setEditingEvent(null);
-  };
-
-  const handleDeleteEvent = async (eventId: string) => {
-    if (!confirm("Remove this event template? Past events will not be affected.")) return;
-    setDeletingEventId(eventId);
-    try {
-      const session = await getViewerSession();
-      if (!session) return;
-      const res = await fetch(`/api/majors/competitions/${competitionId}/events/${eventId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${session.accessToken}` },
-      });
-      if (res.ok) {
-        setCompetition((prev) =>
-          prev ? { ...prev, event_templates: prev.event_templates.filter((e) => e.id !== eventId) } : prev
-        );
-      }
-    } finally {
-      setDeletingEventId(null);
-    }
-  };
-
-  const handleMoveEvent = async (eventId: string, direction: "up" | "down") => {
-    if (!competition) return;
-    const idx = competition.event_templates.findIndex((e) => e.id === eventId);
-    if (idx < 0) return;
-    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= competition.event_templates.length) return;
-
-    const updated = [...competition.event_templates];
-    const newOrder = updated[swapIdx].sort_order;
-    const currOrder = updated[idx].sort_order;
-
-    // Swap sort_order values
-    updated[idx] = { ...updated[idx], sort_order: newOrder };
-    updated[swapIdx] = { ...updated[swapIdx], sort_order: currOrder };
-    updated.sort((a, b) => a.sort_order - b.sort_order);
-
-    setCompetition({ ...competition, event_templates: updated });
-
-    // Persist both
-    const session = await getViewerSession();
-    if (!session) return;
-    const headers = { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" };
-    await Promise.all([
-      fetch(`/api/majors/competitions/${competitionId}/events/${updated[swapIdx].id}`, {
-        method: "PATCH", headers, body: JSON.stringify({ sort_order: currOrder }),
-      }),
-      fetch(`/api/majors/competitions/${competitionId}/events/${updated[idx].id}`, {
-        method: "PATCH", headers, body: JSON.stringify({ sort_order: newOrder }),
-      }),
-    ]);
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen bg-[#071c0f] flex items-center justify-center">
@@ -613,8 +351,6 @@ export default function CompetitionDetailClient({ competitionId }: { competition
       </div>
     );
   }
-
-  const eventTemplates = competition.event_templates ?? [];
 
   return (
     <div className="min-h-screen bg-[#071c0f] text-emerald-50">
@@ -657,7 +393,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
 
       {/* ── Tab navigation ─────────────────────────────────────────────────── */}
       <div className="flex gap-1 overflow-x-auto px-4 pb-4 max-w-lg mx-auto scrollbar-none">
-        {(["history", "events"] as const).map((t) => (
+        {(["upcoming", "history"] as const).map((t) => (
           <button
             key={t}
             type="button"
@@ -668,81 +404,146 @@ export default function CompetitionDetailClient({ competitionId }: { competition
                 : "text-emerald-200/60 hover:text-emerald-100"
             }`}
           >
-            {t === "history" ? "History" : "Events"}
+            {t === "upcoming" ? "Upcoming" : "History"}
           </button>
         ))}
       </div>
 
       <div className="px-4 pb-24 max-w-lg mx-auto space-y-6">
 
-        {/* ── History tab ─────────────────────────────────────────────────── */}
-        {activeTab === "history" && (
-          <>
-            {/* My Competition Record — shown only when viewer has played */}
-            {viewerStats && viewerStats.appearances > 0 && (
-              <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4">
-                <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/65 mb-3 font-semibold">
-                  My Competition Record
+        {/* ── Upcoming tab ─────────────────────────────────────────────────── */}
+        {activeTab === "upcoming" && (() => {
+          const COMPLETED_STATUSES = new Set(["completed", "official", "unofficial", "cancelled", "archived"]);
+          const upcomingEvents = history.flatMap((yg) =>
+            yg.events.filter((c) => !COMPLETED_STATUSES.has(c.event.majors_status))
+          );
+          return (
+            <>
+              {isAdminOrOwner && competition?.group_id && (
+                <button
+                  type="button"
+                  onClick={() => router.push(`/majors/events/create?group_id=${competition.group_id}&competition_id=${competitionId}`)}
+                  className="w-full py-2.5 rounded-full border border-emerald-700/60 text-sm font-semibold text-emerald-200 hover:bg-emerald-900/30"
+                >
+                  + New Event
+                </button>
+              )}
+              {upcomingEvents.length === 0 ? (
+                <div className="rounded-2xl border border-emerald-900/40 bg-[#0b3b21]/40 p-6 text-sm text-emerald-100/40 text-center">
+                  No upcoming events.
                 </div>
-                <div className="grid grid-cols-4 gap-2 text-center">
-                  {[
-                    { label: "Played", value: viewerStats.appearances },
-                    { label: "Wins", value: viewerStats.wins },
-                    {
-                      label: "Best Pos.",
-                      value: viewerStats.best_finish != null ? `P${viewerStats.best_finish}` : "—",
-                    },
-                    {
-                      label: "Avg Pos.",
-                      value: viewerStats.avg_finish != null ? viewerStats.avg_finish.toFixed(1) : "—",
-                    },
-                  ].map((stat) => (
-                    <div key={stat.label}>
-                      <div className="text-base font-extrabold text-[#f5e6b0]">{stat.value}</div>
-                      <div className="text-[10px] text-emerald-200/60">{stat.label}</div>
-                    </div>
+              ) : (
+                <div className="space-y-2">
+                  {upcomingEvents.map(({ event, event_template }) => (
+                    <button
+                      key={event.id}
+                      type="button"
+                      onClick={() => router.push(`/majors/events/${event.id}`)}
+                      className="w-full text-left rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/60 px-4 py-3 hover:bg-emerald-900/30 transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-emerald-50 truncate">
+                            {event_template?.name ?? event.name}
+                          </div>
+                          {event.event_date && (
+                            <div className="text-[11px] text-emerald-200/50 mt-0.5">
+                              {new Date(event.event_date).toLocaleDateString("en-GB", {
+                                day: "numeric", month: "short", year: "numeric",
+                              })}
+                            </div>
+                          )}
+                        </div>
+                        <StatusPill status={event.majors_status} />
+                      </div>
+                    </button>
                   ))}
                 </div>
-              </div>
-            )}
+              )}
+            </>
+          );
+        })()}
 
-            {/* Year group history cards */}
-            {history.length === 0 ? (
-              <div className="rounded-2xl border border-emerald-900/40 bg-[#0b3b21]/40 p-6 text-sm text-emerald-100/40 text-center">
-                No history yet.
-              </div>
-            ) : (
-              history.map((yearGroup) => {
-                return (
+        {/* ── History tab ─────────────────────────────────────────────────── */}
+        {activeTab === "history" && (() => {
+          const COMPLETED_STATUSES = new Set(["completed", "official", "unofficial"]);
+          const fmtPar = (v: number | null) =>
+            v == null ? "—" : v === 0 ? "E" : v > 0 ? `+${v}` : `${v}`;
+
+          const completedYearGroups = history
+            .map((yg) => ({
+              ...yg,
+              events: yg.events.filter((c) => COMPLETED_STATUSES.has(c.event.majors_status)),
+            }))
+            .filter((yg) => yg.events.length > 0);
+
+          return (
+            <>
+              {/* My Competition Record */}
+              {viewerStats && viewerStats.appearances > 0 && (
+                <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4">
+                  <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/65 mb-3 font-semibold">
+                    My Competition Record
+                  </div>
+                  <div className="grid grid-cols-4 gap-2 text-center">
+                    {[
+                      { label: "Played", value: viewerStats.appearances },
+                      { label: "Wins", value: viewerStats.wins },
+                      {
+                        label: "Best Pos.",
+                        value: viewerStats.best_finish != null ? `P${viewerStats.best_finish}` : "—",
+                      },
+                      {
+                        label: "Avg Pos.",
+                        value: viewerStats.avg_finish != null ? viewerStats.avg_finish.toFixed(1) : "—",
+                      },
+                    ].map((stat) => (
+                      <div key={stat.label}>
+                        <div className="text-base font-extrabold text-[#f5e6b0]">{stat.value}</div>
+                        <div className="text-[10px] text-emerald-200/60">{stat.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Year group history cards */}
+              {completedYearGroups.length === 0 ? (
+                <div className="rounded-2xl border border-emerald-900/40 bg-[#0b3b21]/40 p-6 text-sm text-emerald-100/40 text-center">
+                  No history yet.
+                </div>
+              ) : (
+                completedYearGroups.map((yearGroup) => (
                   <div key={yearGroup.year} className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/60 p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm font-bold text-emerald-200">{yearGroup.year}</div>
-                    </div>
+                    <div className="text-sm font-bold text-emerald-200">{yearGroup.year}</div>
                     <div className="space-y-2">
-                      {yearGroup.events.map(({ event, event_template, winner, viewer_entry }) => (
-                        <button
-                          key={event.id}
-                          type="button"
-                          onClick={() => router.push(`/majors/events/${event.id}`)}
-                          className="w-full text-left rounded-xl border border-emerald-900/40 bg-emerald-950/30 px-3 py-2.5 hover:bg-emerald-900/30 transition-colors"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <div className="text-sm font-medium text-emerald-50 truncate">
-                                {event_template?.name ?? event.name}
-                              </div>
-                              {event.event_date && (
-                                <div className="text-[11px] text-emerald-200/45 mt-0.5">
-                                  {new Date(event.event_date).toLocaleDateString("en-GB", {
-                                    day: "numeric", month: "short",
-                                  })}
+                      {yearGroup.events.map(({ event, event_template, winner, viewer_entry }) => {
+                        const grossToPar =
+                          viewer_entry?.gross_score != null && viewer_entry?.course_par != null
+                            ? viewer_entry.gross_score - viewer_entry.course_par
+                            : null;
+                        return (
+                          <button
+                            key={event.id}
+                            type="button"
+                            onClick={() => router.push(`/majors/events/${event.id}`)}
+                            className="w-full text-left rounded-xl border border-emerald-900/40 bg-emerald-950/30 px-3 py-2.5 hover:bg-emerald-900/30 transition-colors"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="text-sm font-medium text-emerald-50 truncate">
+                                  {event_template?.name ?? event.name}
                                 </div>
-                              )}
-                            </div>
-                            <div className="text-right shrink-0">
-                              <StatusPill status={event.majors_status} />
-                              {winner && event.majors_status === "completed" && (
-                                <div className="text-[11px] text-emerald-200/55 mt-1">
+                                {event.event_date && (
+                                  <div className="text-[11px] text-emerald-200/45 mt-0.5">
+                                    {new Date(event.event_date).toLocaleDateString("en-GB", {
+                                      day: "numeric", month: "short",
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                              {winner && (
+                                <div className="text-right shrink-0 text-[11px] text-emerald-200/55">
                                   {winner.name ?? "—"}
                                   {winner.net_score != null && (
                                     <span className="text-emerald-300/60"> · {winner.net_score}</span>
@@ -750,135 +551,31 @@ export default function CompetitionDetailClient({ competitionId }: { competition
                                 </div>
                               )}
                             </div>
-                          </div>
-                          {viewer_entry && (
-                            <div className="flex items-center gap-2 pt-1.5 border-t border-emerald-900/30 mt-1.5">
-                              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-900/40 text-emerald-300 border border-emerald-800/40 shrink-0">
-                                You
-                              </span>
-                              <span className="text-[11px] text-emerald-100/70">
-                                {viewer_entry.position != null ? `P${viewer_entry.position}` : "DNS"}
-                                {viewer_entry.net_score != null && ` · ${viewer_entry.net_score}`}
-                              </span>
-                            </div>
-                          )}
-                        </button>
-                      ))}
+                            {viewer_entry && (
+                              <div className="grid grid-cols-4 gap-1 pt-1.5 border-t border-emerald-900/30 mt-1.5 text-center">
+                                {[
+                                  { label: "Gross", value: viewer_entry.gross_score ?? "—" },
+                                  { label: "G+/-", value: fmtPar(grossToPar) },
+                                  { label: "Net", value: viewer_entry.net_score ?? "—" },
+                                  { label: "N+/-", value: fmtPar(viewer_entry.to_par) },
+                                ].map((s) => (
+                                  <div key={s.label}>
+                                    <div className="text-[12px] font-semibold text-emerald-100">{s.value}</div>
+                                    <div className="text-[9px] text-emerald-200/45">{s.label}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
-                );
-              })
-            )}
-          </>
-        )}
-
-        {/* ── Events tab ──────────────────────────────────────────────────── */}
-        {activeTab === "events" && (
-          <section className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/60 p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="text-xs font-semibold text-emerald-200/70 uppercase tracking-wider">
-                Events in this Competition
-              </div>
-              {isAdminOrOwner && (
-                <button
-                  type="button"
-                  onClick={() => setShowAddEvent(true)}
-                  className="text-[11px] font-semibold text-emerald-300 hover:text-emerald-100"
-                >
-                  + Add
-                </button>
+                ))
               )}
-            </div>
-
-            {eventTemplates.length === 0 ? (
-              <div className="text-sm text-emerald-100/40 py-4 text-center">
-                {isAdminOrOwner
-                  ? "No events yet. Add the events that make up this competition."
-                  : "No events defined for this competition yet."}
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {eventTemplates.map((et, idx) => (
-                  <div
-                    key={et.id}
-                    className="flex items-center gap-3 rounded-xl border border-emerald-900/50 bg-emerald-950/40 px-3 py-2.5"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-emerald-50">{et.name}</div>
-                      <div className="flex flex-wrap gap-1.5 mt-1">
-                        {et.typical_month != null && (
-                          <span className="text-[10px] text-emerald-200/45 border border-emerald-900/40 rounded-full px-1.5 py-0.5">
-                            {monthNames[et.typical_month - 1]}
-                          </span>
-                        )}
-                        {et.template_event_type && (
-                          <span className="text-[10px] text-emerald-200/45 border border-emerald-900/40 rounded-full px-1.5 py-0.5 capitalize">
-                            {et.template_event_type}
-                          </span>
-                        )}
-                        {et.template_scoring_model && (
-                          <span className="text-[10px] text-emerald-200/45 border border-emerald-900/40 rounded-full px-1.5 py-0.5 capitalize">
-                            {et.template_scoring_model}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    {isAdminOrOwner && (
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => handleMoveEvent(et.id, "up")}
-                          disabled={idx === 0}
-                          className="w-6 h-6 flex items-center justify-center rounded text-emerald-300/50 hover:text-emerald-200 disabled:opacity-20"
-                          title="Move up"
-                        >
-                          ↑
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleMoveEvent(et.id, "down")}
-                          disabled={idx === eventTemplates.length - 1}
-                          className="w-6 h-6 flex items-center justify-center rounded text-emerald-300/50 hover:text-emerald-200 disabled:opacity-20"
-                          title="Move down"
-                        >
-                          ↓
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setEditingEvent(et)}
-                          className="w-6 h-6 flex items-center justify-center rounded text-emerald-300/50 hover:text-emerald-200"
-                          title="Edit"
-                        >
-                          ✎
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteEvent(et.id)}
-                          disabled={deletingEventId === et.id}
-                          className="w-6 h-6 flex items-center justify-center rounded text-rose-400/50 hover:text-rose-300 disabled:opacity-40"
-                          title="Remove"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Add Event CTA */}
-            {isAdminOrOwner && competition?.group_id && (
-              <button
-                type="button"
-                onClick={() => router.push(`/majors/events/create?group_id=${competition.group_id}&competition_id=${competitionId}`)}
-                className="w-full py-2.5 rounded-full bg-emerald-700/90 text-sm font-semibold text-white hover:bg-emerald-600 mt-1"
-              >
-                + Add Event
-              </button>
-            )}
-          </section>
-        )}
+            </>
+          );
+        })()}
       </div>
 
       {/* ── Modals ───────────────────────────────────────────────────────────── */}
@@ -890,15 +587,6 @@ export default function CompetitionDetailClient({ competitionId }: { competition
             setCompetition(updated);
             setShowEditCompetition(false);
           }}
-        />
-      )}
-
-      {(showAddEvent || editingEvent) && (
-        <EventTemplateModal
-          competitionId={competitionId}
-          existing={editingEvent}
-          onClose={() => { setShowAddEvent(false); setEditingEvent(null); }}
-          onSaved={handleEventSaved}
         />
       )}
 

@@ -2127,14 +2127,16 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                   <div key={r.id} className="flex items-start gap-2 text-[12px] text-emerald-100/70">
                     <span className="text-emerald-200/40 shrink-0">⛳</span>
                     <div className="min-w-0">
-                      <span className="text-emerald-200/50 text-[11px] mr-1">{r.name}:</span>
-                      <span>{r.course?.name ?? "TBC"}</span>
+                      <div>
+                        <span className="text-emerald-200/50 text-[11px] mr-1">{r.name}:</span>
+                        <span>{r.course?.name ?? "TBC"}</span>
+                      </div>
                       {(r.tee_male?.name || r.tee_female?.name) && (
-                        <span className="text-emerald-200/40 text-[11px] ml-1">
+                        <div className="text-emerald-200/40 text-[11px] ml-3">
                           {r.tee_male?.name && `♂ ${r.tee_male.name}`}
                           {r.tee_male?.name && r.tee_female?.name && " · "}
                           {r.tee_female?.name && `♀ ${r.tee_female.name}`}
-                        </span>
+                        </div>
                       )}
                     </div>
                   </div>

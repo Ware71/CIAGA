@@ -1139,7 +1139,10 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             <div className="text-[11px] text-emerald-100/60 flex items-center gap-2">
               {c.event_date && <span>{new Date(c.event_date).toLocaleDateString([], { month: "short", day: "numeric" })}</span>}
               {(() => {
-                const label = locationLabel(c) ?? c.course?.name ?? null;
+                const label =
+                  c.num_rounds <= 1
+                    ? (c.course?.name ?? null)
+                    : (locationLabel(c) ?? c.course?.name ?? null);
                 return label ? (
                   <>
                     <span className="text-emerald-800">·</span>

@@ -20,7 +20,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       }
     }
 
-    const viewerMap = new Map<string, { position: number | null; net_score: number | null }>();
+    const viewerMap = new Map<string, { position: number | null; net_score: number | null; gross_score: number | null; course_par: number | null; to_par: number | null }>();
     let viewer_stats: {
       appearances: number;
       wins: number;
@@ -32,12 +32,18 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     if (eventIds.length > 0) {
       const { data: entries } = await supabaseAdmin
         .from("event_leaderboard_entries")
-        .select("event_id, position, net_score")
+        .select("event_id, position, net_score, gross_score, course_par, to_par")
         .eq("profile_id", profileId)
         .in("event_id", eventIds);
 
       for (const e of (entries ?? []) as any[]) {
-        viewerMap.set(e.event_id, { position: e.position ?? null, net_score: e.net_score ?? null });
+        viewerMap.set(e.event_id, {
+          position: e.position ?? null,
+          net_score: e.net_score ?? null,
+          gross_score: e.gross_score ?? null,
+          course_par: e.course_par ?? null,
+          to_par: e.to_par ?? null,
+        });
       }
 
       if (viewerMap.size > 0) {
