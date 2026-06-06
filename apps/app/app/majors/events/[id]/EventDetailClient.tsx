@@ -2445,7 +2445,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
           {isAdminOrOwner && leaderboardFreeze?.freeze_state !== "revealed" && (
             <button
               type="button"
-              onClick={handleReveal}
+              onClick={() => handleReveal()}
               disabled={revealLoading}
               className={`w-full py-2 mb-1.5 rounded-full text-xs transition-colors disabled:opacity-30 ${
                 leaderboardFreeze?.freeze_state === "frozen"
