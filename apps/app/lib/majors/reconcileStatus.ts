@@ -49,7 +49,7 @@ export async function reconcileEventStatus(
   const rounds = (roundsResult.data ?? []) as { status: string }[];
 
   // Derive tee-time-linked round statuses (actual rounds players are playing)
-  const teeTimeRows = (teeTimesResult.data ?? []) as Array<{
+  const teeTimeRows = (teeTimesResult.data ?? []) as unknown as Array<{
     id: string;
     round_id: string | null;
     rounds: { id: string; status: string } | null;
