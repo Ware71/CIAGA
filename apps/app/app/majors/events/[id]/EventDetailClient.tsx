@@ -2132,10 +2132,13 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                         <span>{r.course?.name ?? "TBC"}</span>
                       </div>
                       {(r.tee_male?.name || r.tee_female?.name) && (
-                        <div className="text-emerald-200/40 text-[11px] ml-3">
-                          {r.tee_male?.name && `♂ ${r.tee_male.name}`}
-                          {r.tee_male?.name && r.tee_female?.name && " · "}
-                          {r.tee_female?.name && `♀ ${r.tee_female.name}`}
+                        <div className="text-emerald-200/40 text-[11px] ml-3 space-y-0.5">
+                          {r.tee_male?.name && (
+                            <div><span className="text-emerald-200/30">Men's tee: </span>{r.tee_male.name}</div>
+                          )}
+                          {r.tee_female?.name && (
+                            <div><span className="text-emerald-200/30">Women's tee: </span>{r.tee_female.name}</div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -2471,7 +2474,11 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
               </div>
             )}
             {/* Withdraw */}
-            {event.majors_status !== "live" && event.majors_status !== "completed" && (
+            {event.majors_status !== "live" &&
+             event.majors_status !== "completed" &&
+             myTeeTime?.round?.status !== "live" &&
+             myTeeTime?.round?.status !== "starting" &&
+             myTeeTime?.round?.status !== "finished" && (
               (event as any).allow_self_withdrawal !== false ? (
                 <button type="button" onClick={() => setShowWithdrawConfirm(true)}
                   className="w-full py-2 rounded-full border border-red-900/50 text-sm text-red-400/70 hover:text-red-400 transition-colors">
@@ -3067,13 +3074,17 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                           <span className={`text-[10px] capitalize ${statusColour}`}>{cr.status}</span>
                         </div>
                         {(cr.course?.name || cr.tee_male?.name || cr.tee_female?.name) && (
-                          <div className="text-[10px] text-emerald-200/50 mt-0.5 flex items-center gap-1.5">
+                          <div className="text-[10px] text-emerald-200/50 mt-0.5">
                             {cr.course?.name && <span>{cr.course.name}</span>}
-                            {cr.tee_male?.name && (
-                              <span className="text-emerald-200/40">· ♂ {cr.tee_male.name}</span>
-                            )}
-                            {cr.tee_female?.name && (
-                              <span className="text-emerald-200/40">· ♀ {cr.tee_female.name}</span>
+                            {(cr.tee_male?.name || cr.tee_female?.name) && (
+                              <div className="space-y-0.5 mt-0.5">
+                                {cr.tee_male?.name && (
+                                  <div><span className="text-emerald-200/30">Men's tee: </span>{cr.tee_male.name}</div>
+                                )}
+                                {cr.tee_female?.name && (
+                                  <div><span className="text-emerald-200/30">Women's tee: </span>{cr.tee_female.name}</div>
+                                )}
+                              </div>
                             )}
                           </div>
                         )}
