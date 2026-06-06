@@ -2,12 +2,15 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 import { getEventById } from "@/lib/majors/queries";
+import { reconcileEventStatus } from "@/lib/majors/reconcileStatus";
 
 export const runtime = "nodejs";
 
 // POST /api/majors/competitions/[id]/freeze-control
-// Body: { action: 'freeze' | 'reveal' }
+// Body: { action: 'freeze' | 'reveal', force?: boolean }
 // Allowed for group owner/admin. Transitions leaderboard_freeze_state.
+// On reveal without force: returns a warning if any tee-time rounds are not finished,
+// with details of who is still playing and how many holes they've completed.
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { profileId } = await getAuthedProfileOrThrow(req);
@@ -36,7 +39,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
 
     const body = await req.json();
-    const { action } = body as { action: string };
+    const { action, force } = body as { action: string; force?: boolean };
 
     if (action !== "freeze" && action !== "reveal") {
       return NextResponse.json({ error: "action must be 'freeze' or 'reveal'" }, { status: 400 });
@@ -58,6 +61,58 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       );
     }
 
+    // On reveal without force: check for incomplete tee-time rounds and warn the caller
+    if (action === "reveal" && !force) {
+      const { data: teeTimesWithRounds } = await supabaseAdmin
+        .from("event_tee_times")
+        .select("id, tee_time, round_id, rounds(id, status, name)")
+        .eq("event_id", id);
+
+      const incompleteTeeTimes = (teeTimesWithRounds ?? []).filter((tt: any) => {
+        const r = tt.rounds;
+        return r && r.status !== "finished" && r.status !== "cancelled";
+      });
+
+      if (incompleteTeeTimes.length > 0) {
+        // Fetch player details + holes completed for these rounds
+        const incompleteRoundIds = incompleteTeeTimes.map((tt: any) => tt.rounds.id);
+
+        const { data: participants } = await supabaseAdmin
+          .from("round_participants")
+          .select("round_id, profile_id, is_guest, display_name, profiles:profile_id(name)")
+          .in("round_id", incompleteRoundIds)
+          .eq("is_guest", false);
+
+        const { data: leaderboardEntries } = await supabaseAdmin
+          .from("event_leaderboard_entries")
+          .select("profile_id, holes_completed, rounds_submitted")
+          .eq("event_id", id);
+
+        const entriesByProfile = Object.fromEntries(
+          (leaderboardEntries ?? []).map((e: any) => [e.profile_id, e])
+        );
+
+        const participantsByRound: Record<string, any[]> = {};
+        for (const p of participants ?? []) {
+          if (!participantsByRound[p.round_id]) participantsByRound[p.round_id] = [];
+          const entry = entriesByProfile[p.profile_id] ?? {};
+          participantsByRound[p.round_id].push({
+            name: (p.profiles as any)?.name ?? p.display_name ?? "Unknown",
+            holes_completed: entry.holes_completed ?? 0,
+            rounds_submitted: entry.rounds_submitted ?? 0,
+          });
+        }
+
+        const incompleteRounds = incompleteTeeTimes.map((tt: any) => ({
+          round_name: (tt.rounds as any).name ?? "Round",
+          tee_time: tt.tee_time,
+          players: participantsByRound[tt.rounds.id] ?? [],
+        }));
+
+        return NextResponse.json({ warning: true, incomplete_rounds: incompleteRounds });
+      }
+    }
+
     const newState = action === "freeze" ? "frozen" : "revealed";
 
     const { data, error } = await supabaseAdmin
@@ -68,6 +123,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .single();
 
     if (error) throw error;
+
+    // On reveal: mark all event rounds as completed and sync event status
+    if (action === "reveal") {
+      await supabaseAdmin
+        .from("event_rounds")
+        .update({ status: "completed" })
+        .eq("event_id", id)
+        .not("status", "in", '("completed","cancelled")');
+
+      await reconcileEventStatus(id);
+    }
 
     // Emit audit log
     await supabaseAdmin.from("event_audit_log").insert({

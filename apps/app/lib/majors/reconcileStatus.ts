@@ -18,8 +18,8 @@ const NON_AUTO_STATUSES: EventStatus[] = ["cancelled", "archived"];
 /**
  * Computes and persists the correct majors_status for an event based on:
  * - event_date vs today
- * - round statuses (scheduled / live / completed)
- * - whether any tee times exist
+ * - event_rounds statuses (scheduled / live / completed)
+ * - actual round statuses from tee-time-linked rounds (live / finished)
  *
  * Called server-side from GET and round PATCH routes so any user activity
  * triggers a transparent status sync — no client-side logic needed.
@@ -39,7 +39,7 @@ export async function reconcileEventStatus(
       .eq("event_id", eventId),
     supabaseAdmin
       .from("event_tee_times")
-      .select("id", { count: "exact", head: true })
+      .select("id, round_id, rounds(id, status)")
       .eq("event_id", eventId),
   ]);
 
@@ -47,7 +47,36 @@ export async function reconcileEventStatus(
   if (!evt) return;
 
   const rounds = (roundsResult.data ?? []) as { status: string }[];
-  const teeTimeCount = teeTimesResult.count ?? 0;
+
+  // Derive tee-time-linked round statuses (actual rounds players are playing)
+  const teeTimeRows = (teeTimesResult.data ?? []) as Array<{
+    id: string;
+    round_id: string | null;
+    rounds: { id: string; status: string } | null;
+  }>;
+  const teeTimeCount = teeTimeRows.length;
+  const linkedRounds = teeTimeRows
+    .map((tt) => tt.rounds)
+    .filter(Boolean) as { id: string; status: string }[];
+
+  // 'live' or 'starting' means players have begun their round
+  const anyLinkedRoundLive = linkedRounds.some(
+    (r) => r.status === "live" || r.status === "starting"
+  );
+  // 'finished' is the terminal status for a completed round
+  const allLinkedRoundsFinished =
+    linkedRounds.length > 0 &&
+    linkedRounds.every((r) => r.status === "finished" || r.status === "cancelled");
+
+  // If all tee-time rounds are done, propagate to event_rounds so later
+  // calls see event_rounds.status = 'completed' consistently
+  if (allLinkedRoundsFinished && linkedRounds.some((r) => r.status === "finished")) {
+    await supabaseAdmin
+      .from("event_rounds")
+      .update({ status: "completed" })
+      .eq("event_id", eventId)
+      .not("status", "in", '("completed","cancelled")');
+  }
 
   const allRoundsCancelled =
     rounds.length > 0 && rounds.every((r) => r.status === "cancelled");
@@ -76,8 +105,11 @@ export async function reconcileEventStatus(
     const daysDiff = (today.getTime() - evtDate.getTime()) / (1000 * 60 * 60 * 24);
 
     const allRoundsCompleted =
-      rounds.length > 0 && rounds.every((r) => r.status === "completed");
-    const anyRoundLive = rounds.some((r) => r.status === "live");
+      (rounds.length > 0 && rounds.every((r) => r.status === "completed")) ||
+      allLinkedRoundsFinished;
+
+    const anyRoundLive =
+      rounds.some((r) => r.status === "live") || anyLinkedRoundLive;
 
     if (daysDiff >= 1 && teeTimeCount > 0 && allRoundsCompleted) {
       target = "completed";

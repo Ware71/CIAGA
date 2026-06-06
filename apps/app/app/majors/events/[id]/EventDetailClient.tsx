@@ -1454,6 +1454,13 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
   } | null>(null);
   const [showReveal, setShowReveal] = useState(false);
   const [revealLoading, setRevealLoading] = useState(false);
+  const [revealWarning, setRevealWarning] = useState<{
+    incomplete_rounds: Array<{
+      round_name: string;
+      tee_time: string;
+      players: Array<{ name: string; holes_completed: number; rounds_submitted: number }>;
+    }>;
+  } | null>(null);
   const [lbView, setLbView] = useState<"score" | "gross">("score");
   const [detailPlayer, setDetailPlayer] = useState<any | null>(null);
   const [playerRounds, setPlayerRounds] = useState<any[] | null>(null);
@@ -1665,7 +1672,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
     refreshFinances();
   }, [tab, financesLoaded]);
 
-  async function handleReveal() {
+  async function handleReveal(force = false) {
     setRevealLoading(true);
     try {
       const session = await getViewerSession();
@@ -1676,9 +1683,15 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.accessToken}`,
         },
-        body: JSON.stringify({ action: "reveal" }),
+        body: JSON.stringify({ action: "reveal", force }),
       });
+      const json = await res.json();
+      if (res.ok && json.warning) {
+        setRevealWarning({ incomplete_rounds: json.incomplete_rounds });
+        return;
+      }
       if (res.ok) {
+        setRevealWarning(null);
         setLeaderboardFreeze((prev) => prev ? { ...prev, freeze_state: "revealed" } : prev);
         setShowReveal(true);
       }
@@ -2607,6 +2620,56 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
             </>
           )}
         </div>
+        {/* Incomplete rounds warning sheet */}
+        {revealWarning && (
+          <div className="fixed inset-0 z-50 flex items-end bg-black/60" onClick={() => setRevealWarning(null)}>
+            <div
+              className="w-full max-w-sm mx-auto rounded-t-3xl bg-[#071f13] border-t border-emerald-900/70 px-4 pt-5 pb-[env(safe-area-inset-bottom)] space-y-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start gap-3">
+                <span className="text-amber-400 text-lg mt-0.5">⚠️</span>
+                <div>
+                  <p className="text-sm font-semibold text-amber-300">Some rounds aren&apos;t finished</p>
+                  <p className="text-xs text-emerald-200/60 mt-0.5">These players are still on the course. You can wait for them or mark all rounds complete and reveal now.</p>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {revealWarning.incomplete_rounds.map((round, ri) => (
+                  <div key={ri} className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5">
+                    <p className="text-[11px] font-semibold text-emerald-300/80 mb-1.5">{round.round_name}</p>
+                    {round.players.map((p, pi) => (
+                      <div key={pi} className="flex items-center justify-between py-0.5">
+                        <span className="text-xs text-emerald-100">{p.name}</span>
+                        <span className="text-[11px] text-emerald-200/50">
+                          {p.rounds_submitted > 0 ? "Submitted" : `${p.holes_completed}/18 holes`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setRevealWarning(null)}
+                  className="flex-1 py-2.5 rounded-full border border-emerald-900/50 text-xs text-emerald-200/60 hover:text-emerald-200/90 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleReveal(true)}
+                  disabled={revealLoading}
+                  className="flex-1 py-2.5 rounded-full border border-amber-700/50 bg-amber-900/20 text-xs text-amber-300 hover:bg-amber-900/40 transition-colors disabled:opacity-40"
+                >
+                  {revealLoading ? "…" : "Mark complete & reveal"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {showReveal && (
           <LeaderboardReveal
             rows={leaderboard}

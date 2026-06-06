@@ -216,6 +216,23 @@ function ScoreCounter({ score, textClass }: { score: string; textClass: string }
   );
 }
 
+// ─── Fake ticker score (cycles random values to hide real scores) ─────────────
+
+function FakeTicker({ scoringModel }: { scoringModel?: string }) {
+  const [val, setVal] = useState("??");
+  useEffect(() => {
+    const isPoints = scoringModel === "stableford_points";
+    const rand = () => {
+      if (isPoints) return `${Math.floor(Math.random() * 20) + 28} pts`;
+      const n = Math.floor(Math.random() * 14) - 7;
+      return n === 0 ? "E" : n > 0 ? `+${n}` : `${n}`;
+    };
+    const t = setInterval(() => setVal(rand()), 300);
+    return () => clearInterval(t);
+  }, [scoringModel]);
+  return <span className="text-[11px] font-bold text-[#f5e6b0]">{val}</span>;
+}
+
 // ─── Dramatic Podium ─────────────────────────────────────────────────────────
 
 type PodiumPhase = "bubbles" | "tension" | "popping" | "celebrate";
@@ -259,6 +276,7 @@ function FloatingBubble({
   duration,
   isGrowing,
   isPopped,
+  isScare,
   pulsePeak,
   pulseDelay,
   sizeClass,
@@ -271,6 +289,7 @@ function FloatingBubble({
   duration: number;
   isGrowing: boolean;
   isPopped: boolean;
+  isScare: boolean;
   pulsePeak: number;
   pulseDelay: number;
   sizeClass: string;
@@ -286,6 +305,8 @@ function FloatingBubble({
         animate={
           isGrowing
             ? { scale: [1, 4.0, 0], opacity: [1, 1, 0] }
+            : isScare
+            ? { scale: [1, 2.5, 1], opacity: [1, 1, 1] }
             : {
                 x: [0, driftX, 0, -driftX * 0.7, 0],
                 y: [0, driftY * 0.6, driftY, driftY * 0.3, 0],
@@ -295,6 +316,8 @@ function FloatingBubble({
         transition={
           isGrowing
             ? { duration: 0.9, times: [0, 0.6, 1], ease: "easeIn" }
+            : isScare
+            ? { duration: 2.5, times: [0, 0.5, 1], ease: [0.2, 0, 0.8, 1] as any }
             : { duration, repeat: Infinity, ease: "easeInOut", delay: pulseDelay }
         }
         className={`${sizeClass} rounded-full border-2 border-emerald-700/50 bg-emerald-900/60 grid place-items-center overflow-hidden shadow-lg`}
@@ -424,6 +447,24 @@ function PodiumRevealInner({
   const [poppedPositions, setPoppedPositions] = useState<number[]>([]);
   const [growingPosition, setGrowingPosition] = useState<number | null>(null);
   const [tickerIdx, setTickerIdx] = useState(0);
+  const [scareBubble, setScareBubble] = useState<number | null>(null);
+
+  // Measure actual container dimensions to avoid SSR/first-render positioning bug
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [dims, setDims] = useState({
+    w: typeof window !== "undefined" ? window.innerWidth : 390,
+    h: typeof window !== "undefined" ? window.innerHeight : 700,
+  });
+  const [dimsMeasured, setDimsMeasured] = useState(false);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    if (rect.width > 0) {
+      setDims({ w: rect.width, h: rect.height });
+    }
+    setDimsMeasured(true);
+  }, []); // fires once after mount
 
   // Randomise 2nd/3rd reveal order once per mount/replay
   const revealOrder = useMemo(() => Math.random() < 0.5 ? [2, 3, 1] : [3, 2, 1], [replayKey]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -437,10 +478,10 @@ function PodiumRevealInner({
     [rows]
   );
 
-  // Seeded random bubble positions — stable per replayKey
+  // Seeded random bubble positions — stable per replayKey, using actual container dims
   const bubbleData = useMemo(() => {
-    const W = typeof window !== "undefined" ? window.innerWidth : 390;
-    const H = typeof window !== "undefined" ? window.innerHeight : 700;
+    const W = dims.w;
+    const H = dims.h;
     const safeH = H * 0.55; // keep bubbles in top 55% (above podium)
     const SIZE_CLASSES = ["w-12 h-12", "w-14 h-14", "w-16 h-16", "w-20 h-20"] as const;
     return rows.map((_, i) => {
@@ -457,7 +498,7 @@ function PodiumRevealInner({
         sizeClass: SIZE_CLASSES[Math.floor(rand(8) * 4)],
       };
     });
-  }, [rows.length, replayKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [rows.length, replayKey, dims]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reset on replay
   useEffect(() => {
@@ -465,6 +506,7 @@ function PodiumRevealInner({
     setPoppedPositions([]);
     setGrowingPosition(null);
     setTickerIdx(0);
+    setScareBubble(null);
   }, [replayKey]);
 
   // Score ticker — cycles ALL rows rapidly to build tension
@@ -474,10 +516,47 @@ function PodiumRevealInner({
     return () => clearInterval(t);
   }, [podiumPhase, rows.length]);
 
-  // Bubbles → tension
+  // Random near-pop scare events during bubbles phase
   useEffect(() => {
     if (podiumPhase !== "bubbles") return;
-    const t = setTimeout(() => setPodiumPhase("tension"), 5000);
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
+    // Pick non-winner bubbles to scare so we don't spoil the winner
+    const pool = rows
+      .map((r, i) => ({ i, pos: r.position ?? 99 }))
+      .filter(({ pos }) => pos !== 1)
+      .map(({ i }) => i);
+
+    // Fall back to any bubble index if everyone is in the top 3
+    const scarablePool = pool.length > 0 ? pool : rows.map((_, i) => i);
+    if (scarablePool.length === 0) return;
+
+    const scare1 = scarablePool[Math.floor(Math.random() * scarablePool.length)];
+    timers.push(
+      setTimeout(() => {
+        setScareBubble(scare1);
+        timers.push(setTimeout(() => setScareBubble(null), 2500));
+      }, 1800)
+    );
+
+    const scare2Pool = scarablePool.filter((i) => i !== scare1);
+    if (scare2Pool.length > 0) {
+      const scare2 = scare2Pool[Math.floor(Math.random() * scare2Pool.length)];
+      timers.push(
+        setTimeout(() => {
+          setScareBubble(scare2);
+          timers.push(setTimeout(() => setScareBubble(null), 2500));
+        }, 4200)
+      );
+    }
+
+    return () => timers.forEach(clearTimeout);
+  }, [podiumPhase, replayKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Bubbles → tension (extended to 7 s to allow 2 scare events)
+  useEffect(() => {
+    if (podiumPhase !== "bubbles") return;
+    const t = setTimeout(() => setPodiumPhase("tension"), 7000);
     return () => clearTimeout(t);
   }, [podiumPhase, replayKey]);
 
@@ -497,8 +576,8 @@ function PodiumRevealInner({
       return;
     }
     const pos = revealOrder[nextIdx];
-    // 3rd/2nd gap: 700ms (quick succession); winner: 2000ms (dramatic pause)
-    const delay = pos === 1 ? 2000 : nextIdx === 0 ? 0 : 700;
+    // Winner gets a 2 s dramatic pause; 2nd/3rd have 1.2 s between them
+    const delay = pos === 1 ? 2000 : nextIdx === 0 ? 0 : 1200;
 
     const t = setTimeout(() => {
       setGrowingPosition(pos);
@@ -538,7 +617,7 @@ function PodiumRevealInner({
               className="flex items-center gap-2 rounded-full border border-emerald-900/50 bg-[#0b3b21]/60 px-4 py-1.5 backdrop-blur-sm"
             >
               <span className="text-[11px] text-emerald-200/80">{getProfile(tickerRow)?.name ?? "—"}</span>
-              <span className="text-[11px] font-bold text-[#f5e6b0]">{getPodiumScore(tickerRow, scoringModel)}</span>
+              <FakeTicker scoringModel={scoringModel} />
             </motion.div>
           )}
           {(podiumPhase === "tension" || podiumPhase === "popping") && (
@@ -555,8 +634,8 @@ function PodiumRevealInner({
       </div>
 
       {/* Floating bubbles */}
-      <div className="absolute inset-0" style={{ bottom: "38%" }}>
-        {rows.map((row, i) => {
+      <div ref={containerRef} className="absolute inset-0" style={{ bottom: "38%" }}>
+        {dimsMeasured && rows.map((row, i) => {
           const pos = row.position ?? 99;
           const isGrowing = growingPosition === pos;
           const isPopped = poppedPositions.includes(pos);
@@ -572,6 +651,7 @@ function PodiumRevealInner({
               duration={d.duration}
               isGrowing={isGrowing}
               isPopped={isPopped}
+              isScare={scareBubble === i}
               pulsePeak={d.pulsePeak}
               pulseDelay={d.pulseDelay}
               sizeClass={d.sizeClass}
