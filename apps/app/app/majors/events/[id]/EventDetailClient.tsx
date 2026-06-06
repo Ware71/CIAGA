@@ -2865,7 +2865,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                           <div>
                             <div className="text-sm font-semibold text-emerald-100 truncate">{label}</div>
                             {(() => {
-                              const hi = playerEntry?.assigned_handicap_index;
+                              const hi = r.handicap_index;
                               const ch = r.course_handicap;
                               const ph = r.playing_handicap;
                               if (hi == null && ch == null && ph == null) return null;

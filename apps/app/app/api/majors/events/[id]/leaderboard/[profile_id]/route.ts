@@ -51,7 +51,7 @@ export async function GET(
       ? await supabaseAdmin
           .from("round_participants")
           .select(
-            `round_id, course_handicap_used, playing_handicap_used,
+            `round_id, handicap_index, course_handicap_used, playing_handicap_used,
              round_score_events(hole_number, strokes, created_at)`
           )
           .eq("profile_id", profile_id)
@@ -77,6 +77,7 @@ export async function GET(
           ...s,
           gross_score: gross,
           net_score_snapshot: net,
+          handicap_index: stats?.handicap_index ?? null,
           course_handicap: ch,
           playing_handicap: ph,
         };
