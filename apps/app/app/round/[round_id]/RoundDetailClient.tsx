@@ -648,7 +648,10 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     const byPid: Record<string, { out: number; in: number; total: number }> = {};
     for (const p of participants) {
       let out = 0, inn = 0, total = 0;
-      const hcp = typeof p.course_handicap === "number" ? p.course_handicap : 0;
+      // Use playing_handicap_used when the event sets an allowance, otherwise full course handicap.
+      const hcp = typeof p.playing_handicap_used === "number"
+        ? p.playing_handicap_used
+        : typeof p.course_handicap === "number" ? p.course_handicap : 0;
       for (const h of holesList) {
         const st = holeStatesByKey[`${p.id}:${h.hole_number}`] ?? "not_started";
         if (st === "picked_up" && h.par) {
