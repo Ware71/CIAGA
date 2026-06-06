@@ -39,5 +39,5 @@ export function formatHI(hi: number): string {
 }
 
 export function netFromGross(gross: number, recv: number): number {
-  return Math.max(1, gross - recv);
+  return gross - recv;
 }
