@@ -2864,13 +2864,19 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                         >
                           <div>
                             <div className="text-sm font-semibold text-emerald-100 truncate">{label}</div>
-                            {playerEntry && (
-                              <div className="text-[10px] text-emerald-200/40 mt-0.5 space-x-2">
-                                {playerEntry.assigned_handicap_index != null && <span>HI {playerEntry.assigned_handicap_index}</span>}
-                                {playerEntry.assigned_course_handicap != null && <span>CH {playerEntry.assigned_course_handicap}</span>}
-                                {playerEntry.assigned_playing_handicap != null && <span>PH {playerEntry.assigned_playing_handicap}</span>}
-                              </div>
-                            )}
+                            {(() => {
+                              const hi = playerEntry?.assigned_handicap_index;
+                              const ch = r.course_handicap;
+                              const ph = r.playing_handicap;
+                              if (hi == null && ch == null && ph == null) return null;
+                              return (
+                                <div className="text-[10px] text-emerald-200/40 mt-0.5 space-x-2">
+                                  {hi != null && <span>HI {hi}</span>}
+                                  {ch != null && <span>CH {ch}</span>}
+                                  {ph != null && <span>PH {ph}</span>}
+                                </div>
+                              );
+                            })()}
                           </div>
                           <div className="text-sm font-bold tabular-nums text-[#f5e6b0] text-right w-12">
                             {r.gross_score != null ? r.gross_score : "—"}
