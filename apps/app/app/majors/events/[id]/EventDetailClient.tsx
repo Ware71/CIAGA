@@ -1009,6 +1009,111 @@ function FixtureCard({ fixture }: { fixture: MatchplayFixture & { home_entry?: a
   );
 }
 
+// ─── Mini Scorecard (player detail drawer) ──────────────────────────────
+
+function MiniScorecard({
+  snap,
+  loading,
+  profileId,
+}: {
+  snap: any;
+  loading: boolean;
+  profileId: string | null;
+}) {
+  if (loading) {
+    return <div className="text-center py-3 text-emerald-200/50 text-xs">Loading scorecard…</div>;
+  }
+  if (!snap) return null;
+
+  const participant = (snap.participants ?? []).find((p: any) => p.profile_id === profileId);
+  if (!participant) {
+    return <div className="text-center py-3 text-emerald-200/40 text-xs">No score data</div>;
+  }
+
+  const pid: string = participant.id;
+  const holes: Array<{ hole_number: number; par: number | null }> = (snap.holes ?? [])
+    .slice()
+    .sort((a: any, b: any) => a.hole_number - b.hole_number);
+
+  const scoreMap: Record<number, number | null> = {};
+  for (const s of snap.scores ?? []) {
+    if (s.participant_id === pid) scoreMap[s.hole_number] = s.strokes;
+  }
+
+  function badgeType(strokes: number | null, par: number | null) {
+    if (strokes == null || par == null) return null;
+    const d = strokes - par;
+    if (d <= -2) return "eagle";
+    if (d === -1) return "birdie";
+    if (d === 1) return "bogey";
+    if (d >= 2) return "double";
+    return null;
+  }
+
+  function ScoreCell({ hole }: { hole: { hole_number: number; par: number | null } }) {
+    const s = scoreMap[hole.hole_number];
+    const b = badgeType(s, hole.par);
+    const base = "flex items-center justify-center w-7 h-6 text-xs tabular-nums font-semibold";
+    const cls =
+      b === "eagle"
+        ? `${base} rounded-full bg-[#f5e6b0] text-[#042713]`
+        : b === "birdie"
+        ? `${base} rounded-full ring-1 ring-[#f5e6b0] text-emerald-50`
+        : b === "bogey"
+        ? `${base} ring-1 ring-white/50 text-emerald-50`
+        : b === "double"
+        ? `${base} bg-white/20 text-emerald-50`
+        : `${base} text-emerald-100/80`;
+    return <div className={cls}>{s ?? "—"}</div>;
+  }
+
+  const front = holes.filter((h) => h.hole_number <= 9);
+  const back = holes.filter((h) => h.hole_number >= 10);
+
+  function nineTotal(group: typeof front) {
+    const par = group.reduce((t, h) => t + (h.par ?? 0), 0);
+    const score = group.reduce((t, h) => t + (scoreMap[h.hole_number] ?? 0), 0);
+    return { par, score };
+  }
+
+  const frontTotals = nineTotal(front);
+  const backTotals = nineTotal(back);
+
+  function NineRow({
+    group,
+    label,
+    totals,
+  }: {
+    group: typeof front;
+    label: string;
+    totals: { par: number; score: number };
+  }) {
+    return (
+      <div className="flex gap-0.5 items-end">
+        {group.map((h) => (
+          <div key={h.hole_number} className="flex flex-col items-center gap-0.5 w-7">
+            <div className="text-[9px] text-emerald-200/30 leading-none">{h.hole_number}</div>
+            <div className="text-[9px] text-emerald-200/40 leading-none">{h.par ?? "—"}</div>
+            <ScoreCell hole={h} />
+          </div>
+        ))}
+        <div className="flex flex-col items-center gap-0.5 w-9 border-l border-emerald-900/40 ml-0.5 pl-1">
+          <div className="text-[9px] text-emerald-200/30 leading-none">{label}</div>
+          <div className="text-[9px] text-emerald-200/40 leading-none">{totals.par}</div>
+          <div className="text-xs font-bold text-[#f5e6b0] tabular-nums">{totals.score || "—"}</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto px-2 py-2 space-y-2 border-t border-emerald-900/30 mt-0.5">
+      {front.length > 0 && <NineRow group={front} label="OUT" totals={frontTotals} />}
+      {back.length > 0 && <NineRow group={back} label="IN" totals={backTotals} />}
+    </div>
+  );
+}
+
 // ─── Event Setup Sheet ──────────────────────────────────────────────────
 
 function EventSetupSheet({
@@ -1465,6 +1570,10 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
   const [detailPlayer, setDetailPlayer] = useState<any | null>(null);
   const [playerRounds, setPlayerRounds] = useState<any[] | null>(null);
   const [playerRoundsLoading, setPlayerRoundsLoading] = useState(false);
+  const [playerEntry, setPlayerEntry] = useState<any | null>(null);
+  const [scorecardRoundId, setScorecardRoundId] = useState<string | null>(null);
+  const [scorecardSnap, setScorecardSnap] = useState<any | null>(null);
+  const [scorecardLoading, setScorecardLoading] = useState(false);
 
   // Finances tab state
   const [eventCharges, setEventCharges] = useState<EventCharge[]>([]);
@@ -2425,6 +2534,23 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
             return aToPar - bToPar;
           })
         : leaderboard;
+
+      const handleRoundCardClick = async (roundId: string) => {
+        if (scorecardRoundId === roundId) { setScorecardRoundId(null); return; }
+        setScorecardRoundId(roundId);
+        setScorecardSnap(null);
+        setScorecardLoading(true);
+        try {
+          const session = await getViewerSession();
+          const res = await fetch(`/api/rounds/${roundId}/snapshot`, {
+            headers: { Authorization: `Bearer ${session?.accessToken}` },
+          });
+          if (res.ok) setScorecardSnap(await res.json());
+        } finally {
+          setScorecardLoading(false);
+        }
+      };
+
       return (
         <>
           {leaderboardFreeze?.freeze_state === "frozen" && (
@@ -2542,7 +2668,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                 <div className="text-right shrink-0">
                   <div className="text-xs font-extrabold text-[#f5e6b0]">{mainScoreText}</div>
                   {bracketText ? (
-                    <div className="text-[10px] text-emerald-100/50">{bracketText} · {subLabel}</div>
+                    <div className="text-[10px] text-emerald-100/50">{subLabel} {bracketText}</div>
                   ) : (
                     <div className="text-[10px] text-emerald-100/50">{subLabel}</div>
                   )}
@@ -2564,6 +2690,9 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
             const handleRowClick = async () => {
               setDetailPlayer(row);
               setPlayerRounds(null);
+              setPlayerEntry(null);
+              setScorecardRoundId(null);
+              setScorecardSnap(null);
               setPlayerRoundsLoading(true);
               try {
                 const session = await getViewerSession();
@@ -2573,10 +2702,12 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                 );
                 const j = await res.json();
                 setPlayerRounds(j.rounds ?? []);
+                setPlayerEntry(j.entry ?? null);
               } finally {
                 setPlayerRoundsLoading(false);
               }
             };
+
             return (
               <button
                 key={row.profile_id ?? row.id}
@@ -2723,15 +2854,38 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                   </div>
                   {playerRounds.map((r: any, i: number) => {
                     const label = r.event_round?.name ?? `R${r.event_round?.round_number ?? i + 1}`;
+                    const isOpen = scorecardRoundId === r.round_id;
                     return (
-                      <div key={r.event_round_id ?? i} className="grid grid-cols-[1fr_auto_auto] gap-2 items-center rounded-xl border border-emerald-900/40 bg-[#0b3b21]/60 px-3 py-2">
-                        <div className="text-sm font-semibold text-emerald-100 truncate">{label}</div>
-                        <div className="text-sm font-bold tabular-nums text-[#f5e6b0] text-right w-12">
-                          {r.gross_score != null ? r.gross_score : "—"}
-                        </div>
-                        <div className="text-sm font-bold tabular-nums text-emerald-300 text-right w-12">
-                          {r.net_score_snapshot != null ? r.net_score_snapshot : "—"}
-                        </div>
+                      <div key={r.event_round_id ?? i}>
+                        <button
+                          type="button"
+                          onClick={() => r.round_id && handleRoundCardClick(r.round_id)}
+                          className="grid grid-cols-[1fr_auto_auto] gap-2 items-center w-full rounded-xl border border-emerald-900/40 bg-[#0b3b21]/60 px-3 py-2 text-left hover:brightness-110 active:scale-[0.99] transition-all"
+                        >
+                          <div>
+                            <div className="text-sm font-semibold text-emerald-100 truncate">{label}</div>
+                            {playerEntry && (
+                              <div className="text-[10px] text-emerald-200/40 mt-0.5 space-x-2">
+                                {playerEntry.assigned_handicap_index != null && <span>HI {playerEntry.assigned_handicap_index}</span>}
+                                {playerEntry.assigned_course_handicap != null && <span>CH {playerEntry.assigned_course_handicap}</span>}
+                                {playerEntry.assigned_playing_handicap != null && <span>PH {playerEntry.assigned_playing_handicap}</span>}
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-sm font-bold tabular-nums text-[#f5e6b0] text-right w-12">
+                            {r.gross_score != null ? r.gross_score : "—"}
+                          </div>
+                          <div className="text-sm font-bold tabular-nums text-emerald-300 text-right w-12">
+                            {r.net_score_snapshot != null ? r.net_score_snapshot : "—"}
+                          </div>
+                        </button>
+                        {isOpen && (
+                          <MiniScorecard
+                            snap={scorecardSnap}
+                            loading={scorecardLoading}
+                            profileId={detailPlayer?.profile_id ?? null}
+                          />
+                        )}
                       </div>
                     );
                   })}
