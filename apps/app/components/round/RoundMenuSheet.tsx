@@ -556,7 +556,7 @@ export default function RoundMenuSheet(props: {
                     const pts = showPts
                       ? (compEntry
                           ? (compEntry.points_earned ?? projectedPoints(compEntry.position, competitionPointsModel, competitionPointsTable))
-                          : projectedPoints(effectiveRank, competitionPointsModel, competitionPointsTable))
+                          : null)
                       : null;
                     const teamMembers = teamMembersByFirstId[r.participantId];
 
@@ -684,6 +684,14 @@ export default function RoundMenuSheet(props: {
                           <div className={`text-[10px] leading-none mt-0.5 ${isFrozenRow ? "text-cyan-300/70" : "text-emerald-100/55"}`}>{thruText}</div>
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
+                          {showPts && (
+                            <div className="text-right">
+                              <div className="text-[9px] text-emerald-200/50 uppercase tracking-wider leading-none">Pts</div>
+                              <div className="text-[11px] font-bold text-emerald-300 tabular-nums">
+                                {(s.points_earned ?? projectedPoints(s.position, competitionPointsModel, competitionPointsTable)) ?? "—"}
+                              </div>
+                            </div>
+                          )}
                           <div className="text-right">
                             {scoringModel === "stableford_points" ? (
                               <>
@@ -700,7 +708,6 @@ export default function RoundMenuSheet(props: {
                                 )}
                               </>
                             ) : (() => {
-                              // For gross competitions show gross-to-par; for net show net-to-par.
                               const displayToPar = scoringModel === "gross"
                                 ? (s.gross_score != null && s.course_par != null
                                     ? s.gross_score - s.course_par
@@ -712,8 +719,8 @@ export default function RoundMenuSheet(props: {
                                   <div className="text-[15px] font-extrabold tabular-nums text-[#f5e6b0]">
                                     {displayToPar != null ? formatToPar(displayToPar) : (rawScore ?? s.gross_score ?? "—")}
                                   </div>
-                                  {displayToPar != null && s.gross_score != null && (
-                                    <div className="text-[9px] text-emerald-100/50">({s.gross_score} gross)</div>
+                                  {displayToPar != null && rawScore != null && (
+                                    <div className="text-[9px] text-emerald-100/50">({rawScore})</div>
                                   )}
                                 </>
                               );

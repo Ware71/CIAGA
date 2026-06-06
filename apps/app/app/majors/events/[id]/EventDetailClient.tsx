@@ -2403,13 +2403,13 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
       }
       const rankedIds = new Set(leaderboard.map((r) => r.profile_id));
       const unranked = participants.filter((p) => !rankedIds.has(p.profile_id));
-      const showPts = event?.points_model && event.points_model !== "none";
+      const showPts = event?.points_model && event.points_model !== "none"
+        && event.standings_contribution !== "event_only";
       const displayRows = lbView === "gross"
         ? [...leaderboard].sort((a, b) => {
-            if (a.gross_score == null && b.gross_score == null) return 0;
-            if (a.gross_score == null) return 1;
-            if (b.gross_score == null) return -1;
-            return a.gross_score - b.gross_score;
+            const aToPar = (a.gross_score ?? Infinity) - (a.course_par ?? 0);
+            const bToPar = (b.gross_score ?? Infinity) - (b.course_par ?? 0);
+            return aToPar - bToPar;
           })
         : leaderboard;
       return (
@@ -2485,18 +2485,23 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
               leaderboardFreeze?.freeze_scope !== "top_x" ||
               (row.position ?? 999) <= (leaderboardFreeze?.freeze_top_x ?? Infinity)
             );
-            // Compute to-par for net and gross views
             const netToPar: number | null = row.to_par ?? null;
             const grossToPar: number | null =
               row.gross_score != null && row.course_par != null
                 ? row.gross_score - row.course_par
                 : null;
-            const mainToPar = (lbView === "gross" || scoringModel === "gross") ? grossToPar : netToPar;
+            // For stableford By Score: show format_points as primary, net-equivalent to-par as secondary
+            const isStablefordScore = scoringModel === "stableford_points" && lbView === "score";
+            const mainToPar = isStablefordScore ? null : (lbView === "gross" || scoringModel === "gross") ? grossToPar : netToPar;
             const mainTotal = lbView === "gross" ? row.gross_score : displayScore(row);
-            const mainScoreText = mainToPar != null
-              ? formatToPar(mainToPar)
-              : mainTotal != null ? String(mainTotal) : "—";
-            const bracketText = mainToPar != null && mainTotal != null ? `(${mainTotal})` : null;
+            const mainScoreText = isStablefordScore
+              ? (row.format_points != null ? `${row.format_points} pts` : "—")
+              : mainToPar != null
+                ? formatToPar(mainToPar)
+                : mainTotal != null ? String(mainTotal) : "—";
+            const bracketText = isStablefordScore
+              ? (netToPar != null ? formatToPar(netToPar) : null)
+              : mainToPar != null && mainTotal != null ? `(${mainTotal})` : null;
             const subLabel = (() => {
               const label = lbView === "gross" ? "Gross" : scoreLabel;
               return thru ? `${thru} · ${label}` : label;
