@@ -468,10 +468,11 @@ export type FrozenLeaderboardEntry = {
   net_score: number | null;
   to_par?: number | null;
   format_points?: number | null;
+  points_earned?: number | null;
   holes_shown: number;
   actual_holes_completed?: number;
   is_live: boolean;
-  position: number;
+  position: number | null;
   profile?: {
     id: string;
     name: string | null;

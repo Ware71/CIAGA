@@ -2374,7 +2374,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
         const completedRounds = Math.floor(holesShown / holesPerRound);
         const holesInRound = holesShown % holesPerRound;
 
-        const isFrozenRow = isFrozen && (
+        const isFrozenRow = isFrozen && !row.is_live && (
           leaderboardFreeze?.freeze_scope !== "top_x" ||
           (row.position ?? 999) <= (leaderboardFreeze?.freeze_top_x ?? Infinity)
         );
@@ -2481,7 +2481,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
               ? (row.points_earned ?? getPointsForPosition(row.position ?? null, event.points_model, event.points_table as Record<string, unknown>, event.points_config, event.num_rounds))
               : null;
             const thru = getThruLabel(row);
-            const isFrozenRow = isFrozen && (
+            const isFrozenRow = isFrozen && !row.is_live && (
               leaderboardFreeze?.freeze_scope !== "top_x" ||
               (row.position ?? 999) <= (leaderboardFreeze?.freeze_top_x ?? Infinity)
             );
