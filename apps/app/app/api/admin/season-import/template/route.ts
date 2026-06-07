@@ -95,17 +95,36 @@ export async function GET(req: Request) {
     const courses     = coursesRes.data     ?? [];
     const seasons     = (seasonsRes.data    ?? []) as SeasonRow[];
 
-    // Event templates for this group — competition_event_templates are group-scoped
-    // only via their parent competitions row, so resolve the group's competitions first.
+    // Event templates — sourced from two levels:
+    //   1. competitions (series) themselves — prefixed "comp_<uuid>" so import can distinguish
+    //   2. competition_event_templates (named slots within a series) — plain uuid
+    // This ensures the dropdown is populated even when a group has series but no named slots.
     const { data: groupComps, error: gcErr } = await admin
       .from("competitions")
-      .select("id,name")
-      .eq("group_id", groupId);
+      .select("id,name,template_event_type,template_scoring_model,template_points_model,template_settings")
+      .eq("group_id", groupId)
+      .order("name");
     if (gcErr) throw new Error(gcErr.message);
     const compNameById = new Map((groupComps ?? []).map((c: any) => [c.id, c.name as string]));
     const compIds = (groupComps ?? []).map((c: any) => c.id as string);
 
-    let templates: TemplateRow[] = [];
+    const templates: TemplateRow[] = [];
+
+    // Series-level entries first (id prefixed with "comp_")
+    for (const c of groupComps ?? []) {
+      const settings = ((c as any).template_settings ?? {}) as Record<string, any>;
+      templates.push({
+        id:            `comp_${(c as any).id}`,
+        label:         (c as any).name,
+        event_type:    (c as any).template_event_type ?? null,
+        scoring_model: (c as any).template_scoring_model ?? null,
+        points_model:  (c as any).template_points_model ?? null,
+        allowance_pct: settings.handicap_allowance_pct ?? null,
+        max_handicap:  settings.max_handicap ?? null,
+      });
+    }
+
+    // Named event-template slots (indented label, plain uuid)
     if (compIds.length) {
       const { data: tmplRows, error: tmplErr } = await admin
         .from("competition_event_templates")
@@ -113,19 +132,19 @@ export async function GET(req: Request) {
         .in("competition_id", compIds)
         .order("name");
       if (tmplErr) throw new Error(tmplErr.message);
-      templates = (tmplRows ?? []).map((t: any) => {
-        const settings = (t.template_settings ?? {}) as Record<string, any>;
-        const compName = compNameById.get(t.competition_id) ?? "";
-        return {
-          id:            t.id,
-          label:         compName ? `${compName} — ${t.name}` : t.name,
-          event_type:    t.template_event_type ?? null,
-          scoring_model: t.template_scoring_model ?? null,
-          points_model:  t.template_points_model ?? null,
+      for (const t of tmplRows ?? []) {
+        const settings = ((t as any).template_settings ?? {}) as Record<string, any>;
+        const compName = compNameById.get((t as any).competition_id) ?? "";
+        templates.push({
+          id:            (t as any).id,
+          label:         compName ? `${compName} — ${(t as any).name}` : (t as any).name,
+          event_type:    (t as any).template_event_type ?? null,
+          scoring_model: (t as any).template_scoring_model ?? null,
+          points_model:  (t as any).template_points_model ?? null,
           allowance_pct: settings.handicap_allowance_pct ?? null,
           max_handicap:  settings.max_handicap ?? null,
-        };
-      });
+        });
+      }
     }
 
     // Group members first in the player dropdown

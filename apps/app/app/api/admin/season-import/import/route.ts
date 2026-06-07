@@ -273,23 +273,53 @@ export async function POST(req: Request) {
     const existingCompRows = compRows.filter(c => !c.is_new_event);
     const newCompRows      = compRows.filter(c => c.is_new_event);
 
-    // Resolve template defaults for any referenced templates (event_type/scoring_model/max_handicap)
-    type TemplateDefaults = { event_type: string | null; scoring_model: string | null; max_handicap: number | null };
+    // Resolve template defaults — template_id may be "comp_<uuid>" (series-level) or plain uuid (event template slot).
+    type TemplateDefaults = {
+      event_type: string | null; scoring_model: string | null; max_handicap: number | null;
+      // FK to set on the event — mutually exclusive
+      competition_id: string | null;              // when sourced from competitions (series)
+      competition_event_template_id: string | null; // when sourced from competition_event_templates
+    };
     const templateDefaults = new Map<string, TemplateDefaults>();
     const referencedTemplateIds = Array.from(new Set(compRows.map(c => c.template_id).filter(Boolean)));
     if (referencedTemplateIds.length) {
-      const { data: tmplRows, error: tmplErr } = await admin
-        .from("competition_event_templates")
-        .select("id,template_event_type,template_scoring_model,template_settings")
-        .in("id", referencedTemplateIds);
-      if (tmplErr) throw new Error(`Template lookup failed: ${tmplErr.message}`);
-      for (const t of tmplRows ?? []) {
-        const settings = ((t as any).template_settings ?? {}) as Record<string, any>;
-        templateDefaults.set((t as any).id, {
-          event_type:    (t as any).template_event_type ?? null,
-          scoring_model: (t as any).template_scoring_model ?? null,
-          max_handicap:  settings.max_handicap ?? null,
-        });
+      const compSeriesIds  = referencedTemplateIds.filter(id => id.startsWith("comp_")).map(id => id.slice(5));
+      const eventTmplIds   = referencedTemplateIds.filter(id => !id.startsWith("comp_"));
+
+      if (compSeriesIds.length) {
+        const { data: seriesRows, error: srErr } = await admin
+          .from("competitions")
+          .select("id,template_event_type,template_scoring_model,template_settings")
+          .in("id", compSeriesIds);
+        if (srErr) throw new Error(`Series template lookup failed: ${srErr.message}`);
+        for (const c of seriesRows ?? []) {
+          const settings = ((c as any).template_settings ?? {}) as Record<string, any>;
+          templateDefaults.set(`comp_${(c as any).id}`, {
+            event_type:    (c as any).template_event_type ?? null,
+            scoring_model: (c as any).template_scoring_model ?? null,
+            max_handicap:  settings.max_handicap ?? null,
+            competition_id: (c as any).id,
+            competition_event_template_id: null,
+          });
+        }
+      }
+
+      if (eventTmplIds.length) {
+        const { data: tmplRows, error: tmplErr } = await admin
+          .from("competition_event_templates")
+          .select("id,template_event_type,template_scoring_model,template_settings")
+          .in("id", eventTmplIds);
+        if (tmplErr) throw new Error(`Event template lookup failed: ${tmplErr.message}`);
+        for (const t of tmplRows ?? []) {
+          const settings = ((t as any).template_settings ?? {}) as Record<string, any>;
+          templateDefaults.set((t as any).id, {
+            event_type:    (t as any).template_event_type ?? null,
+            scoring_model: (t as any).template_scoring_model ?? null,
+            max_handicap:  settings.max_handicap ?? null,
+            competition_id: null,
+            competition_event_template_id: (t as any).id,
+          });
+        }
       }
     }
     const resolveAllowance = (comp: ParsedComp): number => {
@@ -522,7 +552,8 @@ export async function POST(req: Request) {
           course_id:        comp.course_id || null,
           entry_fee_amount: comp.entry_fee_override,
           majors_status:    "completed",
-          competition_event_template_id: comp.template_id || null,
+          competition_id:                  tmpl?.competition_id ?? null,
+          competition_event_template_id:   tmpl?.competition_event_template_id ?? null,
           handicap_rules:   handicapRules,
         })
         .select("id")
@@ -624,7 +655,11 @@ export async function POST(req: Request) {
         const resolvedSeasonId = comp.season_name ? (seasonIdByName.get(comp.season_name) ?? null) : null;
         const patch: Record<string, unknown> = {};
         if (resolvedSeasonId && competition.group_season_id === null) patch.group_season_id = resolvedSeasonId;
-        if (comp.template_id && !competition.competition_event_template_id) patch.competition_event_template_id = comp.template_id;
+        if (comp.template_id) {
+          const td = templateDefaults.get(comp.template_id);
+          if (td?.competition_id && !(competition as any).competition_id) patch.competition_id = td.competition_id;
+          if (td?.competition_event_template_id && !competition.competition_event_template_id) patch.competition_event_template_id = td.competition_event_template_id;
+        }
         const existingRules = (competition.handicap_rules ?? {}) as Record<string, any>;
         if (existingRules.allowance_pct == null) {
           patch.handicap_rules = {

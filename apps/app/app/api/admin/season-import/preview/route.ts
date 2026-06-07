@@ -155,16 +155,32 @@ export async function POST(req: Request) {
     const referencedTemplateIds = Array.from(new Set(parsed.competitions.map(c => c.template_id).filter(Boolean)));
     let validTemplateIds = new Set<string>();
     if (referencedTemplateIds.length) {
-      // competition_event_templates are group-scoped only via their parent competitions row
-      const { data: groupComps2 } = await admin.from("competitions").select("id").eq("group_id", groupId);
-      const groupCompIds = (groupComps2 ?? []).map((c: any) => c.id);
-      if (groupCompIds.length) {
-        const { data: tmplRows } = await admin
-          .from("competition_event_templates")
+      // template_id may be "comp_<uuid>" (series) or plain uuid (event template slot)
+      const compSeriesIds = referencedTemplateIds.filter(id => id.startsWith("comp_")).map(id => id.slice(5));
+      const eventTmplIds  = referencedTemplateIds.filter(id => !id.startsWith("comp_"));
+
+      // Validate series IDs belong to this group
+      if (compSeriesIds.length) {
+        const { data: seriesRows } = await admin
+          .from("competitions")
           .select("id")
-          .in("id", referencedTemplateIds)
-          .in("competition_id", groupCompIds);
-        validTemplateIds = new Set((tmplRows ?? []).map((t: any) => t.id));
+          .eq("group_id", groupId)
+          .in("id", compSeriesIds);
+        for (const r of seriesRows ?? []) validTemplateIds.add(`comp_${(r as any).id}`);
+      }
+
+      // Validate event template IDs belong to this group's series
+      if (eventTmplIds.length) {
+        const { data: groupComps2 } = await admin.from("competitions").select("id").eq("group_id", groupId);
+        const groupCompIds = (groupComps2 ?? []).map((c: any) => c.id);
+        if (groupCompIds.length) {
+          const { data: tmplRows } = await admin
+            .from("competition_event_templates")
+            .select("id")
+            .in("id", eventTmplIds)
+            .in("competition_id", groupCompIds);
+          for (const t of tmplRows ?? []) validTemplateIds.add((t as any).id);
+        }
       }
     }
     for (const comp of parsed.competitions) {
