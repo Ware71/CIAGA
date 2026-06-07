@@ -1,21 +1,12 @@
--- Extend ciaga_compute_event_leaderboard to support ciaga_formula and
--- custom_formula points models.
+-- Fix: ciaga_compute_event_leaderboard was subtracting handicap strokes
+-- for GROSS scoring competitions, making net_score != gross_score and
+-- producing wrong to_par values and rankings.
 --
--- Both models use the same formula structure:
---   Points = ROUND(
---     base
---     + round_factor × scale × ((F−P)/(F−1))^compression × (F/6)^field_sensitivity
---     + { win_bonus_scale × (F/6)^field_sensitivity  if P = 1 }
---   )
--- where:
---   F = field size (points_config.num_participants override, or count of finishers)
---   P = finishing position (1 = best)
---   round_factor = 1 + round_coefficient × (min(R,3) − 1)
---   R = events.num_rounds (already fetched as v_num_rounds)
+-- For v_scoring_model = 'gross', handicap deduction is now 0 so that:
+--   net_score  = gross_score          (ranking by net_score ASC is correct)
+--   to_par     = gross_score - par    (correct gross to-par)
 --
--- CIAGA defaults: base=18, scale=32, compression=0.7,
---                 field_sensitivity=0.2, win_bonus_scale=5, round_coefficient=0.2
--- Custom formula: all defaults overridable via points_config jsonb.
+-- All other scoring models (net, match_result) are unchanged.
 
 CREATE OR REPLACE FUNCTION public.ciaga_compute_event_leaderboard(p_event_id uuid)
 RETURNS void
@@ -346,6 +337,8 @@ BEGIN
             END
         END                                                           AS gross_score,
 
+        -- net_score: for gross competitions, equals gross_score (no handicap deduction).
+        -- For net/match_result, deduct handicap as before.
         CASE
           WHEN v_scoring_model = 'stableford_points' THEN
             CASE
@@ -359,9 +352,11 @@ BEGIN
             CASE
               WHEN sub.profile_id IS NOT NULL OR live.profile_id IS NOT NULL
               THEN COALESCE(sub.submitted_gross, 0) + COALESCE(live.live_gross, 0)
-                   - COALESCE(sub.submitted_hcp, 0)
-                   - FLOOR(COALESCE(live.course_hcp, 0)
-                       * COALESCE(live.live_holes, 0) / 18.0)::integer
+                   - CASE WHEN v_scoring_model = 'gross' THEN 0
+                       ELSE COALESCE(sub.submitted_hcp, 0)
+                              + FLOOR(COALESCE(live.course_hcp, 0)
+                                  * COALESCE(live.live_holes, 0) / 18.0)::integer
+                     END
               ELSE NULL
             END
         END                                                           AS net_score,

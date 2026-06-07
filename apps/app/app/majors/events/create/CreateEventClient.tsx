@@ -360,7 +360,32 @@ const PODIUM_PREVIEW_POSITIONS = [
   },
 ] as const;
 
+function MiniPreviewTicker() {
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setIdx((i) => (i + 1) % PODIUM_PREVIEW_POSITIONS.length), 400);
+    return () => clearInterval(t);
+  }, []);
+  const row = PODIUM_PREVIEW_POSITIONS[idx];
+  return (
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={idx}
+        initial={{ opacity: 0, y: -3 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 3 }}
+        transition={{ duration: 0.2 }}
+        className="flex items-center gap-1.5 rounded-full border border-emerald-900/50 bg-[#0b3b21]/60 px-2.5 py-0.5 text-[9px]"
+      >
+        <span className="text-emerald-200/70">{row.name}</span>
+        <span className="font-bold text-[#f5e6b0]">- -</span>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
 function PodiumPreview() {
+  const [phase, setPhase] = useState<"tension" | "bubbles" | "popping">("tension");
   const [popped, setPopped] = useState<number[]>([]);
   const [growing, setGrowing] = useState<number | null>(null);
   const [replayKey, setReplayKey] = useState(0);
@@ -368,27 +393,64 @@ function PodiumPreview() {
   useEffect(() => {
     setPopped([]);
     setGrowing(null);
-    const order: number[] = Math.random() < 0.5 ? [2, 3, 1] : [3, 2, 1];
+    setPhase("tension");
     const timers: ReturnType<typeof setTimeout>[] = [];
 
-    let t = 600;
-    order.forEach((pos, i) => {
-      if (i > 0) t += pos === 1 ? 1400 : 600;
-      const captured = t;
-      timers.push(setTimeout(() => {
-        setGrowing(pos);
-        timers.push(setTimeout(() => { setPopped((p) => [...p, pos]); setGrowing(null); }, 520));
-      }, captured));
-    });
+    // Tension text for 800 ms
+    timers.push(setTimeout(() => {
+      setPhase("bubbles");
 
-    timers.push(setTimeout(() => setReplayKey((k) => k + 1), t + 2500));
+      // Bubbles visible for 800 ms then popping begins
+      timers.push(setTimeout(() => {
+        setPhase("popping");
+        const order: number[] = Math.random() < 0.5 ? [2, 3, 1] : [3, 2, 1];
+
+        let t = 0;
+        order.forEach((pos, i) => {
+          if (i > 0) t += pos === 1 ? 1400 : 600;
+          const captured = t;
+          timers.push(setTimeout(() => {
+            setGrowing(pos);
+            timers.push(setTimeout(() => { setPopped((p) => [...p, pos]); setGrowing(null); }, 520));
+          }, captured));
+        });
+
+        timers.push(setTimeout(() => setReplayKey((k) => k + 1), t + 2500));
+      }, 800));
+    }, 800));
+
     return () => timers.forEach(clearTimeout);
   }, [replayKey]);
 
   return (
     <div className="relative w-full" style={{ height: 200 }}>
-      {/* Floating bubbles */}
-      {PODIUM_PREVIEW_POSITIONS.map(({ pos, initials, bLeft, bTop, bSize, pulsePeak, pulseDur }) => {
+      {/* Tension text overlay */}
+      <AnimatePresence>
+        {phase === "tension" && (
+          <motion.div
+            key="tension"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="absolute inset-0 flex items-center justify-center z-20"
+          >
+            <p className="text-[#f5e6b0] text-[11px] font-bold tracking-widest uppercase">
+              The results are in…
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Mini name/score ticker */}
+      {(phase === "bubbles" || phase === "tension") && (
+        <div className="absolute top-0 left-0 right-0 flex justify-center pt-1 z-10">
+          <MiniPreviewTicker />
+        </div>
+      )}
+
+      {/* Floating bubbles — hidden during tension to keep focus on text */}
+      {phase !== "tension" && PODIUM_PREVIEW_POSITIONS.map(({ pos, initials, bLeft, bTop, bSize, pulsePeak, pulseDur }) => {
         const isPopped = popped.includes(pos);
         const isGrowing = growing === pos;
         if (isPopped && !isGrowing) return null;

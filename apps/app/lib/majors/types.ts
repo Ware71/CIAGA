@@ -403,7 +403,8 @@ export type EventFull = {
 
 export type EventWithGroup = EventFull & {
   group: Pick<MajorGroup, "id" | "name" | "type" | "ciaga_tag"> | null;
-  course: { id: string; name: string } | null;
+  course: { id: string; name: string; city: string | null; country: string | null } | null;
+  rounds?: { course_id: string | null; course: { city: string | null; country: string | null } | null }[] | null;
 };
 
 export type EventWithCompetition = EventWithGroup & {
@@ -467,10 +468,11 @@ export type FrozenLeaderboardEntry = {
   net_score: number | null;
   to_par?: number | null;
   format_points?: number | null;
+  points_earned?: number | null;
   holes_shown: number;
   actual_holes_completed?: number;
   is_live: boolean;
-  position: number;
+  position: number | null;
   profile?: {
     id: string;
     name: string | null;

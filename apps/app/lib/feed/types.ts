@@ -18,7 +18,8 @@ export type FeedItemType =
   | "match_result"
   | "hi_change"
   | "trend"
-  | "system_announcement";
+  | "system_announcement"
+  | "competition_round";
 
 export type FeedAudience = "followers" | "public" | "private" | "match_participants" | "custom_list";
 export type FeedVisibility = "visible" | "hidden" | "removed";
@@ -173,6 +174,22 @@ export type FeedPayloadByType = {
     yardage?: number | null;
 
     date?: string | null;
+  };
+
+  competition_round: {
+    event_id: string;
+    event_name: string;
+    round_id: string;
+    round_number: number;
+    total_rounds: number;
+    round_status: "live" | "completed";
+    group_id: string;
+    group_name: string;
+    group_privacy: "public" | "request" | "invite_only";
+    scheduled_date?: string | null;
+    course_name?: string | null;
+    live_players?: Array<{ profile_id: string; name: string; avatar_url?: string | null }> | null;
+    winner?: { profile_id: string; name: string; avatar_url?: string | null } | null;
   };
 
   // Keep the rest permissive for now (we’ll tighten later if needed)

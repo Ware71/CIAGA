@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 import type {
   EventWithGroup,
@@ -31,6 +31,11 @@ import { supabase } from "@/lib/supabaseClient";
 import { LeaderboardReveal } from "@/components/majors/LeaderboardReveal";
 
 const FEDEX_POINTS_SCALE = FEDEX_POINTS;
+
+function fmtPts(n: number | null | undefined): string {
+  if (n == null) return "—";
+  return String(Math.round(n));
+}
 
 function formatToPar(n: number): string {
   if (n === 0) return "E";
@@ -1004,6 +1009,111 @@ function FixtureCard({ fixture }: { fixture: MatchplayFixture & { home_entry?: a
   );
 }
 
+// ─── Mini Scorecard (player detail drawer) ──────────────────────────────
+
+function MiniScorecard({
+  snap,
+  loading,
+  profileId,
+}: {
+  snap: any;
+  loading: boolean;
+  profileId: string | null;
+}) {
+  if (loading) {
+    return <div className="text-center py-3 text-emerald-200/50 text-xs">Loading scorecard…</div>;
+  }
+  if (!snap) return null;
+
+  const participant = (snap.participants ?? []).find((p: any) => p.profile_id === profileId);
+  if (!participant) {
+    return <div className="text-center py-3 text-emerald-200/40 text-xs">No score data</div>;
+  }
+
+  const pid: string = participant.id;
+  const holes: Array<{ hole_number: number; par: number | null }> = (snap.holes ?? [])
+    .slice()
+    .sort((a: any, b: any) => a.hole_number - b.hole_number);
+
+  const scoreMap: Record<number, number | null> = {};
+  for (const s of snap.scores ?? []) {
+    if (s.participant_id === pid) scoreMap[s.hole_number] = s.strokes;
+  }
+
+  function badgeType(strokes: number | null, par: number | null) {
+    if (strokes == null || par == null) return null;
+    const d = strokes - par;
+    if (d <= -2) return "eagle";
+    if (d === -1) return "birdie";
+    if (d === 1) return "bogey";
+    if (d >= 2) return "double";
+    return null;
+  }
+
+  function ScoreCell({ hole }: { hole: { hole_number: number; par: number | null } }) {
+    const s = scoreMap[hole.hole_number];
+    const b = badgeType(s, hole.par);
+    const base = "flex items-center justify-center w-7 h-6 text-xs tabular-nums font-semibold";
+    const cls =
+      b === "eagle"
+        ? `${base} rounded-full bg-[#f5e6b0] text-[#042713]`
+        : b === "birdie"
+        ? `${base} rounded-full ring-1 ring-[#f5e6b0] text-emerald-50`
+        : b === "bogey"
+        ? `${base} ring-1 ring-white/50 text-emerald-50`
+        : b === "double"
+        ? `${base} bg-white/20 text-emerald-50`
+        : `${base} text-emerald-100/80`;
+    return <div className={cls}>{s ?? "—"}</div>;
+  }
+
+  const front = holes.filter((h) => h.hole_number <= 9);
+  const back = holes.filter((h) => h.hole_number >= 10);
+
+  function nineTotal(group: typeof front) {
+    const par = group.reduce((t, h) => t + (h.par ?? 0), 0);
+    const score = group.reduce((t, h) => t + (scoreMap[h.hole_number] ?? 0), 0);
+    return { par, score };
+  }
+
+  const frontTotals = nineTotal(front);
+  const backTotals = nineTotal(back);
+
+  function NineRow({
+    group,
+    label,
+    totals,
+  }: {
+    group: typeof front;
+    label: string;
+    totals: { par: number; score: number };
+  }) {
+    return (
+      <div className="flex gap-0.5 items-end">
+        {group.map((h) => (
+          <div key={h.hole_number} className="flex flex-col items-center gap-0.5 w-7">
+            <div className="text-[9px] text-emerald-200/30 leading-none">{h.hole_number}</div>
+            <div className="text-[9px] text-emerald-200/40 leading-none">{h.par ?? "—"}</div>
+            <ScoreCell hole={h} />
+          </div>
+        ))}
+        <div className="flex flex-col items-center gap-0.5 w-9 border-l border-emerald-900/40 ml-0.5 pl-1">
+          <div className="text-[9px] text-emerald-200/30 leading-none">{label}</div>
+          <div className="text-[9px] text-emerald-200/40 leading-none">{totals.par}</div>
+          <div className="text-xs font-bold text-[#f5e6b0] tabular-nums">{totals.score || "—"}</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto px-2 py-2 space-y-2 border-t border-emerald-900/30 mt-0.5">
+      {front.length > 0 && <NineRow group={front} label="OUT" totals={frontTotals} />}
+      {back.length > 0 && <NineRow group={back} label="IN" totals={backTotals} />}
+    </div>
+  );
+}
+
 // ─── Event Setup Sheet ──────────────────────────────────────────────────
 
 function EventSetupSheet({
@@ -1402,7 +1512,11 @@ function PositionBadge({ position }: { position: number | null }) {
 
 export default function EventDetailClient({ eventId }: { eventId: string }) {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>("overview");
+  const searchParams = useSearchParams();
+  const fromHome = searchParams.get("from") === "home";
+  const VALID_TABS: readonly Tab[] = ["overview", "leaderboard", "tee-times", "rules", "fixtures", "bracket", "league-table", "winnings", "finances"];
+  const tabParam = searchParams.get("tab") as Tab | null;
+  const [tab, setTab] = useState<Tab>(tabParam && VALID_TABS.includes(tabParam) ? tabParam : "overview");
   const [event, setCompetition] = useState<EventWithGroup | null>(null);
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -1447,10 +1561,21 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
   } | null>(null);
   const [showReveal, setShowReveal] = useState(false);
   const [revealLoading, setRevealLoading] = useState(false);
+  const [revealWarning, setRevealWarning] = useState<{
+    incomplete_rounds: Array<{
+      round_name: string;
+      tee_time: string;
+      players: Array<{ name: string; holes_completed: number; rounds_submitted: number }>;
+    }>;
+  } | null>(null);
   const [lbView, setLbView] = useState<"score" | "gross">("score");
   const [detailPlayer, setDetailPlayer] = useState<any | null>(null);
   const [playerRounds, setPlayerRounds] = useState<any[] | null>(null);
   const [playerRoundsLoading, setPlayerRoundsLoading] = useState(false);
+  const [playerEntry, setPlayerEntry] = useState<any | null>(null);
+  const [scorecardRoundId, setScorecardRoundId] = useState<string | null>(null);
+  const [scorecardSnap, setScorecardSnap] = useState<any | null>(null);
+  const [scorecardLoading, setScorecardLoading] = useState(false);
 
   // Finances tab state
   const [eventCharges, setEventCharges] = useState<EventCharge[]>([]);
@@ -1480,6 +1605,21 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
   const [expandedPotId, setExpandedPotId] = useState<string | null>(null);
   const [potActionLoading, setPotActionLoading] = useState<string | null>(null);
   const [proposedDistribution, setProposedDistribution] = useState<{ potId: string; total_pot: number; proposed: Array<{ profile_id: string; profile: { name: string | null } | null; position: number | null; amount: number | null; note: string }> } | null>(null);
+  const [editPotId, setEditPotId] = useState<string | null>(null);
+  const [editPotForm, setEditPotForm] = useState<{
+    name: string;
+    description: string;
+    distribution_type: PrizePotDistributionType | "winner_takes_all";
+    entry_fee_amount: string;
+    entry_fee_notes: string;
+    prize_table: PrizeTableEntry[];
+    metric_type: string;
+    metric_description: string;
+    is_monetary: boolean;
+    prize_description: string;
+    is_mandatory: boolean;
+  } | null>(null);
+  const [savingPot, setSavingPot] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -1643,7 +1783,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
     refreshFinances();
   }, [tab, financesLoaded]);
 
-  async function handleReveal() {
+  async function handleReveal(force = false) {
     setRevealLoading(true);
     try {
       const session = await getViewerSession();
@@ -1654,9 +1794,15 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.accessToken}`,
         },
-        body: JSON.stringify({ action: "reveal" }),
+        body: JSON.stringify({ action: "reveal", force }),
       });
+      const json = await res.json();
+      if (res.ok && json.warning) {
+        setRevealWarning({ incomplete_rounds: json.incomplete_rounds });
+        return;
+      }
       if (res.ok) {
+        setRevealWarning(null);
         setLeaderboardFreeze((prev) => prev ? { ...prev, freeze_state: "revealed" } : prev);
         setShowReveal(true);
       }
@@ -1969,7 +2115,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
         </div>
 
         {/* Date / course */}
-        {(event.event_date || event.course) && (
+        {(event.event_date || event.course || eventRounds.length > 0) && (
           <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 space-y-1">
             {event.event_date && (
               <div className="flex items-center gap-2 text-[12px] text-emerald-100/70">
@@ -1977,12 +2123,36 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                 {new Date(event.event_date).toLocaleDateString([], { weekday: "short", year: "numeric", month: "long", day: "numeric" })}
               </div>
             )}
-            {event.course && (
+            {eventRounds.length > 0 ? (
+              <div className="space-y-0.5">
+                {eventRounds.map((r) => (
+                  <div key={r.id} className="flex items-start gap-2 text-[12px] text-emerald-100/70">
+                    <span className="text-emerald-200/40 shrink-0">⛳</span>
+                    <div className="min-w-0">
+                      <div>
+                        <span className="text-emerald-200/50 text-[11px] mr-1">{r.name}:</span>
+                        <span>{r.course?.name ?? "TBC"}</span>
+                      </div>
+                      {(r.tee_male?.name || r.tee_female?.name) && (
+                        <div className="text-emerald-200/40 text-[11px] ml-3 space-y-0.5">
+                          {r.tee_male?.name && (
+                            <div><span className="text-emerald-200/30">Men's tee: </span>{r.tee_male.name}</div>
+                          )}
+                          {r.tee_female?.name && (
+                            <div><span className="text-emerald-200/30">Women's tee: </span>{r.tee_female.name}</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : event.course ? (
               <div className="flex items-center gap-2 text-[12px] text-emerald-100/70">
                 <span className="text-emerald-200/40">⛳</span>
                 {event.course.name}
               </div>
-            )}
+            ) : null}
           </div>
         )}
 
@@ -2306,7 +2476,11 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
               </div>
             )}
             {/* Withdraw */}
-            {event.majors_status !== "live" && event.majors_status !== "completed" && (
+            {event.majors_status !== "live" &&
+             event.majors_status !== "completed" &&
+             myTeeTime?.round?.status !== "live" &&
+             myTeeTime?.round?.status !== "starting" &&
+             myTeeTime?.round?.status !== "finished" && (
               (event as any).allow_self_withdrawal !== false ? (
                 <button type="button" onClick={() => setShowWithdrawConfirm(true)}
                   className="w-full py-2 rounded-full border border-red-900/50 text-sm text-red-400/70 hover:text-red-400 transition-colors">
@@ -2333,7 +2507,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
         const completedRounds = Math.floor(holesShown / holesPerRound);
         const holesInRound = holesShown % holesPerRound;
 
-        const isFrozenRow = isFrozen && (
+        const isFrozenRow = isFrozen && !row.is_live && (
           leaderboardFreeze?.freeze_scope !== "top_x" ||
           (row.position ?? 999) <= (leaderboardFreeze?.freeze_top_x ?? Infinity)
         );
@@ -2362,15 +2536,32 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
       }
       const rankedIds = new Set(leaderboard.map((r) => r.profile_id));
       const unranked = participants.filter((p) => !rankedIds.has(p.profile_id));
-      const showPts = event?.points_model && event.points_model !== "none";
+      const showPts = event?.points_model && event.points_model !== "none"
+        && event.standings_contribution !== "event_only";
       const displayRows = lbView === "gross"
         ? [...leaderboard].sort((a, b) => {
-            if (a.gross_score == null && b.gross_score == null) return 0;
-            if (a.gross_score == null) return 1;
-            if (b.gross_score == null) return -1;
-            return a.gross_score - b.gross_score;
+            const aToPar = (a.gross_score ?? Infinity) - (a.course_par ?? 0);
+            const bToPar = (b.gross_score ?? Infinity) - (b.course_par ?? 0);
+            return aToPar - bToPar;
           })
         : leaderboard;
+
+      const handleRoundCardClick = async (roundId: string) => {
+        if (scorecardRoundId === roundId) { setScorecardRoundId(null); return; }
+        setScorecardRoundId(roundId);
+        setScorecardSnap(null);
+        setScorecardLoading(true);
+        try {
+          const session = await getViewerSession();
+          const res = await fetch(`/api/rounds/${roundId}/snapshot`, {
+            headers: { Authorization: `Bearer ${session?.accessToken}` },
+          });
+          if (res.ok) setScorecardSnap(await res.json());
+        } finally {
+          setScorecardLoading(false);
+        }
+      };
+
       return (
         <>
           {leaderboardFreeze?.freeze_state === "frozen" && (
@@ -2391,7 +2582,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
           {isAdminOrOwner && leaderboardFreeze?.freeze_state !== "revealed" && (
             <button
               type="button"
-              onClick={handleReveal}
+              onClick={() => handleReveal()}
               disabled={revealLoading}
               className={`w-full py-2 mb-1.5 rounded-full text-xs transition-colors disabled:opacity-30 ${
                 leaderboardFreeze?.freeze_state === "frozen"
@@ -2440,22 +2631,27 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
               ? (row.points_earned ?? getPointsForPosition(row.position ?? null, event.points_model, event.points_table as Record<string, unknown>, event.points_config, event.num_rounds))
               : null;
             const thru = getThruLabel(row);
-            const isFrozenRow = isFrozen && (
+            const isFrozenRow = isFrozen && !row.is_live && (
               leaderboardFreeze?.freeze_scope !== "top_x" ||
               (row.position ?? 999) <= (leaderboardFreeze?.freeze_top_x ?? Infinity)
             );
-            // Compute to-par for net and gross views
             const netToPar: number | null = row.to_par ?? null;
             const grossToPar: number | null =
               row.gross_score != null && row.course_par != null
                 ? row.gross_score - row.course_par
                 : null;
-            const mainToPar = lbView === "gross" ? grossToPar : netToPar;
+            // For stableford By Score: show format_points as primary, net-equivalent to-par as secondary
+            const isStablefordScore = scoringModel === "stableford_points" && lbView === "score";
+            const mainToPar = isStablefordScore ? null : (lbView === "gross" || scoringModel === "gross") ? grossToPar : netToPar;
             const mainTotal = lbView === "gross" ? row.gross_score : displayScore(row);
-            const mainScoreText = mainToPar != null
-              ? formatToPar(mainToPar)
-              : mainTotal != null ? String(mainTotal) : "—";
-            const bracketText = mainToPar != null && mainTotal != null ? `(${mainTotal})` : null;
+            const mainScoreText = isStablefordScore
+              ? (row.format_points != null ? `${row.format_points} pts` : "—")
+              : mainToPar != null
+                ? formatToPar(mainToPar)
+                : mainTotal != null ? String(mainTotal) : "—";
+            const bracketText = isStablefordScore
+              ? (netToPar != null ? formatToPar(netToPar) : null)
+              : mainToPar != null && mainTotal != null ? `(${mainTotal})` : null;
             const subLabel = (() => {
               const label = lbView === "gross" ? "Gross" : scoreLabel;
               return thru ? `${thru} · ${label}` : label;
@@ -2477,13 +2673,13 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                 {showPts && (
                   <div className="text-right shrink-0 mr-1">
                     <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider leading-none">Pts</div>
-                    <div className="text-xs font-bold text-emerald-300">{pts ?? "—"}</div>
+                    <div className="text-xs font-bold text-emerald-300">{fmtPts(pts)}</div>
                   </div>
                 )}
                 <div className="text-right shrink-0">
                   <div className="text-xs font-extrabold text-[#f5e6b0]">{mainScoreText}</div>
                   {bracketText ? (
-                    <div className="text-[10px] text-emerald-100/50">{bracketText} · {subLabel}</div>
+                    <div className="text-[10px] text-emerald-100/50">{subLabel} {bracketText}</div>
                   ) : (
                     <div className="text-[10px] text-emerald-100/50">{subLabel}</div>
                   )}
@@ -2505,6 +2701,9 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
             const handleRowClick = async () => {
               setDetailPlayer(row);
               setPlayerRounds(null);
+              setPlayerEntry(null);
+              setScorecardRoundId(null);
+              setScorecardSnap(null);
               setPlayerRoundsLoading(true);
               try {
                 const session = await getViewerSession();
@@ -2514,10 +2713,12 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                 );
                 const j = await res.json();
                 setPlayerRounds(j.rounds ?? []);
+                setPlayerEntry(j.entry ?? null);
               } finally {
                 setPlayerRoundsLoading(false);
               }
             };
+
             return (
               <button
                 key={row.profile_id ?? row.id}
@@ -2561,6 +2762,56 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
             </>
           )}
         </div>
+        {/* Incomplete rounds warning sheet */}
+        {revealWarning && (
+          <div className="fixed inset-0 z-50 flex items-end bg-black/60" onClick={() => setRevealWarning(null)}>
+            <div
+              className="w-full max-w-sm mx-auto rounded-t-3xl bg-[#071f13] border-t border-emerald-900/70 px-4 pt-5 pb-[env(safe-area-inset-bottom)] space-y-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start gap-3">
+                <span className="text-amber-400 text-lg mt-0.5">⚠️</span>
+                <div>
+                  <p className="text-sm font-semibold text-amber-300">Some rounds aren&apos;t finished</p>
+                  <p className="text-xs text-emerald-200/60 mt-0.5">These players are still on the course. You can wait for them or mark all rounds complete and reveal now.</p>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {revealWarning.incomplete_rounds.map((round, ri) => (
+                  <div key={ri} className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5">
+                    <p className="text-[11px] font-semibold text-emerald-300/80 mb-1.5">{round.round_name}</p>
+                    {round.players.map((p, pi) => (
+                      <div key={pi} className="flex items-center justify-between py-0.5">
+                        <span className="text-xs text-emerald-100">{p.name}</span>
+                        <span className="text-[11px] text-emerald-200/50">
+                          {p.rounds_submitted > 0 ? "Submitted" : `${p.holes_completed}/18 holes`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setRevealWarning(null)}
+                  className="flex-1 py-2.5 rounded-full border border-emerald-900/50 text-xs text-emerald-200/60 hover:text-emerald-200/90 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleReveal(true)}
+                  disabled={revealLoading}
+                  className="flex-1 py-2.5 rounded-full border border-amber-700/50 bg-amber-900/20 text-xs text-amber-300 hover:bg-amber-900/40 transition-colors disabled:opacity-40"
+                >
+                  {revealLoading ? "…" : "Mark complete & reveal"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {showReveal && (
           <LeaderboardReveal
             rows={leaderboard}
@@ -2614,15 +2865,44 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                   </div>
                   {playerRounds.map((r: any, i: number) => {
                     const label = r.event_round?.name ?? `R${r.event_round?.round_number ?? i + 1}`;
+                    const isOpen = scorecardRoundId === r.round_id;
                     return (
-                      <div key={r.event_round_id ?? i} className="grid grid-cols-[1fr_auto_auto] gap-2 items-center rounded-xl border border-emerald-900/40 bg-[#0b3b21]/60 px-3 py-2">
-                        <div className="text-sm font-semibold text-emerald-100 truncate">{label}</div>
-                        <div className="text-sm font-bold tabular-nums text-[#f5e6b0] text-right w-12">
-                          {r.gross_score != null ? r.gross_score : "—"}
-                        </div>
-                        <div className="text-sm font-bold tabular-nums text-emerald-300 text-right w-12">
-                          {r.net_score_snapshot != null ? r.net_score_snapshot : "—"}
-                        </div>
+                      <div key={r.event_round_id ?? i}>
+                        <button
+                          type="button"
+                          onClick={() => r.round_id && handleRoundCardClick(r.round_id)}
+                          className="grid grid-cols-[1fr_auto_auto] gap-2 items-center w-full rounded-xl border border-emerald-900/40 bg-[#0b3b21]/60 px-3 py-2 text-left hover:brightness-110 active:scale-[0.99] transition-all"
+                        >
+                          <div>
+                            <div className="text-sm font-semibold text-emerald-100 truncate">{label}</div>
+                            {(() => {
+                              const hi = r.handicap_index;
+                              const ch = r.course_handicap;
+                              const ph = r.playing_handicap;
+                              if (hi == null && ch == null && ph == null) return null;
+                              return (
+                                <div className="text-[10px] text-emerald-200/40 mt-0.5 space-x-2">
+                                  {hi != null && <span>HI {hi}</span>}
+                                  {ch != null && <span>CH {ch}</span>}
+                                  {ph != null && <span>PH {ph}</span>}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                          <div className="text-sm font-bold tabular-nums text-[#f5e6b0] text-right w-12">
+                            {r.gross_score != null ? r.gross_score : "—"}
+                          </div>
+                          <div className="text-sm font-bold tabular-nums text-emerald-300 text-right w-12">
+                            {r.net_score_snapshot != null ? r.net_score_snapshot : "—"}
+                          </div>
+                        </button>
+                        {isOpen && (
+                          <MiniScorecard
+                            snap={scorecardSnap}
+                            loading={scorecardLoading}
+                            profileId={detailPlayer?.profile_id ?? null}
+                          />
+                        )}
                       </div>
                     );
                   })}
@@ -2796,13 +3076,17 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                           <span className={`text-[10px] capitalize ${statusColour}`}>{cr.status}</span>
                         </div>
                         {(cr.course?.name || cr.tee_male?.name || cr.tee_female?.name) && (
-                          <div className="text-[10px] text-emerald-200/50 mt-0.5 flex items-center gap-1.5">
+                          <div className="text-[10px] text-emerald-200/50 mt-0.5">
                             {cr.course?.name && <span>{cr.course.name}</span>}
-                            {cr.tee_male?.name && (
-                              <span className="text-emerald-200/40">· ♂ {cr.tee_male.name}</span>
-                            )}
-                            {cr.tee_female?.name && (
-                              <span className="text-emerald-200/40">· ♀ {cr.tee_female.name}</span>
+                            {(cr.tee_male?.name || cr.tee_female?.name) && (
+                              <div className="space-y-0.5 mt-0.5">
+                                {cr.tee_male?.name && (
+                                  <div><span className="text-emerald-200/30">Men's tee: </span>{cr.tee_male.name}</div>
+                                )}
+                                {cr.tee_female?.name && (
+                                  <div><span className="text-emerald-200/30">Women's tee: </span>{cr.tee_female.name}</div>
+                                )}
+                              </div>
                             )}
                           </div>
                         )}
@@ -3133,6 +3417,68 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
           await refreshFinances();
         } finally {
           setPotActionLoading(null);
+        }
+      };
+
+      const handleEditPotClick = (pot: PrizePotWithDetails) => {
+        const isWinnerTakesAll =
+          pot.distribution_type === "position_based" &&
+          pot.prize_table?.length === 1 &&
+          pot.prize_table[0].position === 1 &&
+          pot.prize_table[0].pct === 100;
+        setEditPotForm({
+          name: pot.name,
+          description: pot.description ?? "",
+          distribution_type: isWinnerTakesAll ? "winner_takes_all" : pot.distribution_type,
+          entry_fee_amount: pot.entry_fee_amount != null ? String(pot.entry_fee_amount) : "",
+          entry_fee_notes: pot.entry_fee_notes ?? "",
+          prize_table: (!isWinnerTakesAll && pot.prize_table) ? pot.prize_table : [],
+          metric_type: pot.metric_type ?? "",
+          metric_description: pot.metric_description ?? "",
+          is_monetary: pot.is_monetary,
+          prize_description: pot.prize_description ?? "",
+          is_mandatory: pot.is_mandatory,
+        });
+        setEditPotId(pot.id);
+        setPotError(null);
+      };
+
+      const handleSavePot = async () => {
+        if (!editPotForm || !editPotId || !editPotForm.name.trim()) return;
+        setSavingPot(true);
+        setPotError(null);
+        try {
+          const session = await getViewerSession();
+          if (!session) return;
+          const res = await fetch(`/api/majors/prize-pots/${editPotId}`, {
+            method: "PATCH",
+            headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: editPotForm.name.trim(),
+              description: editPotForm.description.trim() || null,
+              distribution_type: editPotForm.distribution_type === "winner_takes_all" ? "position_based" : editPotForm.distribution_type,
+              entry_fee_amount: editPotForm.entry_fee_amount ? parseFloat(editPotForm.entry_fee_amount) : null,
+              entry_fee_notes: editPotForm.entry_fee_notes.trim() || null,
+              prize_table: editPotForm.distribution_type === "winner_takes_all"
+                ? [{ position: 1, pct: 100 }]
+                : (editPotForm.distribution_type === "position_based" && editPotForm.prize_table.length > 0 ? editPotForm.prize_table : null),
+              metric_type: editPotForm.metric_type || null,
+              metric_description: editPotForm.metric_description.trim() || null,
+              is_monetary: editPotForm.is_monetary,
+              prize_description: editPotForm.prize_description.trim() || null,
+              is_mandatory: editPotForm.is_mandatory,
+            }),
+          });
+          if (!res.ok) {
+            const j = await res.json();
+            setPotError(j.error ?? "Failed to save prize pot");
+            return;
+          }
+          setEditPotId(null);
+          setEditPotForm(null);
+          await refreshFinances();
+        } finally {
+          setSavingPot(false);
         }
       };
 
@@ -3730,6 +4076,14 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                           )}
                           <button
                             type="button"
+                            onClick={() => handleEditPotClick(pot)}
+                            disabled={editPotId === pot.id}
+                            className="text-[10px] px-2.5 py-1 rounded-full border border-emerald-700/50 text-emerald-200/70 hover:bg-emerald-900/30 disabled:opacity-50"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => handleDeletePot(pot.id)}
                             disabled={actionPrefix === "delete"}
                             className="text-[10px] px-2 py-1 text-red-400/50 hover:text-red-400 disabled:opacity-50"
@@ -3750,6 +4104,182 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                         </button>
                       )}
                     </div>
+
+                    {/* Inline edit form */}
+                    {editPotId === pot.id && editPotForm && (
+                      <div className="border-t border-emerald-900/50 px-3 py-3 space-y-2">
+                        <div className="text-[11px] font-semibold text-emerald-200">Edit Prize Pot</div>
+
+                        {/* Payment warning */}
+                        {pot.entries.length > 0 && (pot.entry_fee_amount ?? 0) > 0 && (
+                          <div className="rounded-xl border border-amber-800/40 bg-amber-900/20 px-3 py-2 text-[11px] text-amber-300/80">
+                            ⚠ {pot.entries.length} player{pot.entries.length !== 1 ? "s have" : " has"} already contributed to this pot. Changing the entry fee or payout structure will not retroactively affect existing contributions.
+                          </div>
+                        )}
+
+                        <input
+                          type="text"
+                          placeholder="Name (e.g. Two's Club, Season FedEx Pot)"
+                          value={editPotForm.name}
+                          onChange={(e) => setEditPotForm((f) => f && { ...f, name: e.target.value })}
+                          className={inputCls}
+                        />
+                        <select
+                          value={editPotForm.distribution_type}
+                          onChange={(e) => setEditPotForm((f) => f && { ...f, distribution_type: e.target.value as PrizePotDistributionType | "winner_takes_all" })}
+                          className={inputCls}
+                        >
+                          <option value="winner_takes_all">Winner Takes All</option>
+                          <option value="position_based">By finishing position (custom splits)</option>
+                          <option value="metric_weighted">Proportional to metric (e.g. number of twos)</option>
+                          <option value="metric_equal">Equal split among qualifiers (e.g. anyone with a two)</option>
+                          <option value="equal_split">Equal split (all enrolled players)</option>
+                          <option value="non_monetary">Non-cash prize (trophy, voucher, etc.)</option>
+                          <option value="entry_only">Entry collected, no payout</option>
+                        </select>
+
+                        {editPotForm.distribution_type === "winner_takes_all" && (
+                          <div className="rounded-xl border border-emerald-900/40 bg-emerald-950/20 px-3 py-2">
+                            <div className="text-[11px] text-emerald-200/60">100% of the pot goes to 1st place.</div>
+                          </div>
+                        )}
+
+                        {editPotForm.distribution_type === "position_based" && (
+                          <div className="rounded-xl border border-emerald-900/40 bg-emerald-950/20 px-3 py-2 space-y-2">
+                            <div className="text-[10px] uppercase text-emerald-200/50">Payout Percentages</div>
+                            {editPotForm.prize_table.map((row, i) => (
+                              <div key={i} className="flex items-center gap-2">
+                                <span className="text-[11px] text-emerald-200/60 w-8 shrink-0">
+                                  {i === 0 ? "1st" : i === 1 ? "2nd" : i === 2 ? "3rd" : `${i + 1}th`}
+                                </span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  step="1"
+                                  value={row.pct}
+                                  onChange={(e) => {
+                                    const updated = editPotForm.prize_table.map((r, j) =>
+                                      j === i ? { ...r, pct: parseFloat(e.target.value) || 0 } : r
+                                    );
+                                    setEditPotForm((f) => f && { ...f, prize_table: updated });
+                                  }}
+                                  className="w-20 rounded-lg border border-emerald-900/60 bg-[#0b3b21]/60 px-2 py-1 text-sm text-emerald-50 text-center focus:outline-none"
+                                />
+                                <span className="text-[11px] text-emerald-200/40">%</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditPotForm((f) => f && { ...f, prize_table: f.prize_table.filter((_, j) => j !== i) })}
+                                  className="ml-auto text-emerald-200/30 hover:text-red-400 text-sm"
+                                >✕</button>
+                              </div>
+                            ))}
+                            {(() => {
+                              const total = editPotForm.prize_table.reduce((s, r) => s + r.pct, 0);
+                              const remainder = 100 - total;
+                              return (
+                                <div className={`text-[10px] font-semibold ${total <= 100 ? "text-emerald-400" : "text-red-400"}`}>
+                                  Paying out: {total}%{remainder > 0 ? ` · ${remainder}% retained by group` : ""}
+                                  {total > 100 && " (over 100%)"}
+                                </div>
+                              );
+                            })()}
+                            <button
+                              type="button"
+                              onClick={() => setEditPotForm((f) => f && { ...f, prize_table: [...f.prize_table, { position: f.prize_table.length + 1, pct: 0 }] })}
+                              className="text-[11px] text-emerald-300/60 hover:text-emerald-300"
+                            >
+                              + Add position
+                            </button>
+                          </div>
+                        )}
+
+                        {(editPotForm.distribution_type === "metric_weighted" || editPotForm.distribution_type === "metric_equal") && (
+                          <select
+                            value={editPotForm.metric_type}
+                            onChange={(e) => setEditPotForm((f) => f && { ...f, metric_type: e.target.value })}
+                            className={inputCls}
+                          >
+                            <option value="">Select metric type…</option>
+                            <option value="twos">Two&apos;s Club (auto-calculated from scores)</option>
+                            <option value="nearest_pin">Nearest Pin (manually recorded)</option>
+                            <option value="longest_drive">Longest Drive (manually recorded)</option>
+                            <option value="season_points">Season Points</option>
+                            <option value="custom">Custom (manually recorded)</option>
+                          </select>
+                        )}
+
+                        {editPotForm.distribution_type === "non_monetary" && (
+                          <input
+                            type="text"
+                            placeholder="Prize description (e.g. Callaway Driver, £50 Voucher)"
+                            value={editPotForm.prize_description}
+                            onChange={(e) => setEditPotForm((f) => f && { ...f, prize_description: e.target.value, is_monetary: false })}
+                            className={inputCls}
+                          />
+                        )}
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            type="number"
+                            placeholder="Entry fee per player (£, optional)"
+                            value={editPotForm.entry_fee_amount}
+                            onChange={(e) => setEditPotForm((f) => f && { ...f, entry_fee_amount: e.target.value })}
+                            className={inputCls}
+                            min="0"
+                            step="0.01"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Entry fee notes (optional)"
+                            value={editPotForm.entry_fee_notes}
+                            onChange={(e) => setEditPotForm((f) => f && { ...f, entry_fee_notes: e.target.value })}
+                            className={inputCls}
+                          />
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="Description (optional)"
+                          value={editPotForm.description}
+                          onChange={(e) => setEditPotForm((f) => f && { ...f, description: e.target.value })}
+                          className={inputCls}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setEditPotForm((f) => f && { ...f, is_mandatory: !f.is_mandatory })}
+                          className="flex items-center justify-between w-full py-2 px-2 rounded-lg border border-emerald-900/40 hover:bg-emerald-900/20"
+                        >
+                          <div className="text-left">
+                            <div className="text-[11px] font-semibold text-emerald-100">Mandatory</div>
+                            <div className="text-[10px] text-emerald-200/40">Players are auto-enrolled when joining this event</div>
+                          </div>
+                          <div className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${editPotForm.is_mandatory ? "bg-emerald-600" : "bg-emerald-900/50"}`}>
+                            <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${editPotForm.is_mandatory ? "translate-x-5" : ""}`} />
+                          </div>
+                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => { setEditPotId(null); setEditPotForm(null); setPotError(null); }}
+                            className="flex-1 py-1.5 rounded-full border border-emerald-900/60 text-[11px] text-emerald-200/60"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSavePot}
+                            disabled={
+                              savingPot ||
+                              !editPotForm.name.trim() ||
+                              (editPotForm.distribution_type === "position_based" && editPotForm.prize_table.reduce((s, r) => s + r.pct, 0) > 100)
+                            }
+                            className="flex-1 py-1.5 rounded-full bg-emerald-700 text-[11px] font-semibold text-white disabled:opacity-50"
+                          >
+                            {savingPot ? "Saving…" : "Save Changes"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Proposed distribution banner */}
                     {proposedDistribution?.potId === pot.id && (
@@ -4089,7 +4619,17 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
     <div className="min-h-[100dvh] pb-[env(safe-area-inset-bottom)] max-w-sm mx-auto">
       {/* Header */}
       <div className="px-4 pt-8 flex items-center justify-between mb-3">
-        <button type="button" onClick={() => router.back()} className="text-[11px] text-emerald-100/70 hover:text-emerald-50">
+        <button
+          type="button"
+          onClick={() => {
+            if (fromHome && event?.group_id) {
+              router.replace(`/majors/groups/${event.group_id}`);
+            } else {
+              router.back();
+            }
+          }}
+          className="text-[11px] text-emerald-100/70 hover:text-emerald-50"
+        >
           ← Back
         </button>
         <div className="w-14" />

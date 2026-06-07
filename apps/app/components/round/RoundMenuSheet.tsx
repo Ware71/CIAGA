@@ -93,6 +93,7 @@ type CompetitionStandingEntry = {
   net_score: number | null;
   format_points?: number | null;
   to_par: number | null;
+  course_par: number | null;
   points_earned: number | null;
   position: number | null;
   thru: number;
@@ -212,6 +213,7 @@ export default function RoundMenuSheet(props: {
           gross_score: r.gross_score,
           net_score: r.net_score,
           to_par: r.to_par ?? null,
+          course_par: r.course_par ?? null,
           format_points: r.format_points ?? null,
           points_earned: r.points_earned ?? null,
           position: r.position ?? null,
@@ -416,13 +418,23 @@ export default function RoundMenuSheet(props: {
       .map((p) => {
         const summary = fd.summaries.find((s) => s.participantId === p.id);
         const thru = holesCompletedByParticipantId[p.id] ?? null;
+        const rawScore = summary?.total ?? "–";
+        const parThru = parThroughByParticipantId[p.id] ?? null;
+        // Compute to-par for stroke-play formats (lower is better, numeric score).
+        const computedToPar =
+          !fd?.higherIsBetter &&
+          typeof rawScore === "number" &&
+          rawScore > 0 &&
+          typeof parThru === "number"
+            ? rawScore - parThru
+            : null;
         return {
           participantId: p.id,
           profileId: (p as any).profile_id ?? undefined,
           name: getParticipantLabel(p),
           avatarUrl: getParticipantAvatar(p),
-          score: summary?.total ?? "–",
-          toPar: null,
+          score: rawScore,
+          toPar: computedToPar,
           thru: thru > 0 ? thru : null,
         };
       });
@@ -544,7 +556,7 @@ export default function RoundMenuSheet(props: {
                     const pts = showPts
                       ? (compEntry
                           ? (compEntry.points_earned ?? projectedPoints(compEntry.position, competitionPointsModel, competitionPointsTable))
-                          : projectedPoints(effectiveRank, competitionPointsModel, competitionPointsTable))
+                          : null)
                       : null;
                     const teamMembers = teamMembersByFirstId[r.participantId];
 
@@ -672,6 +684,14 @@ export default function RoundMenuSheet(props: {
                           <div className={`text-[10px] leading-none mt-0.5 ${isFrozenRow ? "text-cyan-300/70" : "text-emerald-100/55"}`}>{thruText}</div>
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
+                          {showPts && (
+                            <div className="text-right">
+                              <div className="text-[9px] text-emerald-200/50 uppercase tracking-wider leading-none">Pts</div>
+                              <div className="text-[11px] font-bold text-emerald-300 tabular-nums">
+                                {(s.points_earned ?? projectedPoints(s.position, competitionPointsModel, competitionPointsTable)) ?? "—"}
+                              </div>
+                            </div>
+                          )}
                           <div className="text-right">
                             {scoringModel === "stableford_points" ? (
                               <>
@@ -687,16 +707,24 @@ export default function RoundMenuSheet(props: {
                                   <div className="text-[9px] text-emerald-100/50">({s.gross_score} gross)</div>
                                 )}
                               </>
-                            ) : (
-                              <>
-                                <div className="text-[15px] font-extrabold tabular-nums text-[#f5e6b0]">
-                                  {s.to_par != null ? formatToPar(s.to_par) : (s.net_score ?? s.gross_score ?? "—")}
-                                </div>
-                                {s.to_par != null && s.gross_score != null && (
-                                  <div className="text-[9px] text-emerald-100/50">({s.gross_score} gross)</div>
-                                )}
-                              </>
-                            )}
+                            ) : (() => {
+                              const displayToPar = scoringModel === "gross"
+                                ? (s.gross_score != null && s.course_par != null
+                                    ? s.gross_score - s.course_par
+                                    : null)
+                                : s.to_par;
+                              const rawScore = scoringModel === "gross" ? s.gross_score : s.net_score;
+                              return (
+                                <>
+                                  <div className="text-[15px] font-extrabold tabular-nums text-[#f5e6b0]">
+                                    {displayToPar != null ? formatToPar(displayToPar) : (rawScore ?? s.gross_score ?? "—")}
+                                  </div>
+                                  {displayToPar != null && rawScore != null && (
+                                    <div className="text-[9px] text-emerald-100/50">({rawScore})</div>
+                                  )}
+                                </>
+                              );
+                            })()}
                           </div>
                         </div>
                       </div>

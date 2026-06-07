@@ -1,21 +1,6 @@
--- Extend ciaga_compute_event_leaderboard to support ciaga_formula and
--- custom_formula points models.
---
--- Both models use the same formula structure:
---   Points = ROUND(
---     base
---     + round_factor × scale × ((F−P)/(F−1))^compression × (F/6)^field_sensitivity
---     + { win_bonus_scale × (F/6)^field_sensitivity  if P = 1 }
---   )
--- where:
---   F = field size (points_config.num_participants override, or count of finishers)
---   P = finishing position (1 = best)
---   round_factor = 1 + round_coefficient × (min(R,3) − 1)
---   R = events.num_rounds (already fetched as v_num_rounds)
---
--- CIAGA defaults: base=18, scale=32, compression=0.7,
---                 field_sensitivity=0.2, win_bonus_scale=5, round_coefficient=0.2
--- Custom formula: all defaults overridable via points_config jsonb.
+-- Fix ciaga_compute_event_leaderboard: replace dropped season_id column reference
+-- with group_season_id, and replace removed ciaga_compute_season_standings() call
+-- with ciaga_compute_group_season_standings().
 
 CREATE OR REPLACE FUNCTION public.ciaga_compute_event_leaderboard(p_event_id uuid)
 RETURNS void

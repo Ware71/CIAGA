@@ -16,7 +16,7 @@ export async function GET(req: Request) {
 
     let query = supabaseAdmin
       .from("events")
-      .select("*, group:major_groups(id, name, ciaga_tag), course:courses(id, name)")
+      .select("*, group:major_groups(id, name, ciaga_tag), course:courses(id, name, city, country), rounds:event_rounds(course_id, course:courses(city, country))")
       .order("event_date", { ascending: true })
       .limit(limit);
 

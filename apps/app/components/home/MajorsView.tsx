@@ -12,6 +12,11 @@ import { eventStatusLabel } from "@/lib/majors/labels";
 
 type MenuItem = { id: string; label: string };
 
+function fmtPts(n: number | null | undefined): string {
+  if (n == null) return "—";
+  return String(Math.round(n));
+}
+
 function clamp(n: number, min: number, max: number) {
   return Math.min(max, Math.max(min, n));
 }
@@ -35,7 +40,7 @@ function CompetitionCard({ comp }: { comp: EventWithGroup }) {
   return (
     <button
       type="button"
-      onClick={() => router.push(`/majors/events/${comp.id}`)}
+      onClick={() => router.push(`/majors/events/${comp.id}?from=home`)}
       className="w-full text-left rounded-2xl border bg-[#0b3b21]/80 p-3.5 space-y-1.5 overflow-hidden relative"
       style={{
         borderColor: isLive ? "rgba(217,119,6,0.35)" : isCompleted ? "rgba(52,211,153,0.25)" : "rgba(6,78,59,0.7)",
@@ -469,7 +474,7 @@ function GroupStatRow({ stat }: { stat: MajorGroupSeasonStats }) {
     { label: "Rounds",   value: stat.rounds_played || "—" },
     { label: "Wins",     value: stat.wins || "—" },
     { label: "Earnings", value: fmt(stat.earnings) },
-    { label: "Points",   value: stat.season_points || "—" },
+    { label: "Points",   value: stat.season_points ? fmtPts(stat.season_points) : "—" },
   ];
   return (
     <div className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/60 p-3 space-y-2.5">

@@ -1,21 +1,21 @@
--- Extend ciaga_compute_event_leaderboard to support ciaga_formula and
--- custom_formula points models.
+-- Fix two remaining issues in ciaga_compute_event_leaderboard:
 --
--- Both models use the same formula structure:
---   Points = ROUND(
---     base
---     + round_factor × scale × ((F−P)/(F−1))^compression × (F/6)^field_sensitivity
---     + { win_bonus_scale × (F/6)^field_sensitivity  if P = 1 }
---   )
--- where:
---   F = field size (points_config.num_participants override, or count of finishers)
---   P = finishing position (1 = best)
---   round_factor = 1 + round_coefficient × (min(R,3) − 1)
---   R = events.num_rounds (already fetched as v_num_rounds)
+-- 1. LIVE PAR — proportional vs exact
+--    Before: ROUND(par_total * holes_played / holes_count)  (approximation)
+--    After:  SUM(rhs.par) for holes actually played          (exact)
+--    For courses where front ≠ back nine par (e.g. 38/34) this was causing
+--    the Competition tab to_par to diverge from the Group tab by 1-2 strokes.
+--    Falls back to proportional when tee snapshot is unavailable.
 --
--- CIAGA defaults: base=18, scale=32, compression=0.7,
---                 field_sensitivity=0.2, win_bonus_scale=5, round_coefficient=0.2
--- Custom formula: all defaults overridable via points_config jsonb.
+-- 2. LIVE HANDICAP FALLBACK — restored
+--    Before (20260607000001): COALESCE(live_hcp_strokes, 0)
+--      → gives 0 handicap when tee snapshot is unavailable
+--    After: COALESCE(live_hcp_strokes, proportional_fallback)
+--      → matches migration 009 safety behaviour
+--
+-- The live_hcp_lat lateral join now also computes live_par_exact (SUM of hole pars)
+-- and runs for all scoring models (the WHERE filter for non-stableford is removed;
+-- gross scoring ignores live_hcp_strokes via the CASE in net_score anyway).
 
 CREATE OR REPLACE FUNCTION public.ciaga_compute_event_leaderboard(p_event_id uuid)
 RETURNS void
@@ -31,7 +31,6 @@ DECLARE
   v_contribution      text;
   v_points_model      text;
   v_points_table      jsonb;
-  -- formula model variables
   v_points_config     jsonb;
   v_field_size        integer;
   v_base_pts          numeric;
@@ -62,8 +61,6 @@ BEGIN
   v_points_table := COALESCE(v_points_table, '{}'::jsonb);
   v_points_config := COALESCE(v_points_config, '{}'::jsonb);
 
-  -- Pre-compute formula variables so they are available as scalars in the
-  -- per-row CASE expression below.
   IF v_points_model IN ('ciaga_formula', 'custom_formula') THEN
     v_base_pts          := COALESCE((v_points_config->>'base')::numeric,              18);
     v_scale_pts         := COALESCE((v_points_config->>'scale')::numeric,             32);
@@ -73,7 +70,6 @@ BEGIN
     v_round_coeff       := COALESCE((v_points_config->>'round_coefficient')::numeric,  0.2);
     v_round_factor      := 1.0 + v_round_coeff * (LEAST(v_num_rounds, 3) - 1);
 
-    -- F: use stored override when present, else count actual finishers.
     IF (v_points_config->>'num_participants') IS NOT NULL THEN
       v_field_size := (v_points_config->>'num_participants')::integer;
     ELSE
@@ -253,6 +249,7 @@ BEGIN
           COALESCE(scores.total_strokes, 0)::integer                              AS live_gross,
           COALESCE(scores.hole_count, 0)::integer                                 AS live_holes,
           COALESCE(rp.playing_handicap_used, rp.course_handicap_used, 0)          AS course_hcp,
+          -- Proportional par: retained as fallback when tee snapshot unavailable
           CASE WHEN COALESCE(scores.hole_count, 0) > 0 AND rts.par_total IS NOT NULL
             THEN ROUND(
               rts.par_total::numeric
@@ -262,7 +259,11 @@ BEGIN
             ELSE NULL
           END                                                                       AS live_par,
           COALESCE(stab_pts_lat.pts, 0)::integer                                   AS live_stab_total,
-          COALESCE(stab_pts_lat.par_exact, 0)::integer                             AS live_par_exact
+          COALESCE(stab_pts_lat.par_exact, 0)::integer                             AS live_par_exact,
+          -- Per-hole handicap strokes for holes actually played (matches Group tab formula)
+          live_hcp_lat.hcp_strokes                                                  AS live_hcp_strokes,
+          -- Exact par for the holes played: fixes to_par for unequal front/back nines
+          live_hcp_lat.live_par_exact_holes                                         AS live_par_exact_sp
         FROM event_tee_times ctt
         JOIN rounds r
           ON r.event_tee_time_id = ctt.id
@@ -288,12 +289,17 @@ BEGIN
         CROSS JOIN LATERAL (
           VALUES (COALESCE(rp.playing_handicap_used, rp.course_handicap_used, 0))
         ) AS hv(hcp)
+        -- Use actual course hole count for base/rem so 9-hole courses allocate correctly
         CROSS JOIN LATERAL (
-          VALUES (FLOOR(hv.hcp::numeric / 18)::integer)
+          VALUES (COALESCE(rts.holes_count, 18))
+        ) AS hc(holes_count)
+        CROSS JOIN LATERAL (
+          VALUES (FLOOR(hv.hcp::numeric / hc.holes_count)::integer)
         ) AS hb(base)
         CROSS JOIN LATERAL (
-          VALUES (hv.hcp - hb.base * 18)
+          VALUES (hv.hcp::integer - hb.base * hc.holes_count)
         ) AS hr(rem)
+        -- Stableford per-hole points (no-op for non-stableford)
         LEFT JOIN LATERAL (
           SELECT
             COALESCE(SUM(GREATEST(0, 2 - (
@@ -317,6 +323,25 @@ BEGIN
            AND rhs.hole_number = ls.hole_number
           WHERE v_scoring_model = 'stableford_points'
         ) stab_pts_lat ON true
+        -- Per-hole handicap strokes + exact par for holes played (all scoring models).
+        -- hcp_strokes: ignored for gross (CASE in net_score gives 0) and stableford
+        --              (stab_pts_lat handles points; net_score uses different formula).
+        -- live_par_exact_holes: used for strokeplay/gross course_par instead of proportional.
+        LEFT JOIN LATERAL (
+          SELECT
+            SUM(hb.base + CASE WHEN rhs2.stroke_index <= hr.rem THEN 1 ELSE 0 END)::integer AS hcp_strokes,
+            SUM(rhs2.par)::integer AS live_par_exact_holes
+          FROM (
+            SELECT DISTINCT ON (rse.hole_number) rse.hole_number
+            FROM round_score_events rse
+            WHERE rse.round_id = r.id
+              AND rse.participant_id = rp.id
+            ORDER BY rse.hole_number, rse.created_at DESC
+          ) played_holes
+          JOIN round_hole_snapshots rhs2
+            ON rhs2.round_tee_snapshot_id = rts.id
+           AND rhs2.hole_number = played_holes.hole_number
+        ) live_hcp_lat ON true
         WHERE ctt.event_id = p_event_id
           AND rp.profile_id NOT IN (
             SELECT s2.profile_id
@@ -359,9 +384,15 @@ BEGIN
             CASE
               WHEN sub.profile_id IS NOT NULL OR live.profile_id IS NOT NULL
               THEN COALESCE(sub.submitted_gross, 0) + COALESCE(live.live_gross, 0)
-                   - COALESCE(sub.submitted_hcp, 0)
-                   - FLOOR(COALESCE(live.course_hcp, 0)
-                       * COALESCE(live.live_holes, 0) / 18.0)::integer
+                   - CASE WHEN v_scoring_model = 'gross' THEN 0
+                       ELSE COALESCE(sub.submitted_hcp, 0)
+                              -- Per-hole allocation; proportional fallback when tee snapshot unavailable
+                              + COALESCE(
+                                  live.live_hcp_strokes,
+                                  FLOOR(COALESCE(live.course_hcp, 0)
+                                      * COALESCE(live.live_holes, 0) / 18.0)::integer
+                                )
+                     END
               ELSE NULL
             END
         END                                                           AS net_score,
@@ -388,7 +419,9 @@ BEGIN
           ELSE
             CASE
               WHEN sub.profile_id IS NOT NULL OR live.profile_id IS NOT NULL
-              THEN COALESCE(sub.submitted_par, 0) + COALESCE(live.live_par, 0)
+              -- Exact hole-par when tee snapshot available; proportional fallback otherwise
+              THEN COALESCE(sub.submitted_par, 0)
+                   + COALESCE(live.live_par_exact_sp, live.live_par, 0)
               ELSE NULL
             END
         END                                                           AS course_par
@@ -404,12 +437,10 @@ BEGIN
     ) agg
   ) ranked;
 
-  -- Cascade to group standings
   IF v_group_id IS NOT NULL AND v_contribution IN ('season', 'both') THEN
     PERFORM ciaga_compute_group_standings(v_group_id);
   END IF;
 
-  -- Cascade to group season standings
   IF v_group_season_id IS NOT NULL AND v_contribution IN ('season', 'both') THEN
     PERFORM ciaga_compute_group_season_standings(v_group_season_id);
   END IF;

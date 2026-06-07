@@ -424,6 +424,7 @@ export function isSupportedFeedType(type: string): type is FeedItemType {
     type === "match_result" ||
     type === "hi_change" ||
     type === "trend" ||
-    type === "system_announcement"
+    type === "system_announcement" ||
+    type === "competition_round"
   );
 }

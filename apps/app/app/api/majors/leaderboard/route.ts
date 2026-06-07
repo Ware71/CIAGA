@@ -9,6 +9,7 @@ import {
   getEventPendingParticipants,
 } from "@/lib/majors/queries";
 import type { FrozenLeaderboardEntry } from "@/lib/majors/types";
+import { computeFormulaPoints, FEDEX_POINTS } from "@/lib/events/constants";
 
 export const runtime = "nodejs";
 
@@ -64,13 +65,30 @@ export async function GET(req: Request) {
 
       if (isFrozen) {
         const threshold = freezeConfig.total_holes - (freezeConfig.freeze_last_holes as number);
-        const rows = await getFrozenLeaderboard(eventId, threshold, freezeConfig, (event as any).scoring_model ?? "net");
+        const scoringModel = (event as any).scoring_model ?? "net";
+        const frozenRows = await getFrozenLeaderboard(eventId, threshold, freezeConfig, scoringModel, event as any);
+        const frozenIds = new Set(frozenRows.map((r) => r.profile_id));
+        const pendingParticipants = await getEventPendingParticipants(eventId, frozenIds);
+        const rows = [
+          ...frozenRows,
+          ...pendingParticipants.map((p) => ({
+            profile_id: p.profile_id,
+            profile: { id: p.profile_id, name: p.name, avatar_url: p.avatar_url },
+            gross_score: null,
+            net_score: null,
+            format_points: null,
+            points_earned: null,
+            holes_shown: 0,
+            is_live: false,
+            position: null,
+          })),
+        ];
         return NextResponse.json(
           {
             rows,
             freeze: freezeConfig,
             my_role: myRole,
-            scoring_model: (event as any).scoring_model ?? "net",
+            scoring_model: scoringModel,
           },
           { headers: { "Cache-Control": "no-store" } }
         );
@@ -133,6 +151,37 @@ export async function GET(req: Request) {
   }
 }
 
+type EventConfig = {
+  points_model?: string | null;
+  points_table?: Record<string, unknown> | null;
+  points_config?: Record<string, unknown> | null;
+  num_rounds?: number | null;
+  standings_contribution?: string | null;
+};
+
+function computePointsForPosition(
+  position: number,
+  fieldSize: number,
+  event: EventConfig,
+): number | null {
+  const model = event.points_model;
+  if (!model || model === "none") return null;
+  if (event.standings_contribution === "event_only") return null;
+  if (model === "fedex_style") {
+    return FEDEX_POINTS[position - 1] ?? 0;
+  }
+  if (model === "position_based" || model === "custom_table") {
+    const table = event.points_table ?? {};
+    const val = table[String(position)];
+    return typeof val === "number" ? val : null;
+  }
+  if (model === "ciaga_formula" || model === "custom_formula") {
+    const config = (event.points_config ?? {}) as Parameters<typeof computeFormulaPoints>[3];
+    return computeFormulaPoints(position, fieldSize, event.num_rounds ?? 1, config);
+  }
+  return null;
+}
+
 async function getFrozenLeaderboard(
   eventId: string,
   threshold: number,
@@ -140,7 +189,8 @@ async function getFrozenLeaderboard(
     freeze_scope: string;
     freeze_top_x: number | null;
   },
-  scoringModel: string
+  scoringModel: string,
+  event: EventConfig,
 ): Promise<FrozenLeaderboardEntry[]> {
   // Prefer the per-player snapshot written at freeze time. Fall back to the
   // dynamic function only when the snapshot is absent (manual freeze before
@@ -235,25 +285,35 @@ async function getFrozenLeaderboard(
     return (b.holes_shown ?? 0) - (a.holes_shown ?? 0);
   });
 
-  const result: FrozenLeaderboardEntry[] = combined.map((r, i) => ({
-    profile_id: r.profile_id,
-    gross_score: r.gross_score,
-    net_score: r.net_score,
-    to_par: r.to_par ?? null,
-    format_points: r.format_points ?? null,
-    holes_shown: r.holes_shown,
-    actual_holes_completed: r.actual_holes_completed ?? undefined,
-    is_live: r.is_live,
-    position: i + 1,
-    profile: profileMap[r.profile_id] ?? undefined,
-  }));
+  // Field size for points: use configured override if present, else count scored players.
+  const configuredParticipants = (event.points_config as any)?.num_participants;
+  const fieldSize: number = configuredParticipants != null
+    ? Number(configuredParticipants)
+    : Math.max(combined.filter((r) => r.net_score != null).length, 1);
+
+  const result: FrozenLeaderboardEntry[] = combined.map((r, i) => {
+    const position = i + 1;
+    return {
+      profile_id: r.profile_id,
+      gross_score: r.gross_score,
+      net_score: r.net_score,
+      to_par: r.to_par ?? null,
+      format_points: r.format_points ?? null,
+      points_earned: computePointsForPosition(position, fieldSize, event),
+      holes_shown: r.holes_shown,
+      actual_holes_completed: r.actual_holes_completed ?? undefined,
+      is_live: r.is_live,
+      position,
+      profile: profileMap[r.profile_id] ?? undefined,
+    };
+  });
 
   // For top_x freeze scope: players outside top-x always show live scores
   if (freezeConfig.freeze_scope === "top_x" && freezeConfig.freeze_top_x != null) {
     const topX = freezeConfig.freeze_top_x;
     const liveByProfile = Object.fromEntries(liveRows.map((r) => [r.profile_id, r]));
     return result.map((row) => {
-      if (row.position > topX) {
+      if ((row.position ?? Infinity) > topX) {
         const live = liveByProfile[row.profile_id];
         if (live) {
           return {
@@ -262,6 +322,7 @@ async function getFrozenLeaderboard(
             net_score: live.net_score ?? null,
             to_par: (live as any).to_par ?? null,
             format_points: (live as any).format_points ?? null,
+            points_earned: row.position != null ? computePointsForPosition(row.position, fieldSize, event) : null,
             holes_shown: live.holes_completed ?? 0,
             actual_holes_completed: live.holes_completed ?? undefined,
             is_live: live.is_live ?? false,

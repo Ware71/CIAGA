@@ -38,9 +38,11 @@ export async function getGroupsByProfile(
   if (error) throw error;
 
   const rows = (data ?? []) as any[];
-  return rows
+  const groups = rows
     .filter((r) => r.group)
-    .map((r) => ({ ...(r.group as MajorGroup), role: r.role as string, member_count: 0 }));
+    .map((r) => ({ ...(r.group as MajorGroup), role: r.role as string }));
+  const counts = await Promise.all(groups.map((g) => getGroupMemberCount(g.id)));
+  return groups.map((g, i) => ({ ...g, member_count: counts[i] }));
 }
 
 export async function getGroupMemberCount(groupId: string): Promise<number> {
@@ -63,7 +65,9 @@ export async function getDiscoverGroups(
     .order("created_at", { ascending: false })
     .limit(limit);
   if (error) throw error;
-  return ((data ?? []) as MajorGroup[]).map((g) => ({ ...g, member_count: 0 }));
+  const groups = (data ?? []) as MajorGroup[];
+  const counts = await Promise.all(groups.map((g) => getGroupMemberCount(g.id)));
+  return groups.map((g, i) => ({ ...g, member_count: counts[i] }));
 }
 
 export async function getGroupMembers(groupId: string): Promise<MajorGroupMembershipWithProfile[]> {
@@ -429,6 +433,7 @@ export async function getMajorHubSummary(profileId: string): Promise<MajorHubSum
   ]);
 
   const myGroupIds = myGroupRows.map((g) => g.id);
+  const myGroupMemberCounts = await Promise.all(myGroupRows.map((g) => getGroupMemberCount(g.id)));
 
   // Active and upcoming events across my groups
   let activeEvents: EventWithGroup[] = [];
@@ -552,7 +557,7 @@ export async function getMajorHubSummary(profileId: string): Promise<MajorHubSum
     group_stats,
     active_events: activeEvents,
     upcoming_events: upcomingEvents,
-    my_groups: myGroupRows.map((g) => ({ ...g, member_count: 0 })),
+    my_groups: myGroupRows.map((g, i) => ({ ...g, member_count: myGroupMemberCounts[i] })),
     discover_groups: filteredDiscover,
     pending_invites,
   };
@@ -599,7 +604,7 @@ export async function getCompetitionHistory(competitionId: string): Promise<Comp
   // Fetch all events in this competition with their group/course
   const { data: evts, error: evtsErr } = await supabaseAdmin
     .from("events")
-    .select("*, group:major_groups(id, name, ciaga_tag), course:courses(id, name), event_template:competition_event_templates(id, name, sort_order)")
+    .select("*, group:major_groups(id, name, type, ciaga_tag), course:courses(id, name), event_template:competition_event_templates(id, name, sort_order)")
     .eq("competition_id", competitionId)
     .order("event_date", { ascending: true });
   if (evtsErr) throw evtsErr;

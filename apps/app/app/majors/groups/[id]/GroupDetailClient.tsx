@@ -54,6 +54,24 @@ const ACCESS_OPTIONS = [
 
 const MATCHPLAY_GROUP_TYPES = new Set<MajorGroupType>(["matchplay_series", "matchplay_knockout"]);
 
+function fmtPts(n: number | null | undefined): string {
+  if (n == null) return "—";
+  return String(Math.round(n));
+}
+
+function locationLabel(c: EventWithGroup): string | null {
+  const courseSources = [
+    c.course ? { city: c.course.city, country: c.course.country } : null,
+    ...((c.rounds ?? []).map((r) => r.course ?? null)),
+  ].filter((x): x is { city: string | null; country: string | null } => x != null);
+  if (!courseSources.length) return null;
+  const cities = [...new Set(courseSources.map((x) => x.city).filter((v): v is string => !!v))];
+  if (cities.length === 1) return cities[0];
+  const countries = [...new Set(courseSources.map((x) => x.country).filter((v): v is string => !!v))];
+  if (countries.length === 1) return countries[0];
+  return courseSources.length > 1 ? "multi course" : null;
+}
+
 function getFormatsForGroupType(type: MajorGroupType) {
   if (MATCHPLAY_GROUP_TYPES.has(type))
     return EVENT_TYPES.filter((t) => t.value === "matchplay");
@@ -828,9 +846,14 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     const db = b.event_date ?? "";
     return db < da ? -1 : db > da ? 1 : 0;
   };
+  const sortByDateAsc = (a: EventWithGroup, b: EventWithGroup) => {
+    const da = a.event_date ?? "";
+    const db = b.event_date ?? "";
+    return da < db ? -1 : da > db ? 1 : 0;
+  };
   const upcomingComps = events
     .filter((c) => c.majors_status === "upcoming" || c.majors_status === "live")
-    .sort(sortByDateDesc);
+    .sort(sortByDateAsc);
   const completedComps = events
     .filter((c) => c.majors_status === "completed" || c.majors_status === "cancelled")
     .sort(sortByDateDesc);
@@ -1115,12 +1138,18 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             </div>
             <div className="text-[11px] text-emerald-100/60 flex items-center gap-2">
               {c.event_date && <span>{new Date(c.event_date).toLocaleDateString([], { month: "short", day: "numeric" })}</span>}
-              {c.course && (
-                <>
-                  <span className="text-emerald-800">·</span>
-                  <span className="truncate">{c.course.name}</span>
-                </>
-              )}
+              {(() => {
+                const label =
+                  c.num_rounds <= 1
+                    ? (c.course?.name ?? null)
+                    : (locationLabel(c) ?? c.course?.name ?? null);
+                return label ? (
+                  <>
+                    <span className="text-emerald-800">·</span>
+                    <span className="truncate">{label}</span>
+                  </>
+                ) : null;
+              })()}
             </div>
           </button>
         ))}
@@ -1249,9 +1278,9 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                   <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
                   <div className="text-right shrink-0 space-y-0.5">
                     <div className="flex items-baseline justify-end gap-1">
-                      <span className="text-xs font-extrabold text-[#f5e6b0]">{s.display_points} pts</span>
+                      <span className="text-xs font-extrabold text-[#f5e6b0]">{fmtPts(s.display_points)} pts</span>
                       {s.live_points_pending > 0 && (
-                        <span className="text-[10px] font-semibold text-amber-400/90">+{s.live_points_pending}</span>
+                        <span className="text-[10px] font-semibold text-amber-400/90">+{Math.round(s.live_points_pending)}</span>
                       )}
                     </div>
                     <div className="flex gap-1 justify-end">
@@ -1793,7 +1822,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                   {avatarEl(s.profile)}
                   <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
                   <div className="text-right shrink-0">
-                    <div className="text-xs font-extrabold text-[#f5e6b0]">{s.season_points} pts</div>
+                    <div className="text-xs font-extrabold text-[#f5e6b0]">{fmtPts(s.season_points)} pts</div>
                     <div className="flex gap-1 justify-end">
                       <span className="text-[9px] text-emerald-100/50 bg-emerald-900/40 rounded px-1">{s.events_played} evts</span>
                       {s.wins > 0 && <span className="text-[9px] text-[#f5e6b0]/70 bg-[#f5e6b0]/10 rounded px-1">{s.wins}W</span>}
@@ -3345,7 +3374,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                     </div>
                     <div className="text-right shrink-0 space-y-0.5">
                       {e.points_earned != null && (
-                        <div className="text-[11px] font-bold text-[#f5e6b0]">{e.points_earned} pts</div>
+                        <div className="text-[11px] font-bold text-[#f5e6b0]">{fmtPts(e.points_earned)} pts</div>
                       )}
                       {e.gross_score != null && (
                         <div className="text-[10px] text-emerald-200/55">{e.gross_score} gross</div>
@@ -3359,7 +3388,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                 <div className="flex items-center justify-between pt-1 border-t border-emerald-900/40">
                   <span className="text-[11px] text-emerald-200/50">{playerBreakdownEntries.length} event{playerBreakdownEntries.length !== 1 ? "s" : ""}</span>
                   <span className="text-[11px] font-bold text-[#f5e6b0]">
-                    {playerBreakdownEntries.reduce((sum, e) => sum + (e.points_earned ?? 0), 0)} pts total
+                    {fmtPts(playerBreakdownEntries.reduce((sum, e) => sum + (e.points_earned ?? 0), 0))} pts total
                   </span>
                 </div>
               </div>

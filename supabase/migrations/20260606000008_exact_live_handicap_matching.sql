@@ -1,21 +1,20 @@
--- Extend ciaga_compute_event_leaderboard to support ciaga_formula and
--- custom_formula points models.
+-- Fix: competition net score now matches the scorecard/Group tab for both
+-- live and submitted stroke-play rounds.
 --
--- Both models use the same formula structure:
---   Points = ROUND(
---     base
---     + round_factor × scale × ((F−P)/(F−1))^compression × (F/6)^field_sensitivity
---     + { win_bonus_scale × (F/6)^field_sensitivity  if P = 1 }
---   )
--- where:
---   F = field size (points_config.num_participants override, or count of finishers)
---   P = finishing position (1 = best)
---   round_factor = 1 + round_coefficient × (min(R,3) − 1)
---   R = events.num_rounds (already fetched as v_num_rounds)
+-- Two root causes addressed:
 --
--- CIAGA defaults: base=18, scale=32, compression=0.7,
---                 field_sensitivity=0.2, win_bonus_scale=5, round_coefficient=0.2
--- Custom formula: all defaults overridable via points_config jsonb.
+-- 1. LIVE ROUNDS — proportional vs exact handicap
+--    Before: FLOOR(course_hcp × live_holes / 18)  (approximation, off by 1-3 mid-round)
+--    After:  SUM(strokes_received per played hole) (exact, same formula as scorecard)
+--    Falls back to proportional when tee snapshot is unavailable.
+--
+-- 2. HANDICAP SOURCE — playing_handicap_used vs course_handicap_used
+--    Before: COALESCE(rp.playing_handicap_used, rp.course_handicap_used, 0)
+--            → uses event allowance-adjusted handicap for net calculation
+--    After:  COALESCE(rp.course_handicap_used, 0)
+--            → uses full 100% course handicap, same as the scorecard's p.course_handicap
+--    This keeps competition net = scorecard net for all events.
+--    (playing_handicap_used still reaches the leaderboard via format_points for stableford.)
 
 CREATE OR REPLACE FUNCTION public.ciaga_compute_event_leaderboard(p_event_id uuid)
 RETURNS void
@@ -62,8 +61,6 @@ BEGIN
   v_points_table := COALESCE(v_points_table, '{}'::jsonb);
   v_points_config := COALESCE(v_points_config, '{}'::jsonb);
 
-  -- Pre-compute formula variables so they are available as scalars in the
-  -- per-row CASE expression below.
   IF v_points_model IN ('ciaga_formula', 'custom_formula') THEN
     v_base_pts          := COALESCE((v_points_config->>'base')::numeric,              18);
     v_scale_pts         := COALESCE((v_points_config->>'scale')::numeric,             32);
@@ -73,7 +70,6 @@ BEGIN
     v_round_coeff       := COALESCE((v_points_config->>'round_coefficient')::numeric,  0.2);
     v_round_factor      := 1.0 + v_round_coeff * (LEAST(v_num_rounds, 3) - 1);
 
-    -- F: use stored override when present, else count actual finishers.
     IF (v_points_config->>'num_participants') IS NOT NULL THEN
       v_field_size := (v_points_config->>'num_participants')::integer;
     ELSE
@@ -181,7 +177,7 @@ BEGIN
         JOIN round_participants rp
           ON rp.round_id = s.round_id AND rp.profile_id = s.profile_id
         CROSS JOIN LATERAL (
-          VALUES (COALESCE(rp.playing_handicap_used, rp.course_handicap_used, 0))
+          VALUES (COALESCE(rp.course_handicap_used, 0))
         ) AS hv(hcp)
         CROSS JOIN LATERAL (
           VALUES (FLOOR(hv.hcp::numeric / 18)::integer)
@@ -224,17 +220,19 @@ BEGIN
       submitted AS (
         SELECT
           s.profile_id,
-          SUM(hrr.adjusted_gross_score)::integer                                         AS submitted_gross,
-          SUM(COALESCE(rp.playing_handicap_used, rp.course_handicap_used, 0))::integer   AS submitted_hcp,
-          SUM(CASE WHEN hrr.is_9_hole THEN 9 ELSE 18 END)::integer                       AS submitted_holes,
+          SUM(hrr.adjusted_gross_score)::integer                         AS submitted_gross,
+          -- Use course_handicap_used (100% allowance) to match the scorecard's
+          -- p.course_handicap which also uses the full course handicap.
+          SUM(COALESCE(rp.course_handicap_used, 0))::integer             AS submitted_hcp,
+          SUM(CASE WHEN hrr.is_9_hole THEN 9 ELSE 18 END)::integer       AS submitted_holes,
           SUM(
             CASE WHEN hrr.is_9_hole
               THEN (COALESCE(rts.par_total, 72) * 9 / COALESCE(rts.holes_count, 18))
               ELSE COALESCE(rts.par_total, 72)
             END
-          )::integer                                                                      AS submitted_par,
-          COUNT(*)::integer                                                               AS rounds_submitted,
-          MAX(s.submitted_at)                                                             AS last_submission_at
+          )::integer                                                      AS submitted_par,
+          COUNT(*)::integer                                               AS rounds_submitted,
+          MAX(s.submitted_at)                                             AS last_submission_at
         FROM event_round_submissions s
         JOIN round_participants rp
           ON rp.round_id = s.round_id AND rp.profile_id = s.profile_id
@@ -252,7 +250,8 @@ BEGIN
           rp.profile_id,
           COALESCE(scores.total_strokes, 0)::integer                              AS live_gross,
           COALESCE(scores.hole_count, 0)::integer                                 AS live_holes,
-          COALESCE(rp.playing_handicap_used, rp.course_handicap_used, 0)          AS course_hcp,
+          -- Use course_handicap_used (100% allowance) to match the scorecard.
+          COALESCE(rp.course_handicap_used, 0)                                    AS course_hcp,
           CASE WHEN COALESCE(scores.hole_count, 0) > 0 AND rts.par_total IS NOT NULL
             THEN ROUND(
               rts.par_total::numeric
@@ -262,7 +261,11 @@ BEGIN
             ELSE NULL
           END                                                                       AS live_par,
           COALESCE(stab_pts_lat.pts, 0)::integer                                   AS live_stab_total,
-          COALESCE(stab_pts_lat.par_exact, 0)::integer                             AS live_par_exact
+          COALESCE(stab_pts_lat.par_exact, 0)::integer                             AS live_par_exact,
+          -- Exact per-hole handicap strokes for played holes (stroke play only).
+          -- Matches strokesReceivedOnHole() in the frontend scorecard.
+          -- NULL when tee snapshot unavailable; fallback to proportional in final SELECT.
+          live_hcp_lat.live_hcp_exact                                               AS live_hcp_exact
         FROM event_tee_times ctt
         JOIN rounds r
           ON r.event_tee_time_id = ctt.id
@@ -286,7 +289,7 @@ BEGIN
           ) latest
         ) scores ON true
         CROSS JOIN LATERAL (
-          VALUES (COALESCE(rp.playing_handicap_used, rp.course_handicap_used, 0))
+          VALUES (COALESCE(rp.course_handicap_used, 0))
         ) AS hv(hcp)
         CROSS JOIN LATERAL (
           VALUES (FLOOR(hv.hcp::numeric / 18)::integer)
@@ -294,6 +297,7 @@ BEGIN
         CROSS JOIN LATERAL (
           VALUES (hv.hcp - hb.base * 18)
         ) AS hr(rem)
+        -- Stableford per-hole points (no-op for non-stableford)
         LEFT JOIN LATERAL (
           SELECT
             COALESCE(SUM(GREATEST(0, 2 - (
@@ -317,6 +321,23 @@ BEGIN
            AND rhs.hole_number = ls.hole_number
           WHERE v_scoring_model = 'stableford_points'
         ) stab_pts_lat ON true
+        -- Exact stroke-play handicap strokes for played holes (no-op for stableford/gross)
+        LEFT JOIN LATERAL (
+          SELECT
+            COALESCE(SUM(
+              hb.base + CASE WHEN rhs.stroke_index <= hr.rem THEN 1 ELSE 0 END
+            ), 0)::integer AS live_hcp_exact
+          FROM (
+            SELECT DISTINCT ON (rse.hole_number) rse.hole_number
+            FROM round_score_events rse
+            WHERE rse.round_id = r.id AND rse.participant_id = rp.id
+            ORDER BY rse.hole_number, rse.created_at DESC
+          ) played_holes
+          JOIN round_hole_snapshots rhs
+            ON rhs.round_tee_snapshot_id = rts.id
+           AND rhs.hole_number = played_holes.hole_number
+          WHERE v_scoring_model NOT IN ('stableford_points', 'gross')
+        ) live_hcp_lat ON true
         WHERE ctt.event_id = p_event_id
           AND rp.profile_id NOT IN (
             SELECT s2.profile_id
@@ -346,6 +367,11 @@ BEGIN
             END
         END                                                           AS gross_score,
 
+        -- net_score:
+        --   gross  → equals gross_score (no handicap)
+        --   stableford → net-stroke equivalent (for ranking ASC)
+        --   net/other  → submitted uses course_handicap_used (100% allowance, matches scorecard)
+        --                live uses exact per-hole strokes when available, else proportional
         CASE
           WHEN v_scoring_model = 'stableford_points' THEN
             CASE
@@ -359,9 +385,15 @@ BEGIN
             CASE
               WHEN sub.profile_id IS NOT NULL OR live.profile_id IS NOT NULL
               THEN COALESCE(sub.submitted_gross, 0) + COALESCE(live.live_gross, 0)
-                   - COALESCE(sub.submitted_hcp, 0)
-                   - FLOOR(COALESCE(live.course_hcp, 0)
-                       * COALESCE(live.live_holes, 0) / 18.0)::integer
+                   - CASE WHEN v_scoring_model = 'gross' THEN 0
+                       ELSE
+                         COALESCE(sub.submitted_hcp, 0)
+                         + COALESCE(
+                             live.live_hcp_exact,
+                             FLOOR(COALESCE(live.course_hcp, 0)
+                                 * COALESCE(live.live_holes, 0) / 18.0)::integer
+                           )
+                     END
               ELSE NULL
             END
         END                                                           AS net_score,

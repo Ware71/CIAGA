@@ -103,6 +103,42 @@ export async function fanOutFeedItemToFollowers(params: {
   });
 }
 
+/**
+ * Fan-out for competition round cards: targets are group members + their followers.
+ * For private groups, call with followersIncluded=false to limit to members only.
+ */
+export async function fanOutToGroupMembersAndFollowers(params: {
+  feedItemId: string;
+  memberProfileIds: string[];
+  followersIncluded: boolean;
+}): Promise<void> {
+  const { feedItemId, memberProfileIds, followersIncluded } = params;
+  if (!feedItemId || !memberProfileIds.length) return;
+
+  const members = Array.from(new Set(memberProfileIds.filter(Boolean)));
+  const viewerIds = new Set<string>(members);
+
+  if (followersIncluded && members.length) {
+    const { data: followerRows, error } = await supabaseAdmin
+      .from("follows")
+      .select("follower_id")
+      .in("following_id", members);
+    if (error) throw error;
+    for (const r of followerRows ?? []) {
+      const fid = (r as any).follower_id as string | undefined;
+      if (fid) viewerIds.add(fid);
+    }
+  }
+
+  const targets = Array.from(viewerIds).map((vid) => ({
+    feed_item_id: feedItemId,
+    viewer_profile_id: vid,
+    reason: members.includes(vid) ? "group_member" : "follow",
+  }));
+
+  await insertTargets(targets);
+}
+
 async function insertTargets(
   targets: Array<{ feed_item_id: string; viewer_profile_id: string; reason: string }>
 ) {

@@ -1,21 +1,12 @@
--- Extend ciaga_compute_event_leaderboard to support ciaga_formula and
--- custom_formula points models.
+-- Fix: ciaga_compute_event_leaderboard field size for formula points models.
 --
--- Both models use the same formula structure:
---   Points = ROUND(
---     base
---     + round_factor × scale × ((F−P)/(F−1))^compression × (F/6)^field_sensitivity
---     + { win_bonus_scale × (F/6)^field_sensitivity  if P = 1 }
---   )
--- where:
---   F = field size (points_config.num_participants override, or count of finishers)
---   P = finishing position (1 = best)
---   round_factor = 1 + round_coefficient × (min(R,3) − 1)
---   R = events.num_rounds (already fetched as v_num_rounds)
+-- Previously, field size was computed as the count of players who had
+-- submitted all required rounds. During a live round no one has submitted yet,
+-- so the count was 0 → GREATEST(0,1) = 1. With F=1 the CIAGA formula gives
+-- everyone 18 pts and 1st place ~21 pts regardless of field.
 --
--- CIAGA defaults: base=18, scale=32, compression=0.7,
---                 field_sensitivity=0.2, win_bonus_scale=5, round_coefficient=0.2
--- Custom formula: all defaults overridable via points_config jsonb.
+-- Fix: count all non-guest round participants linked to this event via
+-- event_tee_times, so the formula uses the full field size from the start.
 
 CREATE OR REPLACE FUNCTION public.ciaga_compute_event_leaderboard(p_event_id uuid)
 RETURNS void
@@ -73,18 +64,20 @@ BEGIN
     v_round_coeff       := COALESCE((v_points_config->>'round_coefficient')::numeric,  0.2);
     v_round_factor      := 1.0 + v_round_coeff * (LEAST(v_num_rounds, 3) - 1);
 
-    -- F: use stored override when present, else count actual finishers.
+    -- F: use stored override when present, else count all round participants
+    -- for the event (submitted OR live). This ensures live rounds use the
+    -- correct field size instead of falling back to F=1.
     IF (v_points_config->>'num_participants') IS NOT NULL THEN
       v_field_size := (v_points_config->>'num_participants')::integer;
     ELSE
-      SELECT COUNT(*) INTO v_field_size
-      FROM (
-        SELECT s.profile_id
-        FROM event_round_submissions s
-        WHERE s.event_id = p_event_id AND s.accepted = true
-        GROUP BY s.profile_id
-        HAVING COUNT(*) >= v_num_rounds
-      ) completed_players;
+      SELECT COUNT(DISTINCT rp.profile_id) INTO v_field_size
+      FROM event_tee_times ctt
+      JOIN rounds r   ON r.event_tee_time_id = ctt.id
+      JOIN round_participants rp
+        ON rp.round_id = r.id
+       AND rp.is_guest = false
+       AND rp.profile_id IS NOT NULL
+      WHERE ctt.event_id = p_event_id;
       v_field_size := GREATEST(COALESCE(v_field_size, 1), 1);
     END IF;
 
