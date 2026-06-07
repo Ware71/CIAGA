@@ -31,17 +31,27 @@ function cellNumber(cell: ExcelJS.Cell): number | null {
 }
 
 // ── XLSX parsing ──────────────────────────────────────────────────────────────
-// Competitions sheet columns (v2, 1-based):
-//   1=event_name(A), 2=event_date(B), 3=event_type(C), 4=scoring_model(D)
-//   5=season_name(E), 6=course_name(F), 7=tee_name(G), 8=entry_fee_override(H), 9=notes(I)
-//   10=event_id(J), 11=is_new(K), 12=course_id(L), 13=tee_box_id(M), 14=tee_found(N)
-//   15=season_id(O), 16=default_entry_fee(P)
+// Competitions sheet columns (v3, 1-based):
+//   1=event_name(A), 2=event_date(B), 3=event_type(C), 4=scoring_model(D), 5=template(E),
+//   6=allowance%(F), 7=season_name(G), 8=course_name(H), 9=tee_name(I), 10=entry_fee_override(J),
+//   11=notes(K), 12=event_id(L), 13=is_new(M), 14=course_id(N), 15=tee_box_id(O), 16=tee_found(P),
+//   17=season_id(Q), 18=default_entry_fee(R), 19=template_id(S), 20=tee_slope(T), 21=tee_rating(U),
+//   22=tee_par(V), 23=allowance_resolved(W)
 //
 // Seasons sheet columns (1-based):
 //   1=season_name, 2=year, 3=start_date_override, 4=end_date_override, 5=season_id
 //
-// Scores sheet columns (1-based):
-//   1=event_name, 2=player_label, 3=handicap, 4=round_number, 5-22=holes 1-18, 23=event_id, 24=profile_id
+// Scores sheet columns (v3, 1-based):
+//   1=event_name, 2=player_label, 3=handicap_index, 4=round_number, 5-22=holes 1-18,
+//   23=course_handicap, 24=playing_handicap, 25=event_id, 26=profile_id
+//
+// Prizes sheet columns (1-based):
+//   1=event_name, 2=pot_name, 3=distribution_type, 4=entry_fee_amount, 5=metric_type,
+//   6=is_monetary, 7=prize_description, 8=description, 9=event_id
+//
+// Payouts sheet columns (1-based):
+//   1=event_name, 2=pot_name, 3=player_label, 4=position, 5=amount, 6=metric_value,
+//   7=note, 8=event_id, 9=profile_id
 
 type ParsedSeason = {
   season_name: string;
@@ -56,6 +66,8 @@ type ParsedComp = {
   event_date: string | null;
   event_type: string | null;
   scoring_model: string | null;
+  template_id: string;
+  allowance_resolved: number | null;
   season_name: string;
   entry_fee_override: number | null;
   event_id: string;
@@ -66,12 +78,36 @@ type ParsedComp = {
 
 type ParsedScore = {
   competition_name: string; // = event_name from col A
-  competition_id: string;   // resolved event_id from col W (blank for new events at parse time)
+  competition_id: string;   // resolved event_id from col Y (blank for new events at parse time)
   player_label: string;
   profile_id: string;
   handicap: number | null;
   round_number: number;
   holes: number[];
+};
+
+type ParsedPot = {
+  event_name: string;
+  event_id: string;
+  pot_name: string;
+  distribution_type: string;
+  entry_fee_amount: number | null;
+  metric_type: string | null;
+  is_monetary: boolean;
+  prize_description: string | null;
+  description: string | null;
+};
+
+type ParsedPayout = {
+  event_name: string;
+  event_id: string;
+  pot_name: string;
+  player_label: string;
+  profile_id: string;
+  position: number | null;
+  amount: number | null;
+  metric_value: number | null;
+  note: string | null;
 };
 
 async function parseXlsx(file: File) {
@@ -119,18 +155,20 @@ async function parseXlsx(file: File) {
     if (rowNumber === 1) return;
     const eventName = cellString(row.getCell(1)); // A
     if (!eventName) return;
-    const eventId = cellString(row.getCell(10)); // J
+    const eventId = cellString(row.getCell(12)); // L
     competitions.push({
       event_name:         eventName,
       event_date:         cellString(row.getCell(2)) || null,  // B
       event_type:         cellString(row.getCell(3)) || null,  // C
       scoring_model:      cellString(row.getCell(4)) || null,  // D
-      season_name:        cellString(row.getCell(5)),          // E
-      entry_fee_override: cellNumber(row.getCell(8)),          // H
+      template_id:        cellString(row.getCell(19)),         // S
+      allowance_resolved: cellNumber(row.getCell(23)),         // W
+      season_name:        cellString(row.getCell(7)),          // G
+      entry_fee_override: cellNumber(row.getCell(10)),         // J
       event_id:           eventId,
       is_new_event:       eventId === "",
-      course_id:          cellString(row.getCell(12)),         // L
-      tee_box_id:         cellString(row.getCell(13)),         // M
+      course_id:          cellString(row.getCell(14)),         // N
+      tee_box_id:         cellString(row.getCell(15)),         // O
     });
   });
 
@@ -145,16 +183,57 @@ async function parseXlsx(file: File) {
     for (let h = 0; h < 18; h++) holes.push(cellNumber(row.getCell(5 + h)) ?? 0);
     scores.push({
       competition_name: compName,
-      competition_id:   cellString(row.getCell(23)), // W
+      competition_id:   cellString(row.getCell(25)), // Y
       player_label:     playerLabel,
-      profile_id:       cellString(row.getCell(24)), // X
+      profile_id:       cellString(row.getCell(26)), // Z
       handicap:         cellNumber(row.getCell(3)),
       round_number:     cellNumber(row.getCell(4)) ?? 1,
       holes,
     });
   });
 
-  return { seasons, competitions, scores };
+  const pots: ParsedPot[] = [];
+  const prizesSheet = wb.getWorksheet("Prizes");
+  prizesSheet?.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return;
+    const eventName = cellString(row.getCell(1));
+    const potName   = cellString(row.getCell(2));
+    if (!eventName || !potName) return;
+    pots.push({
+      event_name:        eventName,
+      pot_name:          potName,
+      distribution_type: cellString(row.getCell(3)) || "position_based",
+      entry_fee_amount:  cellNumber(row.getCell(4)),
+      metric_type:       cellString(row.getCell(5)) || null,
+      is_monetary:       (cellString(row.getCell(6)) || "Yes").toLowerCase() !== "no",
+      prize_description: cellString(row.getCell(7)) || null,
+      description:       cellString(row.getCell(8)) || null,
+      event_id:          cellString(row.getCell(9)),
+    });
+  });
+
+  const payouts: ParsedPayout[] = [];
+  const payoutsSheet = wb.getWorksheet("Payouts");
+  payoutsSheet?.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return;
+    const eventName   = cellString(row.getCell(1));
+    const potName     = cellString(row.getCell(2));
+    const playerLabel = cellString(row.getCell(3));
+    if (!eventName || !potName || !playerLabel) return;
+    payouts.push({
+      event_name:   eventName,
+      pot_name:     potName,
+      player_label: playerLabel,
+      position:     cellNumber(row.getCell(4)),
+      amount:       cellNumber(row.getCell(5)),
+      metric_value: cellNumber(row.getCell(6)),
+      note:         cellString(row.getCell(7)) || null,
+      event_id:     cellString(row.getCell(8)),
+      profile_id:   cellString(row.getCell(9)),
+    });
+  });
+
+  return { seasons, competitions, scores, pots, payouts };
 }
 
 // ── POST handler ──────────────────────────────────────────────────────────────
@@ -188,11 +267,36 @@ export async function POST(req: Request) {
     if (!file)    return NextResponse.json({ error: "Missing file" },     { status: 400 });
     if (!groupId) return NextResponse.json({ error: "Missing group_id" }, { status: 400 });
 
-    const { seasons: seasonRows, competitions: compRows, scores: scoreRows } = await parseXlsx(file);
+    const { seasons: seasonRows, competitions: compRows, scores: scoreRows, pots: potRows, payouts: payoutRows } = await parseXlsx(file);
 
     // ── 0. Pre-flight validation ──────────────────────────────────────────────
     const existingCompRows = compRows.filter(c => !c.is_new_event);
     const newCompRows      = compRows.filter(c => c.is_new_event);
+
+    // Resolve template defaults for any referenced templates (event_type/scoring_model/max_handicap)
+    type TemplateDefaults = { event_type: string | null; scoring_model: string | null; max_handicap: number | null };
+    const templateDefaults = new Map<string, TemplateDefaults>();
+    const referencedTemplateIds = Array.from(new Set(compRows.map(c => c.template_id).filter(Boolean)));
+    if (referencedTemplateIds.length) {
+      const { data: tmplRows, error: tmplErr } = await admin
+        .from("competition_event_templates")
+        .select("id,template_event_type,template_scoring_model,template_settings")
+        .in("id", referencedTemplateIds);
+      if (tmplErr) throw new Error(`Template lookup failed: ${tmplErr.message}`);
+      for (const t of tmplRows ?? []) {
+        const settings = ((t as any).template_settings ?? {}) as Record<string, any>;
+        templateDefaults.set((t as any).id, {
+          event_type:    (t as any).template_event_type ?? null,
+          scoring_model: (t as any).template_scoring_model ?? null,
+          max_handicap:  settings.max_handicap ?? null,
+        });
+      }
+    }
+    const resolveAllowance = (comp: ParsedComp): number => {
+      const a = comp.allowance_resolved;
+      if (a == null || !Number.isFinite(a)) return 100;
+      return Math.max(0, Math.min(100, Math.round(a)));
+    };
 
     const existingCompIds = Array.from(new Set(existingCompRows.map(c => c.event_id).filter(Boolean)));
     const allTeeBoxIds    = Array.from(new Set(compRows.map(c => c.tee_box_id).filter(Boolean)));
@@ -243,6 +347,24 @@ export async function POST(req: Request) {
       } else if ((teeBoxHoleCounts.get(comp.tee_box_id) ?? 0) === 0) {
         preflightErrors.push(`Competition "${comp.event_name}": tee box has no holes configured`);
       }
+    }
+
+    // Prize pot / payout preflight
+    const VALID_DIST   = new Set(["position_based", "metric_weighted", "metric_equal", "equal_split", "non_monetary", "entry_only"]);
+    const VALID_METRIC = new Set(["twos", "nearest_pin", "longest_drive", "season_points", "custom"]);
+    const compNamesSet = new Set(compRows.map(c => c.event_name));
+    const potKeys      = new Set<string>();
+    for (const pot of potRows) {
+      potKeys.add(`${pot.event_name}::${pot.pot_name}`);
+      if (!compNamesSet.has(pot.event_name)) preflightErrors.push(`Prize pot "${pot.pot_name}": event "${pot.event_name}" is not on the Competitions sheet`);
+      if (!VALID_DIST.has(pot.distribution_type)) preflightErrors.push(`Prize pot "${pot.pot_name}": invalid Distribution Type "${pot.distribution_type}"`);
+      if ((pot.distribution_type === "metric_weighted" || pot.distribution_type === "metric_equal") && (!pot.metric_type || !VALID_METRIC.has(pot.metric_type))) {
+        preflightErrors.push(`Prize pot "${pot.pot_name}": a valid Metric Type is required for metric pots`);
+      }
+    }
+    for (const po of payoutRows) {
+      if (!potKeys.has(`${po.event_name}::${po.pot_name}`)) preflightErrors.push(`Payout for "${po.player_label}": no pot "${po.pot_name}" defined for event "${po.event_name}"`);
+      if (!po.profile_id) preflightErrors.push(`Payout: player "${po.player_label}" did not resolve to a profile`);
     }
 
     if (preflightErrors.length) {
@@ -368,10 +490,22 @@ export async function POST(req: Request) {
       const roundNumbers     = Array.from(roundsPerEventName.get(comp.event_name) ?? new Set([1])).sort((a, b) => a - b);
       const multiRound       = roundNumbers.length > 1;
 
+      // Inherit type/scoring from the template when the row leaves them blank (row overrides template)
+      const tmpl = comp.template_id ? templateDefaults.get(comp.template_id) : undefined;
+      const rawType    = comp.event_type    || tmpl?.event_type    || "stroke";
+      const rawScoring = comp.scoring_model  || tmpl?.scoring_model || "net";
+
       // Normalise event_type to DB enum value
-      const eventTypeNorm = (comp.event_type ?? "stroke")
-        .toLowerCase().replace(/\s+/g, "") === "bestball" ? "bestball"
-        : (comp.event_type ?? "stroke").toLowerCase().replace(/\s+/g, "");
+      const eventTypeNorm = rawType.toLowerCase().replace(/\s+/g, "") === "bestball"
+        ? "bestball"
+        : rawType.toLowerCase().replace(/\s+/g, "");
+
+      const resolvedAllowance = resolveAllowance(comp);
+      const handicapRules = {
+        mode:         "allowance_pct",
+        allowance_pct: resolvedAllowance,
+        max_handicap:  tmpl?.max_handicap ?? null,
+      };
 
       const { data: newEvent, error: neErr } = await admin
         .from("events")
@@ -383,11 +517,13 @@ export async function POST(req: Request) {
           event_year:       new Date(comp.event_date!).getFullYear(),
           event_type:       eventTypeNorm,
           event_structure:  multiRound ? "multi_round" : "standalone",
-          scoring_model:    (comp.scoring_model ?? "net").toLowerCase(),
+          scoring_model:    rawScoring.toLowerCase(),
           num_rounds:       roundNumbers.length,
           course_id:        comp.course_id || null,
           entry_fee_amount: comp.entry_fee_override,
           majors_status:    "completed",
+          competition_event_template_id: comp.template_id || null,
+          handicap_rules:   handicapRules,
         })
         .select("id")
         .single();
@@ -444,9 +580,19 @@ export async function POST(req: Request) {
       score_events_created: 0,
       competition_entries_created: 0,
       fee_transactions_created: 0,
+      event_submissions_created: 0,
+      leaderboards_computed: 0,
+      prize_pots_created: 0,
+      pot_entries_created: 0,
+      pot_payouts_created: 0,
+      pot_entry_fee_transactions: 0,
+      pot_winnings_transactions: 0,
       skipped_already_imported: [] as string[],
       competition_round_ids: [] as Array<{ competition_name: string; event_name: string; competition_id: string; round_id: string }>,
     };
+
+    // Track which events had rounds created this run (for leaderboard recompute)
+    const eventsTouched = new Set<string>();
 
     // ── 3. Create rounds + scores per competition ─────────────────────────────
     for (const comp of compRows) {
@@ -455,29 +601,53 @@ export async function POST(req: Request) {
         throw new Error(`No resolved event_id for "${comp.event_name}" — this should not happen after pre-flight`);
       }
 
-      const roundNumbers = Array.from(roundsPerComp.get(resolvedEventId) ?? new Set([1])).sort((a, b) => a - b);
-      const multiRound   = roundNumbers.length > 1;
+      const roundNumbers      = Array.from(roundsPerComp.get(resolvedEventId) ?? new Set([1])).sort((a, b) => a - b);
+      const multiRound        = roundNumbers.length > 1;
+      const resolvedAllowance = resolveAllowance(comp);
 
       // Fetch event data (for course, entry_fee, event_date, name)
       const { data: competition, error: compErr } = await admin
         .from("events")
-        .select("id,name,group_id,course_id,event_date,entry_fee_amount,group_season_id")
+        .select("id,name,group_id,course_id,event_date,entry_fee_amount,group_season_id,handicap_rules,competition_event_template_id,scoring_model")
         .eq("id", resolvedEventId)
         .single();
       if (compErr || !competition) throw new Error(`Event "${comp.event_name}" not found`);
       if (competition.group_id !== groupId) throw new Error(`Event "${comp.event_name}" does not belong to this group`);
 
-      // Set group_season_id on existing events if not already set
+      // Scoring model: sheet override → template default → DB event value → net
+      const eventScoringModel = (
+        comp.scoring_model || templateDefaults.get(comp.template_id)?.scoring_model || competition.scoring_model || "net"
+      ).toLowerCase();
+
+      // Set group_season_id / template / handicap_rules on existing events if not already set (fill nulls only)
       if (!comp.is_new_event) {
         const resolvedSeasonId = comp.season_name ? (seasonIdByName.get(comp.season_name) ?? null) : null;
-        if (resolvedSeasonId && competition.group_season_id === null) {
-          const { error: gsiErr } = await admin
-            .from("events")
-            .update({ group_season_id: resolvedSeasonId })
-            .eq("id", resolvedEventId);
-          if (gsiErr) throw new Error(`Set group_season_id failed for "${comp.event_name}": ${gsiErr.message}`);
+        const patch: Record<string, unknown> = {};
+        if (resolvedSeasonId && competition.group_season_id === null) patch.group_season_id = resolvedSeasonId;
+        if (comp.template_id && !competition.competition_event_template_id) patch.competition_event_template_id = comp.template_id;
+        const existingRules = (competition.handicap_rules ?? {}) as Record<string, any>;
+        if (existingRules.allowance_pct == null) {
+          patch.handicap_rules = {
+            mode:          "allowance_pct",
+            allowance_pct: resolvedAllowance,
+            max_handicap:  templateDefaults.get(comp.template_id)?.max_handicap ?? existingRules.max_handicap ?? null,
+          };
+        }
+        if (Object.keys(patch).length) {
+          const { error: updErr } = await admin.from("events").update(patch).eq("id", resolvedEventId);
+          if (updErr) throw new Error(`Update event "${comp.event_name}" failed: ${updErr.message}`);
         }
       }
+
+      // Map round_number → event_round_id for submissions (event_rounds created with the event)
+      const { data: eventRoundsRows, error: erMapErr } = await admin
+        .from("event_rounds")
+        .select("id,round_number")
+        .eq("event_id", resolvedEventId);
+      if (erMapErr) throw new Error(`event_rounds lookup failed for "${comp.event_name}": ${erMapErr.message}`);
+      const eventRoundIdByNumber = new Map<number, string>(
+        (eventRoundsRows ?? []).map((er: any) => [er.round_number as number, er.id as string])
+      );
 
       const courseId = comp.course_id || competition.course_id;
       if (!courseId) throw new Error(`Event "${comp.event_name}" has no course — set a course on the event first`);
@@ -550,6 +720,10 @@ export async function POST(req: Request) {
             name:           roundName,
             started_at:     basePlayedAt,
             finished_at:    basePlayedAt,
+            // Drives Playing Handicap (allowance) for net scoring — populated by
+            // ciaga_persist_playing_handicaps after the round is finished.
+            default_playing_handicap_mode:  "allowance_pct",
+            default_playing_handicap_value: resolvedAllowance,
           })
           .select("id")
           .single();
@@ -698,9 +872,68 @@ export async function POST(req: Request) {
         }
 
         // ── Finish round ──────────────────────────────────────────────────
+        // Flipping to 'finished' fires compute_all_results_when_round_finishes
+        // (replays HI + computes handicap_round_results).
         const { error: finErr } = await admin.from("rounds").update({ status: "finished" }).eq("id", round.id);
         if (finErr) throw new Error(`Finish round failed: ${finErr.message}`);
 
+        // Persist Playing Handicap (allowance applied) — must run AFTER the finish
+        // replay so it reflects the replayed HI. Populates round_participants.playing_handicap_used.
+        const { error: phErr } = await admin.rpc("ciaga_persist_playing_handicaps", { p_round_id: round.id });
+        if (phErr) throw new Error(`Persist playing handicaps failed for "${roundName}": ${phErr.message}`);
+
+        // ── Event round submissions (so the event leaderboard computes net) ──
+        const { data: rpRows, error: rpFetchErr } = await admin
+          .from("round_participants")
+          .select("id,profile_id,playing_handicap_used,course_handicap_used")
+          .eq("round_id", round.id);
+        if (rpFetchErr) throw new Error(`Participant fetch failed for "${roundName}": ${rpFetchErr.message}`);
+
+        const partIds = (rpRows ?? []).map((p: any) => p.id);
+        const hrrByParticipant = new Map<string, { gross: number | null; ch: number | null }>();
+        if (partIds.length) {
+          const { data: hrrRows, error: hrrErr } = await admin
+            .from("handicap_round_results")
+            .select("participant_id,adjusted_gross_score,course_handicap_used")
+            .in("participant_id", partIds);
+          if (hrrErr) throw new Error(`Handicap results fetch failed for "${roundName}": ${hrrErr.message}`);
+          for (const h of hrrRows ?? []) {
+            hrrByParticipant.set((h as any).participant_id, {
+              gross: (h as any).adjusted_gross_score ?? null,
+              ch:    (h as any).course_handicap_used ?? null,
+            });
+          }
+        }
+
+        const eventRoundId = eventRoundIdByNumber.get(roundNumber) ?? null;
+        const submissions = (rpRows ?? []).map((p: any) => {
+          const hrr   = hrrByParticipant.get(p.id);
+          const gross = hrr?.gross ?? null;
+          // Playing handicap (allowance applied) preferred; fall back to course handicap.
+          const ch    = p.playing_handicap_used != null ? p.playing_handicap_used : (p.course_handicap_used ?? hrr?.ch ?? null);
+          let score_used: number | null = null;
+          if (gross != null) {
+            score_used = (eventScoringModel === "net" && ch != null) ? gross - ch : gross;
+          }
+          return {
+            event_id:     resolvedEventId,
+            round_id:     round.id,
+            event_round_id: eventRoundId,
+            profile_id:   p.profile_id,
+            score_used,
+            accepted:     true,
+            submitted_at: basePlayedAt,
+          };
+        });
+        if (submissions.length) {
+          const { error: subErr } = await admin
+            .from("event_round_submissions")
+            .upsert(submissions, { onConflict: "event_id,round_id,profile_id" });
+          if (subErr) throw new Error(`Create submissions failed for "${roundName}": ${subErr.message}`);
+          summary.event_submissions_created += submissions.length;
+        }
+
+        eventsTouched.add(resolvedEventId);
         summary.rounds_created++;
         summary.competition_round_ids.push({
           competition_name: comp.event_name,
@@ -711,8 +944,172 @@ export async function POST(req: Request) {
       }
     }
 
+    // ── 4. Recompute event leaderboards for every event we added rounds to ────
+    for (const eventId of eventsTouched) {
+      const { error: lbErr } = await admin.rpc("ciaga_compute_event_leaderboard", { p_event_id: eventId });
+      if (lbErr) throw new Error(`Leaderboard compute failed for event ${eventId}: ${lbErr.message}`);
+      summary.leaderboards_computed++;
+    }
+
+    // ── 5. Prize pots + payouts ───────────────────────────────────────────────
+    await importPrizePots({
+      admin, groupId, recordedBy: myProfile.id,
+      potRows, payoutRows, compRows, scoreRows, eventIdByName, summary,
+    });
+
     return NextResponse.json({ ok: true, summary });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 400 });
+  }
+}
+
+// ── Prize pots + payouts ────────────────────────────────────────────────────────
+// Creates event-scoped pots, auto-enrols every player who scored the event (charging
+// the buy-in once), and records winners from the Payouts sheet. Idempotent: existing
+// pots/entries/payouts are reused/skipped so re-import never double-charges.
+async function importPrizePots(args: {
+  admin: ReturnType<typeof getSupabaseAdmin>;
+  groupId: string;
+  recordedBy: string;
+  potRows: ParsedPot[];
+  payoutRows: ParsedPayout[];
+  compRows: ParsedComp[];
+  scoreRows: ParsedScore[];
+  eventIdByName: Map<string, string>;
+  summary: any;
+}) {
+  const { admin, groupId, recordedBy, potRows, payoutRows, scoreRows, eventIdByName, summary } = args;
+  if (!potRows.length) return;
+
+  // Players who scored each event — these are auto-enrolled into the event's pots
+  const scoredByEvent = new Map<string, Set<string>>();
+  for (const s of scoreRows) {
+    if (!s.profile_id) continue;
+    if (!scoredByEvent.has(s.competition_name)) scoredByEvent.set(s.competition_name, new Set());
+    scoredByEvent.get(s.competition_name)!.add(s.profile_id);
+  }
+
+  for (const pot of potRows) {
+    const eventId = eventIdByName.get(pot.event_name) ?? (pot.event_id || null);
+    if (!eventId) throw new Error(`Prize pot "${pot.pot_name}": event "${pot.event_name}" did not resolve`);
+
+    // Find or create the pot (idempotent by event_id + name)
+    const { data: existingPot, error: epErr } = await admin
+      .from("prize_pots")
+      .select("id,status")
+      .eq("event_id", eventId)
+      .eq("name", pot.pot_name)
+      .maybeSingle();
+    if (epErr) throw new Error(`Prize pot lookup failed for "${pot.pot_name}": ${epErr.message}`);
+
+    let potId: string;
+    let potStatus: string;
+    if (existingPot) {
+      potId = (existingPot as any).id;
+      potStatus = (existingPot as any).status;
+    } else {
+      const { data: newPot, error: npErr } = await admin
+        .from("prize_pots")
+        .insert({
+          group_id:          groupId,
+          event_id:          eventId,
+          name:              pot.pot_name,
+          description:       pot.description,
+          entry_fee_amount:  pot.entry_fee_amount,
+          distribution_type: pot.distribution_type,
+          metric_type:       pot.metric_type || null,
+          is_monetary:       pot.is_monetary,
+          prize_description: pot.prize_description,
+          status:            "active",
+          created_by:        recordedBy,
+        })
+        .select("id,status")
+        .single();
+      if (npErr || !newPot) throw new Error(`Create prize pot "${pot.pot_name}" failed: ${npErr?.message}`);
+      potId = (newPot as any).id;
+      potStatus = (newPot as any).status;
+      summary.prize_pots_created++;
+    }
+
+    // Auto-enrol players who scored the event (skip already-enrolled; charge fee once)
+    const scored = Array.from(scoredByEvent.get(pot.event_name) ?? new Set<string>());
+    if (scored.length) {
+      const { data: existingEntries } = await admin
+        .from("prize_pot_entries")
+        .select("profile_id")
+        .eq("prize_pot_id", potId)
+        .in("profile_id", scored);
+      const enrolled = new Set((existingEntries ?? []).map((e: any) => e.profile_id));
+      const toEnrol  = scored.filter(p => !enrolled.has(p));
+      const fee      = pot.entry_fee_amount ?? 0;
+
+      const txnByProfile = new Map<string, string>();
+      if (fee > 0 && toEnrol.length) {
+        const txns = toEnrol.map(pid => ({
+          group_id: groupId, profile_id: pid, event_id: eventId,
+          type: "entry_fee", amount: fee, note: `Entry fee: ${pot.pot_name}`, recorded_by: recordedBy,
+        }));
+        const { data: txnRows, error: txnErr } = await admin
+          .from("group_balance_transactions").insert(txns).select("id,profile_id");
+        if (txnErr) throw new Error(`Pot entry-fee transaction failed for "${pot.pot_name}": ${txnErr.message}`);
+        for (const t of txnRows ?? []) txnByProfile.set((t as any).profile_id, (t as any).id);
+        summary.pot_entry_fee_transactions += txnRows?.length ?? 0;
+      }
+
+      if (toEnrol.length) {
+        const entries = toEnrol.map(pid => ({
+          prize_pot_id: potId, profile_id: pid,
+          amount_contributed: fee, transaction_id: txnByProfile.get(pid) ?? null,
+        }));
+        const { error: entErr } = await admin.from("prize_pot_entries").insert(entries);
+        if (entErr) throw new Error(`Pot enrolment failed for "${pot.pot_name}": ${entErr.message}`);
+        summary.pot_entries_created += entries.length;
+      }
+    }
+
+    // Payouts (winners listed on the Payouts sheet)
+    const potPayouts = payoutRows.filter(p => p.event_name === pot.event_name && p.pot_name === pot.pot_name && p.profile_id);
+    if (potPayouts.length) {
+      const { data: existingPayouts } = await admin
+        .from("prize_pot_payouts").select("profile_id,position").eq("prize_pot_id", potId);
+      const payoutKey = (pid: string, pos: number | null) => `${pid}::${pos ?? ""}`;
+      const existingKeys = new Set((existingPayouts ?? []).map((p: any) => payoutKey(p.profile_id, p.position)));
+      const toInsert = potPayouts.filter(p => !existingKeys.has(payoutKey(p.profile_id, p.position)));
+
+      if (toInsert.length) {
+        const rows = toInsert.map(p => ({
+          prize_pot_id: potId, profile_id: p.profile_id,
+          position: p.position, amount: p.amount, note: p.note ?? null, recorded_by: recordedBy,
+        }));
+        const { data: inserted, error: poErr } = await admin
+          .from("prize_pot_payouts").insert(rows).select("id,profile_id,amount");
+        if (poErr) throw new Error(`Pot payout insert failed for "${pot.pot_name}": ${poErr.message}`);
+        summary.pot_payouts_created += inserted?.length ?? 0;
+
+        const monetary = (inserted ?? []).filter((p: any) => p.amount != null && p.amount > 0);
+        if (monetary.length) {
+          const txns = monetary.map((p: any) => ({
+            group_id: groupId, profile_id: p.profile_id, event_id: eventId,
+            type: "winnings", amount: -Math.abs(p.amount), note: `${pot.pot_name} payout`, recorded_by: recordedBy,
+          }));
+          const { data: txnRows, error: txnErr } = await admin
+            .from("group_balance_transactions").insert(txns).select("id,profile_id");
+          if (txnErr) throw new Error(`Pot winnings transaction failed for "${pot.pot_name}": ${txnErr.message}`);
+          summary.pot_winnings_transactions += txnRows?.length ?? 0;
+          const txnByProfile = new Map<string, string>();
+          for (const t of txnRows ?? []) txnByProfile.set((t as any).profile_id, (t as any).id);
+          for (const p of monetary as any[]) {
+            const tid = txnByProfile.get(p.profile_id);
+            if (tid) await admin.from("prize_pot_payouts").update({ transaction_id: tid }).eq("id", p.id);
+          }
+        }
+      }
+
+      if (potStatus !== "distributed") {
+        await admin.from("prize_pots")
+          .update({ status: "distributed", updated_at: new Date().toISOString() })
+          .eq("id", potId);
+      }
+    }
   }
 }

@@ -36,12 +36,25 @@ type CompetitionPreview = {
   event_date: string | null;
   event_type: string | null;
   scoring_model: string | null;
+  template_name: string | null;
+  allowance_pct: number | null;
+};
+
+type PotPreview = {
+  event_name: string;
+  pot_name: string;
+  distribution_type: string;
+  entry_fee_amount: number | null;
+  player_count: number;
+  payout_count: number;
+  already_exists: boolean;
 };
 
 type PreviewData = {
   group_id: string;
   seasons: SeasonPreview[];
   competitions: CompetitionPreview[];
+  pots: PotPreview[];
   errors: string[];
   totals: {
     seasons_to_create: number;
@@ -49,6 +62,11 @@ type PreviewData = {
     participants: number;
     score_events: number;
     fee_transactions: number;
+    prize_pots: number;
+    pot_entries: number;
+    pot_entry_fees: number;
+    pot_payouts: number;
+    pot_winnings: number;
   };
 };
 
@@ -61,6 +79,13 @@ type ImportSummary = {
   score_events_created: number;
   competition_entries_created: number;
   fee_transactions_created: number;
+  event_submissions_created: number;
+  leaderboards_computed: number;
+  prize_pots_created: number;
+  pot_entries_created: number;
+  pot_payouts_created: number;
+  pot_entry_fee_transactions: number;
+  pot_winnings_transactions: number;
   skipped_already_imported: string[];
   competition_round_ids: Array<{ competition_name: string; event_name: string; competition_id: string; round_id: string }>;
 };
@@ -362,6 +387,15 @@ export default function SeasonImportPage() {
                   <span><span className="font-semibold text-white">{preview.totals.participants}</span> participant rows</span>
                   <span><span className="font-semibold text-white">{preview.totals.score_events}</span> score events</span>
                   <span><span className="font-semibold text-white">{preview.totals.fee_transactions}</span> fee transactions</span>
+                  {preview.totals.prize_pots > 0 && (
+                    <span><span className="font-semibold text-white">{preview.totals.prize_pots}</span> prize pots</span>
+                  )}
+                  {preview.totals.pot_entries > 0 && (
+                    <span><span className="font-semibold text-white">{preview.totals.pot_entries}</span> pot entries</span>
+                  )}
+                  {preview.totals.pot_payouts > 0 && (
+                    <span><span className="font-semibold text-white">{preview.totals.pot_payouts}</span> payouts</span>
+                  )}
                 </div>
 
                 {/* Seasons */}
@@ -404,6 +438,8 @@ export default function SeasonImportPage() {
                       <tr className="text-emerald-100/50">
                         <th className="text-left py-1 pr-3">Event Name</th>
                         <th className="text-left py-1 pr-3">Season</th>
+                        <th className="text-left py-1 pr-3">Template</th>
+                        <th className="text-right py-1 pr-3">Allow %</th>
                         <th className="text-right py-1 pr-3">Players</th>
                         <th className="text-right py-1 pr-3">Fee</th>
                         <th className="text-right py-1">Status</th>
@@ -422,6 +458,8 @@ export default function SeasonImportPage() {
                                 )}
                               </td>
                               <td className="py-1 pr-3 text-emerald-100/70">{c.season_name || "—"}</td>
+                              <td className="py-1 pr-3 text-emerald-100/70">{c.template_name || "—"}</td>
+                              <td className="text-right py-1 pr-3 text-emerald-100/80">{c.allowance_pct != null ? `${c.allowance_pct}%` : "—"}</td>
                               <td className="text-right py-1 pr-3 text-emerald-100/80">{c.player_count}</td>
                               <td className="text-right py-1 pr-3 text-emerald-100/80">
                                 {c.entry_fee != null && c.entry_fee > 0 ? `£${c.entry_fee.toFixed(2)}` : c.entry_fee === 0 ? "Free" : "—"}
@@ -437,7 +475,7 @@ export default function SeasonImportPage() {
                             </tr>
                             {isPartial && c.rounds.map(r => (
                               <tr key={`${c.competition_id}-${r.round_number}`} className="bg-black/10">
-                                <td colSpan={4} className="py-0.5 pl-5 pr-3 text-xs text-emerald-100/50">↳ {r.round_name}</td>
+                                <td colSpan={6} className="py-0.5 pl-5 pr-3 text-xs text-emerald-100/50">↳ {r.round_name}</td>
                                 <td className="text-right py-0.5 text-xs">
                                   {r.already_imported
                                     ? <span className="text-amber-400">Skip</span>
@@ -452,6 +490,46 @@ export default function SeasonImportPage() {
                     </tbody>
                   </table>
                 </div>
+
+                {/* Prize pots */}
+                {preview.pots.length > 0 && (
+                  <div>
+                    <div className="text-xs font-semibold text-emerald-100/60 mb-1">Prize Pots</div>
+                    <table className="w-full text-xs border-collapse">
+                      <thead>
+                        <tr className="text-emerald-100/50">
+                          <th className="text-left py-1 pr-3">Event</th>
+                          <th className="text-left py-1 pr-3">Pot</th>
+                          <th className="text-left py-1 pr-3">Type</th>
+                          <th className="text-right py-1 pr-3">Buy-in</th>
+                          <th className="text-right py-1 pr-3">Enrolled</th>
+                          <th className="text-right py-1 pr-3">Payouts</th>
+                          <th className="text-right py-1">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {preview.pots.map((p, i) => (
+                          <tr key={`${p.event_name}-${p.pot_name}-${i}`} className="border-t border-emerald-900/40">
+                            <td className="py-1 pr-3 text-emerald-100/80">{p.event_name}</td>
+                            <td className="py-1 pr-3 text-emerald-100">{p.pot_name}</td>
+                            <td className="py-1 pr-3 text-emerald-100/60">{p.distribution_type}</td>
+                            <td className="text-right py-1 pr-3 text-emerald-100/80">
+                              {p.entry_fee_amount != null && p.entry_fee_amount > 0 ? `£${p.entry_fee_amount.toFixed(2)}` : "—"}
+                            </td>
+                            <td className="text-right py-1 pr-3 text-emerald-100/80">{p.player_count}</td>
+                            <td className="text-right py-1 pr-3 text-emerald-100/80">{p.payout_count}</td>
+                            <td className="text-right py-1">
+                              {p.already_exists
+                                ? <span className="text-amber-400 font-medium">Exists</span>
+                                : <span className="text-emerald-400 font-medium">New</span>
+                              }
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -462,7 +540,7 @@ export default function SeasonImportPage() {
           <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 space-y-3">
             <div className="text-sm font-semibold text-[#f5e6b0]">Step 3 — Confirm Import</div>
             <div className="text-sm text-emerald-100/70">
-              This will create rounds, score events, competition entries, and entry fee transactions. This action cannot be undone from the UI.
+              This will create rounds, score events, competition entries, entry fee transactions, event leaderboards, and any prize pots &amp; payouts. This action cannot be undone from the UI.
             </div>
             <button
               type="button"
@@ -497,6 +575,21 @@ export default function SeasonImportPage() {
               <span><span className="font-semibold text-white">{importSummary.score_events_created}</span> score events</span>
               <span><span className="font-semibold text-white">{importSummary.competition_entries_created}</span> competition entries</span>
               <span><span className="font-semibold text-white">{importSummary.fee_transactions_created}</span> fee transactions</span>
+              {importSummary.event_submissions_created > 0 && (
+                <span><span className="font-semibold text-white">{importSummary.event_submissions_created}</span> submissions</span>
+              )}
+              {importSummary.leaderboards_computed > 0 && (
+                <span><span className="font-semibold text-white">{importSummary.leaderboards_computed}</span> leaderboards</span>
+              )}
+              {importSummary.prize_pots_created > 0 && (
+                <span><span className="font-semibold text-white">{importSummary.prize_pots_created}</span> prize pots</span>
+              )}
+              {importSummary.pot_entries_created > 0 && (
+                <span><span className="font-semibold text-white">{importSummary.pot_entries_created}</span> pot entries</span>
+              )}
+              {importSummary.pot_payouts_created > 0 && (
+                <span><span className="font-semibold text-white">{importSummary.pot_payouts_created}</span> payouts</span>
+              )}
             </div>
 
             {importSummary.skipped_already_imported.length > 0 && (

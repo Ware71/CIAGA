@@ -32,12 +32,25 @@ export type CompetitionPreview = {
   event_date: string | null;
   event_type: string | null;
   scoring_model: string | null;
+  template_name: string | null;
+  allowance_pct: number | null;
+};
+
+export type PotPreview = {
+  event_name: string;
+  pot_name: string;
+  distribution_type: string;
+  entry_fee_amount: number | null;
+  player_count: number;       // players who scored this event (auto-enrolled)
+  payout_count: number;
+  already_exists: boolean;
 };
 
 export type PreviewResponse = {
   group_id: string;
   seasons: SeasonPreview[];
   competitions: CompetitionPreview[];
+  pots: PotPreview[];
   errors: string[];
   totals: {
     seasons_to_create: number;
@@ -45,6 +58,11 @@ export type PreviewResponse = {
     participants: number;
     score_events: number;
     fee_transactions: number;
+    prize_pots: number;
+    pot_entries: number;
+    pot_entry_fees: number;
+    pot_payouts: number;
+    pot_winnings: number;
   };
 };
 
@@ -129,12 +147,42 @@ export async function POST(req: Request) {
         errors.push(`New event "${comp.event_name}": Course Name did not resolve — select a course from the dropdown`);
       }
       if (!comp.tee_box_id) {
-        errors.push(`New event "${comp.event_name}": Tee Name did not resolve — check column N (tee_found) shows ✓`);
+        errors.push(`New event "${comp.event_name}": Tee Name did not resolve — check column P (tee_found) shows ✓`);
+      }
+    }
+
+    // Template + allowance validation (applies to all competition rows)
+    const referencedTemplateIds = Array.from(new Set(parsed.competitions.map(c => c.template_id).filter(Boolean)));
+    let validTemplateIds = new Set<string>();
+    if (referencedTemplateIds.length) {
+      // competition_event_templates are group-scoped only via their parent competitions row
+      const { data: groupComps2 } = await admin.from("competitions").select("id").eq("group_id", groupId);
+      const groupCompIds = (groupComps2 ?? []).map((c: any) => c.id);
+      if (groupCompIds.length) {
+        const { data: tmplRows } = await admin
+          .from("competition_event_templates")
+          .select("id")
+          .in("id", referencedTemplateIds)
+          .in("competition_id", groupCompIds);
+        validTemplateIds = new Set((tmplRows ?? []).map((t: any) => t.id));
+      }
+    }
+    for (const comp of parsed.competitions) {
+      if (comp.template_name && !comp.template_id) {
+        errors.push(`Competition "${comp.event_name}": Template "${comp.template_name}" did not resolve — pick it from the dropdown.`);
+      } else if (comp.template_id && !validTemplateIds.has(comp.template_id)) {
+        errors.push(`Competition "${comp.event_name}": Template does not belong to this group.`);
+      }
+      if (comp.allowance_pct != null && (comp.allowance_pct < 0 || comp.allowance_pct > 100)) {
+        errors.push(`Competition "${comp.event_name}": Handicap Allowance % must be between 0 and 100.`);
       }
     }
 
     const existingCompIds = Array.from(new Set(existingComps.map(c => c.event_id).filter(Boolean)));
-    const profileIds      = Array.from(new Set(parsed.scores.map(s => s.profile_id).filter(Boolean)));
+    const profileIds      = Array.from(new Set([
+      ...parsed.scores.map(s => s.profile_id),
+      ...parsed.payouts.map(p => p.profile_id),
+    ].filter(Boolean)));
     const teeBoxIds       = Array.from(new Set(parsed.competitions.map(c => c.tee_box_id).filter(Boolean)));
     const seasonNames     = Array.from(definedSeasonNames);
     const newEventNames   = newComps.map(c => c.event_name);
@@ -300,16 +348,87 @@ export async function POST(req: Request) {
         event_date:       comp.event_date,
         event_type:       comp.event_type,
         scoring_model:    comp.scoring_model,
+        template_name:    comp.template_name || null,
+        allowance_pct:    comp.allowance_resolved,
       };
     });
 
     const newCompPreviews  = competitionPreviews.filter(c => !c.already_imported);
     const playersWithFee   = newCompPreviews.reduce((acc, c) => acc + (c.entry_fee != null && c.entry_fee > 0 ? c.player_count : 0), 0);
 
+    // ── Prize pots + payouts ──────────────────────────────────────────────────
+    const DIST_TYPES   = new Set(["position_based", "metric_weighted", "metric_equal", "equal_split", "non_monetary", "entry_only"]);
+    const METRIC_TYPES = new Set(["twos", "nearest_pin", "longest_drive", "season_points", "custom"]);
+
+    // Players who scored each event (these are auto-enrolled into the event's pots)
+    const playersScoredByEventName = new Map<string, Set<string>>();
+    for (const s of parsed.scores) {
+      if (!s.profile_id) continue;
+      if (!playersScoredByEventName.has(s.competition_name)) playersScoredByEventName.set(s.competition_name, new Set());
+      playersScoredByEventName.get(s.competition_name)!.add(s.profile_id);
+    }
+
+    const compByName = new Map(parsed.competitions.map(c => [c.event_name, c]));
+    const potKeySet  = new Set<string>();
+    for (const pot of parsed.pots) {
+      const key = `${pot.event_name}::${pot.pot_name}`;
+      if (potKeySet.has(key)) errors.push(`Prizes sheet: duplicate pot "${pot.pot_name}" for event "${pot.event_name}".`);
+      potKeySet.add(key);
+      if (!compByName.has(pot.event_name)) {
+        errors.push(`Prize pot "${pot.pot_name}": Event "${pot.event_name}" is not on the Competitions sheet.`);
+      }
+      if (!DIST_TYPES.has(pot.distribution_type)) {
+        errors.push(`Prize pot "${pot.pot_name}": invalid Distribution Type "${pot.distribution_type}".`);
+      }
+      if ((pot.distribution_type === "metric_weighted" || pot.distribution_type === "metric_equal")
+          && (!pot.metric_type || !METRIC_TYPES.has(pot.metric_type))) {
+        errors.push(`Prize pot "${pot.pot_name}": a valid Metric Type is required for metric pots.`);
+      }
+    }
+    for (const po of parsed.payouts) {
+      const key = `${po.event_name}::${po.pot_name}`;
+      if (!potKeySet.has(key)) {
+        errors.push(`Payout for "${po.player_label}": no pot "${po.pot_name}" defined for event "${po.event_name}" on the Prizes sheet.`);
+      }
+      if (!po.profile_id || !validProfileIds.has(po.profile_id)) {
+        errors.push(`Payout: player "${po.player_label}" did not resolve to a known profile.`);
+      }
+    }
+
+    // Detect pots that already exist (existing events only — new events have no event_id yet)
+    const potEventIds = Array.from(new Set(
+      parsed.pots.map(p => compByName.get(p.event_name)?.event_id).filter(Boolean) as string[]
+    ));
+    let existingPotKeys = new Set<string>();
+    if (potEventIds.length) {
+      const { data: existingPots } = await admin.from("prize_pots").select("event_id,name").in("event_id", potEventIds);
+      existingPotKeys = new Set((existingPots ?? []).map((p: any) => `${p.event_id}::${p.name}`));
+    }
+
+    const potPreviews: PotPreview[] = parsed.pots.map(pot => {
+      const comp        = compByName.get(pot.event_name);
+      const scored      = playersScoredByEventName.get(pot.event_name)?.size ?? 0;
+      const payoutCount = parsed.payouts.filter(p => p.event_name === pot.event_name && p.pot_name === pot.pot_name).length;
+      const already_exists = comp?.event_id ? existingPotKeys.has(`${comp.event_id}::${pot.pot_name}`) : false;
+      return {
+        event_name:        pot.event_name,
+        pot_name:          pot.pot_name,
+        distribution_type: pot.distribution_type,
+        entry_fee_amount:  pot.entry_fee_amount,
+        player_count:      scored,
+        payout_count:      payoutCount,
+        already_exists,
+      };
+    });
+
+    const newPotPreviews = potPreviews.filter(p => !p.already_exists);
+    const monetaryPayouts = parsed.payouts.filter(p => p.amount != null && p.amount > 0).length;
+
     const response: PreviewResponse = {
       group_id: groupId,
       seasons: seasonPreviews,
       competitions: competitionPreviews,
+      pots: potPreviews,
       errors,
       totals: {
         seasons_to_create: seasonPreviews.filter(s => !s.already_exists).length,
@@ -317,6 +436,11 @@ export async function POST(req: Request) {
         participants:      newCompPreviews.reduce((a, c) => a + c.player_count, 0),
         score_events:      newCompPreviews.reduce((a, c) => a + c.score_row_count, 0) * 18,
         fee_transactions:  playersWithFee,
+        prize_pots:        newPotPreviews.length,
+        pot_entries:       newPotPreviews.reduce((a, p) => a + p.player_count, 0),
+        pot_entry_fees:    newPotPreviews.reduce((a, p) => a + (p.entry_fee_amount != null && p.entry_fee_amount > 0 ? p.player_count : 0), 0),
+        pot_payouts:       parsed.payouts.length,
+        pot_winnings:      monetaryPayouts,
       },
     };
 
@@ -327,17 +451,27 @@ export async function POST(req: Request) {
 }
 
 // ── XLSX parsing ──────────────────────────────────────────────────────────────
-// Competitions sheet columns (v2, 1-based):
-//   1=event_name(A), 2=event_date(B), 3=event_type(C), 4=scoring_model(D)
-//   5=season_name(E), 6=course_name(F), 7=tee_name(G), 8=entry_fee_override(H), 9=notes(I)
-//   10=event_id(J), 11=is_new(K), 12=course_id(L), 13=tee_box_id(M), 14=tee_found(N)
-//   15=season_id(O), 16=default_entry_fee(P)
+// Competitions sheet columns (v3, 1-based):
+//   1=event_name(A), 2=event_date(B), 3=event_type(C), 4=scoring_model(D), 5=template(E),
+//   6=allowance%(F), 7=season_name(G), 8=course_name(H), 9=tee_name(I), 10=entry_fee_override(J),
+//   11=notes(K), 12=event_id(L), 13=is_new(M), 14=course_id(N), 15=tee_box_id(O), 16=tee_found(P),
+//   17=season_id(Q), 18=default_entry_fee(R), 19=template_id(S), 20=tee_slope(T), 21=tee_rating(U),
+//   22=tee_par(V), 23=allowance_resolved(W)
 //
 // Seasons sheet columns (1-based):
 //   1=season_name, 2=year, 3=start_date_override, 4=end_date_override, 5=season_id
 //
-// Scores sheet columns (1-based):
-//   1=event_name, 2=player_label, 3=handicap, 4=round_number, 5-22=holes 1-18, 23=event_id, 24=profile_id
+// Scores sheet columns (v3, 1-based):
+//   1=event_name, 2=player_label, 3=handicap_index, 4=round_number, 5-22=holes 1-18,
+//   23=course_handicap, 24=playing_handicap, 25=event_id, 26=profile_id
+//
+// Prizes sheet columns (1-based):
+//   1=event_name, 2=pot_name, 3=distribution_type, 4=entry_fee_amount, 5=metric_type,
+//   6=is_monetary, 7=prize_description, 8=description, 9=event_id
+//
+// Payouts sheet columns (1-based):
+//   1=event_name, 2=pot_name, 3=player_label, 4=position, 5=amount, 6=metric_value,
+//   7=note, 8=event_id, 9=profile_id
 
 type ParsedSeason = {
   season_name: string;
@@ -351,6 +485,10 @@ type ParsedComp = {
   event_date: string | null;
   event_type: string | null;
   scoring_model: string | null;
+  template_name: string;
+  template_id: string;
+  allowance_pct: number | null;       // user-entered (col F), may be null
+  allowance_resolved: number | null;  // effective (col W)
   season_name: string;
   course_name: string;
   tee_name: string;
@@ -371,13 +509,39 @@ type ParsedScore = {
   holes: number[];
 };
 
+type ParsedPot = {
+  event_name: string;
+  event_id: string;
+  pot_name: string;
+  distribution_type: string;
+  entry_fee_amount: number | null;
+  metric_type: string | null;
+  is_monetary: boolean;
+  prize_description: string | null;
+  description: string | null;
+};
+
+type ParsedPayout = {
+  event_name: string;
+  event_id: string;
+  pot_name: string;
+  player_label: string;
+  profile_id: string;
+  position: number | null;
+  amount: number | null;
+  metric_value: number | null;
+  note: string | null;
+};
+
 async function parseXlsx(file: File): Promise<{
-  parsed: { seasons: ParsedSeason[]; competitions: ParsedComp[]; scores: ParsedScore[] };
+  parsed: { seasons: ParsedSeason[]; competitions: ParsedComp[]; scores: ParsedScore[]; pots: ParsedPot[]; payouts: ParsedPayout[] };
   errors: string[];
 }> {
   const errors: string[] = [];
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(await file.arrayBuffer());
+
+  const EMPTY = { seasons: [], competitions: [], scores: [], pots: [], payouts: [] };
 
   // Version check — guide sheet col D row 1 contains the version marker
   const guideSheet = wb.getWorksheet("Guide");
@@ -385,11 +549,11 @@ async function parseXlsx(file: File): Promise<{
     const versionCell = cellString(guideSheet.getCell(1, 4));
     if (versionCell && versionCell !== TEMPLATE_VERSION) {
       errors.push(`This template is outdated (version "${versionCell}") — please re-download the template from Step 1.`);
-      return { parsed: { seasons: [], competitions: [], scores: [] }, errors };
+      return { parsed: EMPTY, errors };
     }
     if (!versionCell) {
       errors.push(`This template is outdated (no version marker) — please re-download the template from Step 1.`);
-      return { parsed: { seasons: [], competitions: [], scores: [] }, errors };
+      return { parsed: EMPTY, errors };
     }
   }
 
@@ -402,7 +566,7 @@ async function parseXlsx(file: File): Promise<{
   const scoresSheet = wb.getWorksheet("Scores");
   if (!scoresSheet) errors.push("Workbook is missing the 'Scores' sheet");
 
-  if (errors.length) return { parsed: { seasons: [], competitions: [], scores: [] }, errors };
+  if (errors.length) return { parsed: EMPTY, errors };
 
   const seasons: ParsedSeason[] = [];
   seasonSheet!.eachRow((row, rowNumber) => {
@@ -422,20 +586,24 @@ async function parseXlsx(file: File): Promise<{
     if (rowNumber === 1) return;
     const eventName = cellString(row.getCell(1)); // A
     if (!eventName) return;
-    const eventId = cellString(row.getCell(10)); // J
+    const eventId = cellString(row.getCell(12)); // L
     competitions.push({
       event_name:         eventName,
       event_date:         cellString(row.getCell(2)) || null,  // B
       event_type:         cellString(row.getCell(3)) || null,  // C
       scoring_model:      cellString(row.getCell(4)) || null,  // D
-      season_name:        cellString(row.getCell(5)),          // E
-      course_name:        cellString(row.getCell(6)),          // F
-      tee_name:           cellString(row.getCell(7)),          // G
-      entry_fee_override: cellNumber(row.getCell(8)),          // H
+      template_name:      cellString(row.getCell(5)),          // E
+      allowance_pct:      cellNumber(row.getCell(6)),          // F
+      season_name:        cellString(row.getCell(7)),          // G
+      course_name:        cellString(row.getCell(8)),          // H
+      tee_name:           cellString(row.getCell(9)),          // I
+      entry_fee_override: cellNumber(row.getCell(10)),         // J
       event_id:           eventId,
       is_new_event:       eventId === "",
-      course_id:          cellString(row.getCell(12)),         // L
-      tee_box_id:         cellString(row.getCell(13)),         // M
+      course_id:          cellString(row.getCell(14)),         // N
+      tee_box_id:         cellString(row.getCell(15)),         // O
+      template_id:        cellString(row.getCell(19)),         // S
+      allowance_resolved: cellNumber(row.getCell(23)),         // W
     });
   });
 
@@ -450,16 +618,57 @@ async function parseXlsx(file: File): Promise<{
     for (let h = 0; h < 18; h++) holes.push(cellNumber(row.getCell(5 + h)) ?? 0); // E-V
     scores.push({
       competition_name: compName,
-      competition_id:   cellString(row.getCell(23)), // W
+      competition_id:   cellString(row.getCell(25)), // Y
       player_label:     playerLabel,
-      profile_id:       cellString(row.getCell(24)), // X
+      profile_id:       cellString(row.getCell(26)), // Z
       handicap:         cellNumber(row.getCell(3)),
       round_number:     cellNumber(row.getCell(4)) ?? 1,
       holes,
     });
   });
 
-  return { parsed: { seasons, competitions, scores }, errors };
+  const pots: ParsedPot[] = [];
+  const prizesSheet = wb.getWorksheet("Prizes");
+  prizesSheet?.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return;
+    const eventName = cellString(row.getCell(1)); // A
+    const potName   = cellString(row.getCell(2)); // B
+    if (!eventName || !potName) return;
+    pots.push({
+      event_name:        eventName,
+      pot_name:          potName,
+      distribution_type: cellString(row.getCell(3)) || "position_based", // C
+      entry_fee_amount:  cellNumber(row.getCell(4)),                      // D
+      metric_type:       cellString(row.getCell(5)) || null,             // E
+      is_monetary:       (cellString(row.getCell(6)) || "Yes").toLowerCase() !== "no", // F
+      prize_description: cellString(row.getCell(7)) || null,             // G
+      description:       cellString(row.getCell(8)) || null,             // H
+      event_id:          cellString(row.getCell(9)),                      // I
+    });
+  });
+
+  const payouts: ParsedPayout[] = [];
+  const payoutsSheet = wb.getWorksheet("Payouts");
+  payoutsSheet?.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return;
+    const eventName   = cellString(row.getCell(1)); // A
+    const potName     = cellString(row.getCell(2)); // B
+    const playerLabel = cellString(row.getCell(3)); // C
+    if (!eventName || !potName || !playerLabel) return;
+    payouts.push({
+      event_name:   eventName,
+      pot_name:     potName,
+      player_label: playerLabel,
+      position:     cellNumber(row.getCell(4)), // D
+      amount:       cellNumber(row.getCell(5)), // E
+      metric_value: cellNumber(row.getCell(6)), // F
+      note:         cellString(row.getCell(7)) || null, // G
+      event_id:     cellString(row.getCell(8)), // H
+      profile_id:   cellString(row.getCell(9)), // I
+    });
+  });
+
+  return { parsed: { seasons, competitions, scores, pots, payouts }, errors };
 }
 
 function cellString(cell: ExcelJS.Cell): string {
