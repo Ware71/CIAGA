@@ -162,6 +162,7 @@ export async function GET(req: Request) {
     buildSeasonsSheet(wb);
     buildCompetitionsSheet(wb, events.length, courses.length, templates.length);
     buildScoresSheet(wb, orderedProfiles.length);
+    buildEventRoundsSheet(wb);
     buildPrizesSheet(wb);
     buildPayoutsSheet(wb, orderedProfiles.length);
     buildLookupSheets(wb, events, orderedProfiles, teeBoxes, courses, seasons, templates);
@@ -328,6 +329,20 @@ function buildGuideSheet(wb: ExcelJS.Workbook, groupName: string) {
   for (const [col, desc, colour] of scoreCols) { ws.getRow(r).values = [col, desc, colour]; r++; }
 
   r = addBlank(ws, r);
+  r = addSection(ws, r, "Event Rounds sheet — columns (optional, multi-course events only)", 3);
+  const erCols: [string, string, string][] = [
+    ["Event Name",   "Dropdown from Competitions sheet. Must match exactly.", "Green"],
+    ["Round Number", "Which round this entry applies to (1, 2, 3…).", "Green"],
+    ["Round Date",   "Optional date override for this specific round (YYYY-MM-DD). Leave blank to use the event date.", "Amber"],
+    ["Course Name",  "Dropdown — the course for THIS round. Overrides the Competitions-sheet course for this round only.", "Green"],
+    ["Tee Name",     "Cascading dropdown for the selected course.", "Green"],
+    ["event_id … round_key", "Auto-resolved by formula — do not edit. round_key is used by the Scores CH/PH calculation.", "Red"],
+  ];
+  ws.getRow(r).values = ["Column", "Description", "Colour"]; ws.getRow(r).font = { bold: true }; r++;
+  for (const [col, desc, colour] of erCols) { ws.getRow(r).values = [col, desc, colour]; r++; }
+  r = addText(ws, r, "Leave this sheet blank for single-round events or multi-round events where all rounds are played at the same course.", 3);
+
+  r = addBlank(ws, r);
   r = addSection(ws, r, "Prizes sheet — columns (optional)", 3);
   const prizeCols: [string, string, string][] = [
     ["Event Name",        "Dropdown from Competitions sheet. Which event this pot belongs to.", "Green"],
@@ -360,10 +375,11 @@ function buildGuideSheet(wb: ExcelJS.Workbook, groupName: string) {
   const steps = [
     "1. Fill Seasons sheet — one row per season.",
     "2. Fill Competitions (Events) sheet — one row per event. Use dropdowns. Pick a Template to inherit settings. Check column P (tee_found) shows ✓ for every row.",
-    "3. Fill Scores sheet — one row per player per round. Enter ONLY the Handicap Index; Course & Playing Handicap calculate automatically so you can sanity-check them.",
-    "4. (Optional) Fill Prizes sheet — one row per prize pot per event.",
-    "5. (Optional) Fill Payouts sheet — one row per winner per pot.",
-    "6. Upload this .xlsx, click Preview, review, then Confirm Import.",
+    "3. (Optional) Fill Event Rounds sheet — only for multi-round events where each round is at a DIFFERENT course. One row per round. Leave blank otherwise.",
+    "4. Fill Scores sheet — one row per player per round. Enter ONLY the Handicap Index; Course & Playing Handicap calculate automatically (using the Event Rounds tee when set, otherwise the Competitions tee).",
+    "5. (Optional) Fill Prizes sheet — one row per prize pot per event.",
+    "6. (Optional) Fill Payouts sheet — one row per winner per pot.",
+    "7. Upload this .xlsx, click Preview, review, then Confirm Import.",
   ];
   for (const s of steps) { r = addText(ws, r, s, 3); }
 
@@ -603,7 +619,8 @@ function buildCompetitionsSheet(wb: ExcelJS.Workbook, eventCount: number, course
 // C   Handicap Index      GREEN  enter HI only — CH/PH computed below
 // D   Round               GREEN  integer 1+, blank=1
 // E-V Hole 1–18           GREEN  cols 5-22
-// W   Course Handicap     RED    col 23  ← ROUND(HI*slope/113 + (rating-par))
+// W   Course Handicap     RED    col 23  ← ROUND(HI*slope/113 + (rating-par)); slope/rating/par from EventRounds
+//                                           if a per-round entry exists, else from Competitions (event-level tee)
 // X   Playing Handicap    RED    col 24  ← ROUND(CH * allowance/100)
 // Y   event_id            RED    col 25  ← XLOOKUP(A, Competitions!$A, Competitions!$L) [col L = event_id]
 // Z   profile_id          RED    col 26
@@ -641,8 +658,9 @@ function buildScoresSheet(wb: ExcelJS.Workbook, memberCount: number) {
       null, // C Handicap Index
       1,    // D Round (default 1)
       ...Array.from({ length: 18 }, () => null as CellVal), // E-V holes
-      // W: Course Handicap — live calc from the event's tee slope/rating/par
-      { formula: `IF(OR($A${r}="",$C${r}=""),"",ROUND($C${r}*XLOOKUP($A${r},Competitions!$A:$A,Competitions!$T:$T)/113+(XLOOKUP($A${r},Competitions!$A:$A,Competitions!$U:$U)-XLOOKUP($A${r},Competitions!$A:$A,Competitions!$V:$V)),0))` },
+      // W: Course Handicap — tries Event Rounds sheet first (per-round tee), falls back to Competitions (event-level tee)
+      // round_key in EventRounds!$M = EventName&"|"&RoundNumber
+      { formula: `IF(OR($A${r}="",$C${r}=""),"",ROUND($C${r}*IFERROR(XLOOKUP($A${r}&"|"&$D${r},'Event Rounds'!$M:$M,'Event Rounds'!$J:$J),XLOOKUP($A${r},Competitions!$A:$A,Competitions!$T:$T))/113+(IFERROR(XLOOKUP($A${r}&"|"&$D${r},'Event Rounds'!$M:$M,'Event Rounds'!$K:$K),XLOOKUP($A${r},Competitions!$A:$A,Competitions!$U:$U))-IFERROR(XLOOKUP($A${r}&"|"&$D${r},'Event Rounds'!$M:$M,'Event Rounds'!$L:$L),XLOOKUP($A${r},Competitions!$A:$A,Competitions!$V:$V))),0))` },
       // X: Playing Handicap — Course Handicap × event allowance %
       { formula: `IF(W${r}="","",ROUND(W${r}*XLOOKUP($A${r},Competitions!$A:$A,Competitions!$W:$W)/100,0))` },
       // Y: event_id — references Competitions!$L (col 12 = event_id in the new layout)
@@ -690,6 +708,117 @@ function buildScoresSheet(wb: ExcelJS.Workbook, memberCount: number) {
   }
 
   ws.views = [{ state: "frozen", xSplit: 4, ySplit: 1 }];
+}
+
+// ── Event Rounds sheet ────────────────────────────────────────────────────────
+// Optional. One row per round per multi-course event.
+// Leave blank for single-round events or multi-round same-course events.
+// When populated, overrides the Competitions-sheet course/tee for that specific round.
+// A  Event Name   GREEN  dropdown from Competitions!$A
+// B  Round Number GREEN  integer ≥ 1
+// C  Round Date   AMBER  YYYY-MM-DD override; blank = use event date
+// D  Course Name  GREEN  dropdown from _Courses!$B
+// E  Tee Name     GREEN  cascading INDIRECT on course_id (col G)
+// F  event_id     RED    XLOOKUP(A, Competitions!$A, Competitions!$L)
+// G  course_id    RED    XLOOKUP(D, _Courses!$B, _Courses!$A)
+// H  tee_box_id   RED    XLOOKUP(G&"|"&E, _TeeBoxes!$D, _TeeBoxes!$A)
+// I  tee_found    RED    ✓/✗ indicator
+// J  tee_slope    RED    XLOOKUP(H, _TeeBoxes!$A, _TeeBoxes!$F)
+// K  tee_rating   RED    XLOOKUP(H, _TeeBoxes!$A, _TeeBoxes!$E)
+// L  tee_par      RED    XLOOKUP(H, _TeeBoxes!$A, _TeeBoxes!$G)
+// M  round_key    RED    A&"|"&B  ← used by Scores CH/PH to find per-round slope/rating/par
+
+const EVENT_ROUNDS_DATA_ROWS = 500;
+
+function buildEventRoundsSheet(wb: ExcelJS.Workbook) {
+  const ws = wb.addWorksheet("Event Rounds");
+  ws.properties.tabColor = { argb: "FF00B0F0" };
+
+  const ER_COLS: Array<{ header: string; width: number; fill: Fill }> = [
+    { header: "Event Name",   width: 30, fill: GREEN_FILL }, // A col 1
+    { header: "Round Number", width: 12, fill: GREEN_FILL }, // B col 2
+    { header: "Round Date",   width: 14, fill: AMBER_FILL }, // C col 3
+    { header: "Course Name",  width: 28, fill: GREEN_FILL }, // D col 4
+    { header: "Tee Name",     width: 14, fill: GREEN_FILL }, // E col 5
+    { header: "event_id",     width: 38, fill: RED_FILL   }, // F col 6
+    { header: "course_id",    width: 38, fill: RED_FILL   }, // G col 7
+    { header: "tee_box_id",   width: 38, fill: RED_FILL   }, // H col 8
+    { header: "tee_found",    width: 14, fill: RED_FILL   }, // I col 9
+    { header: "tee_slope",    width: 10, fill: RED_FILL   }, // J col 10
+    { header: "tee_rating",   width: 10, fill: RED_FILL   }, // K col 11
+    { header: "tee_par",      width: 10, fill: RED_FILL   }, // L col 12
+    { header: "round_key",    width: 30, fill: RED_FILL   }, // M col 13
+  ];
+
+  ER_COLS.forEach((col, i) => { ws.getColumn(i + 1).width = col.width; });
+
+  type CellVal = string | number | null | { formula: string };
+  const rows: CellVal[][] = [];
+  for (let i = 0; i < EVENT_ROUNDS_DATA_ROWS; i++) {
+    const r = i + 2;
+    rows.push([
+      null, null, null, null, null, // A-E user input
+      { formula: `IFERROR(XLOOKUP(A${r},Competitions!$A:$A,Competitions!$L:$L),"")` },            // F event_id
+      { formula: `IFERROR(XLOOKUP(D${r},_Courses!$B:$B,_Courses!$A:$A),"")` },                    // G course_id
+      { formula: `IFERROR(XLOOKUP(G${r}&"|"&E${r},_TeeBoxes!$D:$D,_TeeBoxes!$A:$A),"")` },       // H tee_box_id
+      { formula: `IF(A${r}="","",IF(H${r}<>"","✓ Found","✗ Not found"))` },                       // I tee_found
+      { formula: `IFERROR(XLOOKUP(H${r},_TeeBoxes!$A:$A,_TeeBoxes!$F:$F),"")` },                 // J tee_slope
+      { formula: `IFERROR(XLOOKUP(H${r},_TeeBoxes!$A:$A,_TeeBoxes!$E:$E),"")` },                 // K tee_rating
+      { formula: `IFERROR(XLOOKUP(H${r},_TeeBoxes!$A:$A,_TeeBoxes!$G:$G),"")` },                 // L tee_par
+      { formula: `IF(A${r}="","",A${r}&"|"&IF(B${r}="","",B${r}))` },                             // M round_key
+    ]);
+  }
+
+  ws.addTable({
+    name: "EventRoundsImport",
+    ref: "A1",
+    headerRow: true,
+    totalsRow: false,
+    style: { theme: "TableStyleMedium1", showRowStripes: true } as any,
+    columns: ER_COLS.map(col => ({ name: col.header, filterButton: true })),
+    rows: rows as any,
+  });
+
+  const headerRow = ws.getRow(1);
+  ER_COLS.forEach((col, i) => {
+    const cell = headerRow.getCell(i + 1);
+    cell.fill = col.fill; cell.font = { bold: true }; cell.alignment = { horizontal: "center" };
+  });
+
+  for (let row = 2; row <= EVENT_ROUNDS_DATA_ROWS + 1; row++) {
+    for (let col = 6; col <= 13; col++) ws.getCell(row, col).fill = LIGHT_RED;
+  }
+
+  const compEnd = COMP_DATA_ROWS + 1;
+  applyListValidation(ws, 1, 2, EVENT_ROUNDS_DATA_ROWS + 1, `Competitions!$A$2:$A$${compEnd}`);
+  applyListValidation(ws, 4, 2, EVENT_ROUNDS_DATA_ROWS + 1, `_Courses!$B$2:$B$2001`);
+
+  // Round Number — whole ≥ 1
+  for (let row = 2; row <= EVENT_ROUNDS_DATA_ROWS + 1; row++) {
+    ws.getCell(row, 2).dataValidation = {
+      type: "whole", operator: "greaterThanOrEqual", formulae: [1],
+      allowBlank: true, showErrorMessage: false,
+    };
+    // Tee Name — cascading INDIRECT on course_id (col G)
+    ws.getCell(row, 5).dataValidation = {
+      type: "list", allowBlank: true,
+      formulae: [`INDIRECT("tees_"&SUBSTITUTE(G${row},"-","_"))`],
+      showErrorMessage: false,
+    };
+  }
+
+  // Conditional format: tee_found (col I = 9)
+  ws.addConditionalFormatting({
+    ref: `I2:I${EVENT_ROUNDS_DATA_ROWS + 1}`,
+    rules: [
+      { type: "containsText", operator: "containsText", text: "✓",
+        style: { fill: { type: "pattern", pattern: "solid", fgColor: { argb: "FF92D050" } } }, priority: 1 } as any,
+      { type: "containsText", operator: "containsText", text: "✗",
+        style: { fill: { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFDDDD" } } }, priority: 2 } as any,
+    ],
+  });
+
+  ws.views = [{ state: "frozen", ySplit: 1 }];
 }
 
 // ── Prizes sheet ──────────────────────────────────────────────────────────────

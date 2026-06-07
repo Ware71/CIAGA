@@ -34,6 +34,7 @@ export type CompetitionPreview = {
   scoring_model: string | null;
   template_name: string | null;
   allowance_pct: number | null;
+  round_overrides: { round_number: number; course_id: string; tee_box_id: string }[];
 };
 
 export type PotPreview = {
@@ -101,6 +102,12 @@ export async function POST(req: Request) {
     const { parsed, errors: parseErrors } = await parseXlsx(file);
     if (parseErrors.length) {
       return NextResponse.json({ error: parseErrors[0], errors: parseErrors }, { status: 400 });
+    }
+
+    // Build round override map keyed by "eventName::roundNumber"
+    const roundCourseByKey = new Map<string, ParsedRound>();
+    for (const r of parsed.eventRounds) {
+      roundCourseByKey.set(`${r.event_name}::${r.round_number}`, r);
     }
 
     const errors: string[] = [];
@@ -199,7 +206,10 @@ export async function POST(req: Request) {
       ...parsed.scores.map(s => s.profile_id),
       ...parsed.payouts.map(p => p.profile_id),
     ].filter(Boolean)));
-    const teeBoxIds       = Array.from(new Set(parsed.competitions.map(c => c.tee_box_id).filter(Boolean)));
+    const teeBoxIds       = Array.from(new Set([
+      ...parsed.competitions.map(c => c.tee_box_id),
+      ...parsed.eventRounds.map(r => r.tee_box_id),
+    ].filter(Boolean)));
     const seasonNames     = Array.from(definedSeasonNames);
     const newEventNames   = newComps.map(c => c.event_name);
     const allCourseIds    = Array.from(new Set(parsed.competitions.map(c => c.course_id).filter(Boolean)));
@@ -349,6 +359,11 @@ export async function POST(req: Request) {
 
       const already_imported = !comp.is_new_event && rounds.length > 0 && rounds.every(r => r.already_imported);
 
+      // Per-round course overrides (for display only)
+      const roundOverrides = parsed.eventRounds
+        .filter(r => r.event_name === comp.event_name)
+        .map(r => ({ round_number: r.round_number, course_id: r.course_id, tee_box_id: r.tee_box_id }));
+
       return {
         competition_id:   comp.event_id,
         competition_name: comp.event_name,
@@ -360,6 +375,7 @@ export async function POST(req: Request) {
         score_row_count:  compScores.length,
         already_imported,
         rounds,
+        round_overrides:  roundOverrides,
         is_new_event:     comp.is_new_event,
         event_date:       comp.event_date,
         event_type:       comp.event_type,
@@ -371,6 +387,17 @@ export async function POST(req: Request) {
 
     const newCompPreviews  = competitionPreviews.filter(c => !c.already_imported);
     const playersWithFee   = newCompPreviews.reduce((acc, c) => acc + (c.entry_fee != null && c.entry_fee > 0 ? c.player_count : 0), 0);
+
+    // ── Event Rounds validation ───────────────────────────────────────────────
+    const compNamesOnSheet = new Set(parsed.competitions.map(c => c.event_name));
+    for (const er of parsed.eventRounds) {
+      if (!compNamesOnSheet.has(er.event_name)) {
+        errors.push(`Event Rounds: event "${er.event_name}" not on the Competitions sheet`);
+      }
+      if (!validTeeBoxIds.has(er.tee_box_id)) {
+        errors.push(`Event Rounds: round ${er.round_number} of "${er.event_name}" — tee not found (check column I shows ✓)`);
+      }
+    }
 
     // ── Prize pots + payouts ──────────────────────────────────────────────────
     const DIST_TYPES   = new Set(["position_based", "metric_weighted", "metric_equal", "equal_split", "non_monetary", "entry_only"]);
@@ -481,6 +508,11 @@ export async function POST(req: Request) {
 //   1=event_name, 2=player_label, 3=handicap_index, 4=round_number, 5-22=holes 1-18,
 //   23=course_handicap, 24=playing_handicap, 25=event_id, 26=profile_id
 //
+// Event Rounds sheet columns (1-based, optional):
+//   1=event_name, 2=round_number, 3=round_date, 4=course_name, 5=tee_name,
+//   6=event_id, 7=course_id, 8=tee_box_id, 9=tee_found, 10=tee_slope,
+//   11=tee_rating, 12=tee_par, 13=round_key
+//
 // Prizes sheet columns (1-based):
 //   1=event_name, 2=pot_name, 3=distribution_type, 4=entry_fee_amount, 5=metric_type,
 //   6=is_monetary, 7=prize_description, 8=description, 9=event_id
@@ -525,6 +557,14 @@ type ParsedScore = {
   holes: number[];
 };
 
+type ParsedRound = {
+  event_name: string;
+  round_number: number;
+  round_date: string | null;
+  course_id: string;   // col G
+  tee_box_id: string;  // col H
+};
+
 type ParsedPot = {
   event_name: string;
   event_id: string;
@@ -550,14 +590,14 @@ type ParsedPayout = {
 };
 
 async function parseXlsx(file: File): Promise<{
-  parsed: { seasons: ParsedSeason[]; competitions: ParsedComp[]; scores: ParsedScore[]; pots: ParsedPot[]; payouts: ParsedPayout[] };
+  parsed: { seasons: ParsedSeason[]; competitions: ParsedComp[]; scores: ParsedScore[]; eventRounds: ParsedRound[]; pots: ParsedPot[]; payouts: ParsedPayout[] };
   errors: string[];
 }> {
   const errors: string[] = [];
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(await file.arrayBuffer());
 
-  const EMPTY = { seasons: [], competitions: [], scores: [], pots: [], payouts: [] };
+  const EMPTY = { seasons: [], competitions: [], scores: [], eventRounds: [], pots: [], payouts: [] };
 
   // Version check — guide sheet col D row 1 contains the version marker
   const guideSheet = wb.getWorksheet("Guide");
@@ -643,6 +683,26 @@ async function parseXlsx(file: File): Promise<{
     });
   });
 
+  const eventRounds: ParsedRound[] = [];
+  const eventRoundsSheet = wb.getWorksheet("Event Rounds");
+  eventRoundsSheet?.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return;
+    const eventName = cellString(row.getCell(1)); // A
+    if (!eventName) return;
+    const roundNum = cellNumber(row.getCell(2));  // B
+    if (!roundNum) return;
+    const courseId  = cellString(row.getCell(7)); // G
+    const teeBoxId  = cellString(row.getCell(8)); // H
+    if (!courseId || !teeBoxId) return;
+    eventRounds.push({
+      event_name:   eventName,
+      round_number: roundNum,
+      round_date:   cellString(row.getCell(3)) || null, // C
+      course_id:    courseId,
+      tee_box_id:   teeBoxId,
+    });
+  });
+
   const pots: ParsedPot[] = [];
   const prizesSheet = wb.getWorksheet("Prizes");
   prizesSheet?.eachRow((row, rowNumber) => {
@@ -684,7 +744,7 @@ async function parseXlsx(file: File): Promise<{
     });
   });
 
-  return { parsed: { seasons, competitions, scores, pots, payouts }, errors };
+  return { parsed: { seasons, competitions, scores, eventRounds, pots, payouts }, errors };
 }
 
 function cellString(cell: ExcelJS.Cell): string {

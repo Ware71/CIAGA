@@ -38,6 +38,7 @@ type CompetitionPreview = {
   scoring_model: string | null;
   template_name: string | null;
   allowance_pct: number | null;
+  round_overrides: { round_number: number; course_id: string; tee_box_id: string }[];
 };
 
 type PotPreview = {
@@ -455,6 +456,9 @@ export default function SeasonImportPage() {
                                 {c.event_name}
                                 {c.is_new_event && (
                                   <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-wide text-blue-300 bg-blue-900/40 px-1.5 py-0.5 rounded">New</span>
+                                )}
+                                {c.round_overrides?.length > 0 && (
+                                  <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-wide text-cyan-300 bg-cyan-900/30 px-1.5 py-0.5 rounded">{c.round_overrides.length} round overrides</span>
                                 )}
                               </td>
                               <td className="py-1 pr-3 text-emerald-100/70">{c.season_name || "—"}</td>
