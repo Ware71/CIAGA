@@ -39,6 +39,17 @@ export async function emitRoundPlayedFeedItem(params: {
   const status = String((round as any).status ?? "").toLowerCase();
   if (status === "live") return null;
 
+  // Skip round_played card for rounds played as part of a competition event
+  const eventTeeTimeId = (round as any).event_tee_time_id as string | null;
+  if (eventTeeTimeId) {
+    const { data: tt } = await supabaseAdmin
+      .from("event_tee_times")
+      .select("event_id")
+      .eq("id", eventTeeTimeId)
+      .maybeSingle();
+    if ((tt as any)?.event_id) return null;
+  }
+
   // Idempotency
   const group_key = `round:${roundId}`;
   const { data: existing, error: exErr } = await supabaseAdmin
@@ -130,7 +141,6 @@ export async function emitRoundPlayedFeedItem(params: {
 
   // Look up event freeze state if this round is part of an event
   let competitionHolesShown: number | null = null;
-  const eventTeeTimeId = (round as any).event_tee_time_id as string | null;
   if (eventTeeTimeId) {
     try {
       const { data: teeTime } = await supabaseAdmin

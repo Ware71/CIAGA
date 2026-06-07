@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { emitCompetitionRoundFeedItems } from "@/lib/feed/generators/competitionRound";
 
 export type EventStatus =
   | "upcoming"
@@ -139,5 +140,9 @@ export async function reconcileEventStatus(
       .from("events")
       .update({ majors_status: target })
       .eq("id", eventId);
+
+    if (target === "live" || target === "completed") {
+      emitCompetitionRoundFeedItems({ eventId, newStatus: target }).catch(() => {});
+    }
   }
 }

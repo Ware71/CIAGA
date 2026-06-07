@@ -1514,7 +1514,9 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const fromHome = searchParams.get("from") === "home";
-  const [tab, setTab] = useState<Tab>("overview");
+  const VALID_TABS: readonly Tab[] = ["overview", "leaderboard", "tee-times", "rules", "fixtures", "bracket", "league-table", "winnings", "finances"];
+  const tabParam = searchParams.get("tab") as Tab | null;
+  const [tab, setTab] = useState<Tab>(tabParam && VALID_TABS.includes(tabParam) ? tabParam : "overview");
   const [event, setCompetition] = useState<EventWithGroup | null>(null);
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);

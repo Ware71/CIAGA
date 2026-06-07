@@ -53,6 +53,8 @@ function formatLiveStarted(occurredAtIso: string): string {
 // ---- Helpers ----------------------------------------------------
 
 function getRoundIdForOpen(item: FeedItemVM): string | undefined {
+  if (item.type === "competition_round") return undefined;
+
   const p: any = item.payload ?? {};
   if (item.type === "round_played") return typeof p.round_id === "string" ? p.round_id : undefined;
 
@@ -81,6 +83,12 @@ function cardHeaderTitle(item: FeedItemVM, isLive: boolean): string {
   if (item.type === "pb") return "Personal Best";
   if (item.type === "hole_event") return holeEventBadgeText(item.payload);
   if (item.type === "user_post") return "Post";
+  if (item.type === "competition_round") {
+    const p: any = item.payload ?? {};
+    const rn = typeof p.round_number === "number" ? p.round_number : 1;
+    const total = typeof p.total_rounds === "number" ? p.total_rounds : 1;
+    return total > 1 ? `Round ${rn} of ${total}` : "Round";
+  }
   return "Activity";
 }
 
@@ -426,6 +434,54 @@ function HoleEventBody({ item }: { item: FeedItemVM }) {
 
 // ---- Main component --------------------------------------------
 
+function CompetitionRoundBody({ payload }: { payload: any }) {
+  const roundStatus: string = payload?.round_status ?? "live";
+  const isComplete = roundStatus === "completed";
+  const winner = payload?.winner as { profile_id: string; name: string; avatar_url?: string | null } | null;
+  const livePlayers = (Array.isArray(payload?.live_players) ? payload.live_players : []) as Array<{
+    profile_id: string;
+    name: string;
+    avatar_url?: string | null;
+  }>;
+  const courseName: string | null = payload?.course_name ?? null;
+  const scheduledDate: string | null = payload?.scheduled_date ?? null;
+  const groupName: string | null = payload?.group_name ?? null;
+
+  const dateLine = [
+    scheduledDate ? new Date(scheduledDate).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" }) : null,
+    courseName,
+  ].filter(Boolean).join(" · ");
+
+  return (
+    <div className="space-y-2">
+      {groupName ? (
+        <div className="text-[10px] uppercase tracking-[0.16em] text-emerald-200/50">{groupName}</div>
+      ) : null}
+      {dateLine ? (
+        <div className="text-xs font-semibold text-emerald-100/60">{dateLine}</div>
+      ) : null}
+      {isComplete && winner ? (
+        <div className="flex items-center gap-2 mt-1">
+          <Avatar name={winner.name} url={winner.avatar_url ?? null} size={24} />
+          <span className="text-xs font-semibold text-[#f5e6b0]">
+            Winner: {winner.name}
+          </span>
+        </div>
+      ) : !isComplete && livePlayers.length > 0 ? (
+        <div className="flex items-center gap-2 mt-1">
+          <AvatarStack
+            people={livePlayers.map((p) => ({ name: p.name, avatar_url: p.avatar_url ?? null }))}
+            max={4}
+          />
+          <span className="text-xs font-semibold text-emerald-100/60">
+            {livePlayers.length === 1 ? livePlayers[0].name : `${livePlayers.length} playing`}
+          </span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 type TopCommentVM = { author: string; body: string; like_count: number; created_at?: string };
 
 function isBetterTopComment(a: TopCommentVM | null, b: TopCommentVM | null) {
@@ -515,11 +571,23 @@ export default function FeedCard({ item }: { item: FeedItemVM }) {
   const openRoundId = getRoundIdForOpen(item);
   const canOpenRound = typeof openRoundId === "string" && openRoundId.length > 0;
 
+  const competitionEventId = useMemo(() => {
+    if (item.type !== "competition_round") return null;
+    const p: any = item.payload ?? {};
+    return typeof p.event_id === "string" ? p.event_id : null;
+  }, [item.type, item.payload]);
+
+  const isClickable = canOpenRound || !!competitionEventId;
+
   const timeLabel = useMemo(() => {
     return isLive ? formatLiveStarted(item.occurred_at) : formatAgeOrDate(item.occurred_at);
   }, [isLive, item.occurred_at]);
 
-  function openRound() {
+  function handleCardClick() {
+    if (competitionEventId) {
+      router.push(`/majors/events/${competitionEventId}?tab=leaderboard`);
+      return;
+    }
     if (!canOpenRound) return;
     router.push(`/round/${openRoundId}?from=social`);
   }
@@ -578,15 +646,15 @@ export default function FeedCard({ item }: { item: FeedItemVM }) {
     <div
       className={[
         "rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/60 p-4 shadow-sm",
-        canOpenRound ? "cursor-pointer hover:bg-[#0b3b21]/75" : "",
+        isClickable ? "cursor-pointer hover:bg-[#0b3b21]/75" : "",
       ].join(" ")}
-      onClick={() => openRound()}
-      role={canOpenRound ? "button" : undefined}
-      tabIndex={canOpenRound ? 0 : undefined}
+      onClick={() => handleCardClick()}
+      role={isClickable ? "button" : undefined}
+      tabIndex={isClickable ? 0 : undefined}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          openRound();
+          handleCardClick();
         }
       }}
     >
@@ -635,7 +703,21 @@ export default function FeedCard({ item }: { item: FeedItemVM }) {
           <div className="flex items-center gap-2 min-w-0">
             <div className="text-sm font-extrabold truncate text-[#f5e6b0]">{headerTitle}</div>
 
-            {isLive ? (
+            {item.type === "competition_round" ? (
+              (() => {
+                const p: any = item.payload ?? {};
+                const roundStatus: string = p.round_status ?? "live";
+                return roundStatus === "completed" ? (
+                  <span className="shrink-0 rounded-full border border-emerald-800/50 bg-emerald-900/40 px-2 py-0.5 text-[10px] font-extrabold tracking-wide text-emerald-300">
+                    FINAL
+                  </span>
+                ) : (
+                  <span className="shrink-0 rounded-full border border-amber-800/50 bg-amber-900/40 px-2 py-0.5 text-[10px] font-extrabold tracking-wide text-amber-300">
+                    LIVE
+                  </span>
+                );
+              })()
+            ) : isLive ? (
               <span className="shrink-0 rounded-full border border-emerald-900/50 bg-emerald-950/10 px-2 py-0.5 text-[10px] font-extrabold tracking-wide text-[#f5e6b0]">
                 LIVE
               </span>
@@ -719,6 +801,8 @@ export default function FeedCard({ item }: { item: FeedItemVM }) {
           <PbOrRecordBody item={item} />
         ) : item.type === "hole_event" ? (
           <HoleEventBody item={item} />
+        ) : item.type === "competition_round" ? (
+          <CompetitionRoundBody payload={item.payload as any} />
         ) : (
           <div className="text-sm font-semibold text-emerald-100/80">Activity</div>
         )}
