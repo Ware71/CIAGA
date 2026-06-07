@@ -242,7 +242,7 @@ const PODIUM_COLORS = {
     border: "border-[#f5e6b0]/70",
     bg: "bg-[#f5e6b0]/15",
     text: "text-[#f5e6b0]",
-    height: "140px",
+    height: "180px",
     label: "1",
     gradient: "linear-gradient(180deg, #c9a227 0%, #9a7b1a 40%, #6b5112 100%)",
     ring: "ring-[#f5e6b0]",
@@ -251,7 +251,7 @@ const PODIUM_COLORS = {
     border: "border-slate-400/50",
     bg: "bg-slate-800/50",
     text: "text-slate-200",
-    height: "100px",
+    height: "140px",
     label: "2",
     gradient: "linear-gradient(180deg, #94a3b8 0%, #64748b 40%, #334155 100%)",
     ring: "ring-slate-300",
@@ -260,7 +260,7 @@ const PODIUM_COLORS = {
     border: "border-amber-700/50",
     bg: "bg-amber-900/30",
     text: "text-amber-300",
-    height: "75px",
+    height: "110px",
     label: "3",
     gradient: "linear-gradient(180deg, #b45309 0%, #92400e 40%, #5c2d0a 100%)",
     ring: "ring-amber-600",
@@ -280,6 +280,7 @@ function FloatingBubble({
   isGrowing,
   isPopped,
   isAborting,
+  abortScale,
   pulsePeak,
   pulseDelay,
   sizeClass,
@@ -296,6 +297,7 @@ function FloatingBubble({
   isGrowing: boolean;
   isPopped: boolean;
   isAborting: boolean;
+  abortScale: number;
   pulsePeak: number;
   pulseDelay: number;
   sizeClass: string;
@@ -321,7 +323,7 @@ function FloatingBubble({
               }
             : isAborting
             ? {
-                scale: [1, 2.2, 1],
+                scale: [1, abortScale, 1],
                 opacity: [1, 1, 1],
                 x: [0, targetDx * 0.45, 0],
                 y: [0, targetDy * 0.45, 0],
@@ -428,7 +430,7 @@ function PodiumSlot({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.5, duration: 0.3 }}
-              className="absolute inset-x-0 top-[52px] flex justify-center"
+              className="absolute inset-x-0 top-[58px] flex justify-center"
             >
               <ScoreCounter score={score} textClass={`text-xs ${colors.text}`} />
             </motion.div>
@@ -462,21 +464,10 @@ function PodiumRevealInner({
   const [tickerIdx, setTickerIdx] = useState(0);
   const [abortBubble, setAbortBubble] = useState<number | null>(null);
 
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [dims, setDims] = useState({
-    w: typeof window !== "undefined" ? window.innerWidth : 390,
-    h: typeof window !== "undefined" ? window.innerHeight : 700,
-  });
-  const [dimsMeasured, setDimsMeasured] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [abortScale, setAbortScale] = useState(2.2);
 
-  useEffect(() => {
-    if (!containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    if (rect.width > 0) {
-      setDims({ w: rect.width, h: rect.height });
-    }
-    setDimsMeasured(true);
-  }, []);
+  useEffect(() => { setMounted(true); }, []);
 
   const revealOrder = useMemo(() => Math.random() < 0.5 ? [2, 3, 1] : [3, 2, 1], [replayKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -486,31 +477,29 @@ function PodiumRevealInner({
   );
 
   const bubbleData = useMemo(() => {
-    const W = dims.w;
-    const H = dims.h;
-    const safeH = H * 0.55;
-    return rows.map((_, i) => {
-      const seed = i * 7.3 + replayKey * 13.1;
-      const rand = (n: number) => Math.abs(Math.sin(seed + n) * 10000) % 1;
-      const sizeIdx = Math.floor(rand(8) * 4);
+    const W = typeof window !== "undefined" ? window.innerWidth : 390;
+    const H = typeof window !== "undefined" ? window.innerHeight : 700;
+    const safeH = H * 0.62 * 0.55;
+    return rows.map(() => {
+      const sizeIdx = Math.floor(Math.random() * 4);
       const sizePx = BUBBLE_SIZE_PX[sizeIdx];
-      const startX = rand(1) * (W - sizePx) + sizePx / 2;
-      const startY = rand(2) * (safeH - sizePx) + sizePx / 2;
+      const startX = Math.random() * (W - sizePx) + sizePx / 2;
+      const startY = Math.random() * (safeH - sizePx) + sizePx / 2;
       return {
         startX,
         startY,
         sizePx,
-        driftX: (rand(3) - 0.5) * 60,
-        driftY: (rand(4) - 0.5) * 40,
-        duration: 3.5 + rand(5) * 2.5,
-        pulsePeak: 1.15 + rand(6) * 0.45,
-        pulseDelay: rand(7) * 2,
+        driftX: (Math.random() - 0.5) * 60,
+        driftY: (Math.random() - 0.5) * 40,
+        duration: 3.5 + Math.random() * 2.5,
+        pulsePeak: 1.15 + Math.random() * 0.45,
+        pulseDelay: Math.random() * 2,
         sizeClass: BUBBLE_SIZE_CLASSES[sizeIdx],
         targetDx: W / 2 - startX,
         targetDy: H - startY,
       };
     });
-  }, [rows.length, replayKey, dims]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [rows.length, replayKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reset on replay
   useEffect(() => {
@@ -528,7 +517,7 @@ function PodiumRevealInner({
     return () => clearInterval(t);
   }, [podiumPhase, rows.length]);
 
-  // Abort events during bubbles phase (replace scare events)
+  // Abort events during bubbles phase — random count (1-3), spread across 2500-6200ms
   useEffect(() => {
     if (podiumPhase !== "bubbles") return;
     const timers: ReturnType<typeof setTimeout>[] = [];
@@ -540,36 +529,40 @@ function PodiumRevealInner({
     const abortPool = pool.length > 0 ? pool : rows.map((_, i) => i);
     if (abortPool.length === 0) return;
 
-    const abort1 = abortPool[Math.floor(Math.random() * abortPool.length)];
-    timers.push(
-      setTimeout(() => {
-        setAbortBubble(abort1);
-        timers.push(setTimeout(() => setAbortBubble(null), 2500));
-      }, 1800)
-    );
+    const numFakeouts = Math.min(1 + Math.floor(Math.random() * 3), abortPool.length);
+    const shuffled = [...abortPool].sort(() => Math.random() - 0.5);
+    const targets = shuffled.slice(0, numFakeouts);
 
-    const abort2Pool = abortPool.filter((i) => i !== abort1);
-    if (abort2Pool.length > 0) {
-      const abort2 = abort2Pool[Math.floor(Math.random() * abort2Pool.length)];
+    const MIN_START = 2500;
+    const MIN_GAP = 1400;
+    const available = 6200 - MIN_START - (numFakeouts - 1) * MIN_GAP;
+    const segmentSize = available / numFakeouts;
+
+    let cursor = MIN_START;
+    targets.forEach((target) => {
+      cursor += Math.random() * segmentSize;
+      const fireAt = Math.round(cursor);
       timers.push(
         setTimeout(() => {
-          setAbortBubble(abort2);
+          setAbortScale(2.2);
+          setAbortBubble(target);
           timers.push(setTimeout(() => setAbortBubble(null), 2500));
-        }, 4200)
+        }, fireAt)
       );
-    }
+      cursor += MIN_GAP;
+    });
 
     return () => timers.forEach(clearTimeout);
   }, [podiumPhase, replayKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Abort event during the 2s window before 1st place is revealed
+  // Abort event(s) during the 2s window before 1st place is revealed
   useEffect(() => {
     if (podiumPhase !== "popping") return;
     const nextIdx = poppedPositions.length;
     if (nextIdx !== revealOrder.length - 1) return;
     if (revealOrder[nextIdx] !== 1) return;
 
-    // Prefer a field row (position > 3); fall back to any non-winner un-popped row
+    // Prefer field rows (position > 3); fall back to any non-winner un-popped row
     const fieldPool = rows
       .map((r, i) => ({ i, pos: r.position ?? 99 }))
       .filter(({ pos }) => pos > 3)
@@ -581,12 +574,31 @@ function PodiumRevealInner({
     const pool = fieldPool.length > 0 ? fieldPool : fallbackPool;
     if (pool.length === 0) return;
 
-    const target = pool[Math.floor(Math.random() * pool.length)];
-    const t = setTimeout(() => {
-      setAbortBubble(target);
-      setTimeout(() => setAbortBubble(null), 1800);
-    }, 300);
-    return () => clearTimeout(t);
+    const shuffled = [...pool].sort(() => Math.random() - 0.5);
+    const numPreFakeouts = Math.random() < 0.4 && shuffled.length >= 2 ? 2 : 1;
+    const delay1 = 200 + Math.random() * 600;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
+    timers.push(
+      setTimeout(() => {
+        setAbortScale(2.8);
+        setAbortBubble(shuffled[0]);
+        timers.push(setTimeout(() => setAbortBubble(null), 1800));
+      }, delay1)
+    );
+
+    if (numPreFakeouts === 2) {
+      const delay2 = delay1 + 700 + Math.random() * 400;
+      timers.push(
+        setTimeout(() => {
+          setAbortScale(2.8);
+          setAbortBubble(shuffled[1]);
+          timers.push(setTimeout(() => setAbortBubble(null), 1800));
+        }, delay2)
+      );
+    }
+
+    return () => timers.forEach(clearTimeout);
   }, [podiumPhase, poppedPositions.length, revealOrder]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Bubbles → tension
@@ -661,8 +673,8 @@ function PodiumRevealInner({
       </div>
 
       {/* Floating bubbles — positioned in the upper 62% of the screen */}
-      <div ref={containerRef} className="absolute inset-0" style={{ bottom: "38%" }}>
-        {dimsMeasured && rows.map((row, i) => {
+      <div className="absolute inset-0" style={{ bottom: "38%" }}>
+        {mounted && rows.map((row, i) => {
           const pos = row.position ?? 99;
           const isGrowing = growingPosition === pos;
           const isPopped = poppedPositions.includes(pos);
@@ -682,6 +694,7 @@ function PodiumRevealInner({
               isGrowing={isGrowing}
               isPopped={isPopped}
               isAborting={abortBubble === i}
+              abortScale={abortScale}
               pulsePeak={d.pulsePeak}
               pulseDelay={d.pulseDelay}
               sizeClass={d.sizeClass}
@@ -758,24 +771,15 @@ export function LeaderboardReveal({ rows, revealStyle, revealTopX, scoringModel,
   const scrollItems = useMemo<ScrollItem[]>(() => {
     const items: ScrollItem[] = [];
     items.push({ type: "spacer", key: "spacer-lead", height: LEADING_SPACER_HEIGHT });
-    let addedWinnerSpacer = false;
     rowsToReveal.forEach((row) => {
-      if (row.position === 1 && !addedWinnerSpacer) {
-        items.push({ type: "spacer", key: "spacer-winner", height: SECTION_SPACER_HEIGHT });
-        addedWinnerSpacer = true;
-      }
       items.push({ type: "row", row, key: row.profile_id });
     });
     items.push({ type: "spacer", key: "spacer-trail", height: SECTION_SPACER_HEIGHT });
     return items;
   }, [rowsToReveal.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const totalScrollHeight = scrollItems.reduce(
-    (sum, item) => sum + (item.type === "spacer" ? item.height : ROW_HEIGHT_WITH_GAP),
-    0
-  );
-  // Stop scroll when winner row is visible at top of viewport
-  const scrollTarget = Math.max(0, totalScrollHeight - SECTION_SPACER_HEIGHT - ROW_HEIGHT_WITH_GAP);
+  // Stop scroll when 1st place row is at the top of the viewport
+  const scrollTarget = Math.max(0, LEADING_SPACER_HEIGHT + (rowsToReveal.length - 1) * ROW_HEIGHT_WITH_GAP);
   const scrollDuration = Math.max(scrollTarget / 80, 10);
 
   function handleReplay() {
