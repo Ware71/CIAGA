@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { LeaderboardEntryWithProfile, FrozenLeaderboardEntry, LeaderboardRevealStyle } from "@/lib/majors/types";
 
@@ -267,7 +267,14 @@ const PODIUM_COLORS = {
   },
 } as const;
 
-function FloatingBubble({
+// A real pop and a fake-out share this charge so they look identical until the
+// final beat — the only tell is whether the bubble bursts or deflates.
+const POP_DURATION = 1.4;
+const POP_TIMES = [0, 0.35, 0.5, 0.82, 1];
+const ABORT_PEAK = 3.2; // near-burst swell a fake-out reaches before retreating
+const FAKE_CLEAR_MS = POP_DURATION * 1000;
+
+const FloatingBubble = memo(function FloatingBubble({
   row,
   startX,
   startY,
@@ -280,8 +287,6 @@ function FloatingBubble({
   isGrowing,
   isPopped,
   isAborting,
-  abortScale,
-  abortDuration,
   pulsePeak,
   pulseDelay,
   sizeClass,
@@ -298,8 +303,6 @@ function FloatingBubble({
   isGrowing: boolean;
   isPopped: boolean;
   isAborting: boolean;
-  abortScale: number;
-  abortDuration: number;
   pulsePeak: number;
   pulseDelay: number;
   sizeClass: string;
@@ -311,41 +314,57 @@ function FloatingBubble({
   const left = startX - sizePx / 2;
   const top = startY - sizePx / 2;
 
+  // The wrapper carries the trajectory (x/y) so the rings travel with the bubble.
+  // `null` as the first keyframe means "start from the current value" — no snap
+  // when switching between float / charge / abort.
+  const wrapperAnimate = isGrowing
+    ? {
+        // Fly toward the podium as it bursts
+        x: [null, targetDx * 0.2, targetDx * 0.3, targetDx * 0.7, targetDx * 0.85],
+        y: [null, targetDy * 0.2, targetDy * 0.3, targetDy * 0.7, targetDy * 0.85],
+      }
+    : isAborting
+    ? {
+        // Same path as a real pop, then glides back to origin (the fake-out)
+        x: [null, targetDx * 0.2, targetDx * 0.3, targetDx * 0.55, 0],
+        y: [null, targetDy * 0.2, targetDy * 0.3, targetDy * 0.55, 0],
+      }
+    : {
+        x: [null, driftX, 0, -driftX * 0.7, 0],
+        y: [null, driftY * 0.6, driftY, driftY * 0.3, 0],
+      };
+
+  const chargeTransition = { duration: POP_DURATION, times: POP_TIMES, ease: "easeInOut" as const };
+  const wrapperTransition =
+    isGrowing || isAborting
+      ? chargeTransition
+      : { duration, repeat: Infinity, ease: "easeInOut" as const, delay: pulseDelay };
+
+  // The bubble carries scale/opacity. Real pop and fake-out charge identically
+  // (2.6 → 2.2) and only diverge at the final beat: burst-and-vanish vs deflate.
+  const bubbleAnimate = isGrowing
+    ? { scale: [null, 2.6, 2.2, 6.0, 0], opacity: [1, 1, 1, 0.85, 0] }
+    : isAborting
+    ? { scale: [null, 2.6, 2.2, ABORT_PEAK, 1], opacity: [1, 1, 1, 1, 1] }
+    : { scale: [null, pulsePeak, 0.88, pulsePeak * 0.9, 1] };
+
+  const bubbleTransition =
+    isGrowing || isAborting
+      ? chargeTransition
+      : { duration, repeat: Infinity, ease: "easeInOut" as const, delay: pulseDelay };
+
   return (
-    <>
+    <motion.div
+      style={{ position: "absolute", left, top }}
+      className={sizeClass}
+      animate={wrapperAnimate}
+      transition={wrapperTransition}
+    >
       <motion.div
-        style={{ position: "absolute", left, top, originX: "50%", originY: "50%" }}
-        animate={
-          isGrowing
-            ? {
-                // Wind up (grow + slight recoil), then burst outward and vanish — a pop
-                scale: [1, 2.6, 2.2, 6.0, 0],
-                opacity: [1, 1, 1, 0.85, 0],
-                x: [0, targetDx * 0.2, targetDx * 0.3, targetDx * 0.7, targetDx * 0.85],
-                y: [0, targetDy * 0.2, targetDy * 0.3, targetDy * 0.7, targetDy * 0.85],
-              }
-            : isAborting
-            ? {
-                // Charge up like a real reveal… then deflate back (the fake-out)
-                scale: [1, abortScale * 0.55, abortScale, abortScale * 0.85, 1],
-                opacity: [1, 1, 1, 1, 1],
-                x: [0, targetDx * 0.18, targetDx * 0.38, targetDx * 0.3, 0],
-                y: [0, targetDy * 0.18, targetDy * 0.38, targetDy * 0.3, 0],
-              }
-            : {
-                x: [0, driftX, 0, -driftX * 0.7, 0],
-                y: [0, driftY * 0.6, driftY, driftY * 0.3, 0],
-                scale: [1, pulsePeak, 0.88, pulsePeak * 0.9, 1],
-              }
-        }
-        transition={
-          isGrowing
-            ? { duration: 1.4, times: [0, 0.35, 0.5, 0.82, 1], ease: "easeInOut" }
-            : isAborting
-            ? { duration: abortDuration, times: [0, 0.3, 0.55, 0.72, 1], ease: "easeInOut" }
-            : { duration, repeat: Infinity, ease: "easeInOut", delay: pulseDelay }
-        }
-        className={`${sizeClass} rounded-full border-2 border-emerald-700/50 bg-emerald-900/60 grid place-items-center overflow-hidden shadow-lg`}
+        style={{ originX: "50%", originY: "50%" }}
+        animate={bubbleAnimate}
+        transition={bubbleTransition}
+        className="w-full h-full rounded-full border-2 border-emerald-700/50 bg-emerald-900/60 grid place-items-center overflow-hidden shadow-lg"
       >
         {profile?.avatar_url ? (
           <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
@@ -356,27 +375,26 @@ function FloatingBubble({
         )}
       </motion.div>
 
-      {/* Radiating rings — gold bursts when really popping, green pulses on a fake-out */}
+      {/* Gold radiating rings — identical for a real pop and a fake-out (the fake's
+          rings retract instead of bursting wide). As children they follow the bubble. */}
       {(isGrowing || isAborting) &&
         [0, 1].map((ringIdx) => (
           <motion.div
             key={`ring-${ringIdx}`}
-            style={{ position: "absolute", left, top, originX: "50%", originY: "50%", pointerEvents: "none" }}
+            style={{ originX: "50%", originY: "50%", pointerEvents: "none" }}
             initial={{ scale: 1, opacity: 0 }}
-            animate={{ scale: isGrowing ? 8 : 5, opacity: [0, 0.75, 0] }}
+            animate={isGrowing ? { scale: 8, opacity: [0, 0.75, 0] } : { scale: [1, 4.5, 1], opacity: [0, 0.7, 0] }}
             transition={{
-              duration: isGrowing ? 1.3 : Math.min(abortDuration, 1.7),
+              duration: isGrowing ? 1.3 : POP_DURATION,
               delay: ringIdx * 0.45,
-              repeat: isGrowing ? 0 : 1,
-              repeatDelay: 0.25,
               ease: "easeOut",
             }}
-            className={`${sizeClass} rounded-full border-2 ${isGrowing ? "border-[#f5e6b0]" : "border-emerald-300/70"}`}
+            className="absolute inset-0 rounded-full border-2 border-[#f5e6b0]"
           />
         ))}
-    </>
+    </motion.div>
   );
-}
+});
 
 function PodiumSlot({
   position,
@@ -471,8 +489,6 @@ function PodiumRevealInner({
   const [abortBubble, setAbortBubble] = useState<number | null>(null);
 
   const [mounted, setMounted] = useState(false);
-  const [abortScale, setAbortScale] = useState(2.2);
-  const [abortDuration, setAbortDuration] = useState(2.4);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -536,15 +552,14 @@ function PodiumRevealInner({
     const abortPool = pool.length > 0 ? pool : rows.map((_, i) => i);
     if (abortPool.length === 0) return;
 
-    const FAKE_DURATION = 1800;
     const numFakeouts = Math.min(abortPool.length, Math.random() < 0.5 ? 1 : 2);
     const shuffled = [...abortPool].sort(() => Math.random() - 0.5);
     const targets = shuffled.slice(0, numFakeouts);
 
     // Keep each tease inside the 7s window with a gap so they never overlap
     const MIN_START = 2600;
-    const MIN_GAP = FAKE_DURATION + 600;
-    const latestStart = 7000 - FAKE_DURATION - 300;
+    const MIN_GAP = FAKE_CLEAR_MS + 600;
+    const latestStart = 7000 - FAKE_CLEAR_MS - 300;
     const segmentSize = Math.max(0, (latestStart - MIN_START - (numFakeouts - 1) * MIN_GAP) / numFakeouts);
 
     let cursor = MIN_START;
@@ -553,10 +568,8 @@ function PodiumRevealInner({
       const fireAt = Math.round(cursor);
       timers.push(
         setTimeout(() => {
-          setAbortScale(2.1);
-          setAbortDuration(FAKE_DURATION / 1000);
           setAbortBubble(target);
-          timers.push(setTimeout(() => setAbortBubble(null), FAKE_DURATION));
+          timers.push(setTimeout(() => setAbortBubble(null), FAKE_CLEAR_MS));
         }, fireAt)
       );
       cursor += MIN_GAP;
@@ -587,34 +600,28 @@ function PodiumRevealInner({
     const shuffled = [...pool].sort(() => Math.random() - 0.5);
     const timers: ReturnType<typeof setTimeout>[] = [];
 
-    // The big suspense beat before the winner. Usually one slow, swelling charge that
-    // almost pops then deflates; occasionally a quick double-tease. Both fit inside the
+    // The big suspense beat before the winner. A charge that looks exactly like the
+    // real pop, then deflates; occasionally a quick double-tease. Both fit inside the
     // ~3.4s gap before 1st place erupts.
     const doDouble = Math.random() < 0.35 && shuffled.length >= 2;
 
     if (doDouble) {
-      const dur = 1.4;
       const delay1 = 250 + Math.random() * 250;
-      const delay2 = delay1 + 1450;
+      const delay2 = delay1 + FAKE_CLEAR_MS + 100;
       [shuffled[0], shuffled[1]].forEach((target, k) => {
         timers.push(
           setTimeout(() => {
-            setAbortScale(2.5);
-            setAbortDuration(dur);
             setAbortBubble(target);
-            timers.push(setTimeout(() => setAbortBubble(null), dur * 1000));
+            timers.push(setTimeout(() => setAbortBubble(null), FAKE_CLEAR_MS));
           }, k === 0 ? delay1 : delay2)
         );
       });
     } else {
-      const dur = 2.2;
       const delay1 = 350 + Math.random() * 500;
       timers.push(
         setTimeout(() => {
-          setAbortScale(3.0);
-          setAbortDuration(dur);
           setAbortBubble(shuffled[0]);
-          timers.push(setTimeout(() => setAbortBubble(null), dur * 1000));
+          timers.push(setTimeout(() => setAbortBubble(null), FAKE_CLEAR_MS));
         }, delay1)
       );
     }
@@ -716,8 +723,6 @@ function PodiumRevealInner({
               isGrowing={isGrowing}
               isPopped={isPopped}
               isAborting={abortBubble === i}
-              abortScale={abortScale}
-              abortDuration={abortDuration}
               pulsePeak={d.pulsePeak}
               pulseDelay={d.pulseDelay}
               sizeClass={d.sizeClass}
