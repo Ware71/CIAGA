@@ -1727,10 +1727,10 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
   // Realtime: recompute leaderboard whenever event_leaderboard_entries changes
   // or the event freeze state transitions.
   useEffect(() => {
-    function fetchLeaderboard() {
-      getViewerSession().then((session) => {
+    function fetchLeaderboard(): Promise<void> {
+      return getViewerSession().then((session) => {
         if (!session) return;
-        fetch(`/api/majors/leaderboard?event_id=${eventId}`, {
+        return fetch(`/api/majors/leaderboard?event_id=${eventId}`, {
           headers: { Authorization: `Bearer ${session.accessToken}` },
         })
           .then((r) => (r.ok ? r.json() : null))
@@ -1765,11 +1765,11 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
         },
         (payload) => {
           const freezeState = (payload.new as any)?.leaderboard_freeze_state;
-          if (freezeState === "frozen" || freezeState === "revealed") {
+          if (freezeState === "frozen") {
             fetchLeaderboard();
           }
           if (freezeState === "revealed") {
-            setShowReveal(true);
+            fetchLeaderboard().then(() => setShowReveal(true));
           }
         }
       )
@@ -1804,6 +1804,15 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
       if (res.ok) {
         setRevealWarning(null);
         setLeaderboardFreeze((prev) => prev ? { ...prev, freeze_state: "revealed" } : prev);
+        // Fetch full scores before starting the reveal animation
+        const lbRes = await fetch(`/api/majors/leaderboard?event_id=${eventId}`, {
+          headers: { Authorization: `Bearer ${session.accessToken}` },
+        });
+        if (lbRes.ok) {
+          const j = await lbRes.json();
+          setLeaderboard(j.rows ?? []);
+          if (j.freeze) setLeaderboardFreeze(j.freeze);
+        }
         setShowReveal(true);
       }
     } finally {

@@ -162,10 +162,11 @@ export default function LeaderboardClient() {
               if (c.leaderboard_freeze_state === "frozen") {
                 fetchLeaderboard(competitionId, "competition");
               }
-              // If just revealed, trigger reveal sequence
+              // If just revealed, fetch full scores first then start the reveal sequence
               if (c.leaderboard_freeze_state === "revealed") {
-                fetchLeaderboard(competitionId, "competition");
-                setShowReveal(true);
+                fetchLeaderboard(competitionId, "competition").then(() => {
+                  if (!cancelled) setShowReveal(true);
+                });
               }
             }
           }
@@ -197,6 +198,7 @@ export default function LeaderboardClient() {
       });
       if (res.ok) {
         setFreeze((prev) => prev ? { ...prev, freeze_state: "revealed" } : prev);
+        await fetchLeaderboard(competitionId, "competition");
         setShowReveal(true);
       }
     } finally {
