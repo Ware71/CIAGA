@@ -81,6 +81,7 @@ export default function LeaderboardClient() {
   const [hasFirstPlaceTie, setHasFirstPlaceTie] = useState(false);
   const [activePlayoff, setActivePlayoff] = useState<EventPlayoff | null>(null);
   const [showTieDrawer, setShowTieDrawer] = useState(false);
+  const [tieDrawerScreen, setTieDrawerScreen] = useState<"choice" | "playoff_setup">("choice");
   const [showPlayoffCard, setShowPlayoffCard] = useState(false);
   const accessTokenRef = useRef<string | null>(null);
 
@@ -209,7 +210,8 @@ export default function LeaderboardClient() {
   const rows = tab === "competition" ? compRows : groupRows;
   const isFrozen = freeze?.freeze_state === "frozen";
   const totalHoles = freeze?.total_holes ?? 18;
-  const canReveal = freeze?.freeze_state !== "revealed" && (myRole === "owner" || myRole === "admin");
+  const isAdmin = myRole === "owner" || myRole === "admin";
+  const canReveal = freeze?.freeze_state !== "revealed" && isAdmin;
 
   return (
     <div className="min-h-[100dvh] pb-[env(safe-area-inset-bottom)] px-4 pt-8 max-w-sm mx-auto space-y-5">
@@ -242,11 +244,8 @@ export default function LeaderboardClient() {
       )}
 
       {/* Tie / playoff banners */}
-      {tab === "competition" && hasFirstPlaceTie && !activePlayoff && (
-        <TieBanner
-          isAdmin={myRole === "owner" || myRole === "admin"}
-          onManage={() => setShowTieDrawer(true)}
-        />
+      {tab === "competition" && hasFirstPlaceTie && !activePlayoff && !isAdmin && (
+        <TieBanner isAdmin={false} onManage={() => setShowTieDrawer(true)} />
       )}
       {tab === "competition" && activePlayoff && (
         <PlayoffStatusBanner
@@ -273,8 +272,28 @@ export default function LeaderboardClient() {
         </div>
       )}
 
+      {/* Tie resolution buttons — owners and admins only, when 1st-place tie is unresolved */}
+      {tab === "competition" && canReveal && hasFirstPlaceTie && !activePlayoff && (
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={() => { setTieDrawerScreen("playoff_setup"); setShowTieDrawer(true); }}
+            className="flex-1 py-3 rounded-full bg-[#f5e6b0] text-[#042713] text-sm font-semibold"
+          >
+            Playoff
+          </button>
+          <button
+            type="button"
+            onClick={() => { setTieDrawerScreen("choice"); setShowTieDrawer(true); }}
+            className="flex-1 py-3 rounded-full border border-[#f5e6b0]/50 text-[#f5e6b0] text-sm font-semibold"
+          >
+            Countback
+          </button>
+        </div>
+      )}
+
       {/* Reveal button — owners and admins only */}
-      {tab === "competition" && canReveal && (
+      {tab === "competition" && canReveal && !(hasFirstPlaceTie && !activePlayoff) && (
         <button
           type="button"
           onClick={handleReveal}
@@ -427,6 +446,7 @@ export default function LeaderboardClient() {
       {showTieDrawer && competitionId && (
         <TieManagementDrawer
           eventId={competitionId}
+          initialScreen={tieDrawerScreen}
           onClose={() => setShowTieDrawer(false)}
           onResolved={(playoff) => {
             setActivePlayoff(playoff);

@@ -12,12 +12,13 @@ type Screen =
 
 interface Props {
   eventId: string;
+  initialScreen?: Screen;
   onClose: () => void;
   onResolved: (playoff: EventPlayoff) => void;
 }
 
-export function TieManagementDrawer({ eventId, onClose, onResolved }: Props) {
-  const [screen, setScreen] = useState<Screen>("choice");
+export function TieManagementDrawer({ eventId, initialScreen, onClose, onResolved }: Props) {
+  const [screen, setScreen] = useState<Screen>(initialScreen ?? "choice");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
