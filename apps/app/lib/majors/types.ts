@@ -450,6 +450,68 @@ export type EventLeaderboardEntry = {
   holes_completed: number;
   to_par: number | null;
   course_par: number | null;
+  playoff_result: "won_playoff" | "lost_playoff" | "won_countback" | "lost_countback" | null;
+  playoff_final_position: number | null;
+};
+
+// ─── Playoff types ────────────────────────────────────────────────────────────
+
+export type PlayoffStatus = "pending" | "active" | "completed";
+export type PlayoffResolutionType = "playoff" | "countback";
+export type PlayoffResult = "won_playoff" | "lost_playoff" | "won_countback" | "lost_countback";
+
+export type EventPlayoff = {
+  id: string;
+  event_id: string;
+  status: PlayoffStatus;
+  resolution_type: PlayoffResolutionType | null;
+  tied_profile_ids: string[];
+  winner_profile_id: string | null;
+  elimination_log: string[][];
+  created_by: string | null;
+  created_at: string;
+  completed_at: string | null;
+};
+
+export type EventPlayoffHole = {
+  id: string;
+  playoff_id: string;
+  sequence: number;
+  course_id: string;
+  tee_box_id: string;
+  hole_number: number;
+  par: number;
+  stroke_index: number;
+  remaining_profile_ids: string[];
+  created_at: string;
+};
+
+export type EventPlayoffScore = {
+  id: string;
+  playoff_hole_id: string;
+  profile_id: string;
+  gross_strokes: number | null;
+  net_strokes: number | null;
+  eliminated: boolean;
+  created_at: string;
+};
+
+export type PlayoffHoleWithScores = EventPlayoffHole & {
+  scores: EventPlayoffScore[];
+};
+
+export type CountbackBreakdown = {
+  step: string;    // e.g. "Last 9", "Last 6", "Hole 18"
+  holeRange: string;
+  scores: Record<string, number | null>;  // profile_id → score sum
+  resolvedAt: boolean;
+};
+
+export type CountbackResult = {
+  winner_profile_id: string | null;
+  step_resolved: string | null;
+  final_positions: Array<{ profile_id: string; position: number }>;
+  breakdown: CountbackBreakdown[];
 };
 
 export type LeaderboardEntryWithProfile = EventLeaderboardEntry & {

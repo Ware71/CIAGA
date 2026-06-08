@@ -8,7 +8,7 @@ import {
   getEventSubmissionMap,
   getEventPendingParticipants,
 } from "@/lib/majors/queries";
-import type { FrozenLeaderboardEntry } from "@/lib/majors/types";
+import type { FrozenLeaderboardEntry, EventPlayoff } from "@/lib/majors/types";
 import { computeFormulaPoints, FEDEX_POINTS } from "@/lib/events/constants";
 
 export const runtime = "nodejs";
@@ -63,14 +63,28 @@ export async function GET(req: Request) {
 
       const isFrozen = freezeConfig.freeze_state === "frozen" && freezeConfig.freeze_last_holes != null;
 
+      // Load any active/completed playoff for this event
+      const { data: playoffData } = await supabaseAdmin
+        .from("event_playoffs")
+        .select("*")
+        .eq("event_id", eventId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const activePlayoff = playoffData as EventPlayoff | null;
+
       if (isFrozen) {
         const threshold = freezeConfig.total_holes - (freezeConfig.freeze_last_holes as number);
         const scoringModel = (event as any).scoring_model ?? "net";
         const frozenRows = await getFrozenLeaderboard(eventId, threshold, freezeConfig, scoringModel, event as any);
         const frozenIds = new Set(frozenRows.map((r) => r.profile_id));
         const pendingParticipants = await getEventPendingParticipants(eventId, frozenIds);
+
+        // Compute tied_count per position from frozen rows
+        const positionCounts = countByPosition(frozenRows.map((r) => r.position ?? null));
+
         const rows = [
-          ...frozenRows,
+          ...frozenRows.map((r) => ({ ...r, tied_count: positionCounts[r.position ?? -1] ?? 1 })),
           ...pendingParticipants.map((p) => ({
             profile_id: p.profile_id,
             profile: { id: p.profile_id, name: p.name, avatar_url: p.avatar_url },
@@ -81,14 +95,35 @@ export async function GET(req: Request) {
             holes_shown: 0,
             is_live: false,
             position: null,
+            tied_count: 1,
           })),
         ];
+
+        // For the frozen branch, fetch rounds_submitted from the live entries table
+        const { data: entrySubmissions } = await supabaseAdmin
+          .from("event_leaderboard_entries")
+          .select("profile_id, rounds_submitted")
+          .eq("event_id", eventId);
+        const submissionsByProfile = Object.fromEntries(
+          (entrySubmissions ?? []).map((e: any) => [e.profile_id, e.rounds_submitted ?? 0])
+        );
+        const frozenSubmissions = frozenRows.map((r) => ({
+          rounds_submitted: submissionsByProfile[r.profile_id] ?? 0,
+        }));
+        const { has_first_place_tie } = detectFirstPlaceTie(
+          frozenRows.map((r) => ({ position: r.position })),
+          (event as any).num_rounds ?? 1,
+          frozenSubmissions,
+        );
+
         return NextResponse.json(
           {
             rows,
             freeze: freezeConfig,
             my_role: myRole,
             scoring_model: scoringModel,
+            has_first_place_tie: !activePlayoff && has_first_place_tie,
+            active_playoff: activePlayoff ?? null,
           },
           { headers: { "Cache-Control": "no-store" } }
         );
@@ -99,14 +134,42 @@ export async function GET(req: Request) {
         getEventSubmissionMap(eventId),
       ]);
 
-      const scoredIds = new Set(liveRows.map((r) => r.profile_id));
+      // Compute tied_count per position
+      const positionCounts = countByPosition(liveRows.map((r) => r.position ?? null));
+
+      // Detect 1st-place tie: all entries have completed required rounds and >1 player holds position 1
+      const { has_first_place_tie } = detectFirstPlaceTie(
+        liveRows.map((r) => ({ position: r.position ?? null })),
+        (event as any).num_rounds ?? 1,
+        liveRows.map((r) => ({ rounds_submitted: (r as any).rounds_submitted ?? 0 })),
+      );
+
+      // When a playoff is complete, use playoff_final_position as the display position
+      const resolvedRows = activePlayoff?.status === "completed"
+        ? liveRows
+            .map((r) => ({
+              ...r,
+              position: (r as any).playoff_final_position ?? r.position,
+            }))
+            .sort((a, b) => {
+              const ap = (a as any).position ?? Infinity;
+              const bp = (b as any).position ?? Infinity;
+              return ap - bp;
+            })
+        : liveRows;
+
+      // Recompute tied_count from the (possibly playoff-adjusted) positions
+      const finalPositionCounts = countByPosition(resolvedRows.map((r) => (r as any).position ?? null));
+
+      const scoredIds = new Set(resolvedRows.map((r) => r.profile_id));
       const pendingParticipants = await getEventPendingParticipants(eventId, scoredIds);
 
       const rows = [
-        ...liveRows.map((r) => ({
+        ...resolvedRows.map((r) => ({
           ...r,
           round_id: submissionMap[r.profile_id] ?? null,
           tee_time: null as string | null,
+          tied_count: finalPositionCounts[(r as any).position ?? -1] ?? 1,
         })),
         ...pendingParticipants.map((p) => ({
           profile_id: p.profile_id,
@@ -124,6 +187,7 @@ export async function GET(req: Request) {
           event_id: eventId,
           round_id: null,
           tee_time: p.tee_time,
+          tied_count: 1,
         })),
       ];
 
@@ -133,6 +197,8 @@ export async function GET(req: Request) {
           freeze: freezeConfig,
           my_role: myRole,
           scoring_model: (event as any).scoring_model ?? "net",
+          has_first_place_tie: !activePlayoff && has_first_place_tie,
+          active_playoff: activePlayoff ?? null,
         },
         { headers: { "Cache-Control": "no-store" } }
       );
@@ -149,6 +215,39 @@ export async function GET(req: Request) {
     const status = String(msg).toLowerCase().includes("auth") ? 401 : 500;
     return NextResponse.json({ error: msg }, { status });
   }
+}
+
+/** Count how many entries share each position value. */
+function countByPosition(positions: (number | null)[]): Record<number, number> {
+  const counts: Record<number, number> = {};
+  for (const p of positions) {
+    if (p == null) continue;
+    counts[p] = (counts[p] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/**
+ * Returns true when all scored entries have completed the required rounds AND
+ * more than one player holds position 1.
+ */
+function detectFirstPlaceTie(
+  positionEntries: Array<{ position: number | null }>,
+  numRounds: number,
+  submissionEntries: Array<{ rounds_submitted: number }>,
+): { has_first_place_tie: boolean; all_rounds_complete: boolean } {
+  const scoredEntries = positionEntries.filter((e) => e.position != null);
+  if (scoredEntries.length === 0) return { has_first_place_tie: false, all_rounds_complete: false };
+
+  const allComplete = submissionEntries
+    .filter((_, i) => positionEntries[i]?.position != null)
+    .every((e) => e.rounds_submitted >= numRounds);
+
+  const firstPlaceCount = scoredEntries.filter((e) => e.position === 1).length;
+  return {
+    has_first_place_tie: allComplete && firstPlaceCount > 1,
+    all_rounds_complete: allComplete,
+  };
 }
 
 type EventConfig = {

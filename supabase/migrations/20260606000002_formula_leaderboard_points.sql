@@ -106,32 +106,37 @@ BEGIN
     ranked.gross_score,
     ranked.net_score,
     ranked.format_points,
+    -- Average points across all players sharing the same position (tied positions).
     CASE
       WHEN v_points_model = 'none' OR ranked.position IS NULL THEN NULL
-      WHEN v_points_model = 'fedex_style' THEN
-        (ARRAY[500,300,190,140,110,90,75,60,48,38,30,24,18,14,10,8,6,4,2,1])[LEAST(ranked.position, 20)]
-      WHEN v_points_model IN ('position_based', 'custom_table') THEN
-        CASE
-          WHEN v_points_table ->> ranked.position::text IS NOT NULL
-            THEN (v_points_table ->> ranked.position::text)::numeric
-          ELSE 0
-        END
-      WHEN v_points_model IN ('ciaga_formula', 'custom_formula') THEN
-        ROUND((
+      WHEN v_points_model = 'fedex_style' THEN (
+        SELECT ROUND(AVG(
+          (ARRAY[500,300,190,140,110,90,75,60,48,38,30,24,18,14,10,8,6,4,2,1])[LEAST(gs, 20)]::numeric
+        ), 0)
+        FROM generate_series(ranked.position, ranked.position + ranked.tied_count - 1) gs
+      )
+      WHEN v_points_model IN ('position_based', 'custom_table') THEN (
+        SELECT ROUND(AVG(COALESCE((v_points_table ->> gs::text)::numeric, 0)), 0)
+        FROM generate_series(ranked.position, ranked.position + ranked.tied_count - 1) gs
+      )
+      WHEN v_points_model IN ('ciaga_formula', 'custom_formula') THEN (
+        SELECT ROUND(AVG(
           v_base_pts
           + v_round_factor
             * v_scale_pts
             * POWER(
                 CASE WHEN v_field_size > 1
-                  THEN GREATEST(v_field_size - ranked.position, 0)::numeric / (v_field_size - 1)
+                  THEN GREATEST(v_field_size - gs, 0)::numeric / (v_field_size - 1)
                   ELSE 0 END,
                 v_compression)
             * v_field_scale
-          + CASE WHEN ranked.position = 1
+          + CASE WHEN gs = 1
               THEN v_win_bonus_scale * v_field_scale
               ELSE 0
             END
-        )::numeric, 0)
+        ), 0)
+        FROM generate_series(ranked.position, ranked.position + ranked.tied_count - 1) gs
+      )
       ELSE NULL
     END AS points_earned,
     ranked.rounds_submitted,
@@ -147,6 +152,11 @@ BEGIN
     ranked.position,
     NOW() AS computed_at
   FROM (
+    -- Outer wrapper adds tied_count via a second window pass.
+    SELECT
+      r.*,
+      COALESCE(COUNT(*) OVER (PARTITION BY r.position), 1)::integer AS tied_count
+    FROM (
     SELECT
       agg.profile_id,
       agg.gross_score,
@@ -402,6 +412,7 @@ BEGIN
          OR COALESCE(live.live_holes, 0) > 0
 
     ) agg
+    ) r
   ) ranked;
 
   -- Cascade to group standings
