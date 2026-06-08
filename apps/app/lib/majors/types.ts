@@ -535,6 +535,8 @@ export type FrozenLeaderboardEntry = {
   actual_holes_completed?: number;
   is_live: boolean;
   position: number | null;
+  playoff_result?: "won_playoff" | "lost_playoff" | "won_countback" | "lost_countback" | null;
+  playoff_final_position?: number | null;
   profile?: {
     id: string;
     name: string | null;

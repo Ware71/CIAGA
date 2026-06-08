@@ -80,11 +80,35 @@ export async function GET(req: Request) {
         const frozenIds = new Set(frozenRows.map((r) => r.profile_id));
         const pendingParticipants = await getEventPendingParticipants(eventId, frozenIds);
 
-        // Compute tied_count per position from frozen rows
-        const positionCounts = countByPosition(frozenRows.map((r) => r.position ?? null));
+        // Fetch rounds_submitted + playoff fields from the live entries table
+        const { data: entrySubmissions } = await supabaseAdmin
+          .from("event_leaderboard_entries")
+          .select("profile_id, rounds_submitted, playoff_result, playoff_final_position")
+          .eq("event_id", eventId);
+        const entryMap = Object.fromEntries(
+          (entrySubmissions ?? []).map((e: any) => [e.profile_id, e])
+        );
+
+        // When playoff is complete, override positions with playoff_final_position + re-sort
+        const rankedFrozenRows = activePlayoff?.status === "completed"
+          ? frozenRows
+              .map((r) => ({
+                ...r,
+                position: entryMap[r.profile_id]?.playoff_final_position ?? r.position,
+              }))
+              .sort((a, b) => (a.position ?? Infinity) - (b.position ?? Infinity))
+          : frozenRows;
+
+        // Compute tied_count from (possibly playoff-adjusted) positions
+        const positionCounts = countByPosition(rankedFrozenRows.map((r) => r.position ?? null));
 
         const rows = [
-          ...frozenRows.map((r) => ({ ...r, tied_count: positionCounts[r.position ?? -1] ?? 1 })),
+          ...rankedFrozenRows.map((r) => ({
+            ...r,
+            tied_count: positionCounts[r.position ?? -1] ?? 1,
+            playoff_result: entryMap[r.profile_id]?.playoff_result ?? null,
+            playoff_final_position: entryMap[r.profile_id]?.playoff_final_position ?? null,
+          })),
           ...pendingParticipants.map((p) => ({
             profile_id: p.profile_id,
             profile: { id: p.profile_id, name: p.name, avatar_url: p.avatar_url },
@@ -99,19 +123,11 @@ export async function GET(req: Request) {
           })),
         ];
 
-        // For the frozen branch, fetch rounds_submitted from the live entries table
-        const { data: entrySubmissions } = await supabaseAdmin
-          .from("event_leaderboard_entries")
-          .select("profile_id, rounds_submitted")
-          .eq("event_id", eventId);
-        const submissionsByProfile = Object.fromEntries(
-          (entrySubmissions ?? []).map((e: any) => [e.profile_id, e.rounds_submitted ?? 0])
-        );
-        const frozenSubmissions = frozenRows.map((r) => ({
-          rounds_submitted: submissionsByProfile[r.profile_id] ?? 0,
+        const frozenSubmissions = rankedFrozenRows.map((r) => ({
+          rounds_submitted: entryMap[r.profile_id]?.rounds_submitted ?? 0,
         }));
         const { has_first_place_tie } = detectFirstPlaceTie(
-          frozenRows.map((r) => ({ position: r.position })),
+          rankedFrozenRows.map((r) => ({ position: r.position })),
           (event as any).num_rounds ?? 1,
           frozenSubmissions,
         );
@@ -390,15 +406,28 @@ async function getFrozenLeaderboard(
     ? Number(configuredParticipants)
     : Math.max(combined.filter((r) => r.net_score != null).length, 1);
 
-  const result: FrozenLeaderboardEntry[] = combined.map((r, i) => {
-    const position = i + 1;
+  let rankPos = 1;
+  let prevScore: number | undefined = undefined;
+  let placed = 0;
+
+  const result: FrozenLeaderboardEntry[] = combined.map((r) => {
+    const score = r.net_score ?? r.gross_score;
+    let position: number | null = null;
+    if (score != null) {
+      if (score !== prevScore) {
+        rankPos = placed + 1;
+        prevScore = score;
+      }
+      placed++;
+      position = rankPos;
+    }
     return {
       profile_id: r.profile_id,
       gross_score: r.gross_score,
       net_score: r.net_score,
       to_par: r.to_par ?? null,
       format_points: r.format_points ?? null,
-      points_earned: computePointsForPosition(position, fieldSize, event),
+      points_earned: position != null ? computePointsForPosition(position, fieldSize, event) : null,
       holes_shown: r.holes_shown,
       actual_holes_completed: r.actual_holes_completed ?? undefined,
       is_live: r.is_live,
