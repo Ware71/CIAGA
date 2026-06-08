@@ -190,9 +190,12 @@ BEGIN
           ON rp.round_id = s.round_id AND rp.profile_id = s.profile_id
         CROSS JOIN LATERAL (
           VALUES (
-            CASE WHEN v_handicap_mode = 'allowance_pct'
-                 THEN FLOOR(COALESCE(rp.course_handicap_used, 0)::numeric * v_allowance_pct / 100)::integer
-                 ELSE COALESCE(rp.playing_handicap_used, rp.course_handicap_used, 0)
+            CASE
+              WHEN rp.assigned_playing_handicap IS NOT NULL
+                   THEN rp.assigned_playing_handicap
+              WHEN v_handicap_mode = 'allowance_pct'
+                   THEN FLOOR(COALESCE(rp.course_handicap_used, 0)::numeric * v_allowance_pct / 100)::integer
+              ELSE COALESCE(rp.playing_handicap_used, rp.course_handicap_used, 0)
             END
           )
         ) AS hv(hcp)
@@ -239,9 +242,12 @@ BEGIN
           s.profile_id,
           SUM(hrr.adjusted_gross_score)::integer                                         AS submitted_gross,
           SUM(
-            CASE WHEN v_handicap_mode = 'allowance_pct'
-                 THEN FLOOR(COALESCE(rp.course_handicap_used, 0)::numeric * v_allowance_pct / 100)::integer
-                 ELSE COALESCE(rp.playing_handicap_used, rp.course_handicap_used, 0)
+            CASE
+              WHEN rp.assigned_playing_handicap IS NOT NULL
+                   THEN rp.assigned_playing_handicap
+              WHEN v_handicap_mode = 'allowance_pct'
+                   THEN FLOOR(COALESCE(rp.course_handicap_used, 0)::numeric * v_allowance_pct / 100)::integer
+              ELSE COALESCE(rp.playing_handicap_used, rp.course_handicap_used, 0)
             END
           )::integer                                                                      AS submitted_hcp,
           SUM(CASE WHEN hrr.is_9_hole THEN 9 ELSE 18 END)::integer                       AS submitted_holes,
@@ -270,9 +276,12 @@ BEGIN
           rp.profile_id,
           COALESCE(scores.total_strokes, 0)::integer                              AS live_gross,
           COALESCE(scores.hole_count, 0)::integer                                 AS live_holes,
-          CASE WHEN v_handicap_mode = 'allowance_pct'
-               THEN FLOOR(COALESCE(rp.course_handicap_used, 0)::numeric * v_allowance_pct / 100)::integer
-               ELSE COALESCE(rp.playing_handicap_used, rp.course_handicap_used, 0)
+          CASE
+            WHEN rp.assigned_playing_handicap IS NOT NULL
+                 THEN rp.assigned_playing_handicap
+            WHEN v_handicap_mode = 'allowance_pct'
+                 THEN FLOOR(COALESCE(rp.course_handicap_used, 0)::numeric * v_allowance_pct / 100)::integer
+            ELSE COALESCE(rp.playing_handicap_used, rp.course_handicap_used, 0)
           END                                                                       AS course_hcp,
           -- Proportional par: retained as fallback when tee snapshot unavailable
           CASE WHEN COALESCE(scores.hole_count, 0) > 0 AND rts.par_total IS NOT NULL
@@ -313,9 +322,12 @@ BEGIN
         ) scores ON true
         CROSS JOIN LATERAL (
           VALUES (
-            CASE WHEN v_handicap_mode = 'allowance_pct'
-                 THEN FLOOR(COALESCE(rp.course_handicap_used, 0)::numeric * v_allowance_pct / 100)::integer
-                 ELSE COALESCE(rp.playing_handicap_used, rp.course_handicap_used, 0)
+            CASE
+              WHEN rp.assigned_playing_handicap IS NOT NULL
+                   THEN rp.assigned_playing_handicap
+              WHEN v_handicap_mode = 'allowance_pct'
+                   THEN FLOOR(COALESCE(rp.course_handicap_used, 0)::numeric * v_allowance_pct / 100)::integer
+              ELSE COALESCE(rp.playing_handicap_used, rp.course_handicap_used, 0)
             END
           )
         ) AS hv(hcp)
