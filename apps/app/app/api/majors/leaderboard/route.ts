@@ -244,24 +244,36 @@ function countByPosition(positions: (number | null)[]): Record<number, number> {
 }
 
 /**
- * Returns true when all scored entries have completed the required rounds AND
- * more than one player holds position 1.
+ * Returns true when multiple players hold position 1 AND those tied players
+ * have all completed their required rounds. Other scored entries (e.g. live
+ * in-progress players) do not block the tie — only the tied players must be done.
  */
 function detectFirstPlaceTie(
   positionEntries: Array<{ position: number | null }>,
   numRounds: number,
   submissionEntries: Array<{ rounds_submitted: number }>,
 ): { has_first_place_tie: boolean; all_rounds_complete: boolean } {
-  const scoredEntries = positionEntries.filter((e) => e.position != null);
-  if (scoredEntries.length === 0) return { has_first_place_tie: false, all_rounds_complete: false };
+  const scoredIndices = positionEntries
+    .map((e, i) => (e.position != null ? i : -1))
+    .filter((i) => i >= 0);
 
-  const allComplete = submissionEntries
-    .filter((_, i) => positionEntries[i]?.position != null)
-    .every((e) => e.rounds_submitted >= numRounds);
+  if (scoredIndices.length === 0) return { has_first_place_tie: false, all_rounds_complete: false };
 
-  const firstPlaceCount = scoredEntries.filter((e) => e.position === 1).length;
+  const allComplete = scoredIndices.every(
+    (i) => (submissionEntries[i]?.rounds_submitted ?? 0) >= numRounds,
+  );
+
+  const firstPlaceIndices = positionEntries
+    .map((e, i) => (e.position === 1 ? i : -1))
+    .filter((i) => i >= 0);
+
+  // Only the tied players at 1st need to have completed their rounds.
+  const firstPlaceComplete = firstPlaceIndices.every(
+    (i) => (submissionEntries[i]?.rounds_submitted ?? 0) >= numRounds,
+  );
+
   return {
-    has_first_place_tie: allComplete && firstPlaceCount > 1,
+    has_first_place_tie: firstPlaceComplete && firstPlaceIndices.length > 1,
     all_rounds_complete: allComplete,
   };
 }
