@@ -123,13 +123,14 @@ export async function GET(req: Request) {
           })),
         ];
 
-        const frozenSubmissions = rankedFrozenRows.map((r) => ({
-          rounds_submitted: entryMap[r.profile_id]?.rounds_submitted ?? 0,
-        }));
+        // Detect the tie on the FULL final standings, not the masked frozen
+        // positions — otherwise a tie whose deciding holes fall inside the hidden
+        // window would never surface the resolution buttons before reveal.
+        const liveFull = await getEventLeaderboard(eventId);
         const { has_first_place_tie } = detectFirstPlaceTie(
-          rankedFrozenRows.map((r) => ({ position: r.position })),
+          liveFull.map((r) => ({ position: r.position ?? null })),
           (event as any).num_rounds ?? 1,
-          frozenSubmissions,
+          liveFull.map((r) => ({ rounds_submitted: (r as any).rounds_submitted ?? 0 })),
         );
 
         return NextResponse.json(

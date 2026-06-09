@@ -244,7 +244,7 @@ export default function LeaderboardClient() {
       )}
 
       {/* Tie / playoff banners */}
-      {tab === "competition" && hasFirstPlaceTie && !activePlayoff && !isAdmin && (
+      {tab === "competition" && hasFirstPlaceTie && !activePlayoff && !isAdmin && !isFrozen && (
         <TieBanner isAdmin={false} onManage={() => setShowTieDrawer(true)} />
       )}
       {tab === "competition" && activePlayoff && (
@@ -272,8 +272,10 @@ export default function LeaderboardClient() {
         </div>
       )}
 
-      {/* Tie resolution buttons — owners and admins only, when 1st-place tie is unresolved */}
-      {tab === "competition" && canReveal && hasFirstPlaceTie && !activePlayoff && (
+      {/* Tie resolution buttons — owners and admins only, when 1st-place tie is
+          unresolved. Not gated by reveal state: an unresolved tie must be
+          resolvable both before (frozen) and after the reveal. */}
+      {tab === "competition" && isAdmin && hasFirstPlaceTie && !activePlayoff && (
         <div className="flex gap-3">
           <button
             type="button"
