@@ -474,6 +474,22 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           const config = (eventData as any).points_config ?? {};
           const numRounds = (eventData as any).num_rounds ?? 1;
 
+          // Field size for points: the tied players' positions are positions in the
+          // FULL event field, so the formula needs the whole field — not just the
+          // playoff participants. Mirrors the display logic in majors/leaderboard.
+          const configuredParticipants = (config as any)?.num_participants;
+          let fieldSize: number;
+          if (configuredParticipants != null) {
+            fieldSize = Number(configuredParticipants);
+          } else {
+            const { count } = await supabaseAdmin
+              .from("event_leaderboard_entries")
+              .select("*", { count: "exact", head: true })
+              .eq("event_id", eventId)
+              .not("net_score", "is", null);
+            fieldSize = Math.max(count ?? final_positions.length, 1);
+          }
+
           for (const fp of final_positions) {
             let pts: number | null = null;
             if (model === "fedex_style") {
@@ -481,7 +497,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             } else if (model === "position_based" || model === "custom_table") {
               pts = typeof table[String(fp.position)] === "number" ? table[String(fp.position)] : null;
             } else if (model === "ciaga_formula" || model === "custom_formula") {
-              const fieldSize = final_positions.length;
               pts = computeFormulaPoints(fp.position, fieldSize, numRounds, config);
             }
             await supabaseAdmin
