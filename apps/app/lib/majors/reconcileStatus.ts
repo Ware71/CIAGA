@@ -28,6 +28,10 @@ const NON_AUTO_STATUSES: EventStatus[] = ["cancelled", "archived"];
 export async function reconcileEventStatus(
   eventId: string
 ): Promise<void> {
+  // event_tee_times ↔ rounds has FKs in both directions (event_tee_times.round_id
+  // and rounds.event_tee_time_id), so a PostgREST embed between them is ambiguous
+  // (PGRST201) and silently returns no data — which used to zero the tee-time
+  // count and force completed events back to 'live'. Fetch rounds separately.
   const [eventResult, roundsResult, teeTimesResult] = await Promise.all([
     supabaseAdmin
       .from("events")
@@ -40,21 +44,51 @@ export async function reconcileEventStatus(
       .eq("event_id", eventId),
     supabaseAdmin
       .from("event_tee_times")
-      .select("id, round_id, rounds(id, status)")
+      .select("id, round_id")
       .eq("event_id", eventId),
   ]);
+
+  // Never derive a status from incomplete data.
+  const queryError = eventResult.error ?? roundsResult.error ?? teeTimesResult.error;
+  if (queryError) {
+    console.error("[reconcileEventStatus] query failed:", queryError.message);
+    return;
+  }
 
   const evt = eventResult.data as { majors_status: EventStatus; event_date: string | null } | null;
   if (!evt) return;
 
   const rounds = (roundsResult.data ?? []) as { status: string }[];
 
+  const slots = (teeTimesResult.data ?? []) as { id: string; round_id: string | null }[];
+  const linkedRoundIds = slots
+    .map((s) => s.round_id)
+    .filter((id): id is string => id != null);
+
+  let linkedRoundList: { id: string; status: string }[] = [];
+  if (linkedRoundIds.length > 0) {
+    const { data: linkedRoundsData, error: linkedRoundsErr } = await supabaseAdmin
+      .from("rounds")
+      .select("id, status")
+      .in("id", linkedRoundIds);
+    if (linkedRoundsErr) {
+      console.error("[reconcileEventStatus] rounds query failed:", linkedRoundsErr.message);
+      return;
+    }
+    linkedRoundList = (linkedRoundsData ?? []) as { id: string; status: string }[];
+  }
+  const roundById = new Map(linkedRoundList.map((r) => [r.id, r]));
+
   // Derive tee-time-linked round statuses (actual rounds players are playing)
-  const teeTimeRows = (teeTimesResult.data ?? []) as unknown as Array<{
+  const teeTimeRows: Array<{
     id: string;
     round_id: string | null;
     rounds: { id: string; status: string } | null;
-  }>;
+  }> = slots.map((s) => ({
+    id: s.id,
+    round_id: s.round_id,
+    rounds: s.round_id ? roundById.get(s.round_id) ?? null : null,
+  }));
 
   // Disregard tee times whose linked round is cancelled
   const activeTeeTimeRows = teeTimeRows.filter(

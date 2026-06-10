@@ -33,16 +33,26 @@ export async function PATCH(
       return NextResponse.json({ error: "Only group owner or admin can edit tee times" }, { status: 403 });
     }
 
+    // No round embed — event_tee_times ↔ rounds has FKs in both directions, which
+    // makes a PostgREST embed ambiguous (PGRST201) and the whole select fail.
     const { data: teeTime } = await supabaseAdmin
       .from("event_tee_times")
-      .select("*, round:rounds(id, status)")
+      .select("*")
       .eq("id", tee_time_id)
       .eq("event_id", id)
       .maybeSingle();
     if (!teeTime) return NextResponse.json({ error: "Tee time not found" }, { status: 404 });
 
     // Prevent editing a tee time whose round is already live or finished
-    const roundStatus = (teeTime as any).round?.status;
+    let roundStatus: string | null = null;
+    if ((teeTime as any).round_id) {
+      const { data: linkedRound } = await supabaseAdmin
+        .from("rounds")
+        .select("status")
+        .eq("id", (teeTime as any).round_id)
+        .maybeSingle();
+      roundStatus = (linkedRound as any)?.status ?? null;
+    }
     if (roundStatus === "live" || roundStatus === "finished") {
       return NextResponse.json({ error: "Cannot edit a tee time that is already in progress or finished" }, { status: 400 });
     }

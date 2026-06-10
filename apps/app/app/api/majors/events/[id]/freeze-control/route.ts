@@ -61,14 +61,29 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       );
     }
 
-    // On reveal without force: check for incomplete tee-time rounds and warn the caller
+    // On reveal without force: check for incomplete tee-time rounds and warn the caller.
+    // (No embed here — event_tee_times ↔ rounds has FKs in both directions, which
+    // makes a PostgREST embed ambiguous and silently empty.)
     if (action === "reveal" && !force) {
-      const { data: teeTimesWithRounds } = await supabaseAdmin
+      const { data: teeTimeSlots } = await supabaseAdmin
         .from("event_tee_times")
-        .select("id, tee_time, round_id, rounds(id, status, name)")
+        .select("id, tee_time, round_id")
         .eq("event_id", id);
 
-      const incompleteTeeTimes = (teeTimesWithRounds ?? []).filter((tt: any) => {
+      const slotRoundIds = (teeTimeSlots ?? [])
+        .map((tt: any) => tt.round_id)
+        .filter(Boolean) as string[];
+      const { data: slotRounds } = slotRoundIds.length
+        ? await supabaseAdmin.from("rounds").select("id, status, name").in("id", slotRoundIds)
+        : { data: [] as any[] };
+      const slotRoundById = new Map((slotRounds ?? []).map((r: any) => [r.id, r]));
+
+      const teeTimesWithRounds = (teeTimeSlots ?? []).map((tt: any) => ({
+        ...tt,
+        rounds: tt.round_id ? slotRoundById.get(tt.round_id) ?? null : null,
+      }));
+
+      const incompleteTeeTimes = teeTimesWithRounds.filter((tt: any) => {
         const r = tt.rounds;
         return r && r.status !== "finished" && r.status !== "cancelled";
       });
