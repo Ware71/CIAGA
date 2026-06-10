@@ -91,7 +91,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         .select("*, event_playoff_scores(*)")
         .eq("playoff_id", playoff.id)
         .order("sequence", { ascending: true });
-      holes = holesData ?? [];
+      // Expose the embedded scores under `scores` (the PlayoffHoleWithScores shape the
+      // client consumes), not the raw Supabase relation key `event_playoff_scores`.
+      holes = (holesData ?? []).map((h: any) => ({ ...h, scores: h.event_playoff_scores ?? [] }));
       handicaps = await getPlayoffPlayingHandicaps(eventId, (playoff as any).tied_profile_ids ?? []);
     }
 
@@ -194,8 +196,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         const { playoff_hole_id, target_profile_id, gross_strokes } = body as {
           playoff_hole_id: string;
           target_profile_id: string;
-          gross_strokes: number;
+          gross_strokes: number | null;
         };
+
+        // Clearing a score (the entry sheet's "Clear score") removes the row.
+        if (gross_strokes == null) {
+          await supabaseAdmin
+            .from("event_playoff_scores")
+            .delete()
+            .eq("playoff_hole_id", playoff_hole_id)
+            .eq("profile_id", target_profile_id);
+          return NextResponse.json({ ok: true });
+        }
 
         // Load hole details for net calculation
         const { data: holeRow } = await supabaseAdmin
@@ -260,11 +272,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         const higherIsBetter = scoringModel === "stableford_points";
         const advHcaps = await getPlayoffPlayingHandicaps(eventId, remaining);
         const holeSi = (holeRow as any).stroke_index ?? null;
-        const valueFor = (s: { profile_id: string; gross_strokes: number | null; net_strokes: number | null }) => {
+        const holePar = (holeRow as any).par ?? 4;
+        const valueFor = (s: { profile_id: string; gross_strokes: number | null }) => {
           const gross = s.gross_strokes ?? 0;
           if (scoringModel === "gross") return gross;
-          if (scoringModel === "stableford_points") return s.net_strokes ?? gross;
-          return gross - strokesReceivedOnHole(advHcaps[s.profile_id] ?? 0, holeSi);
+          const net = gross - strokesReceivedOnHole(advHcaps[s.profile_id] ?? 0, holeSi);
+          if (scoringModel === "stableford_points") return Math.max(0, 2 - (net - holePar));
+          return net;
         };
 
         const best = scores.reduce<number>((acc, s) => {
@@ -429,6 +443,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         const wonLabel = isCountback ? "won_countback" : "won_playoff";
         const lostLabel = isCountback ? "lost_countback" : "lost_playoff";
 
+        // Recompute the base leaderboard FIRST. The RPC deletes + re-inserts every entry
+        // (dropping playoff columns), so the playoff result must be written AFTER it.
+        await supabaseAdmin.rpc("ciaga_compute_event_leaderboard", { p_event_id: eventId });
+
         // Update each tied player's leaderboard entry
         for (const fp of final_positions) {
           await supabaseAdmin
@@ -473,9 +491,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
               .eq("profile_id", fp.profile_id);
           }
         }
-
-        // Cascade to season standings
-        await supabaseAdmin.rpc("ciaga_compute_event_leaderboard", { p_event_id: eventId });
 
         return NextResponse.json({ ok: true });
       }

@@ -6,6 +6,8 @@ import { getViewerSession } from "@/lib/auth/viewerSession";
 import { strokesReceivedOnHole } from "@/lib/rounds/handicapUtils";
 import { StrokeDots, PlusIndicator, BadgeWrap, scoreBadgeType } from "@/components/round/ScorecardCells";
 import { CoursePickerModal } from "@/components/rounds/CoursePickerModal";
+import ScoreEntrySheet from "@/components/round/ScoreEntrySheet";
+import type { Participant, Hole } from "@/lib/rounds/hooks/useRoundDetail";
 import type {
   EventPlayoff,
   PlayoffHoleWithScores,
@@ -16,11 +18,13 @@ interface Props {
   playoff: EventPlayoff;
   eventId: string;
   canScore: boolean;
+  scoringModel?: string;
 }
 
 type Profile = { id: string; name: string | null; avatar_url: string | null };
+type ScoreView = "gross" | "playoff";
 
-export function PlayoffScorecardClient({ playoff, eventId, canScore }: Props) {
+export function PlayoffScorecardClient({ playoff, eventId, canScore, scoringModel = "net" }: Props) {
   const [holes, setHoles] = useState<PlayoffHoleWithScores[]>([]);
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
   const [handicaps, setHandicaps] = useState<Record<string, number>>({});
@@ -32,9 +36,12 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore }: Props) {
   const [tiedAgain, setTiedAgain] = useState(false);
   const [remainingIds, setRemainingIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [scoreView, setScoreView] = useState<ScoreView>("playoff");
 
-  // Inline score entry
-  const [entry, setEntry] = useState<{ holeId: string; pid: string } | null>(null);
+  // Score entry (reuses the normal ScoreEntrySheet)
+  const [entryPid, setEntryPid] = useState<string | null>(null);
+  const [entryMode, setEntryMode] = useState<"quick" | "custom">("quick");
+  const [customVal, setCustomVal] = useState("10");
 
   // Change course / tee
   const [teeOpen, setTeeOpen] = useState(false);
@@ -47,7 +54,6 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore }: Props) {
   async function load() {
     const session = await getViewerSession();
     if (!session) return;
-
     const res = await fetch(`/api/majors/events/${eventId}/playoff`, {
       headers: { Authorization: `Bearer ${session.accessToken}` },
     });
@@ -56,11 +62,10 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore }: Props) {
     setHoles(json.holes ?? []);
     setHandicaps(json.handicaps ?? {});
 
-    const allIds = playoff.tied_profile_ids;
     const { data: profileData } = await supabase
       .from("profiles")
       .select("id, name, avatar_url")
-      .in("id", allIds);
+      .in("id", playoff.tied_profile_ids);
     const pm: Record<string, Profile> = {};
     for (const p of profileData ?? []) pm[p.id] = p;
     setProfiles(pm);
@@ -91,13 +96,13 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore }: Props) {
     return json;
   }
 
-  async function submitScore(holeId: string, pid: string, gross: number) {
-    const key = `${holeId}:${pid}`;
+  async function submitScore(holeId: string, pid: string, gross: number | null) {
+    const key = `${pid}:${currentHole?.hole_number}`;
     setSaving(key);
     setError(null);
     try {
       await apiPost({ action: "submit_score", playoff_hole_id: holeId, target_profile_id: pid, gross_strokes: gross });
-      setEntry(null);
+      setEntryPid(null);
       await load();
     } catch (e: any) {
       setError(e.message);
@@ -194,6 +199,18 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore }: Props) {
 
   const currentHole = holes[holes.length - 1];
   const isComplete = playoff.status === "completed";
+  const isStableford = scoringModel === "stableford_points";
+
+  // The value shown in a cell for the active tab.
+  function cellValue(hole: PlayoffHoleWithScores, pid: string): { display: string | number | null; recv: number } {
+    const score = hole.scores?.find((s) => s.profile_id === pid);
+    const gross = score?.gross_strokes ?? null;
+    const recv = strokesReceivedOnHole(handicaps[pid] ?? 0, hole.stroke_index);
+    if (gross == null) return { display: null, recv: scoreView === "playoff" ? recv : 0 };
+    if (scoreView === "gross") return { display: gross, recv: 0 };
+    if (isStableford) return { display: Math.max(0, 2 - ((gross - recv) - hole.par)), recv };
+    return { display: gross - recv, recv };
+  }
 
   if (loading) {
     return (
@@ -203,8 +220,18 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore }: Props) {
     );
   }
 
+  const players = playoff.tied_profile_ids;
+  const gridCols = `28px 30px 26px repeat(${players.length}, minmax(0, 1fr))`;
+
+  // Adapters so we can reuse the normal ScoreEntrySheet for the current hole only.
+  const entryParticipants = players.map((id) => ({ id } as unknown as Participant));
+  const entryHoles: Hole[] = currentHole
+    ? [{ hole_number: currentHole.hole_number, par: currentHole.par, yardage: null, stroke_index: currentHole.stroke_index }]
+    : [];
+  const scoreForEntry = (pid: string) => currentHole?.scores?.find((s) => s.profile_id === pid)?.gross_strokes ?? null;
+
   return (
-    <div className="min-h-[100dvh] pb-10 pt-12 px-4 max-w-sm mx-auto space-y-4">
+    <div className="min-h-[100dvh] pb-10 pt-12 px-4 max-w-md mx-auto space-y-4">
       <div className="text-center space-y-1">
         <p className="text-[10px] uppercase tracking-widest text-emerald-100/50">
           {isComplete ? "Playoff Complete" : "Sudden-Death Playoff"}
@@ -212,86 +239,79 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore }: Props) {
         <h1 className="text-lg font-bold text-[#f5e6b0]">Playoff Scorecard</h1>
       </div>
 
-      {/* Scorecard — one column per hole played, cut to the current hole */}
+      {/* Gross / Play-off tabs */}
+      <div className="rounded-xl border border-emerald-900/70 bg-[#0b3b21]/50 p-1 flex items-center w-max mx-auto">
+        {(["gross", "playoff"] as ScoreView[]).map((v) => (
+          <button
+            key={v}
+            type="button"
+            onClick={() => setScoreView(v)}
+            className={`px-3 py-1 text-[11px] font-semibold rounded-lg ${
+              scoreView === v ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
+            }`}
+          >
+            {v === "gross" ? "Gross" : "Play-off"}
+          </button>
+        ))}
+      </div>
+
+      {/* Portrait scorecard */}
       {holes.length > 0 && (
-        <div className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/40 overflow-hidden">
-          {/* Hole header row */}
-          <div className="grid" style={{ gridTemplateColumns: `7rem repeat(${holes.length}, minmax(3rem, 1fr))` }}>
-            <div className="px-2 py-2 text-[10px] uppercase tracking-wide text-emerald-100/50 border-b border-emerald-900/60">
-              Hole
-            </div>
-            {holes.map((h, i) => (
-              <div
-                key={h.id}
-                className={`px-1 py-2 text-center border-b border-l border-emerald-900/60 ${
-                  i === holes.length - 1 && !isComplete ? "bg-[#042713]" : ""
-                }`}
-              >
-                <div className="text-[13px] font-extrabold text-[#f5e6b0] leading-none">{h.hole_number}</div>
-                <div className="mt-0.5 text-[9px] text-emerald-100/50 leading-none">
-                  P{h.par} · SI{h.stroke_index}
-                </div>
+        <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/30 overflow-hidden">
+          {/* Header */}
+          <div className="grid" style={{ gridTemplateColumns: gridCols }}>
+            <div className="h-9 flex items-center justify-center text-[10px] text-emerald-100/60 border-b border-r border-emerald-900/60 bg-[#0b3b21]/60">#</div>
+            <div className="h-9 flex items-center justify-center text-[10px] text-emerald-100/60 border-b border-r border-emerald-900/60 bg-[#0b3b21]/60">Par</div>
+            <div className="h-9 flex items-center justify-center text-[10px] text-emerald-100/60 border-b border-r border-emerald-900/60 bg-[#0b3b21]/60">SI</div>
+            {players.map((pid) => (
+              <div key={pid} className="h-9 flex items-center justify-center gap-1 px-1 border-b border-r border-emerald-900/60 bg-[#0b3b21]/60 min-w-0">
+                <PlayerAvatar profile={profiles[pid]} />
+                <span className="text-[10px] font-semibold text-emerald-50 truncate">
+                  {(profiles[pid]?.name ?? "?").split(" ")[0]}
+                </span>
               </div>
             ))}
           </div>
 
-          {/* Player rows */}
-          {playoff.tied_profile_ids.map((pid) => {
-            const profile = profiles[pid];
-            const hcp = handicaps[pid] ?? 0;
+          {/* Hole rows */}
+          {holes.map((hole, hi) => {
+            const isCurrent = hi === holes.length - 1 && !isComplete;
             return (
-              <div
-                key={pid}
-                className="grid items-stretch border-b border-emerald-900/40 last:border-b-0"
-                style={{ gridTemplateColumns: `7rem repeat(${holes.length}, minmax(3rem, 1fr))` }}
-              >
-                {/* Name + handicap */}
-                <div className="flex items-center gap-2 px-2 py-2 min-w-0">
-                  <PlayerAvatar profile={profile} />
-                  <div className="min-w-0">
-                    <p className="text-[12px] font-semibold text-emerald-50 truncate leading-tight">
-                      {profile?.name ?? "Unknown"}
-                    </p>
-                    <p className="text-[9px] text-emerald-100/50 leading-tight">hcp {hcp}</p>
-                  </div>
+              <div key={hole.id} className="grid" style={{ gridTemplateColumns: gridCols }}>
+                <div className={`h-11 flex items-center justify-center text-[12px] font-extrabold border-b border-r border-emerald-900/60 ${isCurrent ? "bg-[#042713] text-[#f5e6b0]" : "bg-[#0b3b21]/40 text-emerald-100/80"}`}>
+                  {hole.hole_number}
                 </div>
-
-                {/* Per-hole cells */}
-                {holes.map((hole, hi) => {
-                  const isCurrent = hi === holes.length - 1 && !isComplete;
+                <div className="h-11 flex items-center justify-center text-[11px] text-emerald-100/70 border-b border-r border-emerald-900/60 bg-[#0b3b21]/20">{hole.par}</div>
+                <div className="h-11 flex items-center justify-center text-[11px] text-emerald-100/70 border-b border-r border-emerald-900/60 bg-[#0b3b21]/20">{hole.stroke_index}</div>
+                {players.map((pid) => {
                   const isRemaining = hole.remaining_profile_ids.includes(pid);
-                  const recv = strokesReceivedOnHole(hcp, hole.stroke_index);
-                  const score = hole.scores?.find((s) => s.profile_id === pid);
-                  const gross = score?.gross_strokes ?? null;
-                  const net = gross != null ? gross - recv : null;
-                  const badge = scoreBadgeType(gross, hole.par);
-                  const cellKey = `${hole.id}:${pid}`;
-
+                  const { display, recv } = cellValue(hole, pid);
+                  const gross = hole.scores?.find((s) => s.profile_id === pid)?.gross_strokes ?? null;
+                  const badge = !isStableford && gross != null ? scoreBadgeType(typeof display === "number" ? display : gross, hole.par) : null;
+                  const tappable = canScore && isCurrent && isRemaining && gross == null;
+                  const savingKey = `${pid}:${hole.hole_number}`;
                   return (
                     <button
-                      key={hole.id}
+                      key={pid}
                       type="button"
-                      disabled={!canScore || !isCurrent || !isRemaining || gross != null}
-                      onClick={() => setEntry({ holeId: hole.id, pid })}
-                      className={`flex flex-col items-center justify-center gap-0.5 border-l border-emerald-900/40 py-2 ${
-                        isCurrent ? "bg-[#042713]/40" : ""
-                      } ${canScore && isCurrent && isRemaining && gross == null ? "hover:bg-emerald-900/30" : "cursor-default"}`}
+                      disabled={!tappable}
+                      onClick={() => { if (tappable) { setEntryMode("quick"); setEntryPid(pid); } }}
+                      className={`h-11 flex flex-col items-center justify-center gap-0.5 border-b border-r border-emerald-900/60 font-semibold tabular-nums ${
+                        isCurrent ? "bg-[#042713]/40 text-[#f5e6b0]" : "bg-[#0b3b21]/10 text-emerald-50"
+                      } ${tappable ? "hover:bg-emerald-900/30" : "cursor-default"} ${!isRemaining ? "opacity-40" : ""}`}
                     >
                       {!isRemaining ? (
-                        <span className="text-sm font-bold text-red-400/70">✕</span>
-                      ) : gross != null ? (
+                        <span className="text-red-400/70 text-sm">✕</span>
+                      ) : (
                         <>
                           <BadgeWrap type={badge}>
-                            <span className="text-[13px] font-bold text-emerald-50 leading-none">{gross}</span>
+                            <span className="text-[13px] leading-none">{saving === savingKey ? "…" : (display ?? "–")}</span>
                           </BadgeWrap>
-                          <span className="text-[9px] text-emerald-100/50 leading-none">net {net}</span>
+                          {recv > 0 ? <div className="leading-none"><StrokeDots count={recv} /></div>
+                            : recv < 0 ? <div className="leading-none"><PlusIndicator count={Math.abs(recv)} /></div>
+                            : <div className="h-[6px]" />}
                         </>
-                      ) : canScore && isCurrent ? (
-                        <span className="text-[11px] font-semibold text-emerald-300/80">{saving === cellKey ? "…" : "+ add"}</span>
-                      ) : (
-                        <span className="text-emerald-100/30">–</span>
                       )}
-                      {recv > 0 ? <StrokeDots count={recv} /> : recv < 0 ? <PlusIndicator count={Math.abs(recv)} /> : null}
                     </button>
                   );
                 })}
@@ -312,7 +332,6 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore }: Props) {
             ⛳ Change course / tee
           </button>
 
-          {/* Determine result when all remaining have scored */}
           {!tiedAgain && currentHole.remaining_profile_ids.every((pid) =>
             currentHole.scores?.some((s) => s.profile_id === pid && s.gross_strokes != null)
           ) && (
@@ -357,7 +376,7 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore }: Props) {
         </div>
       )}
 
-      {/* Decide by countback (when sudden-death drags on) */}
+      {/* Decide by countback */}
       {!isComplete && canScore && (
         <button
           type="button"
@@ -381,14 +400,29 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore }: Props) {
 
       {error && <p className="text-xs text-red-400 text-center">{error}</p>}
 
-      {/* Score entry sheet */}
-      {entry && (
-        <ScoreEntry
-          par={holes.find((h) => h.id === entry.holeId)?.par ?? 4}
-          name={profiles[entry.pid]?.name ?? "Player"}
-          saving={saving === `${entry.holeId}:${entry.pid}`}
-          onClose={() => setEntry(null)}
-          onSubmit={(v) => submitScore(entry.holeId, entry.pid, v)}
+      {/* Score entry — the normal sheet, restricted to the current hole */}
+      {entryPid && currentHole && (
+        <ScoreEntrySheet
+          participants={entryParticipants}
+          holes={entryHoles}
+          pid={entryPid}
+          holeNumber={currentHole.hole_number}
+          mode={entryMode}
+          customVal={customVal}
+          setMode={setEntryMode}
+          setCustomVal={setCustomVal}
+          canScore={canScore}
+          isFinished={false}
+          hideHoleState
+          scoreFor={(pid) => scoreForEntry(pid)}
+          savingKey={saving}
+          holeState={"completed"}
+          onSetPickedUp={() => {}}
+          onSetNotStarted={() => {}}
+          onClose={() => setEntryPid(null)}
+          onSubmit={(strokes) => submitScore(currentHole.id, entryPid, strokes)}
+          getParticipantLabel={(p) => profiles[p.id]?.name ?? "Player"}
+          getParticipantAvatar={(p) => profiles[p.id]?.avatar_url ?? null}
         />
       )}
 
@@ -421,73 +455,17 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore }: Props) {
 
 function PlayerAvatar({ profile }: { profile: Profile | undefined }) {
   if (profile?.avatar_url) {
-    return <img src={profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />;
+    return <img src={profile.avatar_url} alt="" className="h-5 w-5 rounded-full object-cover shrink-0" />;
   }
   return (
-    <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
+    <div className="h-5 w-5 rounded-full bg-emerald-900/60 grid place-items-center text-[8px] font-bold text-emerald-200 shrink-0">
       {profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
     </div>
   );
 }
 
-// ── Score entry bottom sheet ───────────────────────────────────────────────
-function ScoreEntry({
-  par,
-  name,
-  saving,
-  onClose,
-  onSubmit,
-}: {
-  par: number;
-  name: string;
-  saving: boolean;
-  onClose: () => void;
-  onSubmit: (v: number) => void;
-}) {
-  const quick = [par - 2, par - 1, par, par + 1, par + 2, par + 3].filter((n) => n >= 1);
-  return (
-    <div className="fixed inset-0 z-[60] flex items-end bg-black/60" onClick={onClose}>
-      <div
-        className="w-full max-w-sm mx-auto rounded-t-3xl bg-[#071f13] border-t border-emerald-900/70 px-4 pt-5 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] space-y-4"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <p className="text-center text-sm font-semibold text-emerald-50">{name} — enter score</p>
-        <div className="grid grid-cols-3 gap-2">
-          {quick.map((n) => (
-            <button
-              key={n}
-              type="button"
-              disabled={saving}
-              onClick={() => onSubmit(n)}
-              className="py-3 rounded-xl bg-emerald-900/50 border border-emerald-700/40 text-emerald-50 text-lg font-bold disabled:opacity-50"
-            >
-              {n}
-            </button>
-          ))}
-        </div>
-        <div className="grid grid-cols-4 gap-2">
-          {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
-            <button
-              key={n}
-              type="button"
-              disabled={saving}
-              onClick={() => onSubmit(n)}
-              className="py-2 rounded-lg bg-emerald-900/30 border border-emerald-800/40 text-emerald-100/80 text-sm font-semibold disabled:opacity-50"
-            >
-              {n}
-            </button>
-          ))}
-        </div>
-        <button type="button" onClick={onClose} className="w-full py-2 text-emerald-200/50 text-xs">
-          Cancel
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ── Change course / tee sheet ──────────────────────────────────────────────
-type TeeBox = { id: string; name: string | null; gender?: string | null; holes: Array<{ hole_number: number; par: number; handicap: number | null }> };
+type TeeBox = { id: string; name: string | null };
 
 function ChangeTeeSheet({
   hole,
@@ -524,7 +502,7 @@ function ChangeTeeSheet({
   return (
     <div className="fixed inset-0 z-[60] flex items-end bg-black/60" onClick={onClose}>
       <div
-        className="w-full max-w-sm mx-auto rounded-t-3xl bg-[#071f13] border-t border-emerald-900/70 px-4 pt-5 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] space-y-4 max-h-[85vh] overflow-y-auto"
+        className="w-full max-w-md mx-auto rounded-t-3xl bg-[#071f13] border-t border-emerald-900/70 px-4 pt-5 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] space-y-4 max-h-[85vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <p className="text-center text-sm font-semibold text-emerald-50">Change course / tee</p>
@@ -616,7 +594,7 @@ function CountbackConfirm({
   return (
     <div className="fixed inset-0 z-[60] flex items-end bg-black/60" onClick={onCancel}>
       <div
-        className="w-full max-w-sm mx-auto rounded-t-3xl bg-[#071f13] border-t border-emerald-900/70 px-4 pt-5 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] space-y-4 max-h-[85vh] overflow-y-auto"
+        className="w-full max-w-md mx-auto rounded-t-3xl bg-[#071f13] border-t border-emerald-900/70 px-4 pt-5 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] space-y-4 max-h-[85vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <p className="text-center text-sm font-semibold text-emerald-50">Decide by countback</p>

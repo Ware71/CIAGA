@@ -2737,6 +2737,17 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                 <div className="flex items-center gap-1 flex-1 min-w-0">
                   <span className="text-sm font-semibold text-emerald-50 truncate">{row.profile?.name ?? "Unknown"}</span>
                   {isFrozenRow && <span className="text-[11px] leading-none shrink-0">❄️</span>}
+                  {(row as any).playoff_result && (
+                    <span className={`text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full shrink-0 ${
+                      String((row as any).playoff_result).startsWith("won")
+                        ? "bg-[#f5e6b0] text-[#042713]"
+                        : "border border-emerald-700/50 text-emerald-200/70"
+                    }`}>
+                      {String((row as any).playoff_result).includes("countback")
+                        ? (String((row as any).playoff_result).startsWith("won") ? "Won CB" : "CB")
+                        : (String((row as any).playoff_result).startsWith("won") ? "Won PO" : "PO")}
+                    </span>
+                  )}
                 </div>
                 {showPts && (
                   <div className="text-right shrink-0 mr-1">
@@ -2913,7 +2924,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
             >
               ✕ Close
             </button>
-            <PlayoffScorecardClient playoff={activePlayoff} eventId={eventId} canScore={isAdminOrOwner} />
+            <PlayoffScorecardClient playoff={activePlayoff} eventId={eventId} canScore={isAdminOrOwner} scoringModel={event?.scoring_model} />
           </div>
         )}
         {/* Player round breakdown sheet */}

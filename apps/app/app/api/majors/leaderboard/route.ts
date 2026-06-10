@@ -89,15 +89,9 @@ export async function GET(req: Request) {
           (entrySubmissions ?? []).map((e: any) => [e.profile_id, e])
         );
 
-        // When playoff is complete, override positions with playoff_final_position + re-sort
-        const rankedFrozenRows = activePlayoff?.status === "completed"
-          ? frozenRows
-              .map((r) => ({
-                ...r,
-                position: entryMap[r.profile_id]?.playoff_final_position ?? r.position,
-              }))
-              .sort((a, b) => (a.position ?? Infinity) - (b.position ?? Infinity))
-          : frozenRows;
+        // When playoff is complete, derive winner/loser positions + result from the
+        // playoff record (robust to leaderboard recomputes) and re-sort.
+        const rankedFrozenRows = applyCompletedPlayoff(frozenRows, activePlayoff, event as any);
 
         // Compute tied_count from (possibly playoff-adjusted) positions
         const positionCounts = countByPosition(rankedFrozenRows.map((r) => r.position ?? null));
@@ -106,8 +100,8 @@ export async function GET(req: Request) {
           ...rankedFrozenRows.map((r) => ({
             ...r,
             tied_count: positionCounts[r.position ?? -1] ?? 1,
-            playoff_result: entryMap[r.profile_id]?.playoff_result ?? null,
-            playoff_final_position: entryMap[r.profile_id]?.playoff_final_position ?? null,
+            playoff_result: (r as any).playoff_result ?? entryMap[r.profile_id]?.playoff_result ?? null,
+            playoff_final_position: (r as any).playoff_final_position ?? entryMap[r.profile_id]?.playoff_final_position ?? null,
           })),
           ...pendingParticipants.map((p) => ({
             profile_id: p.profile_id,
@@ -167,19 +161,9 @@ export async function GET(req: Request) {
         (event as any).num_rounds ?? 1,
       );
 
-      // When a playoff is complete, use playoff_final_position as the display position
-      const resolvedRows = activePlayoff?.status === "completed"
-        ? liveRows
-            .map((r) => ({
-              ...r,
-              position: (r as any).playoff_final_position ?? r.position,
-            }))
-            .sort((a, b) => {
-              const ap = (a as any).position ?? Infinity;
-              const bp = (b as any).position ?? Infinity;
-              return ap - bp;
-            })
-        : liveRows;
+      // When a playoff is complete, derive winner/loser positions, points and result
+      // from the playoff record (robust to leaderboard recomputes) and re-sort.
+      const resolvedRows = applyCompletedPlayoff(liveRows as any[], activePlayoff, event as any);
 
       // Recompute tied_count from the (possibly playoff-adjusted) positions
       const finalPositionCounts = countByPosition(resolvedRows.map((r) => (r as any).position ?? null));
@@ -250,6 +234,46 @@ function countByPosition(positions: (number | null)[]): Record<number, number> {
     counts[p] = (counts[p] ?? 0) + 1;
   }
   return counts;
+}
+
+type PlayoffAdjustable = {
+  profile_id: string;
+  position: number | null;
+  net_score?: number | null;
+  points_earned?: number | null;
+  playoff_result?: string | null;
+  playoff_final_position?: number | null;
+};
+
+/**
+ * Apply a COMPLETED playoff's outcome to the leaderboard rows, derived from the
+ * `event_playoffs` record (winner + tied set + resolution type) rather than the
+ * `playoff_final_position`/`playoff_result` columns on event_leaderboard_entries —
+ * those are wiped every time `ciaga_compute_event_leaderboard` re-inserts entries.
+ * Deriving here keeps the playoff result correct regardless of recomputes.
+ */
+function applyCompletedPlayoff<T extends PlayoffAdjustable>(
+  rows: T[],
+  activePlayoff: EventPlayoff | null,
+  event: EventConfig,
+): T[] {
+  if (!activePlayoff || activePlayoff.status !== "completed") return rows;
+  const tied = new Set(activePlayoff.tied_profile_ids ?? []);
+  const winner = activePlayoff.winner_profile_id;
+  const type = activePlayoff.resolution_type ?? "playoff";
+  const fieldSize = Math.max(rows.filter((r) => (r.net_score ?? null) != null).length, 1);
+  const adjusted = rows.map((r) => {
+    if (!tied.has(r.profile_id)) return r;
+    const pos = r.profile_id === winner ? 1 : 2;
+    return {
+      ...r,
+      position: pos,
+      points_earned: computePointsForPosition(pos, fieldSize, event),
+      playoff_result: r.profile_id === winner ? `won_${type}` : `lost_${type}`,
+      playoff_final_position: pos,
+    };
+  });
+  return adjusted.sort((a, b) => (a.position ?? Infinity) - (b.position ?? Infinity));
 }
 
 /**

@@ -26,6 +26,7 @@ export default function ScoreEntrySheet(props: {
   scoreFor: (pid: string, hole: number) => number | null;
   savingKey: string | null;
   isPortrait?: boolean;
+  hideHoleState?: boolean;
 
   // B: hole state controls
   holeState: HoleState;
@@ -51,6 +52,7 @@ export default function ScoreEntrySheet(props: {
     scoreFor,
     savingKey,
     isPortrait = true,
+    hideHoleState = false,
 
     holeState,
     onSetPickedUp,
@@ -142,23 +144,25 @@ export default function ScoreEntrySheet(props: {
             </div>
 
             {/* B: Hole state quick actions */}
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <button
-                className="h-11 rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/40 text-emerald-50 text-sm font-semibold hover:bg-emerald-900/25 disabled:opacity-40"
-                disabled={disabled || busy}
-                onClick={() => onSetPickedUp()}
-              >
-                Picked up (PU)
-              </button>
+            {!hideHoleState && (
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <button
+                  className="h-11 rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/40 text-emerald-50 text-sm font-semibold hover:bg-emerald-900/25 disabled:opacity-40"
+                  disabled={disabled || busy}
+                  onClick={() => onSetPickedUp()}
+                >
+                  Picked up (PU)
+                </button>
 
-              <button
-                className="h-11 rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/40 text-emerald-50 text-sm font-semibold hover:bg-emerald-900/25 disabled:opacity-40"
-                disabled={disabled || busy}
-                onClick={() => onSetNotStarted()}
-              >
-                Not started (—)
-              </button>
-            </div>
+                <button
+                  className="h-11 rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/40 text-emerald-50 text-sm font-semibold hover:bg-emerald-900/25 disabled:opacity-40"
+                  disabled={disabled || busy}
+                  onClick={() => onSetNotStarted()}
+                >
+                  Not started (—)
+                </button>
+              </div>
+            )}
 
             {mode === "quick" ? (
               <div className="mt-3 grid grid-cols-3 gap-2">
