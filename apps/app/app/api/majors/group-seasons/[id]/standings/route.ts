@@ -83,7 +83,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     if (eventIds.length > 0) {
       const { data: leaderEntries } = await supabaseAdmin
         .from("event_leaderboard_entries")
-        .select("profile_id, event_id, position, net_score, gross_score, to_par, course_par")
+        .select("profile_id, event_id, position, playoff_final_position, net_score, gross_score, to_par, course_par")
         .in("event_id", eventIds)
         .not("net_score", "is", null);
 
@@ -106,7 +106,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
           agg.total_gross += e.gross_score;
           if (e.course_par != null) agg.gross_to_par_sum += e.gross_score - e.course_par;
         }
-        if (e.position === 1) {
+        // Playoff-resolved ties keep position=1 for every tied player
+        if (((e as any).playoff_final_position ?? e.position) === 1) {
           const ev = eventMap.get(e.event_id);
           agg.won_events.push({
             event_id: e.event_id,

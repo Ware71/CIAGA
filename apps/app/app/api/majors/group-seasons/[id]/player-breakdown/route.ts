@@ -49,7 +49,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     const { data: entries, error: leErr } = await supabaseAdmin
       .from("event_leaderboard_entries")
-      .select("event_id, position, net_score, gross_score, points_earned, format_points")
+      .select("event_id, position, playoff_final_position, net_score, gross_score, points_earned, format_points")
       .in("event_id", eventIds)
       .eq("profile_id", profileId);
 
@@ -61,7 +61,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         event_id: e.event_id,
         event_name: ev?.name ?? "Unknown",
         event_date: ev?.event_date ?? null,
-        position: e.position ?? null,
+        // playoff-resolved finishing position takes precedence over the tied position
+        position: e.playoff_final_position ?? e.position ?? null,
         net_score: e.net_score ?? null,
         gross_score: e.gross_score ?? null,
         points_earned: e.points_earned ?? null,

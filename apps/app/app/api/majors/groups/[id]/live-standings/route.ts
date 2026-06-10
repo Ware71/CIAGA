@@ -164,7 +164,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     if (completedCompIds.length > 0) {
       const { data: confirmedEntries, error: ceErr } = await supabaseAdmin
         .from("event_leaderboard_entries")
-        .select("profile_id, points_earned, position, event_id, gross_score, net_score, to_par, course_par")
+        .select("profile_id, points_earned, position, playoff_final_position, event_id, gross_score, net_score, to_par, course_par")
         .in("event_id", completedCompIds)
         .not("net_score", "is", null);
 
@@ -184,7 +184,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         };
         existing.confirmed_points += entry.points_earned ?? 0;
         existing.events.add(entry.event_id);
-        if (entry.position === 1) existing.wins += 1;
+        // Playoff-resolved ties keep position=1 for every tied player
+        if (((entry as any).playoff_final_position ?? entry.position) === 1) existing.wins += 1;
         // Strokes
         if (entry.net_score != null) {
           existing.total_net += entry.net_score;
