@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 import { supabase } from "@/lib/supabaseClient";
@@ -10,8 +10,11 @@ import type {
   FrozenLeaderboardEntry,
   LeaderboardFreezeState,
   LeaderboardRevealStyle,
+  EventPlayoff,
 } from "@/lib/majors/types";
 import { LeaderboardReveal } from "@/components/majors/LeaderboardReveal";
+import { TieBanner, PlayoffStatusBanner } from "./TieBanner";
+import { TieManagementDrawer } from "./TieManagementDrawer";
 
 type Tab = "competition" | "group";
 
@@ -75,6 +78,12 @@ export default function LeaderboardClient() {
   const [showReveal, setShowReveal] = useState(false);
   const [myRole, setMyRole] = useState<string | null>(null);
   const [revealLoading, setRevealLoading] = useState(false);
+  const [hasFirstPlaceTie, setHasFirstPlaceTie] = useState(false);
+  const [allEntrantsComplete, setAllEntrantsComplete] = useState(false);
+  const [activePlayoff, setActivePlayoff] = useState<EventPlayoff | null>(null);
+  const [showTieDrawer, setShowTieDrawer] = useState(false);
+  const [tieDrawerScreen, setTieDrawerScreen] = useState<"choice" | "playoff_setup">("choice");
+  const [showPlayoffCard, setShowPlayoffCard] = useState(false);
   const accessTokenRef = useRef<string | null>(null);
 
   async function fetchLeaderboard(id: string, t: Tab) {
@@ -93,6 +102,9 @@ export default function LeaderboardClient() {
       if (json.freeze) setFreeze(json.freeze);
       if (json.my_role !== undefined) setMyRole(json.my_role);
       if (json.scoring_model) setScoringModel(json.scoring_model);
+      setHasFirstPlaceTie(json.has_first_place_tie ?? false);
+      setAllEntrantsComplete(json.all_entrants_complete ?? false);
+      setActivePlayoff(json.active_playoff ?? null);
     } else {
       setGroupRows(json.rows ?? []);
     }
@@ -153,10 +165,11 @@ export default function LeaderboardClient() {
               if (c.leaderboard_freeze_state === "frozen") {
                 fetchLeaderboard(competitionId, "competition");
               }
-              // If just revealed, trigger reveal sequence
+              // If just revealed, fetch full scores first then start the reveal sequence
               if (c.leaderboard_freeze_state === "revealed") {
-                fetchLeaderboard(competitionId, "competition");
-                setShowReveal(true);
+                fetchLeaderboard(competitionId, "competition").then(() => {
+                  if (!cancelled) setShowReveal(true);
+                });
               }
             }
           }
@@ -188,6 +201,7 @@ export default function LeaderboardClient() {
       });
       if (res.ok) {
         setFreeze((prev) => prev ? { ...prev, freeze_state: "revealed" } : prev);
+        await fetchLeaderboard(competitionId, "competition");
         setShowReveal(true);
       }
     } finally {
@@ -198,7 +212,8 @@ export default function LeaderboardClient() {
   const rows = tab === "competition" ? compRows : groupRows;
   const isFrozen = freeze?.freeze_state === "frozen";
   const totalHoles = freeze?.total_holes ?? 18;
-  const canReveal = freeze?.freeze_state !== "revealed" && (myRole === "owner" || myRole === "admin");
+  const isAdmin = myRole === "owner" || myRole === "admin";
+  const canReveal = freeze?.freeze_state !== "revealed" && isAdmin;
 
   return (
     <div className="min-h-[100dvh] pb-[env(safe-area-inset-bottom)] px-4 pt-8 max-w-sm mx-auto space-y-5">
@@ -230,6 +245,17 @@ export default function LeaderboardClient() {
         </div>
       )}
 
+      {/* Tie / playoff banners */}
+      {tab === "competition" && hasFirstPlaceTie && !activePlayoff && !isAdmin && !isFrozen && (
+        <TieBanner isAdmin={false} onManage={() => setShowTieDrawer(true)} />
+      )}
+      {tab === "competition" && activePlayoff && (
+        <PlayoffStatusBanner
+          playoff={activePlayoff}
+          onView={() => setShowPlayoffCard(true)}
+        />
+      )}
+
       {/* Freeze banner */}
       {tab === "competition" && isFrozen && (
         <div className="flex items-center gap-2 rounded-xl border border-amber-700/50 bg-amber-900/20 px-3 py-2">
@@ -248,8 +274,31 @@ export default function LeaderboardClient() {
         </div>
       )}
 
-      {/* Reveal button — owners and admins only */}
-      {tab === "competition" && canReveal && (
+      {/* Tie resolution buttons — owners and admins only, when 1st-place tie is
+          unresolved. Not gated by reveal state: an unresolved tie must be
+          resolvable both before (frozen) and after the reveal. Hidden until every
+          entrant has finished. */}
+      {tab === "competition" && isAdmin && allEntrantsComplete && hasFirstPlaceTie && !activePlayoff && (
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={() => { setTieDrawerScreen("playoff_setup"); setShowTieDrawer(true); }}
+            className="flex-1 py-3 rounded-full bg-[#f5e6b0] text-[#042713] text-sm font-semibold"
+          >
+            Playoff
+          </button>
+          <button
+            type="button"
+            onClick={() => { setTieDrawerScreen("choice"); setShowTieDrawer(true); }}
+            className="flex-1 py-3 rounded-full border border-[#f5e6b0]/50 text-[#f5e6b0] text-sm font-semibold"
+          >
+            Countback
+          </button>
+        </div>
+      )}
+
+      {/* Reveal button — owners and admins only, once every entrant has finished */}
+      {tab === "competition" && canReveal && allEntrantsComplete && !(hasFirstPlaceTie && !activePlayoff) && (
         <button
           type="button"
           onClick={handleReveal}
@@ -303,8 +352,12 @@ export default function LeaderboardClient() {
                   : "border-emerald-900/50 bg-[#0b3b21]/60"
               }`}
             >
-              <span className="w-6 text-center text-xs font-extrabold text-[#f5e6b0]">
-                {row.position ?? idx + 1}
+              <span className="w-7 text-center text-xs font-extrabold text-[#f5e6b0]">
+                {row.position == null
+                  ? idx + 1
+                  : (row as any).tied_count > 1
+                    ? `T${row.position}`
+                    : row.position}
               </span>
               <button
                 type="button"
@@ -325,7 +378,19 @@ export default function LeaderboardClient() {
                     </span>
                     {isFrozenRow && <span className="text-[11px] leading-none shrink-0">❄️</span>}
                   </div>
-                  {tab === "competition" && thruLabel && (
+                  {tab === "competition" && (row as any).playoff_result && (
+                    <span className={`text-[10px] font-medium ${
+                      (row as any).playoff_result === "won_playoff" || (row as any).playoff_result === "won_countback"
+                        ? "text-yellow-300/80"
+                        : "text-emerald-100/40"
+                    }`}>
+                      {(row as any).playoff_result === "won_playoff" && "Won by Playoff"}
+                      {(row as any).playoff_result === "lost_playoff" && "Lost by Playoff"}
+                      {(row as any).playoff_result === "won_countback" && "Won on Countback"}
+                      {(row as any).playoff_result === "lost_countback" && "Lost on Countback"}
+                    </span>
+                  )}
+                  {tab === "competition" && !(row as any).playoff_result && thruLabel && (
                     <span className={`text-[10px] ${isFrozenRow ? "text-cyan-300/70" : "text-emerald-100/40"}`}>
                       {thruLabel}
                     </span>
@@ -380,6 +445,66 @@ export default function LeaderboardClient() {
           scoringModel={scoringModel}
           onDone={() => setShowReveal(false)}
         />
+      )}
+
+      {/* Tie management drawer (admin/owner only) */}
+      {showTieDrawer && competitionId && (
+        <TieManagementDrawer
+          eventId={competitionId}
+          initialScreen={tieDrawerScreen}
+          onClose={() => setShowTieDrawer(false)}
+          onResolved={(playoff) => {
+            setActivePlayoff(playoff);
+            setHasFirstPlaceTie(false);
+            setShowTieDrawer(false);
+            // Refresh leaderboard to pick up playoff_final_position changes
+            fetchLeaderboard(competitionId, "competition");
+          }}
+        />
+      )}
+
+      {/* Playoff scorecard view */}
+      {showPlayoffCard && activePlayoff && competitionId && (
+        <PlayoffScorecardModal
+          playoff={activePlayoff}
+          eventId={competitionId}
+          onClose={() => setShowPlayoffCard(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// Lazy-loaded playoff scorecard modal — imported inline to keep the leaderboard
+// bundle light. Renders a full-screen overlay wrapping PlayoffScorecardClient.
+function PlayoffScorecardModal({
+  playoff,
+  eventId,
+  onClose,
+}: {
+  playoff: EventPlayoff;
+  eventId: string;
+  onClose: () => void;
+}) {
+  // Dynamically import to avoid circular deps; show spinner while loading
+  const [Component, setComponent] = useState<React.ComponentType<any> | null>(null);
+  useEffect(() => {
+    import("../events/[id]/PlayoffScorecardClient").then((m) => setComponent(() => m.PlayoffScorecardClient));
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-50 bg-[#071f13] overflow-y-auto">
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute top-4 right-4 text-emerald-100/60 text-sm z-10"
+      >
+        ✕ Close
+      </button>
+      {Component ? (
+        <Component playoff={playoff} eventId={eventId} canScore={false} />
+      ) : (
+        <div className="flex items-center justify-center h-full text-emerald-100/60 text-sm">Loading…</div>
       )}
     </div>
   );

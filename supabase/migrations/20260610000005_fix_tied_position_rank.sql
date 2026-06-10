@@ -1,21 +1,15 @@
--- Extend ciaga_compute_event_leaderboard to support ciaga_formula and
--- custom_formula points models.
+-- Fix: ciaga_compute_event_leaderboard used last_submission_at as a RANK() tiebreaker.
+-- Two players with identical net_score and holes_completed almost always submit at
+-- different times, so RANK() assigned them positions 1 and 2 instead of both 1.
+-- detectFirstPlaceTie (leaderboard API) requires position = 1 for both players to
+-- fire, so the Playoff/Countback buttons never appeared for live stroke-play ties.
 --
--- Both models use the same formula structure:
---   Points = ROUND(
---     base
---     + round_factor × scale × ((F−P)/(F−1))^compression × (F/6)^field_sensitivity
---     + { win_bonus_scale × (F/6)^field_sensitivity  if P = 1 }
---   )
--- where:
---   F = field size (points_config.num_participants override, or count of finishers)
---   P = finishing position (1 = best)
---   round_factor = 1 + round_coefficient × (min(R,3) − 1)
---   R = events.num_rounds (already fetched as v_num_rounds)
+-- Fix: remove last_submission_at from the RANK() ORDER BY.  Equal net_score +
+-- holes_completed now produces the same RANK, so both tied players receive position 1
+-- and the tie-break UI is correctly shown.
 --
--- CIAGA defaults: base=18, scale=32, compression=0.7,
---                 field_sensitivity=0.2, win_bonus_scale=5, round_coefficient=0.2
--- Custom formula: all defaults overridable via points_config jsonb.
+-- last_submission_at is still stored on each row for display ordering; it is simply
+-- no longer used as a position-determining tiebreaker.
 
 CREATE OR REPLACE FUNCTION public.ciaga_compute_event_leaderboard(p_event_id uuid)
 RETURNS void
@@ -31,7 +25,6 @@ DECLARE
   v_contribution      text;
   v_points_model      text;
   v_points_table      jsonb;
-  -- formula model variables
   v_points_config     jsonb;
   v_field_size        integer;
   v_base_pts          numeric;
@@ -42,6 +35,9 @@ DECLARE
   v_round_coeff       numeric;
   v_round_factor      numeric;
   v_field_scale       numeric;
+  -- Handicap allowance from event rules
+  v_handicap_mode     text    := 'none';
+  v_allowance_pct     numeric := 100;
 BEGIN
   SELECT
     scoring_model::text,
@@ -58,12 +54,18 @@ BEGIN
   FROM events
   WHERE id = p_event_id;
 
+  -- Read event handicap allowance rules
+  SELECT
+    COALESCE(handicap_rules->>'mode', 'none'),
+    COALESCE((handicap_rules->>'allowance_pct')::numeric, 100)
+  INTO v_handicap_mode, v_allowance_pct
+  FROM events
+  WHERE id = p_event_id;
+
   v_num_rounds   := COALESCE(v_num_rounds, 1);
   v_points_table := COALESCE(v_points_table, '{}'::jsonb);
   v_points_config := COALESCE(v_points_config, '{}'::jsonb);
 
-  -- Pre-compute formula variables so they are available as scalars in the
-  -- per-row CASE expression below.
   IF v_points_model IN ('ciaga_formula', 'custom_formula') THEN
     v_base_pts          := COALESCE((v_points_config->>'base')::numeric,              18);
     v_scale_pts         := COALESCE((v_points_config->>'scale')::numeric,             32);
@@ -73,7 +75,6 @@ BEGIN
     v_round_coeff       := COALESCE((v_points_config->>'round_coefficient')::numeric,  0.2);
     v_round_factor      := 1.0 + v_round_coeff * (LEAST(v_num_rounds, 3) - 1);
 
-    -- F: use stored override when present, else count actual finishers.
     IF (v_points_config->>'num_participants') IS NOT NULL THEN
       v_field_size := (v_points_config->>'num_participants')::integer;
     ELSE
@@ -106,37 +107,32 @@ BEGIN
     ranked.gross_score,
     ranked.net_score,
     ranked.format_points,
-    -- Average points across all players sharing the same position (tied positions).
     CASE
       WHEN v_points_model = 'none' OR ranked.position IS NULL THEN NULL
-      WHEN v_points_model = 'fedex_style' THEN (
-        SELECT ROUND(AVG(
-          (ARRAY[500,300,190,140,110,90,75,60,48,38,30,24,18,14,10,8,6,4,2,1])[LEAST(gs, 20)]::numeric
-        ), 0)
-        FROM generate_series(ranked.position, ranked.position + ranked.tied_count - 1) gs
-      )
-      WHEN v_points_model IN ('position_based', 'custom_table') THEN (
-        SELECT ROUND(AVG(COALESCE((v_points_table ->> gs::text)::numeric, 0)), 0)
-        FROM generate_series(ranked.position, ranked.position + ranked.tied_count - 1) gs
-      )
-      WHEN v_points_model IN ('ciaga_formula', 'custom_formula') THEN (
-        SELECT ROUND(AVG(
+      WHEN v_points_model = 'fedex_style' THEN
+        (ARRAY[500,300,190,140,110,90,75,60,48,38,30,24,18,14,10,8,6,4,2,1])[LEAST(ranked.position, 20)]
+      WHEN v_points_model IN ('position_based', 'custom_table') THEN
+        CASE
+          WHEN v_points_table ->> ranked.position::text IS NOT NULL
+            THEN (v_points_table ->> ranked.position::text)::numeric
+          ELSE 0
+        END
+      WHEN v_points_model IN ('ciaga_formula', 'custom_formula') THEN
+        ROUND((
           v_base_pts
           + v_round_factor
             * v_scale_pts
             * POWER(
                 CASE WHEN v_field_size > 1
-                  THEN GREATEST(v_field_size - gs, 0)::numeric / (v_field_size - 1)
+                  THEN GREATEST(v_field_size - ranked.position, 0)::numeric / (v_field_size - 1)
                   ELSE 0 END,
                 v_compression)
             * v_field_scale
-          + CASE WHEN gs = 1
+          + CASE WHEN ranked.position = 1
               THEN v_win_bonus_scale * v_field_scale
               ELSE 0
             END
-        ), 0)
-        FROM generate_series(ranked.position, ranked.position + ranked.tied_count - 1) gs
-      )
+        )::numeric, 0)
       ELSE NULL
     END AS points_earned,
     ranked.rounds_submitted,
@@ -152,11 +148,6 @@ BEGIN
     ranked.position,
     NOW() AS computed_at
   FROM (
-    -- Outer wrapper adds tied_count via a second window pass.
-    SELECT
-      r.*,
-      COALESCE(COUNT(*) OVER (PARTITION BY r.position), 1)::integer AS tied_count
-    FROM (
     SELECT
       agg.profile_id,
       agg.gross_score,
@@ -172,8 +163,8 @@ BEGIN
         ELSE RANK() OVER (
           ORDER BY
             agg.net_score ASC NULLS LAST,
-            agg.holes_completed DESC,
-            agg.last_submission_at ASC NULLS LAST
+            agg.holes_completed DESC
+            -- last_submission_at removed: equal net_score + holes_completed → same RANK
         )
       END::integer AS position
     FROM (
@@ -191,7 +182,15 @@ BEGIN
         JOIN round_participants rp
           ON rp.round_id = s.round_id AND rp.profile_id = s.profile_id
         CROSS JOIN LATERAL (
-          VALUES (COALESCE(rp.playing_handicap_used, rp.course_handicap_used, 0))
+          VALUES (
+            CASE
+              WHEN rp.assigned_playing_handicap IS NOT NULL
+                   THEN rp.assigned_playing_handicap
+              WHEN v_handicap_mode = 'allowance_pct'
+                   THEN ROUND(COALESCE(rp.course_handicap_used, 0)::numeric * v_allowance_pct / 100)::integer
+              ELSE COALESCE(rp.playing_handicap_used, rp.course_handicap_used, 0)
+            END
+          )
         ) AS hv(hcp)
         CROSS JOIN LATERAL (
           VALUES (FLOOR(hv.hcp::numeric / 18)::integer)
@@ -235,7 +234,15 @@ BEGIN
         SELECT
           s.profile_id,
           SUM(hrr.adjusted_gross_score)::integer                                         AS submitted_gross,
-          SUM(COALESCE(rp.playing_handicap_used, rp.course_handicap_used, 0))::integer   AS submitted_hcp,
+          SUM(
+            CASE
+              WHEN rp.assigned_playing_handicap IS NOT NULL
+                   THEN rp.assigned_playing_handicap
+              WHEN v_handicap_mode = 'allowance_pct'
+                   THEN ROUND(COALESCE(rp.course_handicap_used, 0)::numeric * v_allowance_pct / 100)::integer
+              ELSE COALESCE(rp.playing_handicap_used, rp.course_handicap_used, 0)
+            END
+          )::integer                                                                      AS submitted_hcp,
           SUM(CASE WHEN hrr.is_9_hole THEN 9 ELSE 18 END)::integer                       AS submitted_holes,
           SUM(
             CASE WHEN hrr.is_9_hole
@@ -262,7 +269,14 @@ BEGIN
           rp.profile_id,
           COALESCE(scores.total_strokes, 0)::integer                              AS live_gross,
           COALESCE(scores.hole_count, 0)::integer                                 AS live_holes,
-          COALESCE(rp.playing_handicap_used, rp.course_handicap_used, 0)          AS course_hcp,
+          CASE
+            WHEN rp.assigned_playing_handicap IS NOT NULL
+                 THEN rp.assigned_playing_handicap
+            WHEN v_handicap_mode = 'allowance_pct'
+                 THEN ROUND(COALESCE(rp.course_handicap_used, 0)::numeric * v_allowance_pct / 100)::integer
+            ELSE COALESCE(rp.playing_handicap_used, rp.course_handicap_used, 0)
+          END                                                                       AS course_hcp,
+          -- Proportional par: retained as fallback when tee snapshot unavailable
           CASE WHEN COALESCE(scores.hole_count, 0) > 0 AND rts.par_total IS NOT NULL
             THEN ROUND(
               rts.par_total::numeric
@@ -272,7 +286,11 @@ BEGIN
             ELSE NULL
           END                                                                       AS live_par,
           COALESCE(stab_pts_lat.pts, 0)::integer                                   AS live_stab_total,
-          COALESCE(stab_pts_lat.par_exact, 0)::integer                             AS live_par_exact
+          COALESCE(stab_pts_lat.par_exact, 0)::integer                             AS live_par_exact,
+          -- Per-hole handicap strokes for holes actually played (matches Group tab formula)
+          live_hcp_lat.hcp_strokes                                                  AS live_hcp_strokes,
+          -- Exact par for the holes played: fixes to_par for unequal front/back nines
+          live_hcp_lat.live_par_exact_holes                                         AS live_par_exact_sp
         FROM event_tee_times ctt
         JOIN rounds r
           ON r.event_tee_time_id = ctt.id
@@ -296,14 +314,27 @@ BEGIN
           ) latest
         ) scores ON true
         CROSS JOIN LATERAL (
-          VALUES (COALESCE(rp.playing_handicap_used, rp.course_handicap_used, 0))
+          VALUES (
+            CASE
+              WHEN rp.assigned_playing_handicap IS NOT NULL
+                   THEN rp.assigned_playing_handicap
+              WHEN v_handicap_mode = 'allowance_pct'
+                   THEN ROUND(COALESCE(rp.course_handicap_used, 0)::numeric * v_allowance_pct / 100)::integer
+              ELSE COALESCE(rp.playing_handicap_used, rp.course_handicap_used, 0)
+            END
+          )
         ) AS hv(hcp)
+        -- Use actual course hole count for base/rem so 9-hole courses allocate correctly
         CROSS JOIN LATERAL (
-          VALUES (FLOOR(hv.hcp::numeric / 18)::integer)
+          VALUES (COALESCE(rts.holes_count, 18))
+        ) AS hc(holes_count)
+        CROSS JOIN LATERAL (
+          VALUES (FLOOR(hv.hcp::numeric / hc.holes_count)::integer)
         ) AS hb(base)
         CROSS JOIN LATERAL (
-          VALUES (hv.hcp - hb.base * 18)
+          VALUES (hv.hcp::integer - hb.base * hc.holes_count)
         ) AS hr(rem)
+        -- Stableford per-hole points (no-op for non-stableford)
         LEFT JOIN LATERAL (
           SELECT
             COALESCE(SUM(GREATEST(0, 2 - (
@@ -327,6 +358,22 @@ BEGIN
            AND rhs.hole_number = ls.hole_number
           WHERE v_scoring_model = 'stableford_points'
         ) stab_pts_lat ON true
+        -- Per-hole handicap strokes + exact par for holes played (all scoring models).
+        LEFT JOIN LATERAL (
+          SELECT
+            SUM(hb.base + CASE WHEN rhs2.stroke_index <= hr.rem THEN 1 ELSE 0 END)::integer AS hcp_strokes,
+            SUM(rhs2.par)::integer AS live_par_exact_holes
+          FROM (
+            SELECT DISTINCT ON (rse.hole_number) rse.hole_number
+            FROM round_score_events rse
+            WHERE rse.round_id = r.id
+              AND rse.participant_id = rp.id
+            ORDER BY rse.hole_number, rse.created_at DESC
+          ) played_holes
+          JOIN round_hole_snapshots rhs2
+            ON rhs2.round_tee_snapshot_id = rts.id
+           AND rhs2.hole_number = played_holes.hole_number
+        ) live_hcp_lat ON true
         WHERE ctt.event_id = p_event_id
           AND rp.profile_id NOT IN (
             SELECT s2.profile_id
@@ -369,9 +416,15 @@ BEGIN
             CASE
               WHEN sub.profile_id IS NOT NULL OR live.profile_id IS NOT NULL
               THEN COALESCE(sub.submitted_gross, 0) + COALESCE(live.live_gross, 0)
-                   - COALESCE(sub.submitted_hcp, 0)
-                   - FLOOR(COALESCE(live.course_hcp, 0)
-                       * COALESCE(live.live_holes, 0) / 18.0)::integer
+                   - CASE WHEN v_scoring_model = 'gross' THEN 0
+                       ELSE COALESCE(sub.submitted_hcp, 0)
+                              -- Per-hole allocation; proportional fallback when tee snapshot unavailable
+                              + COALESCE(
+                                  live.live_hcp_strokes,
+                                  FLOOR(COALESCE(live.course_hcp, 0)
+                                      * COALESCE(live.live_holes, 0) / 18.0)::integer
+                                )
+                     END
               ELSE NULL
             END
         END                                                           AS net_score,
@@ -398,7 +451,8 @@ BEGIN
           ELSE
             CASE
               WHEN sub.profile_id IS NOT NULL OR live.profile_id IS NOT NULL
-              THEN COALESCE(sub.submitted_par, 0) + COALESCE(live.live_par, 0)
+              THEN COALESCE(sub.submitted_par, 0)
+                   + COALESCE(live.live_par_exact_sp, live.live_par, 0)
               ELSE NULL
             END
         END                                                           AS course_par
@@ -412,15 +466,12 @@ BEGIN
          OR COALESCE(live.live_holes, 0) > 0
 
     ) agg
-    ) r
   ) ranked;
 
-  -- Cascade to group standings
   IF v_group_id IS NOT NULL AND v_contribution IN ('season', 'both') THEN
     PERFORM ciaga_compute_group_standings(v_group_id);
   END IF;
 
-  -- Cascade to group season standings
   IF v_group_season_id IS NOT NULL AND v_contribution IN ('season', 'both') THEN
     PERFORM ciaga_compute_group_season_standings(v_group_season_id);
   END IF;
@@ -428,3 +479,12 @@ BEGIN
   PERFORM ciaga_check_leaderboard_auto_freeze(p_event_id);
 END;
 $$;
+
+-- Recompute all live events so corrected positions take effect immediately.
+DO $$
+DECLARE v_id uuid;
+BEGIN
+  FOR v_id IN SELECT id FROM public.events WHERE majors_status = 'live' LOOP
+    PERFORM public.ciaga_compute_event_leaderboard(v_id);
+  END LOOP;
+END $$;
