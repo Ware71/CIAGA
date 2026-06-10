@@ -25,6 +25,39 @@ async function checkAdminPermission(event: any, profileId: string) {
   return true;
 }
 
+/**
+ * Resolve each player's event playing handicap (the handicap they were scored off in
+ * the event), from their accepted round's round_participants. Playoff strokes are
+ * allocated from this by stroke index. event_entries.assigned_course_handicap is often
+ * null, so we use the round's playing/course handicap instead.
+ */
+async function getPlayoffPlayingHandicaps(
+  eventId: string,
+  profileIds: string[],
+): Promise<Record<string, number>> {
+  const result: Record<string, number> = {};
+  for (const pid of profileIds) {
+    const { data: sub } = await supabaseAdmin
+      .from("event_round_submissions")
+      .select("round_id")
+      .eq("event_id", eventId)
+      .eq("profile_id", pid)
+      .eq("accepted", true)
+      .order("submitted_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!sub) { result[pid] = 0; continue; }
+    const { data: rp } = await supabaseAdmin
+      .from("round_participants")
+      .select("playing_handicap_used, course_handicap_used")
+      .eq("round_id", (sub as any).round_id)
+      .eq("profile_id", pid)
+      .maybeSingle();
+    result[pid] = (rp as any)?.playing_handicap_used ?? (rp as any)?.course_handicap_used ?? 0;
+  }
+  return result;
+}
+
 // GET /api/majors/events/[id]/playoff
 // Returns active playoff with holes+scores, and default tee info for the event.
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -51,6 +84,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     const playoff = playoffRes.data;
     let holes: any[] = [];
+    let handicaps: Record<string, number> = {};
     if (playoff) {
       const { data: holesData } = await supabaseAdmin
         .from("event_playoff_holes")
@@ -58,11 +92,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         .eq("playoff_id", playoff.id)
         .order("sequence", { ascending: true });
       holes = holesData ?? [];
+      handicaps = await getPlayoffPlayingHandicaps(eventId, (playoff as any).tied_profile_ids ?? []);
     }
 
     return NextResponse.json({
       playoff: playoff ?? null,
       holes,
+      handicaps,
       default_tee_box_id: (eventRoundsRes.data as any)?.default_tee_box_id_male ?? null,
       default_course_id: (eventRoundsRes.data as any)?.course_id ?? null,
     });
@@ -168,15 +204,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           .eq("id", playoff_hole_id)
           .single();
 
-        // Get player's course handicap from event_entries
-        const { data: entryRow } = await supabaseAdmin
-          .from("event_entries")
-          .select("assigned_course_handicap")
-          .eq("event_id", (holeRow as any)?.event_playoffs?.event_id ?? eventId)
-          .eq("profile_id", target_profile_id)
-          .maybeSingle();
-
-        const courseHcp = (entryRow as any)?.assigned_course_handicap ?? 0;
+        // Strokes are allocated from the player's event playing handicap by stroke index.
+        const hcaps = await getPlayoffPlayingHandicaps(
+          (holeRow as any)?.event_playoffs?.event_id ?? eventId,
+          [target_profile_id],
+        );
+        const courseHcp = hcaps[target_profile_id] ?? 0;
         const strokesRecv = strokesReceivedOnHole(courseHcp, (holeRow as any)?.stroke_index ?? null);
         const net_strokes = gross_strokes - strokesRecv;
 
@@ -221,17 +254,26 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           return NextResponse.json({ error: "Not all players have scored yet" }, { status: 400 });
         }
 
-        // Find winner: lowest net_strokes (for stableford, net_strokes is already adjusted)
+        // Recompute net from the players' event playing handicaps by stroke index, so
+        // the result is robust even if an older score row stored a stale net.
         const scoringModel = (event as any).scoring_model ?? "net";
         const higherIsBetter = scoringModel === "stableford_points";
+        const advHcaps = await getPlayoffPlayingHandicaps(eventId, remaining);
+        const holeSi = (holeRow as any).stroke_index ?? null;
+        const valueFor = (s: { profile_id: string; gross_strokes: number | null; net_strokes: number | null }) => {
+          const gross = s.gross_strokes ?? 0;
+          if (scoringModel === "gross") return gross;
+          if (scoringModel === "stableford_points") return s.net_strokes ?? gross;
+          return gross - strokesReceivedOnHole(advHcaps[s.profile_id] ?? 0, holeSi);
+        };
 
         const best = scores.reduce<number>((acc, s) => {
-          const v = s.net_strokes ?? s.gross_strokes ?? 0;
+          const v = valueFor(s as any);
           return higherIsBetter ? Math.max(acc, v) : Math.min(acc, v);
         }, higherIsBetter ? -Infinity : Infinity);
 
-        const winners = scores.filter((s) => (s.net_strokes ?? s.gross_strokes ?? 0) === best).map((s) => s.profile_id);
-        const losers = scores.filter((s) => (s.net_strokes ?? s.gross_strokes ?? 0) !== best).map((s) => s.profile_id);
+        const winners = scores.filter((s) => valueFor(s as any) === best).map((s) => s.profile_id);
+        const losers = scores.filter((s) => valueFor(s as any) !== best).map((s) => s.profile_id);
 
         // Mark losers as eliminated
         if (losers.length > 0) {
@@ -313,12 +355,54 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         return NextResponse.json({ hole });
       }
 
+      // ── update_hole ───────────────────────────────────────────────────────
+      // Change the course / tee box / hole number of an existing playoff hole and
+      // re-derive par + stroke index. Any scores already entered for it are cleared.
+      case "update_hole": {
+        const { playoff_hole_id, course_id, tee_box_id, hole_number } = body as {
+          playoff_hole_id: string;
+          course_id: string;
+          tee_box_id: string;
+          hole_number: number;
+        };
+
+        const { data: holeData } = await supabaseAdmin
+          .from("course_tee_holes")
+          .select("par, handicap")
+          .eq("tee_box_id", tee_box_id)
+          .eq("hole_number", hole_number)
+          .maybeSingle();
+
+        const { data: hole, error: ue } = await supabaseAdmin
+          .from("event_playoff_holes")
+          .update({
+            course_id,
+            tee_box_id,
+            hole_number,
+            par: (holeData as any)?.par ?? 4,
+            stroke_index: (holeData as any)?.handicap ?? hole_number,
+          })
+          .eq("id", playoff_hole_id)
+          .select()
+          .single();
+        if (ue) throw ue;
+
+        // The hole changed — discard any scores already entered against it.
+        await supabaseAdmin
+          .from("event_playoff_scores")
+          .delete()
+          .eq("playoff_hole_id", playoff_hole_id);
+
+        return NextResponse.json({ hole });
+      }
+
       // ── complete ──────────────────────────────────────────────────────────
       case "complete": {
-        const { playoff_id, winner_profile_id, final_positions } = body as {
+        const { playoff_id, winner_profile_id, final_positions, resolution_type } = body as {
           playoff_id: string;
           winner_profile_id: string;
           final_positions: Array<{ profile_id: string; position: number }>;
+          resolution_type?: "playoff" | "countback";
         };
 
         const { data: playoffRow } = await supabaseAdmin
@@ -328,17 +412,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           .single();
         if (!playoffRow) return NextResponse.json({ error: "Playoff not found" }, { status: 404 });
 
-        // Mark playoff complete
+        // Mark playoff complete (optionally relabel the resolution type, e.g. an
+        // active sudden-death playoff that is decided by countback instead).
         await supabaseAdmin
           .from("event_playoffs")
           .update({
             status: "completed",
             winner_profile_id,
             completed_at: new Date().toISOString(),
+            ...(resolution_type ? { resolution_type } : {}),
           })
           .eq("id", playoff_id);
 
-        const isCountback = (playoffRow as any).resolution_type === "countback";
+        const effectiveType = resolution_type ?? (playoffRow as any).resolution_type;
+        const isCountback = effectiveType === "countback";
         const wonLabel = isCountback ? "won_countback" : "won_playoff";
         const lostLabel = isCountback ? "lost_countback" : "lost_playoff";
 
@@ -395,15 +482,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
       // ── resolve_countback ─────────────────────────────────────────────────
       case "resolve_countback": {
-        // Load tied players' hole-by-hole scores from their event submissions
-        const { data: entries } = await supabaseAdmin
-          .from("event_leaderboard_entries")
-          .select("profile_id")
-          .eq("event_id", eventId)
-          .eq("position", 1)
-          .is("playoff_result", null);
-
-        const tiedIds = (entries ?? []).map((e: any) => e.profile_id);
+        // Optionally scope to a specific set of players (e.g. those still remaining in
+        // an active sudden-death playoff). Default to the position-1 tied set.
+        const { profile_ids } = body as { profile_ids?: string[] };
+        let tiedIds: string[];
+        if (Array.isArray(profile_ids) && profile_ids.length >= 2) {
+          tiedIds = profile_ids;
+        } else {
+          const { data: entries } = await supabaseAdmin
+            .from("event_leaderboard_entries")
+            .select("profile_id")
+            .eq("event_id", eventId)
+            .eq("position", 1)
+            .is("playoff_result", null);
+          tiedIds = (entries ?? []).map((e: any) => e.profile_id);
+        }
         if (tiedIds.length < 2) {
           return NextResponse.json({ error: "No tie to resolve" }, { status: 400 });
         }
