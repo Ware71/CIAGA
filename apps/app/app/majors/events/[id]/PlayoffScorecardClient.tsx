@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 import { strokesReceivedOnHole } from "@/lib/rounds/handicapUtils";
@@ -28,6 +28,10 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore, scoringMode
   const [holes, setHoles] = useState<PlayoffHoleWithScores[]>([]);
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
   const [handicaps, setHandicaps] = useState<Record<string, number>>({});
+  // Local copy of the playoff so status/winner reflect completion (the prop is stale).
+  const [playoffState, setPlayoffState] = useState<EventPlayoff>(playoff);
+  const [courseNames, setCourseNames] = useState<Record<string, string>>({});
+  const [teeNames, setTeeNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [advancing, setAdvancing] = useState(false);
@@ -61,6 +65,7 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore, scoringMode
     const json = await res.json();
     setHoles(json.holes ?? []);
     setHandicaps(json.handicaps ?? {});
+    if (json.playoff) setPlayoffState(json.playoff);
 
     const { data: profileData } = await supabase
       .from("profiles")
@@ -82,6 +87,28 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore, scoringMode
     return () => { supabase.removeChannel(channel); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playoff.id, eventId]);
+
+  // Resolve course + tee box names for the holes (for the scorecard banner). Only
+  // refetches when the set of courses changes.
+  const courseKey = Array.from(new Set(holes.map((h) => h.course_id))).sort().join(",");
+  useEffect(() => {
+    const cids = courseKey ? courseKey.split(",") : [];
+    if (!cids.length) return;
+    let cancelled = false;
+    (async () => {
+      const cNames: Record<string, string> = {};
+      const tNames: Record<string, string> = {};
+      await Promise.all(cids.map(async (cid) => {
+        const r = await fetch(`/api/courses/detail?course_id=${cid}`);
+        if (!r.ok) return;
+        const j = await r.json();
+        cNames[cid] = j.course?.name ?? "";
+        for (const t of j.tee_boxes ?? []) tNames[t.id] = t.name ?? "";
+      }));
+      if (!cancelled) { setCourseNames(cNames); setTeeNames(tNames); }
+    })();
+    return () => { cancelled = true; };
+  }, [courseKey]);
 
   async function apiPost(body: Record<string, unknown>) {
     const session = await getViewerSession();
@@ -198,7 +225,7 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore, scoringMode
   }
 
   const currentHole = holes[holes.length - 1];
-  const isComplete = playoff.status === "completed";
+  const isComplete = playoffState.status === "completed";
   const isStableford = scoringModel === "stableford_points";
 
   // The value shown in a cell for the active tab.
@@ -273,11 +300,23 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore, scoringMode
             ))}
           </div>
 
-          {/* Hole rows */}
+          {/* Hole rows, grouped by course/tee with a banner whenever it changes */}
           {holes.map((hole, hi) => {
             const isCurrent = hi === holes.length - 1 && !isComplete;
+            const prev = holes[hi - 1];
+            const showBanner = hi === 0 || hole.course_id !== prev.course_id || hole.tee_box_id !== prev.tee_box_id;
             return (
-              <div key={hole.id} className="grid" style={{ gridTemplateColumns: gridCols }}>
+              <Fragment key={hole.id}>
+              {showBanner && (
+                <div className="px-3 py-1.5 bg-[#0b3b21]/70 border-b border-emerald-900/60 flex items-center gap-1.5">
+                  <span className="text-[11px]">⛳</span>
+                  <span className="text-[10px] font-semibold text-emerald-100/80 truncate">
+                    {courseNames[hole.course_id] || "Course"}
+                    {teeNames[hole.tee_box_id] ? ` · ${teeNames[hole.tee_box_id]}` : ""}
+                  </span>
+                </div>
+              )}
+              <div className="grid" style={{ gridTemplateColumns: gridCols }}>
                 <div className={`h-11 flex items-center justify-center text-[12px] font-extrabold border-b border-r border-emerald-900/60 ${isCurrent ? "bg-[#042713] text-[#f5e6b0]" : "bg-[#0b3b21]/40 text-emerald-100/80"}`}>
                   {hole.hole_number}
                 </div>
@@ -318,6 +357,7 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore, scoringMode
                   );
                 })}
               </div>
+              </Fragment>
             );
           })}
         </div>
@@ -395,7 +435,7 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore, scoringMode
         <div className="rounded-2xl border border-emerald-600/50 bg-emerald-900/20 px-4 py-4 text-center space-y-1">
           <p className="text-base font-bold text-[#f5e6b0]">🏆 Playoff Complete</p>
           <p className="text-[11px] text-emerald-300/70">
-            Winner: {profiles[playoff.winner_profile_id ?? ""]?.name ?? "Unknown"}
+            Winner: {profiles[playoffState.winner_profile_id ?? ""]?.name ?? "Unknown"}
           </p>
         </div>
       )}
