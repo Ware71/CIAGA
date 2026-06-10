@@ -79,6 +79,7 @@ export default function LeaderboardClient() {
   const [myRole, setMyRole] = useState<string | null>(null);
   const [revealLoading, setRevealLoading] = useState(false);
   const [hasFirstPlaceTie, setHasFirstPlaceTie] = useState(false);
+  const [allEntrantsComplete, setAllEntrantsComplete] = useState(false);
   const [activePlayoff, setActivePlayoff] = useState<EventPlayoff | null>(null);
   const [showTieDrawer, setShowTieDrawer] = useState(false);
   const [tieDrawerScreen, setTieDrawerScreen] = useState<"choice" | "playoff_setup">("choice");
@@ -102,6 +103,7 @@ export default function LeaderboardClient() {
       if (json.my_role !== undefined) setMyRole(json.my_role);
       if (json.scoring_model) setScoringModel(json.scoring_model);
       setHasFirstPlaceTie(json.has_first_place_tie ?? false);
+      setAllEntrantsComplete(json.all_entrants_complete ?? false);
       setActivePlayoff(json.active_playoff ?? null);
     } else {
       setGroupRows(json.rows ?? []);
@@ -274,8 +276,9 @@ export default function LeaderboardClient() {
 
       {/* Tie resolution buttons — owners and admins only, when 1st-place tie is
           unresolved. Not gated by reveal state: an unresolved tie must be
-          resolvable both before (frozen) and after the reveal. */}
-      {tab === "competition" && isAdmin && hasFirstPlaceTie && !activePlayoff && (
+          resolvable both before (frozen) and after the reveal. Hidden until every
+          entrant has finished. */}
+      {tab === "competition" && isAdmin && allEntrantsComplete && hasFirstPlaceTie && !activePlayoff && (
         <div className="flex gap-3">
           <button
             type="button"
@@ -294,8 +297,8 @@ export default function LeaderboardClient() {
         </div>
       )}
 
-      {/* Reveal button — owners and admins only */}
-      {tab === "competition" && canReveal && !(hasFirstPlaceTie && !activePlayoff) && (
+      {/* Reveal button — owners and admins only, once every entrant has finished */}
+      {tab === "competition" && canReveal && allEntrantsComplete && !(hasFirstPlaceTie && !activePlayoff) && (
         <button
           type="button"
           onClick={handleReveal}

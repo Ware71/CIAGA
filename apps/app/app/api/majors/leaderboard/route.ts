@@ -127,11 +127,14 @@ export async function GET(req: Request) {
         // positions — otherwise a tie whose deciding holes fall inside the hidden
         // window would never surface the resolution buttons before reveal.
         const liveFull = await getEventLeaderboard(eventId);
-        const { has_first_place_tie } = detectFirstPlaceTie(
-          liveFull.map((r) => ({ position: r.position ?? null })),
+        const { has_first_place_tie, all_rounds_complete } = detectFirstPlaceTie(
+          liveFull.map((r) => ({
+            net_score: r.net_score ?? null,
+            rounds_submitted: (r as any).rounds_submitted ?? 0,
+          })),
           (event as any).num_rounds ?? 1,
-          liveFull.map((r) => ({ rounds_submitted: (r as any).rounds_submitted ?? 0 })),
         );
+        const all_entrants_complete = all_rounds_complete && pendingParticipants.length === 0;
 
         return NextResponse.json(
           {
@@ -140,6 +143,7 @@ export async function GET(req: Request) {
             my_role: myRole,
             scoring_model: scoringModel,
             has_first_place_tie: !activePlayoff && has_first_place_tie,
+            all_entrants_complete,
             active_playoff: activePlayoff ?? null,
           },
           { headers: { "Cache-Control": "no-store" } }
@@ -154,11 +158,13 @@ export async function GET(req: Request) {
       // Compute tied_count per position
       const positionCounts = countByPosition(liveRows.map((r) => r.position ?? null));
 
-      // Detect 1st-place tie: all entries have completed required rounds and >1 player holds position 1
-      const { has_first_place_tie } = detectFirstPlaceTie(
-        liveRows.map((r) => ({ position: r.position ?? null })),
+      // Detect 1st-place tie: >1 player shares the best net_score and those leaders are done.
+      const { has_first_place_tie, all_rounds_complete } = detectFirstPlaceTie(
+        liveRows.map((r) => ({
+          net_score: r.net_score ?? null,
+          rounds_submitted: (r as any).rounds_submitted ?? 0,
+        })),
         (event as any).num_rounds ?? 1,
-        liveRows.map((r) => ({ rounds_submitted: (r as any).rounds_submitted ?? 0 })),
       );
 
       // When a playoff is complete, use playoff_final_position as the display position
@@ -180,6 +186,7 @@ export async function GET(req: Request) {
 
       const scoredIds = new Set(resolvedRows.map((r) => r.profile_id));
       const pendingParticipants = await getEventPendingParticipants(eventId, scoredIds);
+      const all_entrants_complete = all_rounds_complete && pendingParticipants.length === 0;
 
       const rows = [
         ...resolvedRows.map((r) => ({
@@ -215,6 +222,7 @@ export async function GET(req: Request) {
           my_role: myRole,
           scoring_model: (event as any).scoring_model ?? "net",
           has_first_place_tie: !activePlayoff && has_first_place_tie,
+          all_entrants_complete,
           active_playoff: activePlayoff ?? null,
         },
         { headers: { "Cache-Control": "no-store" } }
@@ -245,36 +253,32 @@ function countByPosition(positions: (number | null)[]): Record<number, number> {
 }
 
 /**
- * Returns true when multiple players hold position 1 AND those tied players
- * have all completed their required rounds. Other scored entries (e.g. live
- * in-progress players) do not block the tie — only the tied players must be done.
+ * Returns true when multiple players share the best (lowest) net_score AND those
+ * tied leaders have all completed their required rounds. Detection compares
+ * net_score directly — the same lower-is-better metric the leaderboard ranks by
+ * (stableford is stored as its net-stroke equivalent, gross stores gross) — rather
+ * than the stored `position` integer, which RANK() can split into 1/2 for equal
+ * scores. Other scored entries (e.g. live in-progress players) do not block the
+ * tie — only the tied leaders must be done.
  */
 function detectFirstPlaceTie(
-  positionEntries: Array<{ position: number | null }>,
+  entries: Array<{ net_score: number | null; rounds_submitted: number }>,
   numRounds: number,
-  submissionEntries: Array<{ rounds_submitted: number }>,
 ): { has_first_place_tie: boolean; all_rounds_complete: boolean } {
-  const scoredIndices = positionEntries
-    .map((e, i) => (e.position != null ? i : -1))
-    .filter((i) => i >= 0);
+  const scored = entries.filter((e) => e.net_score != null);
 
-  if (scoredIndices.length === 0) return { has_first_place_tie: false, all_rounds_complete: false };
+  if (scored.length === 0) return { has_first_place_tie: false, all_rounds_complete: false };
 
-  const allComplete = scoredIndices.every(
-    (i) => (submissionEntries[i]?.rounds_submitted ?? 0) >= numRounds,
-  );
+  const allComplete = scored.every((e) => (e.rounds_submitted ?? 0) >= numRounds);
 
-  const firstPlaceIndices = positionEntries
-    .map((e, i) => (e.position === 1 ? i : -1))
-    .filter((i) => i >= 0);
+  const best = Math.min(...scored.map((e) => e.net_score as number));
+  const leaders = scored.filter((e) => e.net_score === best);
 
-  // Only the tied players at 1st need to have completed their rounds.
-  const firstPlaceComplete = firstPlaceIndices.every(
-    (i) => (submissionEntries[i]?.rounds_submitted ?? 0) >= numRounds,
-  );
+  // Only the tied leaders need to have completed their rounds.
+  const leadersComplete = leaders.every((e) => (e.rounds_submitted ?? 0) >= numRounds);
 
   return {
-    has_first_place_tie: firstPlaceComplete && firstPlaceIndices.length > 1,
+    has_first_place_tie: leaders.length > 1 && leadersComplete,
     all_rounds_complete: allComplete,
   };
 }
