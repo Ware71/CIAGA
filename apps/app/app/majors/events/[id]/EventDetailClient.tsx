@@ -22,6 +22,7 @@ import type {
   PrizePotWithDetails,
   PrizePotDistributionType,
   PrizeTableEntry,
+  EventPlayoff,
 } from "@/lib/majors/types";
 import { EVENT_TYPES, SCORING_MODELS, POINTS_MODELS, FEDEX_POINTS, computeFormulaPoints } from "@/lib/events/constants";
 import type { PointsConfig } from "@/lib/majors/types";
@@ -29,6 +30,9 @@ import { HandicapRulesEditor } from "@/components/competitions/HandicapRulesEdit
 import { CoursePickerModal } from "@/components/rounds/CoursePickerModal";
 import { supabase } from "@/lib/supabaseClient";
 import { LeaderboardReveal } from "@/components/majors/LeaderboardReveal";
+import { TieManagementDrawer } from "../../leaderboard/TieManagementDrawer";
+import { PlayoffStatusBanner } from "../../leaderboard/TieBanner";
+import { PlayoffScorecardClient } from "./PlayoffScorecardClient";
 
 const FEDEX_POINTS_SCALE = FEDEX_POINTS;
 
@@ -1561,6 +1565,12 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
   } | null>(null);
   const [showReveal, setShowReveal] = useState(false);
   const [revealLoading, setRevealLoading] = useState(false);
+  const [hasFirstPlaceTie, setHasFirstPlaceTie] = useState(false);
+  const [allEntrantsComplete, setAllEntrantsComplete] = useState(false);
+  const [activePlayoff, setActivePlayoff] = useState<EventPlayoff | null>(null);
+  const [showTieDrawer, setShowTieDrawer] = useState(false);
+  const [tieDrawerScreen, setTieDrawerScreen] = useState<"choice" | "playoff_setup">("choice");
+  const [showPlayoffCard, setShowPlayoffCard] = useState(false);
   const [revealWarning, setRevealWarning] = useState<{
     incomplete_rounds: Array<{
       round_name: string;
@@ -1683,6 +1693,9 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
           const j = await lbRes.json();
           setLeaderboard(j.rows ?? []);
           if (j.freeze) setLeaderboardFreeze(j.freeze);
+          setHasFirstPlaceTie(j.has_first_place_tie ?? false);
+          setAllEntrantsComplete(j.all_entrants_complete ?? false);
+          setActivePlayoff(j.active_playoff ?? null);
         }
 
         if (teeTimesRes.ok) {
@@ -1738,6 +1751,9 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
             if (j) {
               setLeaderboard(j.rows ?? []);
               if (j.freeze) setLeaderboardFreeze(j.freeze);
+              setHasFirstPlaceTie(j.has_first_place_tie ?? false);
+              setAllEntrantsComplete(j.all_entrants_complete ?? false);
+              setActivePlayoff(j.active_playoff ?? null);
             }
           });
       });
@@ -1812,6 +1828,9 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
           const j = await lbRes.json();
           setLeaderboard(j.rows ?? []);
           if (j.freeze) setLeaderboardFreeze(j.freeze);
+          setHasFirstPlaceTie(j.has_first_place_tie ?? false);
+          setAllEntrantsComplete(j.all_entrants_complete ?? false);
+          setActivePlayoff(j.active_playoff ?? null);
         }
         setShowReveal(true);
       }
@@ -1819,6 +1838,21 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
       setRevealLoading(false);
     }
   }
+
+  const refreshLeaderboard = async () => {
+    const session = await getViewerSession();
+    if (!session) return;
+    const res = await fetch(`/api/majors/leaderboard?event_id=${eventId}`, {
+      headers: { Authorization: `Bearer ${session.accessToken}` },
+    });
+    if (!res.ok) return;
+    const j = await res.json();
+    setLeaderboard(j.rows ?? []);
+    if (j.freeze) setLeaderboardFreeze(j.freeze);
+    setHasFirstPlaceTie(j.has_first_place_tie ?? false);
+    setAllEntrantsComplete(j.all_entrants_complete ?? false);
+    setActivePlayoff(j.active_playoff ?? null);
+  };
 
   const refreshTeeTimes = async () => {
     const session = await getViewerSession();
@@ -2588,7 +2622,32 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
               </div>
             </div>
           )}
-          {isAdminOrOwner && leaderboardFreeze?.freeze_state !== "revealed" && (
+          {activePlayoff && (
+            <div className="mb-1.5">
+              <PlayoffStatusBanner playoff={activePlayoff} onView={() => setShowPlayoffCard(true)} />
+            </div>
+          )}
+          {/* Tie resolution buttons — owners/admins only, once every entrant has
+              finished and the 1st-place tie is unresolved. Replace the reveal button. */}
+          {isAdminOrOwner && allEntrantsComplete && hasFirstPlaceTie && !activePlayoff && (
+            <div className="flex gap-2 mb-1.5">
+              <button
+                type="button"
+                onClick={() => { setTieDrawerScreen("playoff_setup"); setShowTieDrawer(true); }}
+                className="flex-1 py-2 rounded-full bg-[#f5e6b0] text-[#042713] text-xs font-semibold"
+              >
+                Playoff
+              </button>
+              <button
+                type="button"
+                onClick={() => { setTieDrawerScreen("choice"); setShowTieDrawer(true); }}
+                className="flex-1 py-2 rounded-full border border-[#f5e6b0]/50 text-[#f5e6b0] text-xs font-semibold"
+              >
+                Countback
+              </button>
+            </div>
+          )}
+          {isAdminOrOwner && leaderboardFreeze?.freeze_state !== "revealed" && allEntrantsComplete && !(hasFirstPlaceTie && !activePlayoff) && (
             <button
               type="button"
               onClick={() => handleReveal()}
@@ -2829,6 +2888,33 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
             scoringModel={event?.scoring_model}
             onDone={() => setShowReveal(false)}
           />
+        )}
+        {/* Tie management drawer (admin/owner only) */}
+        {showTieDrawer && (
+          <TieManagementDrawer
+            eventId={eventId}
+            initialScreen={tieDrawerScreen}
+            onClose={() => setShowTieDrawer(false)}
+            onResolved={(playoff) => {
+              setActivePlayoff(playoff);
+              setHasFirstPlaceTie(false);
+              setShowTieDrawer(false);
+              refreshLeaderboard();
+            }}
+          />
+        )}
+        {/* Playoff scorecard view */}
+        {showPlayoffCard && activePlayoff && (
+          <div className="fixed inset-0 z-50 bg-[#071f13] overflow-y-auto">
+            <button
+              type="button"
+              onClick={() => setShowPlayoffCard(false)}
+              className="absolute top-4 right-4 text-emerald-100/60 text-sm z-10"
+            >
+              ✕ Close
+            </button>
+            <PlayoffScorecardClient playoff={activePlayoff} eventId={eventId} canScore={isAdminOrOwner} />
+          </div>
         )}
         {/* Player round breakdown sheet */}
         {detailPlayer && (
