@@ -99,12 +99,17 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     if (completedIds.length > 0) {
       const { data: entriesData, error: entriesErr } = await supabaseAdmin
         .from("event_leaderboard_entries")
-        .select("event_id, profile_id, position, net_score, gross_score, points_earned, to_par, course_par")
+        .select("event_id, profile_id, position, playoff_final_position, net_score, gross_score, points_earned, to_par, course_par")
         .in("event_id", completedIds)
         .eq("is_live", false)
         .not("position", "is", null);
       if (entriesErr) throw entriesErr;
-      entries = (entriesData ?? []) as typeof entries;
+      // Normalize to the effective finishing position: playoff-resolved ties keep
+      // position=1 for every tied player, with the real order in playoff_final_position.
+      entries = ((entriesData ?? []) as any[]).map((e) => ({
+        ...e,
+        position: e.playoff_final_position ?? e.position,
+      })) as typeof entries;
     }
 
     // ── 4. Fetch all active group members + profiles ──────────────────────

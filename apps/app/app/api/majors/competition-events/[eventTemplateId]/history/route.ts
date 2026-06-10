@@ -80,7 +80,7 @@ export async function GET(
     const [winnersRes, { viewer_stats, viewerMap }] = await Promise.all([
       supabaseAdmin
         .from("event_leaderboard_entries")
-        .select("event_id, profile_id, position, net_score, profile:profiles(id, name, avatar_url)")
+        .select("event_id, profile_id, position, playoff_final_position, net_score, profile:profiles(id, name, avatar_url)")
         .in("event_id", compIds)
         .in("position", [1, 2]),
       fetchViewerData(profileId, compIds),
@@ -90,11 +90,14 @@ export async function GET(
     const winnersByComp = new Map<string, { winner: any; runner_up: any; winning_score: string | null }>();
     for (const entry of ((winnersRes.data ?? []) as any[])) {
       const e = winnersByComp.get(entry.event_id) ?? { winner: null, runner_up: null, winning_score: null };
-      if (entry.position === 1) {
+      // Playoff-resolved ties keep position=1 for every tied player — the real
+      // finishing order lives in playoff_final_position.
+      const effectivePosition = entry.playoff_final_position ?? entry.position;
+      if (effectivePosition === 1) {
         e.winner = entry.profile;
         e.winning_score = entry.net_score?.toString() ?? null;
       }
-      if (entry.position === 2) e.runner_up = entry.profile;
+      if (effectivePosition === 2) e.runner_up = entry.profile;
       winnersByComp.set(entry.event_id, e);
       fieldCountMap.set(entry.event_id, (fieldCountMap.get(entry.event_id) ?? 0) + 1);
     }
@@ -142,13 +145,16 @@ async function fetchViewerData(
 
   const { data: viewerEntries } = await supabaseAdmin
     .from("event_leaderboard_entries")
-    .select("event_id, position, net_score")
+    .select("event_id, position, playoff_final_position, net_score")
     .eq("profile_id", profileId)
     .in("event_id", compIds);
 
   const viewerMap = new Map<string, { position: number | null; net_score: number | null }>();
   for (const e of ((viewerEntries ?? []) as any[])) {
-    viewerMap.set(e.event_id, { position: e.position ?? null, net_score: e.net_score ?? null });
+    viewerMap.set(e.event_id, {
+      position: e.playoff_final_position ?? e.position ?? null,
+      net_score: e.net_score ?? null,
+    });
   }
 
   const appearances = viewerMap.size;

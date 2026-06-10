@@ -131,12 +131,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ potId: 
         if ((pot as any).event_id) {
           const { data: lb } = await supabaseAdmin
             .from("event_leaderboard_entries")
-            .select("profile_id, position, profile:profiles!profile_id(id, name, avatar_url)")
+            .select("profile_id, position, playoff_final_position, profile:profiles!profile_id(id, name, avatar_url)")
             .eq("event_id", (pot as any).event_id)
             .not("position", "is", null);
 
-          for (const row of lb ?? [] as any[]) {
-            positionMap[row.position] = { profile_id: row.profile_id, profile: row.profile };
+          // Tied 1st-place players all keep position=1 after a playoff — the real
+          // finishing order lives in playoff_final_position.
+          for (const row of (lb ?? []) as any[]) {
+            const effectivePosition = row.playoff_final_position ?? row.position;
+            positionMap[effectivePosition] = { profile_id: row.profile_id, profile: row.profile };
           }
         } else if ((pot as any).group_season_id) {
           const { data: standings } = await supabaseAdmin

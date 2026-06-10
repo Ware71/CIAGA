@@ -60,7 +60,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const { data: leaderboard } = await supabaseAdmin
       .from("event_leaderboard_entries")
       .select(`
-        profile_id, position,
+        profile_id, position, playoff_final_position,
         profile:profiles!profile_id(id, name, avatar_url)
       `)
       .eq("event_id", id)
@@ -71,9 +71,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: "No leaderboard data yet." }, { status: 400 });
     }
 
+    // A resolved 1st-place tie keeps position=1 for every tied player — the real
+    // finishing order lives in playoff_final_position. Without this, the playoff
+    // LOSER could be proposed for the winner's payout.
+    const effectivePosition = (l: any) => l.playoff_final_position ?? l.position;
+
     const proposed = prizeTable
       .map((entry) => {
-        const player = (leaderboard as any[]).find((l) => l.position === entry.position);
+        const player = (leaderboard as any[]).find((l) => effectivePosition(l) === entry.position);
         if (!player) return null;
         const amount = Math.round((totalPot * entry.pct) / 100 * 100) / 100;
         return {
