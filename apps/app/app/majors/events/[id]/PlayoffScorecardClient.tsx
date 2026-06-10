@@ -288,7 +288,9 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore, scoringMode
                   const { display, recv } = cellValue(hole, pid);
                   const gross = hole.scores?.find((s) => s.profile_id === pid)?.gross_strokes ?? null;
                   const badge = !isStableford && gross != null ? scoreBadgeType(typeof display === "number" ? display : gross, hole.par) : null;
-                  const tappable = canScore && isCurrent && isRemaining && gross == null;
+                  // Editable on the current hole even after a score exists — tapping
+                  // re-opens the entry sheet (which can change or clear the score).
+                  const tappable = canScore && isCurrent && isRemaining;
                   const savingKey = `${pid}:${hole.hole_number}`;
                   return (
                     <button
