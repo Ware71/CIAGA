@@ -2699,7 +2699,11 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
               ? (row.points_earned ?? getPointsForPosition(row.position ?? null, event.points_model, event.points_table as Record<string, unknown>, event.points_config, event.num_rounds))
               : null;
             const thru = getThruLabel(row);
-            const isFrozenRow = isFrozen && !row.is_live && (
+            const frozenThreshold =
+              ((leaderboardFreeze as any)?.total_holes ?? (event?.num_rounds ?? 1) * 18)
+              - (leaderboardFreeze?.freeze_last_holes ?? 0);
+            const rowHolesShown = (row as any).holes_shown ?? row.holes_completed ?? 0;
+            const isFrozenRow = isFrozen && rowHolesShown >= frozenThreshold && (
               leaderboardFreeze?.freeze_scope !== "top_x" ||
               (row.position ?? 999) <= (leaderboardFreeze?.freeze_top_x ?? Infinity)
             );
