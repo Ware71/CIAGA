@@ -2734,18 +2734,20 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                     {row.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
                   </div>
                 )}
-                <div className="flex items-center gap-1 flex-1 min-w-0">
-                  <span className="text-sm font-semibold text-emerald-50 truncate">{row.profile?.name ?? "Unknown"}</span>
-                  {isFrozenRow && <span className="text-[11px] leading-none shrink-0">❄️</span>}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1 min-w-0">
+                    <span className="text-sm font-semibold text-emerald-50 truncate">{row.profile?.name ?? "Unknown"}</span>
+                    {isFrozenRow && <span className="text-[11px] leading-none shrink-0">❄️</span>}
+                  </div>
                   {(row as any).playoff_result && (
-                    <span className={`text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full shrink-0 ${
+                    <span className={`inline-block mt-0.5 text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full ${
                       String((row as any).playoff_result).startsWith("won")
                         ? "bg-[#f5e6b0] text-[#042713]"
                         : "border border-emerald-700/50 text-emerald-200/70"
                     }`}>
                       {String((row as any).playoff_result).includes("countback")
-                        ? (String((row as any).playoff_result).startsWith("won") ? "Won CB" : "CB")
-                        : (String((row as any).playoff_result).startsWith("won") ? "Won PO" : "PO")}
+                        ? (String((row as any).playoff_result).startsWith("won") ? "Won Countback" : "Lost Countback")
+                        : (String((row as any).playoff_result).startsWith("won") ? "Won Playoff" : "Lost Playoff")}
                     </span>
                   )}
                 </div>
