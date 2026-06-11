@@ -42,8 +42,9 @@ type TeeHole = {
 //                               group-level payments
 
 export async function POST(req: Request) {
+  let lockedGroupId: string | null = null;
+  const admin = getSupabaseAdmin();
   try {
-    const admin = getSupabaseAdmin();
 
     const authHeader = req.headers.get("authorization") || "";
     const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
@@ -82,6 +83,27 @@ export async function POST(req: Request) {
     if (!file)    return NextResponse.json({ error: "Missing file" },     { status: 400 });
     if (!groupId) return NextResponse.json({ error: "Missing group_id" }, { status: 400 });
 
+    // ── Per-group import lock ────────────────────────────────────────────────
+    // A dropped client connection ("Failed to fetch") leaves the serverless
+    // function running; a retry would otherwise execute concurrently and
+    // bypass the skip-on-reimport check, duplicating rounds.
+    await admin
+      .from("season_import_locks")
+      .delete()
+      .lt("locked_at", new Date(Date.now() - 6 * 60_000).toISOString());
+    const { data: lockRows, error: lockErr } = await admin
+      .from("season_import_locks")
+      .upsert({ group_id: groupId }, { onConflict: "group_id", ignoreDuplicates: true })
+      .select("group_id");
+    if (lockErr) throw new Error(`Import lock failed: ${lockErr.message}`);
+    if (!lockRows?.length) {
+      return NextResponse.json(
+        { error: "An import for this group is already running. Wait for it to finish, then retry — already-imported events are skipped automatically." },
+        { status: 409 }
+      );
+    }
+    lockedGroupId = groupId;
+
     const { parsed: fullParsed, errors: parseErrors } = await parseXlsx(file);
     if (parseErrors.length) {
       return NextResponse.json({ error: parseErrors[0], errors: parseErrors }, { status: 400 });
@@ -114,6 +136,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, summary });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 400 });
+  } finally {
+    if (lockedGroupId) {
+      await admin.from("season_import_locks").delete().eq("group_id", lockedGroupId);
+    }
   }
 }
 

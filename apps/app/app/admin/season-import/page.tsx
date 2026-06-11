@@ -370,7 +370,13 @@ export default function SeasonImportPage() {
       setImportSummary(summary);
       setPreview(null);
     } catch (e: any) {
-      setImportError(e?.message || String(e));
+      // "Failed to fetch" = the connection dropped but the server may still be
+      // importing. Warn against an immediate blind retry (the server holds a
+      // per-group lock while it runs; finished events are skipped on re-run).
+      const msg = e instanceof TypeError
+        ? "Network error — the import may still be running on the server. Wait a minute, then re-run; completed events are skipped automatically."
+        : e?.message || String(e);
+      setImportError(msg);
     } finally {
       setImportLoading(false);
       setImportProgress(null);
