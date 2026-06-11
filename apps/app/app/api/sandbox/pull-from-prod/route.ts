@@ -92,7 +92,9 @@ const TABLE_PLAN: Array<{ table: string; transform?: (row: any) => any; onConfli
   // Null out owner_user_id — auth.users from prod don't exist in staging.
   // The impersonation feature creates sandbox auth users on demand.
   { table: "profiles", transform: (row) => ({ ...row, owner_user_id: null }) },
-  { table: "rounds" },
+  // event_tee_time_id is a circular FK (event_tee_times.round_id points back here);
+  // nulled on insert and restored in Phase 4 once event_tee_times exist.
+  { table: "rounds", transform: (row) => ({ ...row, event_tee_time_id: null }) },
   // Snapshots reference rounds and must precede round_participants (which FK to tee_snapshots)
   { table: "round_course_snapshots", transform: (row) => ({ ...row, source_course_id: null }) },
   { table: "round_tee_snapshots", transform: (row) => ({ ...row, source_tee_box_id: null }) },
@@ -127,8 +129,9 @@ const TABLE_PLAN: Array<{ table: string; transform?: (row: any) => any; onConfli
   // event_rules_versions is not in TABLE_PLAN — null out FKs that reference it
   { table: "events", transform: (row) => ({ ...row, published_rules_version_id: null }) },
   { table: "event_entries" },
-  { table: "event_tee_times" },
+  // event_rounds must precede event_tee_times: tee times FK to event_rounds
   { table: "event_rounds" },
+  { table: "event_tee_times" },
   { table: "event_charges" },
   { table: "event_player_charges" },
   { table: "event_round_submissions" },
@@ -138,6 +141,9 @@ const TABLE_PLAN: Array<{ table: string; transform?: (row: any) => any; onConfli
   { table: "event_waitlist" },
   { table: "event_winnings" },
   { table: "event_player_freeze_snapshots", onConflict: "event_id,profile_id" },
+  { table: "event_playoffs" },
+  { table: "event_playoff_holes" },
+  { table: "event_playoff_scores" },
   { table: "prize_pots" },
   { table: "prize_pot_entries" },
   { table: "prize_pot_payouts" },
@@ -225,6 +231,29 @@ export async function POST(req: Request) {
             send({ type: "write", table, rows: inserted, skipped });
           } catch (e: any) {
             send({ type: "write_error", table, message: e?.message ?? "Insert failed" });
+          }
+        }
+
+        // Phase 4: restore the circular rounds → event_tee_times FK that was
+        // nulled on insert. Full-row upsert overwrites all columns, so the
+        // original event_tee_time_id values come back.
+        const linkedRounds = (snapshot["rounds"] ?? []).filter(
+          (r) => r.event_tee_time_id != null
+        );
+        if (linkedRounds.length > 0) {
+          try {
+            const { inserted, skipped } = await insertRows(
+              supabaseAdmin as any,
+              "rounds",
+              linkedRounds
+            );
+            send({ type: "write", table: "rounds ← event_tee_times", rows: inserted, skipped });
+          } catch (e: any) {
+            send({
+              type: "write_error",
+              table: "rounds ← event_tee_times",
+              message: e?.message ?? "Restore failed",
+            });
           }
         }
 
