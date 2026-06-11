@@ -566,7 +566,7 @@ async function importSeasons(args: {
 
     const { data: competition, error: compErr } = await admin
       .from("events")
-      .select("id,name,group_id,course_id,event_date,entry_fee_amount,group_season_id,handicap_rules,competition_id,competition_event_template_id,scoring_model,points_model,points_config,leaderboard_freeze_state")
+      .select("id,name,group_id,course_id,event_date,event_type,entry_fee_amount,group_season_id,handicap_rules,competition_id,competition_event_template_id,scoring_model,points_model,points_config,leaderboard_freeze_state")
       .eq("id", resolvedEventId)
       .single();
     if (compErr || !competition) throw new Error(`Event "${comp.event_name}" not found`);
@@ -614,7 +614,7 @@ async function importSeasons(args: {
       }
     }
 
-    // Map round_number → event_round_id for submissions
+    // Map round_number → event_round_id for tee times + submissions
     const { data: eventRoundsRows, error: erMapErr } = await admin
       .from("event_rounds")
       .select("id,round_number")
@@ -623,6 +623,23 @@ async function importSeasons(args: {
     const eventRoundIdByNumber = new Map<number, string>(
       (eventRoundsRows ?? []).map((er: any) => [er.round_number as number, er.id as string])
     );
+
+    // Names of rounds already linked to this event (imported earlier or played
+    // live) via the tee-time junction — the skip-on-reimport basis.
+    const { data: existingTeeTimes, error: ettErr } = await admin
+      .from("event_tee_times")
+      .select("round_id, rounds:round_id(name)")
+      .eq("event_id", resolvedEventId);
+    if (ettErr) throw new Error(`Tee time lookup failed for "${comp.event_name}": ${ettErr.message}`);
+    const existingRoundNames = new Set(
+      (existingTeeTimes ?? []).map((t: any) => t.rounds?.name).filter(Boolean) as string[]
+    );
+
+    // Round format mirrors what a live tee-time assignment would set
+    const eventTypeForFormat = (comp.event_type || (competition as any).event_type || "stroke").toLowerCase().replace(/\s+/g, "");
+    const roundFormatType = eventTypeForFormat === "stableford"
+      ? "stableford"
+      : eventTypeForFormat.startsWith("matchplay") ? "matchplay" : "strokeplay";
 
     const eventLevelCourseId = comp.course_id || competition.course_id;
     if (!eventLevelCourseId) throw new Error(`Event "${comp.event_name}" has no course — set a course on the event first`);
@@ -706,20 +723,15 @@ async function importSeasons(args: {
       if (teeGroups.size === 0) teeGroups.set(defaultTeeLabel, []);
       const multiGroup = teeGroups.size > 1;
 
-      for (const teeLabel of Array.from(teeGroups.keys()).sort()) {
+      const sortedTeeLabels = Array.from(teeGroups.keys()).sort();
+      for (const teeLabel of sortedTeeLabels) {
+      const groupNumber = sortedTeeLabels.indexOf(teeLabel) + 1;
       // Single group keeps the unsuffixed name so rounds imported before
       // tee-time support still skip correctly on re-import.
       const groupRoundName = multiGroup ? `${roundName} (${teeLabel})` : roundName;
 
-      // Idempotency: skip if round already exists by name
-      const { data: existingRound } = await admin
-        .from("rounds")
-        .select("id")
-        .eq("competition_id", resolvedEventId)
-        .eq("name", groupRoundName)
-        .maybeSingle();
-
-      if (existingRound) {
+      // Idempotency: skip if a round with this name is already linked to the event
+      if (existingRoundNames.has(groupRoundName)) {
         summary.skipped_already_imported.push(groupRoundName);
         continue;
       }
@@ -733,8 +745,11 @@ async function importSeasons(args: {
       for (const s of teeGroups.get(teeLabel)!) uniquePlayers.set(s.profile_id, s);
       const playerCount = Math.max(uniquePlayers.size, 1);
       const finishedAt  = roundFinishTime(teeTime, playerCount - 1).toISOString();
+      const eventRoundId = eventRoundIdByNumber.get(roundNumber) ?? null;
 
       // ── Create round ──────────────────────────────────────────────────
+      // Linked to the event via event_tee_times below — rounds has no direct
+      // event/competition column; the tee-time junction is the live linkage.
       const { data: round, error: rErr } = await admin
         .from("rounds")
         .insert({
@@ -742,9 +757,10 @@ async function importSeasons(args: {
           status:         "live",
           visibility:     "private",
           course_id:      course.id,
-          competition_id: competition.id,
           name:           groupRoundName,
+          format_type:    roundFormatType,
           created_at:     startedAt,
+          scheduled_at:   startedAt,
           started_at:     startedAt,
           finished_at:    finishedAt,
           // Drives Playing Handicap (allowance) for net scoring — populated by
@@ -755,6 +771,28 @@ async function importSeasons(args: {
         .select("id")
         .single();
       if (rErr || !round) throw new Error(`Create round failed for "${groupRoundName}": ${rErr?.message}`);
+
+      // ── Tee-time junction (the event ↔ round link, same as live play) ──
+      const { data: teeTimeRow, error: ttErr } = await admin
+        .from("event_tee_times")
+        .insert({
+          event_id:       resolvedEventId,
+          event_round_id: eventRoundId,
+          round_id:       round.id,
+          tee_time:       startedAt,
+          group_number:   groupNumber,
+          created_by:     recordedBy,
+          created_at:     startedAt,
+        })
+        .select("id")
+        .single();
+      if (ttErr || !teeTimeRow) throw new Error(`Create tee time failed for "${groupRoundName}": ${ttErr?.message}`);
+
+      const { error: backLinkErr } = await admin
+        .from("rounds")
+        .update({ event_tee_time_id: (teeTimeRow as any).id })
+        .eq("id", round.id);
+      if (backLinkErr) throw new Error(`Tee time back-link failed for "${groupRoundName}": ${backLinkErr.message}`);
 
       // ── Course snapshot ───────────────────────────────────────────────
       const { data: courseSnap, error: csErr } = await admin
@@ -938,7 +976,6 @@ async function importSeasons(args: {
         }
       }
 
-      const eventRoundId = eventRoundIdByNumber.get(roundNumber) ?? null;
       const submissions = (rpRows ?? []).map((p: any) => {
         const hrr   = hrrByParticipant.get(p.id);
         const gross = hrr?.gross ?? null;
@@ -1127,14 +1164,14 @@ async function finalizeImport(args: {
   // hole_event cards only (event rounds never get round_played cards in the
   // live flow). Idempotent by group_key, so previously imported rounds are fine.
   if (eventIds.length) {
-    const { data: roundRows, error: rdErr } = await admin
-      .from("rounds")
-      .select("id")
-      .in("competition_id", eventIds)
-      .eq("status", "finished");
+    const { data: teeTimeRows, error: rdErr } = await admin
+      .from("event_tee_times")
+      .select("round_id")
+      .in("event_id", eventIds)
+      .not("round_id", "is", null);
     if (rdErr) throw new Error(`Round lookup for feed backfill failed: ${rdErr.message}`);
     await backfillFeedForRounds({
-      roundIds: (roundRows ?? []).map((r: any) => r.id),
+      roundIds: Array.from(new Set((teeTimeRows ?? []).map((r: any) => r.round_id as string))),
       actorProfileId: recordedBy,
       summary,
     });

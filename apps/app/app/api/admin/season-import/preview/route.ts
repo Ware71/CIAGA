@@ -264,7 +264,7 @@ export async function POST(req: Request) {
         ? admin.from("course_tee_boxes").select("id,name,course_id").in("id", teeBoxIds)
         : Promise.resolve({ data: [], error: null }),
       existingCompIds.length
-        ? admin.from("rounds").select("competition_id,name").in("competition_id", existingCompIds).not("competition_id", "is", null)
+        ? admin.from("event_tee_times").select("event_id, rounds:round_id(name)").in("event_id", existingCompIds)
         : Promise.resolve({ data: [], error: null }),
       seasonNames.length
         ? admin.from("group_seasons").select("name").eq("group_id", groupId).in("name", seasonNames)
@@ -294,7 +294,9 @@ export async function POST(req: Request) {
     const validTeeBoxIds  = new Set((teeBoxesRes.data ?? []).map(t => t.id));
 
     const alreadyImportedKeys = new Set(
-      (existingRoundsRes.data ?? []).map(r => `${r.competition_id as string}::${r.name as string}`)
+      (existingRoundsRes.data ?? [])
+        .map((r: any) => (r.rounds?.name ? `${r.event_id}::${r.rounds.name}` : null))
+        .filter(Boolean) as string[]
     );
     const existingSeasonNames  = new Set((existingSeasonsRes.data ?? []).map(s => s.name));
     const collidingEventNames  = new Set((nameCollisionRes.data ?? []).map(e => e.name));
