@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
-import { parseXlsx, type ParsedRound } from "@/lib/admin/season-import/parse";
+import { parseXlsx, sanitizeParsedIds, type ParsedRound } from "@/lib/admin/season-import/parse";
 import { resolveTemplateDefaults } from "@/lib/admin/season-import/templates";
 import { normalizeTeeTime } from "@/lib/admin/season-import/timing";
 
@@ -156,7 +156,9 @@ export async function POST(req: Request) {
       roundCourseByKey.set(`${r.event_name}::${r.round_number}`, r);
     }
 
-    const errors: string[] = [];
+    // Blank out malformed id cells (edited RED columns, cached formula errors)
+    // and report them per row — they must never reach a uuid query.
+    const errors: string[] = [...sanitizeParsedIds(parsed)];
     const warnings: string[] = [];
 
     // Validate season names referenced in Competitions are defined in Seasons sheet

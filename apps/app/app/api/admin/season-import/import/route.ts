@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import {
   parseXlsx,
+  sanitizeParsedIds,
   type ParsedComp,
   type ParsedPot,
   type ParsedRound,
@@ -84,6 +85,12 @@ export async function POST(req: Request) {
     const { parsed: fullParsed, errors: parseErrors } = await parseXlsx(file);
     if (parseErrors.length) {
       return NextResponse.json({ error: parseErrors[0], errors: parseErrors }, { status: 400 });
+    }
+    // Malformed id cells (edited RED columns / cached formula errors) must never
+    // reach a uuid query — same guard the preview applies.
+    const idErrors = sanitizeParsedIds(fullParsed);
+    if (idErrors.length) {
+      return NextResponse.json({ error: idErrors[0], errors: idErrors }, { status: 400 });
     }
 
     const summary = makeSummary();

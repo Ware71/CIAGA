@@ -49,21 +49,43 @@ import ExcelJS from "exceljs";
 export const TEMPLATE_VERSION = "v5";
 
 // ── Cell readers ──────────────────────────────────────────────────────────────
+// ExcelJS cell values come in many shapes besides string/number: formula results
+// ({ formula, result }), cached ERROR results ({ result: { error: "#N/A" } }),
+// auto-created hyperlinks ({ text, hyperlink }) when someone types an email,
+// rich text ({ richText: [...] }) from formatted pastes, and JS Dates for typed
+// dates. Naive String(v) turns the object shapes into "[object Object]", which
+// then leaks into uuid queries — normalise every shape and never stringify an
+// unknown object.
+
+/** Unwrap object-shaped ExcelJS values to a primitive (or null when unusable). */
+function unwrapCellValue(v: unknown): string | number | Date | null {
+  if (v == null || v === "") return null;
+  if (typeof v === "string" || typeof v === "number") return v;
+  if (v instanceof Date) return v;
+  if (typeof v === "object") {
+    const o = v as Record<string, unknown>;
+    if ("error" in o) return null;                                   // cached #N/A / #VALUE! etc.
+    if ("result" in o) return unwrapCellValue(o.result);             // formula / shared formula
+    if ("richText" in o && Array.isArray(o.richText)) {
+      return (o.richText as Array<{ text?: string }>).map(t => t.text ?? "").join("");
+    }
+    if ("text" in o) return unwrapCellValue(o.text);                 // hyperlink cells
+    return null;                                                     // unknown shape — never "[object Object]"
+  }
+  return String(v);
+}
 
 export function cellString(cell: ExcelJS.Cell): string {
-  const v = cell.value;
+  const v = unwrapCellValue(cell.value);
   if (v == null) return "";
-  if (typeof v === "string") return v.trim();
-  if (typeof v === "number") return String(v);
-  if (typeof v === "object" && "result" in v) return cellString({ value: (v as any).result } as any);
+  if (v instanceof Date) return v.toISOString().slice(0, 10); // typed dates → YYYY-MM-DD
   return String(v).trim();
 }
 
 export function cellNumber(cell: ExcelJS.Cell): number | null {
-  const v = cell.value;
-  if (v == null || v === "") return null;
+  const v = unwrapCellValue(cell.value);
+  if (v == null || v instanceof Date) return null;
   if (typeof v === "number") return v;
-  if (typeof v === "object" && "result" in v) return cellNumber({ value: (v as any).result } as any);
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 }
@@ -74,8 +96,8 @@ export function cellNumber(cell: ExcelJS.Cell): number | null {
  * return garbage like "0.5888…" — normalise all three representations.
  */
 export function cellTime(cell: ExcelJS.Cell): string | null {
-  const v = cell.value as unknown;
-  if (v == null || v === "") return null;
+  const v = unwrapCellValue(cell.value);
+  if (v == null) return null;
   if (v instanceof Date) {
     return `${String(v.getUTCHours()).padStart(2, "0")}:${String(v.getUTCMinutes()).padStart(2, "0")}`;
   }
@@ -83,11 +105,14 @@ export function cellTime(cell: ExcelJS.Cell): string | null {
     const mins = Math.round((v % 1) * 24 * 60);
     return `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
   }
-  if (typeof v === "object" && v !== null && "result" in (v as any)) {
-    return cellTime({ value: (v as any).result } as any);
-  }
   const s = String(v).trim();
   return s || null;
+}
+
+/** True when the value looks like a Postgres uuid — guards id columns so junk
+ * from edited RED cells never reaches a uuid query. */
+export function isUuid(s: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
 }
 
 // ── Parsed row types ──────────────────────────────────────────────────────────
@@ -218,6 +243,63 @@ const EMPTY: ParsedWorkbook = {
   seasons: [], competitions: [], scores: [], eventRounds: [],
   pots: [], payouts: [], charges: [], payments: [], playoffs: [],
 };
+
+/**
+ * Validates every resolved id field against the uuid shape and blanks out the
+ * bad ones so they can never reach a uuid query. Returns one pointed error per
+ * bad cell — almost always caused by someone editing/pasting over a RED column
+ * or saving the sheet while its formulas showed errors.
+ */
+export function sanitizeParsedIds(parsed: ParsedWorkbook): string[] {
+  const errors: string[] = [];
+  const HINT = "the RED columns may have been edited or didn't calculate — re-download the template and don't type or paste over red cells";
+
+  const check = (value: string, setBlank: () => void, label: string) => {
+    if (!value || isUuid(value)) return;
+    setBlank();
+    errors.push(`${label}: the red id cell didn't resolve to a valid id ("${value.slice(0, 40)}") — ${HINT}.`);
+  };
+
+  for (const c of parsed.competitions) {
+    check(c.event_id,    () => { c.event_id = ""; c.is_new_event = true; }, `Competitions sheet "${c.event_name}" (event_id)`);
+    check(c.course_id,   () => { c.course_id = ""; },                       `Competitions sheet "${c.event_name}" (course_id)`);
+    check(c.tee_box_id,  () => { c.tee_box_id = ""; },                      `Competitions sheet "${c.event_name}" (tee_box_id)`);
+    if (c.template_id) {
+      const raw = c.template_id.startsWith("comp_") ? c.template_id.slice(5) : c.template_id;
+      if (!isUuid(raw)) {
+        errors.push(`Competitions sheet "${c.event_name}" (template_id): the red id cell didn't resolve to a valid id — ${HINT}.`);
+        c.template_id = "";
+      }
+    }
+  }
+  for (const s of parsed.scores) {
+    check(s.profile_id,     () => { s.profile_id = ""; },     `Scores sheet "${s.player_label}" / ${s.competition_name} (profile_id)`);
+    check(s.competition_id, () => { s.competition_id = ""; }, `Scores sheet "${s.player_label}" / ${s.competition_name} (event_id)`);
+  }
+  for (const r of parsed.eventRounds) {
+    check(r.course_id,  () => { r.course_id = ""; },  `Event Rounds "${r.event_name}" round ${r.round_number} (course_id)`);
+    check(r.tee_box_id, () => { r.tee_box_id = ""; }, `Event Rounds "${r.event_name}" round ${r.round_number} (tee_box_id)`);
+  }
+  for (const p of parsed.pots)     check(p.event_id,   () => { p.event_id = ""; },   `Prizes sheet "${p.pot_name}" (event_id)`);
+  for (const p of parsed.payouts) {
+    check(p.event_id,   () => { p.event_id = ""; },   `Payouts sheet "${p.player_label}" (event_id)`);
+    check(p.profile_id, () => { p.profile_id = ""; }, `Payouts sheet "${p.player_label}" (profile_id)`);
+  }
+  for (const c of parsed.charges) {
+    check(c.event_id,   () => { c.event_id = ""; },   `Charges sheet "${c.charge_name}" (event_id)`);
+    check(c.profile_id, () => { c.profile_id = ""; }, `Charges sheet "${c.charge_name}" / ${c.player_label} (profile_id)`);
+  }
+  for (const p of parsed.payments) {
+    check(p.event_id,   () => { p.event_id = ""; },   `Payments sheet "${p.player_label}" (event_id)`);
+    check(p.profile_id, () => { p.profile_id = ""; }, `Payments sheet "${p.player_label}" (profile_id)`);
+  }
+  for (const p of parsed.playoffs) {
+    check(p.event_id,   () => { p.event_id = ""; },   `Playoffs sheet "${p.event_name}" (event_id)`);
+    check(p.profile_id, () => { p.profile_id = ""; }, `Playoffs sheet "${p.player_label}" (profile_id)`);
+  }
+
+  return errors;
+}
 
 // ── Parser ────────────────────────────────────────────────────────────────────
 
