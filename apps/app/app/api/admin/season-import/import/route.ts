@@ -875,6 +875,10 @@ async function importSeasons(args: {
             is_guest:        false,
             role:            "player",
             handicap_index:  playerScore.handicap,
+            // Freeze the sheet (or as-of-date) handicap as the participant HI
+            // override: CH/PH derive from it and the WHS replay never reads it,
+            // so event scoring can't drift to the player's current handicap.
+            assigned_handicap_index: playerScore.handicap,
             tee_snapshot_id: teeSnap.id,
             created_at:      startedAt,
           })
@@ -948,9 +952,11 @@ async function importSeasons(args: {
       const { error: finErr } = await admin.from("rounds").update({ status: "finished", finished_at: finishedAt }).eq("id", round.id);
       if (finErr) throw new Error(`Finish round failed: ${finErr.message}`);
 
-      // Persist Playing Handicap (allowance applied) — must run AFTER the finish
-      // replay so it reflects the replayed HI.
-      const { error: phErr } = await admin.rpc("ciaga_persist_playing_handicaps", { p_round_id: round.id });
+      // Persist Playing Handicap (allowance applied). Backdated variant: derives
+      // CH/PH from the imported assigned_handicap_index and never falls back to
+      // the player's CURRENT handicap — a historical round must reflect the
+      // handicap at that moment in time.
+      const { error: phErr } = await admin.rpc("ciaga_persist_playing_handicaps_backdated", { p_round_id: round.id });
       if (phErr) throw new Error(`Persist playing handicaps failed for "${groupRoundName}": ${phErr.message}`);
 
       // ── Event round submissions (so the event leaderboard computes net) ──
