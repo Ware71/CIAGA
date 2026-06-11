@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { TEMPLATE_VERSION } from "@/lib/admin/season-import/parse";
 
 type Fill = ExcelJS.Fill;
 
@@ -9,13 +10,15 @@ const AMBER_FILL: Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "
 const RED_FILL:   Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFF6B6B" } };
 const LIGHT_RED:  Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFDDDD" } };
 
-const DATA_ROWS        = 300;
-const COMP_DATA_ROWS   = 100;
-const SEASON_DATA_ROWS = 50;
-const PRIZE_DATA_ROWS  = 100;
-const PAYOUT_DATA_ROWS = 300;
+const DATA_ROWS          = 2000;
+const COMP_DATA_ROWS     = 300;
+const SEASON_DATA_ROWS   = 50;
+const PRIZE_DATA_ROWS    = 300;
+const PAYOUT_DATA_ROWS   = 600;
+const CHARGE_DATA_ROWS   = 600;
+const PAYMENT_DATA_ROWS  = 400;
+const PLAYOFF_DATA_ROWS  = 100;
 
-export const TEMPLATE_VERSION = "v3";
 
 export async function GET(req: Request) {
   try {
@@ -165,6 +168,9 @@ export async function GET(req: Request) {
     buildEventRoundsSheet(wb);
     buildPrizesSheet(wb);
     buildPayoutsSheet(wb, orderedProfiles.length);
+    buildChargesSheet(wb, orderedProfiles.length);
+    buildPaymentsSheet(wb, orderedProfiles.length);
+    buildPlayoffsSheet(wb, orderedProfiles.length);
     buildLookupSheets(wb, events, orderedProfiles, teeBoxes, courses, seasons, templates);
 
     const buf = await wb.xlsx.writeBuffer();
@@ -298,8 +304,11 @@ function buildGuideSheet(wb: ExcelJS.Workbook, groupName: string) {
     ["Event Date",          "YYYY-MM-DD. Required if creating a new event.", "Amber"],
     ["Event Type",          "Dropdown: Stroke / Stableford / Matchplay / Skins / Scramble / Best Ball. Inherits from Template when blank.", "Amber"],
     ["Scoring Model",       "Dropdown: Gross / Net. Inherits from Template when blank.", "Amber"],
-    ["Template",            "Dropdown of this group's event templates. The new event links to it and inherits its type/scoring/allowance. Optional.", "Amber"],
+    ["Template",            "Dropdown of this group's competitions and event templates. The new event links to it and inherits its type/scoring/points model/allowance/rules and default prize pots. Optional.", "Amber"],
     ["Handicap Allowance %","0–100. The % of Course Handicap used for net scoring (e.g. 95). Blank ⇒ inherit from Template, else 100%.", "Amber"],
+    ["points_model_override","Dropdown (col X): none / position_based / custom_table / fedex_style / ciaga_formula / custom_formula. Blank ⇒ inherit from Template.", "Amber"],
+    ["field_size_override", "Points field size (col Y). Blank ⇒ actual number of finishers. Only matters for formula points.", "Amber"],
+    ["tee_time",            "HH:MM (col Z). First tee time of the day — imported scorecards are timestamped from it. Blank ⇒ 09:00.", "Amber"],
     ["Season Name",         "Dropdown from the Seasons sheet. Required.", "Green"],
     ["Course Name",         "Dropdown — pick a course. Required.", "Green"],
     ["Tee Name",            "Dropdown — shows only tees for the selected course. Required.", "Green"],
@@ -334,6 +343,7 @@ function buildGuideSheet(wb: ExcelJS.Workbook, groupName: string) {
     ["Event Name",   "Dropdown from Competitions sheet. Must match exactly.", "Green"],
     ["Round Number", "Which round this entry applies to (1, 2, 3…).", "Green"],
     ["Round Date",   "Optional date override for this specific round (YYYY-MM-DD). Leave blank to use the event date.", "Amber"],
+    ["Tee Time",     "Optional HH:MM override for this round. Leave blank to use the event tee_time (else 09:00).", "Amber"],
     ["Course Name",  "Dropdown — the course for THIS round. Overrides the Competitions-sheet course for this round only.", "Green"],
     ["Tee Name",     "Cascading dropdown for the selected course.", "Green"],
     ["event_id … round_key", "Auto-resolved by formula — do not edit. round_key is used by the Scores CH/PH calculation.", "Red"],
@@ -371,15 +381,57 @@ function buildGuideSheet(wb: ExcelJS.Workbook, groupName: string) {
   for (const [col, desc, colour] of payoutCols) { ws.getRow(r).values = [col, desc, colour]; r++; }
 
   r = addBlank(ws, r);
+  r = addSection(ws, r, "Charges sheet — columns (optional)", 3);
+  const chargeCols: [string, string, string][] = [
+    ["Event Name",          "Dropdown from Competitions sheet.", "Green"],
+    ["Charge Name",         "e.g. 'Green fee', 'Buggy', 'Dinner'. One catalog charge per (event, name).", "Green"],
+    ["Category",            "green_fee / buggy / food / drink / other.", "Green"],
+    ["Amount",              "Default amount per player.", "Green"],
+    ["Player Email or Name","Leave BLANK to charge every player who scored the event. Or add per-player rows.", "Amber"],
+    ["Amount Override",     "Per-player amount (explicit player rows only).", "Amber"],
+    ["Paid",                "Yes/No (default Yes). Yes also records a settling payment so the player's balance nets out.", "Amber"],
+    ["Note",                "Free text.", "Amber"],
+  ];
+  ws.getRow(r).values = ["Column", "Description", "Colour"]; ws.getRow(r).font = { bold: true }; r++;
+  for (const [col, desc, colour] of chargeCols) { ws.getRow(r).values = [col, desc, colour]; r++; }
+
+  r = addBlank(ws, r);
+  r = addSection(ws, r, "Payments sheet — columns (optional)", 3);
+  const paymentCols: [string, string, string][] = [
+    ["Player Email or Name","Who paid — dropdown, members first.", "Green"],
+    ["Event Name",          "Which event the payment settles. Blank = group-level payment.", "Amber"],
+    ["Amount",              "Leave BLANK to auto-settle the player's outstanding imported debits (entry fees + pot buy-ins + unpaid charges).", "Amber"],
+    ["Payment Date",        "YYYY-MM-DD. Blank = the event date.", "Amber"],
+    ["Note",                "Free text shown on the transaction.", "Amber"],
+  ];
+  ws.getRow(r).values = ["Column", "Description", "Colour"]; ws.getRow(r).font = { bold: true }; r++;
+  for (const [col, desc, colour] of paymentCols) { ws.getRow(r).values = [col, desc, colour]; r++; }
+
+  r = addBlank(ws, r);
+  r = addSection(ws, r, "Playoffs sheet — columns (optional)", 3);
+  const playoffCols: [string, string, string][] = [
+    ["Event Name",          "Dropdown from Competitions sheet. The event whose 1st-place tie was resolved.", "Green"],
+    ["Resolution Type",     "playoff (extra holes) or countback (scorecard tie-break).", "Green"],
+    ["Player Email or Name","One row per tied player.", "Green"],
+    ["Final Position",      "The position after the tie-break. Exactly one row per event must be 1 (the winner).", "Green"],
+    ["Note",                "Free text.", "Amber"],
+  ];
+  ws.getRow(r).values = ["Column", "Description", "Colour"]; ws.getRow(r).font = { bold: true }; r++;
+  for (const [col, desc, colour] of playoffCols) { ws.getRow(r).values = [col, desc, colour]; r++; }
+
+  r = addBlank(ws, r);
   r = addSection(ws, r, "Workflow", 3);
   const steps = [
-    "1. Fill Seasons sheet — one row per season.",
-    "2. Fill Competitions (Events) sheet — one row per event. Use dropdowns. Pick a Template to inherit settings. Check column P (tee_found) shows ✓ for every row.",
-    "3. (Optional) Fill Event Rounds sheet — only for multi-round events where each round is at a DIFFERENT course. One row per round. Leave blank otherwise.",
+    "1. Fill Seasons sheet — one row per season. You can import several seasons in one workbook.",
+    "2. Fill Competitions (Events) sheet — one row per event. Use dropdowns. Pick a Template to inherit settings (type, scoring, points model, allowance, rules, default prize pots). Check column P (tee_found) shows ✓ for every row.",
+    "3. (Optional) Fill Event Rounds sheet — only for multi-round events where each round is at a DIFFERENT course or date. One row per round. Leave blank otherwise.",
     "4. Fill Scores sheet — one row per player per round. Enter ONLY the Handicap Index; Course & Playing Handicap calculate automatically (using the Event Rounds tee when set, otherwise the Competitions tee).",
-    "5. (Optional) Fill Prizes sheet — one row per prize pot per event.",
+    "5. (Optional) Fill Prizes sheet — one row per prize pot per event. Events with a Template that has default prize pots get them automatically when no Prizes rows are given.",
     "6. (Optional) Fill Payouts sheet — one row per winner per pot.",
-    "7. Upload this .xlsx, click Preview, review, then Confirm Import.",
+    "7. (Optional) Fill Charges sheet — green fees, buggies, food etc. per event.",
+    "8. (Optional) Fill Payments sheet — settle members' balances.",
+    "9. (Optional) Fill Playoffs sheet — record resolved 1st-place ties (playoff or countback).",
+    "10. Upload this .xlsx, click Preview, review, then Confirm Import.",
   ];
   for (const s of steps) { r = addText(ws, r, s, 3); }
 
@@ -387,7 +439,8 @@ function buildGuideSheet(wb: ExcelJS.Workbook, groupName: string) {
   r = addSection(ws, r, "Notes", 3);
   r = addText(ws, r, `Requires Excel 365 or Excel 2019+ for XLOOKUP and INDIRECT data validation. Template version: ${TEMPLATE_VERSION}.`, 3);
   r = addText(ws, r, "Tee Name dropdown shows only tees for the selected course. If the dropdown is empty, the course has no tee boxes configured.", 3);
-  r = addText(ws, r, "Re-importing is safe: seasons and events are upserted by name, rounds already imported are skipped.", 3);
+  r = addText(ws, r, "Re-importing is safe: seasons and events are upserted by name, rounds already imported are skipped, charges/payments/playoffs are not duplicated.", 3);
+  r = addText(ws, r, "Imported scorecards are backdated to the event date/tee time and COUNT toward players' WHS handicap history — handicaps are replayed from the earliest imported round.", 3);
 }
 
 // ── Seasons sheet ─────────────────────────────────────────────────────────────
@@ -468,6 +521,10 @@ function buildSeasonsSheet(wb: ExcelJS.Workbook) {
 // U  tee_rating           RED  ← XLOOKUP(O, _TeeBoxes!$A, _TeeBoxes!$E)
 // V  tee_par              RED  ← XLOOKUP(O, _TeeBoxes!$A, _TeeBoxes!$G)
 // W  allowance_resolved   RED  ← IF(F<>"",F,IFERROR(XLOOKUP(S,_Templates!$A,_Templates!$F),100))
+// X  points_model_override AMBER  dropdown; blank ⇒ inherit from Template, else none
+// Y  field_size_override  AMBER  whole ≥1 → points_config.num_participants
+// Z  tee_time             AMBER  HH:MM; blank ⇒ 09:00. Base time for backdated scorecards.
+// AA points_model_resolved RED ← IF(X<>"",X,IFERROR(XLOOKUP(S,_Templates!$A,_Templates!$E),"none"))
 
 const COMP_COLS = [
   { header: "Event Name",           width: 32, fill: GREEN_FILL }, // A col 1
@@ -493,10 +550,15 @@ const COMP_COLS = [
   { header: "tee_rating",           width: 10, fill: RED_FILL   }, // U col 21
   { header: "tee_par",              width: 10, fill: RED_FILL   }, // V col 22
   { header: "allowance_resolved",   width: 16, fill: RED_FILL   }, // W col 23
+  { header: "points_model_override",width: 20, fill: AMBER_FILL }, // X col 24
+  { header: "field_size_override",  width: 16, fill: AMBER_FILL }, // Y col 25
+  { header: "tee_time",             width: 10, fill: AMBER_FILL }, // Z col 26
+  { header: "points_model_resolved",width: 20, fill: RED_FILL   }, // AA col 27
 ] as const;
 
 const EVENT_TYPES    = ["Stroke", "Stableford", "Matchplay", "Skins", "Scramble", "Best Ball"];
 const SCORING_MODELS = ["Gross", "Net"];
+const POINTS_MODELS  = ["none", "position_based", "custom_table", "fedex_style", "ciaga_formula", "custom_formula"];
 
 const COMP_RED_START = 12; // col L
 const COMP_RED_END   = 23; // col W
@@ -526,6 +588,8 @@ function buildCompetitionsSheet(wb: ExcelJS.Workbook, eventCount: number, course
       { formula: `IFERROR(XLOOKUP(O${r},_TeeBoxes!$A:$A,_TeeBoxes!$E:$E),"")` },          // U tee_rating
       { formula: `IFERROR(XLOOKUP(O${r},_TeeBoxes!$A:$A,_TeeBoxes!$G:$G),"")` },          // V tee_par
       { formula: `IF(F${r}<>"",F${r},IFERROR(XLOOKUP(S${r},_Templates!$A:$A,_Templates!$F:$F),100))` }, // W allowance_resolved
+      null, null, null,                                                                    // X-Z user input
+      { formula: `IF(X${r}<>"",X${r},IFERROR(XLOOKUP(S${r},_Templates!$A:$A,_Templates!$E:$E),"none"))` }, // AA points_model_resolved
     ]);
   }
 
@@ -547,6 +611,7 @@ function buildCompetitionsSheet(wb: ExcelJS.Workbook, eventCount: number, course
 
   for (let row = 2; row <= COMP_DATA_ROWS + 1; row++) {
     for (let col = COMP_RED_START; col <= COMP_RED_END; col++) ws.getCell(row, col).fill = LIGHT_RED;
+    ws.getCell(row, 27).fill = LIGHT_RED; // AA points_model_resolved
   }
 
   // Data validation dropdowns
@@ -568,12 +633,22 @@ function buildCompetitionsSheet(wb: ExcelJS.Workbook, eventCount: number, course
   // Col H: Course Name
   applyListValidation(ws, 8, 2, COMP_DATA_ROWS + 1, `_Courses!$B$2:$B$${courseEnd}`);
 
-  // Col F: Handicap Allowance % — whole 0–100
+  // Col X: points_model_override
+  applyListValidation(ws, 24, 2, COMP_DATA_ROWS + 1, `"${POINTS_MODELS.join(",")}"`);
+
+  // Col F: Handicap Allowance % — whole 0–100; Col Y: field size — whole ≥ 1
   for (let row = 2; row <= COMP_DATA_ROWS + 1; row++) {
     ws.getCell(row, 6).dataValidation = {
       type: "whole",
       operator: "between",
       formulae: [0, 100],
+      allowBlank: true,
+      showErrorMessage: false,
+    };
+    ws.getCell(row, 25).dataValidation = {
+      type: "whole",
+      operator: "greaterThanOrEqual",
+      formulae: [1],
       allowBlank: true,
       showErrorMessage: false,
     };
@@ -659,8 +734,8 @@ function buildScoresSheet(wb: ExcelJS.Workbook, memberCount: number) {
       1,    // D Round (default 1)
       ...Array.from({ length: 18 }, () => null as CellVal), // E-V holes
       // W: Course Handicap — tries Event Rounds sheet first (per-round tee), falls back to Competitions (event-level tee)
-      // round_key in EventRounds!$M = EventName&"|"&RoundNumber
-      { formula: `IF(OR($A${r}="",$C${r}=""),"",ROUND($C${r}*IFERROR(XLOOKUP($A${r}&"|"&$D${r},'Event Rounds'!$M:$M,'Event Rounds'!$J:$J),XLOOKUP($A${r},Competitions!$A:$A,Competitions!$T:$T))/113+(IFERROR(XLOOKUP($A${r}&"|"&$D${r},'Event Rounds'!$M:$M,'Event Rounds'!$K:$K),XLOOKUP($A${r},Competitions!$A:$A,Competitions!$U:$U))-IFERROR(XLOOKUP($A${r}&"|"&$D${r},'Event Rounds'!$M:$M,'Event Rounds'!$L:$L),XLOOKUP($A${r},Competitions!$A:$A,Competitions!$V:$V))),0))` },
+      // round_key in EventRounds!$N = EventName&"|"&RoundNumber (v4: slope=K, rating=L, par=M)
+      { formula: `IF(OR($A${r}="",$C${r}=""),"",ROUND($C${r}*IFERROR(XLOOKUP($A${r}&"|"&$D${r},'Event Rounds'!$N:$N,'Event Rounds'!$K:$K),XLOOKUP($A${r},Competitions!$A:$A,Competitions!$T:$T))/113+(IFERROR(XLOOKUP($A${r}&"|"&$D${r},'Event Rounds'!$N:$N,'Event Rounds'!$L:$L),XLOOKUP($A${r},Competitions!$A:$A,Competitions!$U:$U))-IFERROR(XLOOKUP($A${r}&"|"&$D${r},'Event Rounds'!$N:$N,'Event Rounds'!$M:$M),XLOOKUP($A${r},Competitions!$A:$A,Competitions!$V:$V))),0))` },
       // X: Playing Handicap — Course Handicap × event allowance %
       { formula: `IF(W${r}="","",ROUND(W${r}*XLOOKUP($A${r},Competitions!$A:$A,Competitions!$W:$W)/100,0))` },
       // Y: event_id — references Competitions!$L (col 12 = event_id in the new layout)
@@ -717,16 +792,17 @@ function buildScoresSheet(wb: ExcelJS.Workbook, memberCount: number) {
 // A  Event Name   GREEN  dropdown from Competitions!$A
 // B  Round Number GREEN  integer ≥ 1
 // C  Round Date   AMBER  YYYY-MM-DD override; blank = use event date
-// D  Course Name  GREEN  dropdown from _Courses!$B
-// E  Tee Name     GREEN  cascading INDIRECT on course_id (col G)
-// F  event_id     RED    XLOOKUP(A, Competitions!$A, Competitions!$L)
-// G  course_id    RED    XLOOKUP(D, _Courses!$B, _Courses!$A)
-// H  tee_box_id   RED    XLOOKUP(G&"|"&E, _TeeBoxes!$D, _TeeBoxes!$A)
-// I  tee_found    RED    ✓/✗ indicator
-// J  tee_slope    RED    XLOOKUP(H, _TeeBoxes!$A, _TeeBoxes!$F)
-// K  tee_rating   RED    XLOOKUP(H, _TeeBoxes!$A, _TeeBoxes!$E)
-// L  tee_par      RED    XLOOKUP(H, _TeeBoxes!$A, _TeeBoxes!$G)
-// M  round_key    RED    A&"|"&B  ← used by Scores CH/PH to find per-round slope/rating/par
+// D  Tee Time     AMBER  HH:MM override for this round; blank = event tee_time, else 09:00
+// E  Course Name  GREEN  dropdown from _Courses!$B
+// F  Tee Name     GREEN  cascading INDIRECT on course_id (col H)
+// G  event_id     RED    XLOOKUP(A, Competitions!$A, Competitions!$L)
+// H  course_id    RED    XLOOKUP(E, _Courses!$B, _Courses!$A)
+// I  tee_box_id   RED    XLOOKUP(H&"|"&F, _TeeBoxes!$D, _TeeBoxes!$A)
+// J  tee_found    RED    ✓/✗ indicator
+// K  tee_slope    RED    XLOOKUP(I, _TeeBoxes!$A, _TeeBoxes!$F)
+// L  tee_rating   RED    XLOOKUP(I, _TeeBoxes!$A, _TeeBoxes!$E)
+// M  tee_par      RED    XLOOKUP(I, _TeeBoxes!$A, _TeeBoxes!$G)
+// N  round_key    RED    A&"|"&B  ← used by Scores CH/PH to find per-round slope/rating/par
 
 const EVENT_ROUNDS_DATA_ROWS = 500;
 
@@ -738,16 +814,17 @@ function buildEventRoundsSheet(wb: ExcelJS.Workbook) {
     { header: "Event Name",   width: 30, fill: GREEN_FILL }, // A col 1
     { header: "Round Number", width: 12, fill: GREEN_FILL }, // B col 2
     { header: "Round Date",   width: 14, fill: AMBER_FILL }, // C col 3
-    { header: "Course Name",  width: 28, fill: GREEN_FILL }, // D col 4
-    { header: "Tee Name",     width: 14, fill: GREEN_FILL }, // E col 5
-    { header: "event_id",     width: 38, fill: RED_FILL   }, // F col 6
-    { header: "course_id",    width: 38, fill: RED_FILL   }, // G col 7
-    { header: "tee_box_id",   width: 38, fill: RED_FILL   }, // H col 8
-    { header: "tee_found",    width: 14, fill: RED_FILL   }, // I col 9
-    { header: "tee_slope",    width: 10, fill: RED_FILL   }, // J col 10
-    { header: "tee_rating",   width: 10, fill: RED_FILL   }, // K col 11
-    { header: "tee_par",      width: 10, fill: RED_FILL   }, // L col 12
-    { header: "round_key",    width: 30, fill: RED_FILL   }, // M col 13
+    { header: "Tee Time",     width: 10, fill: AMBER_FILL }, // D col 4
+    { header: "Course Name",  width: 28, fill: GREEN_FILL }, // E col 5
+    { header: "Tee Name",     width: 14, fill: GREEN_FILL }, // F col 6
+    { header: "event_id",     width: 38, fill: RED_FILL   }, // G col 7
+    { header: "course_id",    width: 38, fill: RED_FILL   }, // H col 8
+    { header: "tee_box_id",   width: 38, fill: RED_FILL   }, // I col 9
+    { header: "tee_found",    width: 14, fill: RED_FILL   }, // J col 10
+    { header: "tee_slope",    width: 10, fill: RED_FILL   }, // K col 11
+    { header: "tee_rating",   width: 10, fill: RED_FILL   }, // L col 12
+    { header: "tee_par",      width: 10, fill: RED_FILL   }, // M col 13
+    { header: "round_key",    width: 30, fill: RED_FILL   }, // N col 14
   ];
 
   ER_COLS.forEach((col, i) => { ws.getColumn(i + 1).width = col.width; });
@@ -757,15 +834,15 @@ function buildEventRoundsSheet(wb: ExcelJS.Workbook) {
   for (let i = 0; i < EVENT_ROUNDS_DATA_ROWS; i++) {
     const r = i + 2;
     rows.push([
-      null, null, null, null, null, // A-E user input
-      { formula: `IFERROR(XLOOKUP(A${r},Competitions!$A:$A,Competitions!$L:$L),"")` },            // F event_id
-      { formula: `IFERROR(XLOOKUP(D${r},_Courses!$B:$B,_Courses!$A:$A),"")` },                    // G course_id
-      { formula: `IFERROR(XLOOKUP(G${r}&"|"&E${r},_TeeBoxes!$D:$D,_TeeBoxes!$A:$A),"")` },       // H tee_box_id
-      { formula: `IF(A${r}="","",IF(H${r}<>"","✓ Found","✗ Not found"))` },                       // I tee_found
-      { formula: `IFERROR(XLOOKUP(H${r},_TeeBoxes!$A:$A,_TeeBoxes!$F:$F),"")` },                 // J tee_slope
-      { formula: `IFERROR(XLOOKUP(H${r},_TeeBoxes!$A:$A,_TeeBoxes!$E:$E),"")` },                 // K tee_rating
-      { formula: `IFERROR(XLOOKUP(H${r},_TeeBoxes!$A:$A,_TeeBoxes!$G:$G),"")` },                 // L tee_par
-      { formula: `IF(A${r}="","",A${r}&"|"&IF(B${r}="","",B${r}))` },                             // M round_key
+      null, null, null, null, null, null, // A-F user input
+      { formula: `IFERROR(XLOOKUP(A${r},Competitions!$A:$A,Competitions!$L:$L),"")` },            // G event_id
+      { formula: `IFERROR(XLOOKUP(E${r},_Courses!$B:$B,_Courses!$A:$A),"")` },                    // H course_id
+      { formula: `IFERROR(XLOOKUP(H${r}&"|"&F${r},_TeeBoxes!$D:$D,_TeeBoxes!$A:$A),"")` },       // I tee_box_id
+      { formula: `IF(A${r}="","",IF(I${r}<>"","✓ Found","✗ Not found"))` },                       // J tee_found
+      { formula: `IFERROR(XLOOKUP(I${r},_TeeBoxes!$A:$A,_TeeBoxes!$F:$F),"")` },                 // K tee_slope
+      { formula: `IFERROR(XLOOKUP(I${r},_TeeBoxes!$A:$A,_TeeBoxes!$E:$E),"")` },                 // L tee_rating
+      { formula: `IFERROR(XLOOKUP(I${r},_TeeBoxes!$A:$A,_TeeBoxes!$G:$G),"")` },                 // M tee_par
+      { formula: `IF(A${r}="","",A${r}&"|"&IF(B${r}="","",B${r}))` },                             // N round_key
     ]);
   }
 
@@ -786,12 +863,12 @@ function buildEventRoundsSheet(wb: ExcelJS.Workbook) {
   });
 
   for (let row = 2; row <= EVENT_ROUNDS_DATA_ROWS + 1; row++) {
-    for (let col = 6; col <= 13; col++) ws.getCell(row, col).fill = LIGHT_RED;
+    for (let col = 7; col <= 14; col++) ws.getCell(row, col).fill = LIGHT_RED;
   }
 
   const compEnd = COMP_DATA_ROWS + 1;
   applyListValidation(ws, 1, 2, EVENT_ROUNDS_DATA_ROWS + 1, `Competitions!$A$2:$A$${compEnd}`);
-  applyListValidation(ws, 4, 2, EVENT_ROUNDS_DATA_ROWS + 1, `_Courses!$B$2:$B$2001`);
+  applyListValidation(ws, 5, 2, EVENT_ROUNDS_DATA_ROWS + 1, `_Courses!$B$2:$B$2001`);
 
   // Round Number — whole ≥ 1
   for (let row = 2; row <= EVENT_ROUNDS_DATA_ROWS + 1; row++) {
@@ -799,17 +876,17 @@ function buildEventRoundsSheet(wb: ExcelJS.Workbook) {
       type: "whole", operator: "greaterThanOrEqual", formulae: [1],
       allowBlank: true, showErrorMessage: false,
     };
-    // Tee Name — cascading INDIRECT on course_id (col G)
-    ws.getCell(row, 5).dataValidation = {
+    // Tee Name — cascading INDIRECT on course_id (col H)
+    ws.getCell(row, 6).dataValidation = {
       type: "list", allowBlank: true,
-      formulae: [`INDIRECT("tees_"&SUBSTITUTE(G${row},"-","_"))`],
+      formulae: [`INDIRECT("tees_"&SUBSTITUTE(H${row},"-","_"))`],
       showErrorMessage: false,
     };
   }
 
-  // Conditional format: tee_found (col I = 9)
+  // Conditional format: tee_found (col J = 10)
   ws.addConditionalFormatting({
-    ref: `I2:I${EVENT_ROUNDS_DATA_ROWS + 1}`,
+    ref: `J2:J${EVENT_ROUNDS_DATA_ROWS + 1}`,
     rules: [
       { type: "containsText", operator: "containsText", text: "✓",
         style: { fill: { type: "pattern", pattern: "solid", fgColor: { argb: "FF92D050" } } }, priority: 1 } as any,
@@ -965,6 +1042,227 @@ function buildPayoutsSheet(wb: ExcelJS.Workbook, memberCount: number) {
       formulae: [1],
       allowBlank: true,
       showErrorMessage: false,
+    };
+  }
+
+  ws.views = [{ state: "frozen", ySplit: 1 }];
+}
+
+// ── Charges sheet ─────────────────────────────────────────────────────────────
+// Per-player event billing (green fees, buggies, food…). One row per charge —
+// leave Player blank to assign it to EVERY player who scored the event, or add
+// per-player rows (which also override the all-entrants assignment).
+// A  Event Name            GREEN  dropdown: Competitions!$A
+// B  Charge Name           GREEN  e.g. 'Green fee', 'Buggy'
+// C  Category              GREEN  dropdown: green_fee/buggy/food/drink/other
+// D  Amount                GREEN  default amount per player
+// E  Player Email or Name  AMBER  blank = applies to all entrants
+// F  Amount Override       AMBER  per-player amount (explicit player rows only)
+// G  Paid                  AMBER  Yes/No (default Yes) — Yes creates a settling payment
+// H  Note                  AMBER
+// I  event_id              RED
+// J  profile_id            RED
+
+const CHARGE_CATEGORIES = ["green_fee", "buggy", "food", "drink", "other"];
+
+function buildChargesSheet(wb: ExcelJS.Workbook, memberCount: number) {
+  const ws = wb.addWorksheet("Charges");
+  ws.properties.tabColor = { argb: "FFB4A7D6" };
+
+  const CHARGE_COLS: Array<{ header: string; width: number; fill: Fill }> = [
+    { header: "Event Name",           width: 30, fill: GREEN_FILL }, // A col 1
+    { header: "Charge Name",          width: 24, fill: GREEN_FILL }, // B col 2
+    { header: "Category",             width: 14, fill: GREEN_FILL }, // C col 3
+    { header: "Amount",               width: 12, fill: GREEN_FILL }, // D col 4
+    { header: "Player Email or Name", width: 28, fill: AMBER_FILL }, // E col 5
+    { header: "Amount Override",      width: 16, fill: AMBER_FILL }, // F col 6
+    { header: "Paid",                 width: 8,  fill: AMBER_FILL }, // G col 7
+    { header: "Note",                 width: 28, fill: AMBER_FILL }, // H col 8
+    { header: "event_id",             width: 38, fill: RED_FILL   }, // I col 9
+    { header: "profile_id",           width: 38, fill: RED_FILL   }, // J col 10
+  ];
+
+  CHARGE_COLS.forEach((col, i) => { ws.getColumn(i + 1).width = col.width; });
+
+  type CellVal = string | number | null | { formula: string };
+  const rows: CellVal[][] = [];
+  for (let i = 0; i < CHARGE_DATA_ROWS; i++) {
+    const r = i + 2;
+    rows.push([
+      null, null, null, null, null, null, null, null, // A-H input
+      { formula: `IFERROR(XLOOKUP(A${r},Competitions!$A:$A,Competitions!$L:$L),"")` }, // I event_id
+      { formula: `IF(E${r}="","",IFERROR(XLOOKUP(E${r},_Members!$C:$C,_Members!$A:$A,XLOOKUP(E${r},_Members!$B:$B,_Members!$A:$A,"")),""))` }, // J profile_id
+    ]);
+  }
+
+  ws.addTable({
+    name: "ChargesImport",
+    ref: "A1",
+    headerRow: true,
+    totalsRow: false,
+    style: { theme: "TableStyleMedium4", showRowStripes: true } as any,
+    columns: CHARGE_COLS.map(col => ({ name: col.header, filterButton: true })),
+    rows: rows as any,
+  });
+
+  const headerRow = ws.getRow(1);
+  CHARGE_COLS.forEach((col, i) => {
+    const cell = headerRow.getCell(i + 1);
+    cell.fill = col.fill; cell.font = { bold: true }; cell.alignment = { horizontal: "center" };
+  });
+
+  for (let row = 2; row <= CHARGE_DATA_ROWS + 1; row++) {
+    ws.getCell(row, 9).fill = LIGHT_RED;
+    ws.getCell(row, 10).fill = LIGHT_RED;
+  }
+
+  const compEnd   = COMP_DATA_ROWS + 1;
+  const memberEnd = Math.max(memberCount + 1, 2);
+  applyListValidation(ws, 1, 2, CHARGE_DATA_ROWS + 1, `Competitions!$A$2:$A$${compEnd}`);
+  applyListValidation(ws, 3, 2, CHARGE_DATA_ROWS + 1, `"${CHARGE_CATEGORIES.join(",")}"`);
+  applyListValidation(ws, 5, 2, CHARGE_DATA_ROWS + 1, `_Members!$B$2:$B$${memberEnd}`);
+  applyListValidation(ws, 7, 2, CHARGE_DATA_ROWS + 1, `"Yes,No"`);
+
+  ws.views = [{ state: "frozen", ySplit: 1 }];
+}
+
+// ── Payments sheet ────────────────────────────────────────────────────────────
+// Standalone payments settling a member's balance. Leave Amount blank to
+// auto-settle their outstanding imported debits for the event (or whole group
+// balance when Event Name is blank too).
+// A  Player Email or Name GREEN  dropdown
+// B  Event Name           AMBER  blank = group-level payment
+// C  Amount               AMBER  blank = auto-settle outstanding
+// D  Payment Date         AMBER  YYYY-MM-DD; blank = event date
+// E  Note                 AMBER
+// F  event_id             RED
+// G  profile_id           RED
+
+function buildPaymentsSheet(wb: ExcelJS.Workbook, memberCount: number) {
+  const ws = wb.addWorksheet("Payments");
+  ws.properties.tabColor = { argb: "FF93C47D" };
+
+  const PAYMENT_COLS: Array<{ header: string; width: number; fill: Fill }> = [
+    { header: "Player Email or Name", width: 28, fill: GREEN_FILL }, // A col 1
+    { header: "Event Name",           width: 30, fill: AMBER_FILL }, // B col 2
+    { header: "Amount",               width: 12, fill: AMBER_FILL }, // C col 3
+    { header: "Payment Date",         width: 14, fill: AMBER_FILL }, // D col 4
+    { header: "Note",                 width: 28, fill: AMBER_FILL }, // E col 5
+    { header: "event_id",             width: 38, fill: RED_FILL   }, // F col 6
+    { header: "profile_id",           width: 38, fill: RED_FILL   }, // G col 7
+  ];
+
+  PAYMENT_COLS.forEach((col, i) => { ws.getColumn(i + 1).width = col.width; });
+
+  type CellVal = string | number | null | { formula: string };
+  const rows: CellVal[][] = [];
+  for (let i = 0; i < PAYMENT_DATA_ROWS; i++) {
+    const r = i + 2;
+    rows.push([
+      null, null, null, null, null, // A-E input
+      { formula: `IF(B${r}="","",IFERROR(XLOOKUP(B${r},Competitions!$A:$A,Competitions!$L:$L),""))` }, // F event_id
+      { formula: `IFERROR(XLOOKUP(A${r},_Members!$C:$C,_Members!$A:$A,XLOOKUP(A${r},_Members!$B:$B,_Members!$A:$A,"")),"")` }, // G profile_id
+    ]);
+  }
+
+  ws.addTable({
+    name: "PaymentsImport",
+    ref: "A1",
+    headerRow: true,
+    totalsRow: false,
+    style: { theme: "TableStyleMedium6", showRowStripes: true } as any,
+    columns: PAYMENT_COLS.map(col => ({ name: col.header, filterButton: true })),
+    rows: rows as any,
+  });
+
+  const headerRow = ws.getRow(1);
+  PAYMENT_COLS.forEach((col, i) => {
+    const cell = headerRow.getCell(i + 1);
+    cell.fill = col.fill; cell.font = { bold: true }; cell.alignment = { horizontal: "center" };
+  });
+
+  for (let row = 2; row <= PAYMENT_DATA_ROWS + 1; row++) {
+    ws.getCell(row, 6).fill = LIGHT_RED;
+    ws.getCell(row, 7).fill = LIGHT_RED;
+  }
+
+  const compEnd   = COMP_DATA_ROWS + 1;
+  const memberEnd = Math.max(memberCount + 1, 2);
+  applyListValidation(ws, 1, 2, PAYMENT_DATA_ROWS + 1, `_Members!$B$2:$B$${memberEnd}`);
+  applyListValidation(ws, 2, 2, PAYMENT_DATA_ROWS + 1, `Competitions!$A$2:$A$${compEnd}`);
+
+  ws.views = [{ state: "frozen", ySplit: 1 }];
+}
+
+// ── Playoffs sheet ────────────────────────────────────────────────────────────
+// Resolved ties: one row per tied player, with the final position after the
+// playoff/countback. The player with Final Position 1 is recorded as the winner.
+// A  Event Name      GREEN  dropdown: Competitions!$A
+// B  Resolution Type GREEN  dropdown: playoff / countback
+// C  Player          GREEN  dropdown, one row per tied player
+// D  Final Position  GREEN  whole ≥ 1 — exactly one row per event must be 1
+// E  Note            AMBER
+// F  event_id        RED
+// G  profile_id      RED
+
+function buildPlayoffsSheet(wb: ExcelJS.Workbook, memberCount: number) {
+  const ws = wb.addWorksheet("Playoffs");
+  ws.properties.tabColor = { argb: "FFE06666" };
+
+  const PLAYOFF_COLS: Array<{ header: string; width: number; fill: Fill }> = [
+    { header: "Event Name",           width: 30, fill: GREEN_FILL }, // A col 1
+    { header: "Resolution Type",      width: 16, fill: GREEN_FILL }, // B col 2
+    { header: "Player Email or Name", width: 28, fill: GREEN_FILL }, // C col 3
+    { header: "Final Position",       width: 14, fill: GREEN_FILL }, // D col 4
+    { header: "Note",                 width: 28, fill: AMBER_FILL }, // E col 5
+    { header: "event_id",             width: 38, fill: RED_FILL   }, // F col 6
+    { header: "profile_id",           width: 38, fill: RED_FILL   }, // G col 7
+  ];
+
+  PLAYOFF_COLS.forEach((col, i) => { ws.getColumn(i + 1).width = col.width; });
+
+  type CellVal = string | number | null | { formula: string };
+  const rows: CellVal[][] = [];
+  for (let i = 0; i < PLAYOFF_DATA_ROWS; i++) {
+    const r = i + 2;
+    rows.push([
+      null, null, null, null, null, // A-E input
+      { formula: `IFERROR(XLOOKUP(A${r},Competitions!$A:$A,Competitions!$L:$L),"")` }, // F event_id
+      { formula: `IFERROR(XLOOKUP(C${r},_Members!$C:$C,_Members!$A:$A,XLOOKUP(C${r},_Members!$B:$B,_Members!$A:$A,"")),"")` }, // G profile_id
+    ]);
+  }
+
+  ws.addTable({
+    name: "PlayoffsImport",
+    ref: "A1",
+    headerRow: true,
+    totalsRow: false,
+    style: { theme: "TableStyleMedium3", showRowStripes: true } as any,
+    columns: PLAYOFF_COLS.map(col => ({ name: col.header, filterButton: true })),
+    rows: rows as any,
+  });
+
+  const headerRow = ws.getRow(1);
+  PLAYOFF_COLS.forEach((col, i) => {
+    const cell = headerRow.getCell(i + 1);
+    cell.fill = col.fill; cell.font = { bold: true }; cell.alignment = { horizontal: "center" };
+  });
+
+  for (let row = 2; row <= PLAYOFF_DATA_ROWS + 1; row++) {
+    ws.getCell(row, 6).fill = LIGHT_RED;
+    ws.getCell(row, 7).fill = LIGHT_RED;
+  }
+
+  const compEnd   = COMP_DATA_ROWS + 1;
+  const memberEnd = Math.max(memberCount + 1, 2);
+  applyListValidation(ws, 1, 2, PLAYOFF_DATA_ROWS + 1, `Competitions!$A$2:$A$${compEnd}`);
+  applyListValidation(ws, 2, 2, PLAYOFF_DATA_ROWS + 1, `"playoff,countback"`);
+  applyListValidation(ws, 3, 2, PLAYOFF_DATA_ROWS + 1, `_Members!$B$2:$B$${memberEnd}`);
+
+  for (let row = 2; row <= PLAYOFF_DATA_ROWS + 1; row++) {
+    ws.getCell(row, 4).dataValidation = {
+      type: "whole", operator: "greaterThanOrEqual", formulae: [1],
+      allowBlank: true, showErrorMessage: false,
     };
   }
 

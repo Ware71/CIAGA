@@ -439,73 +439,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           .eq("id", playoff_id);
 
         const effectiveType = resolution_type ?? (playoffRow as any).resolution_type;
-        const isCountback = effectiveType === "countback";
-        const wonLabel = isCountback ? "won_countback" : "won_playoff";
-        const lostLabel = isCountback ? "lost_countback" : "lost_playoff";
 
         // Recompute the base leaderboard FIRST. The RPC deletes + re-inserts every entry
         // (dropping playoff columns), so the playoff result must be written AFTER it.
         await supabaseAdmin.rpc("ciaga_compute_event_leaderboard", { p_event_id: eventId });
 
-        // Update each tied player's leaderboard entry
-        for (const fp of final_positions) {
-          await supabaseAdmin
-            .from("event_leaderboard_entries")
-            .update({
-              playoff_result: fp.profile_id === winner_profile_id ? wonLabel : lostLabel,
-              playoff_final_position: fp.position,
-            })
-            .eq("event_id", eventId)
-            .eq("profile_id", fp.profile_id);
-        }
-
-        // Recalculate points_earned for tied players based on playoff_final_position
-        // Fetch the event's points config
-        const { data: eventData } = await supabaseAdmin
-          .from("events")
-          .select("points_model, points_table, points_config, num_rounds, standings_contribution")
-          .eq("id", eventId)
-          .single();
-
-        if (eventData && (eventData as any).points_model !== "none") {
-          const { computeFormulaPoints, FEDEX_POINTS } = await import("@/lib/events/constants");
-          const model = (eventData as any).points_model;
-          const table = (eventData as any).points_table ?? {};
-          const config = (eventData as any).points_config ?? {};
-          const numRounds = (eventData as any).num_rounds ?? 1;
-
-          // Field size for points: the tied players' positions are positions in the
-          // FULL event field, so the formula needs the whole field — not just the
-          // playoff participants. Mirrors the display logic in majors/leaderboard.
-          const configuredParticipants = (config as any)?.num_participants;
-          let fieldSize: number;
-          if (configuredParticipants != null) {
-            fieldSize = Number(configuredParticipants);
-          } else {
-            const { count } = await supabaseAdmin
-              .from("event_leaderboard_entries")
-              .select("*", { count: "exact", head: true })
-              .eq("event_id", eventId)
-              .not("net_score", "is", null);
-            fieldSize = Math.max(count ?? final_positions.length, 1);
-          }
-
-          for (const fp of final_positions) {
-            let pts: number | null = null;
-            if (model === "fedex_style") {
-              pts = FEDEX_POINTS[fp.position - 1] ?? 0;
-            } else if (model === "position_based" || model === "custom_table") {
-              pts = typeof table[String(fp.position)] === "number" ? table[String(fp.position)] : null;
-            } else if (model === "ciaga_formula" || model === "custom_formula") {
-              pts = computeFormulaPoints(fp.position, fieldSize, numRounds, config);
-            }
-            await supabaseAdmin
-              .from("event_leaderboard_entries")
-              .update({ points_earned: pts })
-              .eq("event_id", eventId)
-              .eq("profile_id", fp.profile_id);
-          }
-        }
+        const { applyPlayoffResultToLeaderboard } = await import("@/lib/majors/playoffPoints");
+        await applyPlayoffResultToLeaderboard({
+          admin: supabaseAdmin,
+          eventId,
+          winnerProfileId: winner_profile_id,
+          finalPositions: final_positions,
+          resolutionType: effectiveType === "countback" ? "countback" : "playoff",
+        });
 
         return NextResponse.json({ ok: true });
       }

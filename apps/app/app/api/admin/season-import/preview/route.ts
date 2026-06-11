@@ -1,7 +1,7 @@
-import ExcelJS from "exceljs";
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
-import { TEMPLATE_VERSION } from "../template/route";
+import { parseXlsx, type ParsedRound } from "@/lib/admin/season-import/parse";
+import { resolveTemplateDefaults } from "@/lib/admin/season-import/templates";
 
 export type SeasonPreview = {
   season_name: string;
@@ -34,6 +34,11 @@ export type CompetitionPreview = {
   scoring_model: string | null;
   template_name: string | null;
   allowance_pct: number | null;
+  points_model: string | null;          // resolved (sheet override → template → none)
+  points_model_source: "sheet" | "template" | "default";
+  field_size: number | null;
+  tee_time: string | null;
+  default_pots_inherited: number;       // pots synthesized from the template
   round_overrides: { round_number: number; course_id: string; tee_box_id: string }[];
 };
 
@@ -45,6 +50,33 @@ export type PotPreview = {
   player_count: number;       // players who scored this event (auto-enrolled)
   payout_count: number;
   already_exists: boolean;
+  from_template: boolean;
+};
+
+export type ChargePreview = {
+  event_name: string;
+  charge_name: string;
+  category: string;
+  amount: number | null;
+  applies_to_all: boolean;
+  player_count: number;       // assignments this charge will create
+  paid_count: number;         // assignments that also get a settling payment
+  already_exists: boolean;
+};
+
+export type PaymentPreview = {
+  player_label: string;
+  event_name: string | null;
+  amount: number | null;      // null = auto-settle
+  payment_date: string | null;
+};
+
+export type PlayoffPreview = {
+  event_name: string;
+  resolution_type: string;
+  player_count: number;
+  winner_label: string | null;
+  already_exists: boolean;
 };
 
 export type PreviewResponse = {
@@ -52,7 +84,11 @@ export type PreviewResponse = {
   seasons: SeasonPreview[];
   competitions: CompetitionPreview[];
   pots: PotPreview[];
+  charges: ChargePreview[];
+  payments: PaymentPreview[];
+  playoffs: PlayoffPreview[];
   errors: string[];
+  warnings: string[];
   totals: {
     seasons_to_create: number;
     competitions: number;
@@ -64,11 +100,20 @@ export type PreviewResponse = {
     pot_entry_fees: number;
     pot_payouts: number;
     pot_winnings: number;
+    event_charges: number;
+    player_charges: number;
+    charge_transactions: number;
+    payment_transactions: number;
+    playoffs: number;
+    events_inheriting_template: number;
   };
 };
 
 const VALID_EVENT_TYPES    = ["stroke", "stableford", "matchplay", "skins", "scramble", "bestball", "best ball", "custom"];
 const VALID_SCORING_MODELS = ["gross", "net"];
+const VALID_POINTS_MODELS  = ["none", "position_based", "custom_table", "fedex_style", "ciaga_formula", "custom_formula"];
+const VALID_CATEGORIES     = ["green_fee", "buggy", "food", "drink", "other"];
+const TIME_RE = /^\d{1,2}:\d{2}$/;
 
 export async function POST(req: Request) {
   try {
@@ -111,6 +156,7 @@ export async function POST(req: Request) {
     }
 
     const errors: string[] = [];
+    const warnings: string[] = [];
 
     // Validate season names referenced in Competitions are defined in Seasons sheet
     const definedSeasonNames = new Set(parsed.seasons.map(s => s.season_name));
@@ -127,6 +173,10 @@ export async function POST(req: Request) {
     const existingComps = parsed.competitions.filter(c => !c.is_new_event);
     const newComps      = parsed.competitions.filter(c => c.is_new_event);
 
+    // Resolve template defaults early — required to validate "blank but inherited" fields
+    const referencedTemplateIds = Array.from(new Set(parsed.competitions.map(c => c.template_id).filter(Boolean)));
+    const templateDefaults = await resolveTemplateDefaults(admin, referencedTemplateIds, groupId);
+
     // Validate new event required fields
     const seenNewEventNames = new Set<string>();
     for (const comp of newComps) {
@@ -135,19 +185,19 @@ export async function POST(req: Request) {
       }
       seenNewEventNames.add(comp.event_name);
 
+      const tmpl = comp.template_id ? templateDefaults.get(comp.template_id) : undefined;
+
       if (!comp.event_date) {
         errors.push(`New event "${comp.event_name}": Event Date is required`);
       } else if (!/^\d{4}-\d{2}-\d{2}$/.test(comp.event_date)) {
         errors.push(`New event "${comp.event_name}": Event Date must be formatted YYYY-MM-DD (e.g. 2024-06-15)`);
       }
-      if (!comp.event_type) {
-        errors.push(`New event "${comp.event_name}": Event Type is required (Stroke/Stableford/Matchplay/etc.)`);
-      } else if (!VALID_EVENT_TYPES.includes(comp.event_type.toLowerCase())) {
+      if (!comp.event_type && !tmpl?.event_type) {
+        errors.push(`New event "${comp.event_name}": Event Type is required (or pick a Template that defines it)`);
+      } else if (comp.event_type && !VALID_EVENT_TYPES.includes(comp.event_type.toLowerCase())) {
         errors.push(`New event "${comp.event_name}": Event Type "${comp.event_type}" is not valid`);
       }
-      if (!comp.scoring_model) {
-        errors.push(`New event "${comp.event_name}": Scoring Model is required (Gross or Net)`);
-      } else if (!VALID_SCORING_MODELS.includes(comp.scoring_model.toLowerCase())) {
+      if (comp.scoring_model && !VALID_SCORING_MODELS.includes(comp.scoring_model.toLowerCase())) {
         errors.push(`New event "${comp.event_name}": Scoring Model "${comp.scoring_model}" must be Gross or Net`);
       }
       if (!comp.course_id) {
@@ -158,46 +208,29 @@ export async function POST(req: Request) {
       }
     }
 
-    // Template + allowance validation (applies to all competition rows)
-    const referencedTemplateIds = Array.from(new Set(parsed.competitions.map(c => c.template_id).filter(Boolean)));
-    let validTemplateIds = new Set<string>();
-    if (referencedTemplateIds.length) {
-      // template_id may be "comp_<uuid>" (series) or plain uuid (event template slot)
-      const compSeriesIds = referencedTemplateIds.filter(id => id.startsWith("comp_")).map(id => id.slice(5));
-      const eventTmplIds  = referencedTemplateIds.filter(id => !id.startsWith("comp_"));
-
-      // Validate series IDs belong to this group
-      if (compSeriesIds.length) {
-        const { data: seriesRows } = await admin
-          .from("competitions")
-          .select("id")
-          .eq("group_id", groupId)
-          .in("id", compSeriesIds);
-        for (const r of seriesRows ?? []) validTemplateIds.add(`comp_${(r as any).id}`);
-      }
-
-      // Validate event template IDs belong to this group's series
-      if (eventTmplIds.length) {
-        const { data: groupComps2 } = await admin.from("competitions").select("id").eq("group_id", groupId);
-        const groupCompIds = (groupComps2 ?? []).map((c: any) => c.id);
-        if (groupCompIds.length) {
-          const { data: tmplRows } = await admin
-            .from("competition_event_templates")
-            .select("id")
-            .in("id", eventTmplIds)
-            .in("competition_id", groupCompIds);
-          for (const t of tmplRows ?? []) validTemplateIds.add((t as any).id);
-        }
-      }
-    }
+    // Template + allowance + points/tee-time validation (applies to all competition rows)
     for (const comp of parsed.competitions) {
       if (comp.template_name && !comp.template_id) {
         errors.push(`Competition "${comp.event_name}": Template "${comp.template_name}" did not resolve — pick it from the dropdown.`);
-      } else if (comp.template_id && !validTemplateIds.has(comp.template_id)) {
+      } else if (comp.template_id && !templateDefaults.has(comp.template_id)) {
         errors.push(`Competition "${comp.event_name}": Template does not belong to this group.`);
       }
       if (comp.allowance_pct != null && (comp.allowance_pct < 0 || comp.allowance_pct > 100)) {
         errors.push(`Competition "${comp.event_name}": Handicap Allowance % must be between 0 and 100.`);
+      }
+      if (comp.points_model_override && !VALID_POINTS_MODELS.includes(comp.points_model_override.toLowerCase())) {
+        errors.push(`Competition "${comp.event_name}": points_model_override "${comp.points_model_override}" is not valid.`);
+      }
+      if (comp.field_size_override != null && comp.field_size_override < 1) {
+        errors.push(`Competition "${comp.event_name}": field_size_override must be ≥ 1.`);
+      }
+      if (comp.tee_time && !TIME_RE.test(comp.tee_time)) {
+        errors.push(`Competition "${comp.event_name}": tee_time "${comp.tee_time}" must be HH:MM (e.g. 09:30).`);
+      }
+    }
+    for (const er of parsed.eventRounds) {
+      if (er.tee_time && !TIME_RE.test(er.tee_time)) {
+        errors.push(`Event Rounds: round ${er.round_number} of "${er.event_name}" — Tee Time "${er.tee_time}" must be HH:MM.`);
       }
     }
 
@@ -205,6 +238,9 @@ export async function POST(req: Request) {
     const profileIds      = Array.from(new Set([
       ...parsed.scores.map(s => s.profile_id),
       ...parsed.payouts.map(p => p.profile_id),
+      ...parsed.charges.map(c => c.profile_id),
+      ...parsed.payments.map(p => p.profile_id),
+      ...parsed.playoffs.map(p => p.profile_id),
     ].filter(Boolean)));
     const teeBoxIds       = Array.from(new Set([
       ...parsed.competitions.map(c => c.tee_box_id),
@@ -216,7 +252,7 @@ export async function POST(req: Request) {
 
     const [compsRes, profilesRes, teeBoxesRes, existingRoundsRes, existingSeasonsRes, nameCollisionRes, courseTeeBoxesRes] = await Promise.all([
       existingCompIds.length
-        ? admin.from("events").select("id,name,group_id,entry_fee_amount,course_id,group_season_id").in("id", existingCompIds)
+        ? admin.from("events").select("id,name,group_id,entry_fee_amount,course_id,group_season_id,points_model").in("id", existingCompIds)
         : Promise.resolve({ data: [], error: null }),
       profileIds.length
         ? admin.from("profiles").select("id").in("id", profileIds)
@@ -248,8 +284,8 @@ export async function POST(req: Request) {
     if (nameCollisionRes.error)   throw new Error(nameCollisionRes.error.message);
     if (courseTeeBoxesRes.error)  throw new Error(courseTeeBoxesRes.error.message);
 
-    const validCompMap = new Map<string, { name: string; group_id: string | null; entry_fee_amount: number | null; course_id: string | null; group_season_id: string | null }>();
-    for (const c of compsRes.data ?? []) validCompMap.set(c.id, c);
+    const validCompMap = new Map<string, { name: string; group_id: string | null; entry_fee_amount: number | null; course_id: string | null; group_season_id: string | null; points_model: string | null }>();
+    for (const c of compsRes.data ?? []) validCompMap.set(c.id, c as any);
 
     const validProfileIds = new Set((profilesRes.data ?? []).map(p => p.id));
     const validTeeBoxIds  = new Set((teeBoxesRes.data ?? []).map(t => t.id));
@@ -315,15 +351,22 @@ export async function POST(req: Request) {
     const seasonPreviews: SeasonPreview[] = parsed.seasons.map(s => ({
       season_name:    s.season_name,
       year:           s.year,
-      start_date:     s.start_date_override ?? (s.year ? `${s.year}-01-01` : null),
-      end_date:       s.end_date_override   ?? (s.year ? `${s.year}-12-31` : null),
+      start_date:     s.start_date || null,
+      end_date:       s.end_date || null,
       already_exists: existingSeasonNames.has(s.season_name),
     }));
+
+    // Players who scored each event (auto-enrolled into the event's pots / all-entrant charges)
+    const playersScoredByEventName = new Map<string, Set<string>>();
+    for (const s of parsed.scores) {
+      if (!s.profile_id) continue;
+      if (!playersScoredByEventName.has(s.competition_name)) playersScoredByEventName.set(s.competition_name, new Set());
+      playersScoredByEventName.get(s.competition_name)!.add(s.profile_id);
+    }
 
     // Build competition previews
     const scoresByComp = new Map<string, typeof parsed.scores>();
     for (const s of parsed.scores) {
-      // For new events, key by event_name (competition_id blank); for existing, key by competition_id
       const key = s.competition_id || s.competition_name;
       if (!key) continue;
       if (!scoresByComp.has(key)) scoresByComp.set(key, []);
@@ -337,6 +380,7 @@ export async function POST(req: Request) {
       const dbComp        = comp.event_id ? validCompMap.get(comp.event_id) : null;
       const entryFee      = comp.entry_fee_override != null ? comp.entry_fee_override : (dbComp?.entry_fee_amount ?? null);
       const baseEventName = comp.event_name;
+      const tmpl          = comp.template_id ? templateDefaults.get(comp.template_id) : undefined;
 
       // Per-round status (only for existing events — new events have no prior rounds)
       const roundNumbers = Array.from(new Set(compScores.map(s => s.round_number))).sort((a, b) => a - b);
@@ -346,7 +390,7 @@ export async function POST(req: Request) {
         ? effectiveRoundNumbers.map(n => ({
             round_number:     n,
             round_name:       multiRound ? `${baseEventName} — Round ${n}` : baseEventName,
-            already_imported: false, // new event, nothing imported yet
+            already_imported: false,
           }))
         : effectiveRoundNumbers.map(n => {
             const roundName = multiRound ? `${baseEventName} — Round ${n}` : baseEventName;
@@ -359,10 +403,28 @@ export async function POST(req: Request) {
 
       const already_imported = !comp.is_new_event && rounds.length > 0 && rounds.every(r => r.already_imported);
 
-      // Per-round course overrides (for display only)
       const roundOverrides = parsed.eventRounds
         .filter(r => r.event_name === comp.event_name)
         .map(r => ({ round_number: r.round_number, course_id: r.course_id, tee_box_id: r.tee_box_id }));
+
+      // Resolved inheritance for display: value + where it came from
+      let points_model: string;
+      let points_model_source: "sheet" | "template" | "default";
+      if (comp.points_model_override) {
+        points_model = comp.points_model_override.toLowerCase();
+        points_model_source = "sheet";
+      } else if (tmpl?.points_model) {
+        points_model = tmpl.points_model.toLowerCase();
+        points_model_source = "template";
+      } else {
+        points_model = dbComp?.points_model && dbComp.points_model !== "none" ? dbComp.points_model : "none";
+        points_model_source = "default";
+      }
+
+      const default_pots_inherited =
+        !parsed.pots.some(p => p.event_name === comp.event_name) && tmpl?.default_prize_pots?.length
+          ? tmpl.default_prize_pots.length
+          : 0;
 
       return {
         competition_id:   comp.event_id,
@@ -378,10 +440,15 @@ export async function POST(req: Request) {
         round_overrides:  roundOverrides,
         is_new_event:     comp.is_new_event,
         event_date:       comp.event_date,
-        event_type:       comp.event_type,
-        scoring_model:    comp.scoring_model,
+        event_type:       comp.event_type || tmpl?.event_type || null,
+        scoring_model:    comp.scoring_model || tmpl?.scoring_model || null,
         template_name:    comp.template_name || null,
         allowance_pct:    comp.allowance_resolved,
+        points_model,
+        points_model_source,
+        field_size:       comp.field_size_override,
+        tee_time:         comp.tee_time,
+        default_pots_inherited,
       };
     });
 
@@ -395,7 +462,7 @@ export async function POST(req: Request) {
         errors.push(`Event Rounds: event "${er.event_name}" not on the Competitions sheet`);
       }
       if (!validTeeBoxIds.has(er.tee_box_id)) {
-        errors.push(`Event Rounds: round ${er.round_number} of "${er.event_name}" — tee not found (check column I shows ✓)`);
+        errors.push(`Event Rounds: round ${er.round_number} of "${er.event_name}" — tee not found (check column J shows ✓)`);
       }
     }
 
@@ -403,17 +470,36 @@ export async function POST(req: Request) {
     const DIST_TYPES   = new Set(["position_based", "metric_weighted", "metric_equal", "equal_split", "non_monetary", "entry_only"]);
     const METRIC_TYPES = new Set(["twos", "nearest_pin", "longest_drive", "season_points", "custom"]);
 
-    // Players who scored each event (these are auto-enrolled into the event's pots)
-    const playersScoredByEventName = new Map<string, Set<string>>();
-    for (const s of parsed.scores) {
-      if (!s.profile_id) continue;
-      if (!playersScoredByEventName.has(s.competition_name)) playersScoredByEventName.set(s.competition_name, new Set());
-      playersScoredByEventName.get(s.competition_name)!.add(s.profile_id);
+    const compByName = new Map(parsed.competitions.map(c => [c.event_name, c]));
+
+    // Synthesize template default pots for events without explicit Prizes rows
+    // (mirrors the import behaviour so the preview counts match).
+    type PotRow = (typeof parsed.pots)[number] & { from_template?: boolean };
+    const potEventNames = new Set(parsed.pots.map(p => p.event_name));
+    const effectivePots: PotRow[] = [...parsed.pots];
+    for (const comp of parsed.competitions) {
+      if (potEventNames.has(comp.event_name)) continue;
+      const tmpl = comp.template_id ? templateDefaults.get(comp.template_id) : undefined;
+      if (!tmpl?.default_prize_pots?.length) continue;
+      for (const dp of tmpl.default_prize_pots) {
+        if (!dp?.name) continue;
+        effectivePots.push({
+          event_name:        comp.event_name,
+          event_id:          comp.event_id,
+          pot_name:          dp.name,
+          distribution_type: dp.distribution_type === "winner_takes_all" ? "position_based" : (dp.distribution_type || "position_based"),
+          entry_fee_amount:  dp.entry_fee_amount ?? null,
+          metric_type:       null,
+          is_monetary:       dp.is_monetary ?? true,
+          prize_description: null,
+          description:       "Inherited from competition template",
+          from_template:     true,
+        });
+      }
     }
 
-    const compByName = new Map(parsed.competitions.map(c => [c.event_name, c]));
     const potKeySet  = new Set<string>();
-    for (const pot of parsed.pots) {
+    for (const pot of effectivePots) {
       const key = `${pot.event_name}::${pot.pot_name}`;
       if (potKeySet.has(key)) errors.push(`Prizes sheet: duplicate pot "${pot.pot_name}" for event "${pot.event_name}".`);
       potKeySet.add(key);
@@ -440,7 +526,7 @@ export async function POST(req: Request) {
 
     // Detect pots that already exist (existing events only — new events have no event_id yet)
     const potEventIds = Array.from(new Set(
-      parsed.pots.map(p => compByName.get(p.event_name)?.event_id).filter(Boolean) as string[]
+      effectivePots.map(p => compByName.get(p.event_name)?.event_id).filter(Boolean) as string[]
     ));
     let existingPotKeys = new Set<string>();
     if (potEventIds.length) {
@@ -448,7 +534,7 @@ export async function POST(req: Request) {
       existingPotKeys = new Set((existingPots ?? []).map((p: any) => `${p.event_id}::${p.name}`));
     }
 
-    const potPreviews: PotPreview[] = parsed.pots.map(pot => {
+    const potPreviews: PotPreview[] = effectivePots.map(pot => {
       const comp        = compByName.get(pot.event_name);
       const scored      = playersScoredByEventName.get(pot.event_name)?.size ?? 0;
       const payoutCount = parsed.payouts.filter(p => p.event_name === pot.event_name && p.pot_name === pot.pot_name).length;
@@ -461,18 +547,184 @@ export async function POST(req: Request) {
         player_count:      scored,
         payout_count:      payoutCount,
         already_exists,
+        from_template:     !!pot.from_template,
       };
     });
 
     const newPotPreviews = potPreviews.filter(p => !p.already_exists);
     const monetaryPayouts = parsed.payouts.filter(p => p.amount != null && p.amount > 0).length;
 
+    // ── Charges ───────────────────────────────────────────────────────────────
+    type ChargeGroup = {
+      event_name: string; charge_name: string; category: string; amount: number | null;
+      applies_to_all: boolean; all_paid: boolean;
+      explicit: Array<{ profile_id: string; paid: boolean; player_label: string }>;
+    };
+    const chargeGroups = new Map<string, ChargeGroup>();
+    for (const ch of parsed.charges) {
+      if (!compNamesOnSheet.has(ch.event_name)) {
+        errors.push(`Charge "${ch.charge_name}": event "${ch.event_name}" is not on the Competitions sheet.`);
+      }
+      if (!VALID_CATEGORIES.includes(ch.category)) {
+        errors.push(`Charge "${ch.charge_name}" (${ch.event_name}): invalid Category "${ch.category}".`);
+      }
+      if (ch.player_label && !ch.profile_id) {
+        errors.push(`Charge "${ch.charge_name}": player "${ch.player_label}" did not resolve to a profile.`);
+      } else if (ch.player_label && ch.profile_id && !playersScoredByEventName.get(ch.event_name)?.has(ch.profile_id)) {
+        warnings.push(`Charge "${ch.charge_name}": "${ch.player_label}" has no scores for "${ch.event_name}" — they will still be charged.`);
+      }
+
+      const key = `${ch.event_name}::${ch.charge_name}`;
+      let g = chargeGroups.get(key);
+      if (!g) {
+        g = { event_name: ch.event_name, charge_name: ch.charge_name, category: ch.category, amount: ch.amount, applies_to_all: false, all_paid: true, explicit: [] };
+        chargeGroups.set(key, g);
+      }
+      if (g.amount == null && ch.amount != null) g.amount = ch.amount;
+      if (!ch.player_label) {
+        if (g.applies_to_all) errors.push(`Charge "${ch.charge_name}" (${ch.event_name}): more than one all-entrants row.`);
+        g.applies_to_all = true;
+        g.all_paid = ch.paid;
+      } else if (ch.profile_id) {
+        if (g.explicit.some(e => e.profile_id === ch.profile_id)) {
+          errors.push(`Charge "${ch.charge_name}" (${ch.event_name}): duplicate row for "${ch.player_label}".`);
+        }
+        g.explicit.push({ profile_id: ch.profile_id, paid: ch.paid, player_label: ch.player_label });
+      }
+    }
+    // Amount can live on the all-entrants row (per-player rows inherit it) — only
+    // error when a charge group ends up with no amount anywhere.
+    for (const g of chargeGroups.values()) {
+      const groupRows = parsed.charges.filter(c => c.event_name === g.event_name && c.charge_name === g.charge_name);
+      const hasAmount = g.amount != null || groupRows.every(r => r.player_label && (r.amount_override ?? r.amount) != null);
+      if (!hasAmount) {
+        errors.push(`Charge "${g.charge_name}" (${g.event_name}): Amount is required (on the all-entrants row or each player row).`);
+      }
+    }
+
+    // already_exists detection for charges (existing events only)
+    const chargeEventIds = Array.from(new Set(
+      Array.from(chargeGroups.values()).map(g => compByName.get(g.event_name)?.event_id).filter(Boolean) as string[]
+    ));
+    let existingChargeKeys = new Set<string>();
+    if (chargeEventIds.length) {
+      const { data: existingCharges } = await admin.from("event_charges").select("event_id,name").in("event_id", chargeEventIds);
+      existingChargeKeys = new Set((existingCharges ?? []).map((c: any) => `${c.event_id}::${c.name}`));
+    }
+
+    const chargePreviews: ChargePreview[] = Array.from(chargeGroups.values()).map(g => {
+      const assignments = new Map<string, boolean>(); // profile → paid
+      if (g.applies_to_all) {
+        for (const pid of playersScoredByEventName.get(g.event_name) ?? []) assignments.set(pid, g.all_paid);
+      }
+      for (const ex of g.explicit) assignments.set(ex.profile_id, ex.paid);
+      const comp = compByName.get(g.event_name);
+      return {
+        event_name:     g.event_name,
+        charge_name:    g.charge_name,
+        category:       g.category,
+        amount:         g.amount,
+        applies_to_all: g.applies_to_all,
+        player_count:   assignments.size,
+        paid_count:     Array.from(assignments.values()).filter(Boolean).length,
+        already_exists: comp?.event_id ? existingChargeKeys.has(`${comp.event_id}::${g.charge_name}`) : false,
+      };
+    });
+
+    // ── Payments ──────────────────────────────────────────────────────────────
+    for (const pm of parsed.payments) {
+      if (!pm.profile_id || !validProfileIds.has(pm.profile_id)) {
+        errors.push(`Payment: player "${pm.player_label}" did not resolve to a known profile.`);
+      }
+      if (pm.event_name && !compNamesOnSheet.has(pm.event_name)) {
+        errors.push(`Payment for "${pm.player_label}": event "${pm.event_name}" is not on the Competitions sheet.`);
+      }
+      if (pm.payment_date && !/^\d{4}-\d{2}-\d{2}$/.test(pm.payment_date)) {
+        errors.push(`Payment for "${pm.player_label}": Payment Date must be YYYY-MM-DD.`);
+      }
+      if (pm.amount != null && pm.amount <= 0) {
+        errors.push(`Payment for "${pm.player_label}": Amount must be positive (or blank to auto-settle).`);
+      }
+      if (pm.amount == null && pm.event_name && pm.profile_id) {
+        // Auto-settle with nothing to settle is suspicious — warn, don't block
+        const scored = playersScoredByEventName.get(pm.event_name)?.has(pm.profile_id);
+        const hasCharge = parsed.charges.some(c => c.event_name === pm.event_name && (!c.player_label || c.profile_id === pm.profile_id));
+        const comp = compByName.get(pm.event_name);
+        const hasFee = (comp?.entry_fee_override ?? null) != null
+          || (comp?.event_id ? (validCompMap.get(comp.event_id)?.entry_fee_amount ?? null) != null : false)
+          || effectivePots.some(p => p.event_name === pm.event_name && (p.entry_fee_amount ?? 0) > 0);
+        if (!scored && !hasCharge && !hasFee) {
+          warnings.push(`Payment for "${pm.player_label}" (${pm.event_name}): auto-settle but no imported debits found — it may settle to nothing.`);
+        }
+      }
+    }
+    const paymentPreviews: PaymentPreview[] = parsed.payments.map(pm => ({
+      player_label: pm.player_label,
+      event_name:   pm.event_name || null,
+      amount:       pm.amount,
+      payment_date: pm.payment_date,
+    }));
+
+    // ── Playoffs ──────────────────────────────────────────────────────────────
+    const playoffsByEvent = new Map<string, typeof parsed.playoffs>();
+    for (const row of parsed.playoffs) {
+      if (!compNamesOnSheet.has(row.event_name)) {
+        errors.push(`Playoff: event "${row.event_name}" is not on the Competitions sheet.`);
+      }
+      if (!row.profile_id || !validProfileIds.has(row.profile_id)) {
+        errors.push(`Playoff (${row.event_name}): player "${row.player_label}" did not resolve to a known profile.`);
+      } else if (!playersScoredByEventName.get(row.event_name)?.has(row.profile_id)) {
+        errors.push(`Playoff (${row.event_name}): "${row.player_label}" has no scores for this event.`);
+      }
+      if (!["playoff", "countback"].includes(row.resolution_type)) {
+        errors.push(`Playoff (${row.event_name}): Resolution Type must be playoff or countback.`);
+      }
+      if (!playoffsByEvent.has(row.event_name)) playoffsByEvent.set(row.event_name, []);
+      playoffsByEvent.get(row.event_name)!.push(row);
+    }
+    for (const [eventName, rows] of playoffsByEvent.entries()) {
+      if (rows.length < 2) errors.push(`Playoff for "${eventName}": needs at least 2 tied players.`);
+      const positions = rows.map(r => r.final_position).filter((p): p is number => p != null).sort((a, b) => a - b);
+      if (positions.length !== rows.length) errors.push(`Playoff for "${eventName}": every player needs a Final Position.`);
+      if (rows.filter(r => r.final_position === 1).length !== 1) {
+        errors.push(`Playoff for "${eventName}": exactly one player must have Final Position 1.`);
+      }
+    }
+
+    const playoffEventIds = Array.from(new Set(
+      Array.from(playoffsByEvent.keys()).map(n => compByName.get(n)?.event_id).filter(Boolean) as string[]
+    ));
+    let eventsWithPlayoff = new Set<string>();
+    if (playoffEventIds.length) {
+      const { data: existingPlayoffs } = await admin.from("event_playoffs").select("event_id").in("event_id", playoffEventIds);
+      eventsWithPlayoff = new Set((existingPlayoffs ?? []).map((p: any) => p.event_id));
+    }
+
+    const playoffPreviews: PlayoffPreview[] = Array.from(playoffsByEvent.entries()).map(([eventName, rows]) => {
+      const comp = compByName.get(eventName);
+      return {
+        event_name:      eventName,
+        resolution_type: rows[0]?.resolution_type ?? "playoff",
+        player_count:    rows.length,
+        winner_label:    rows.find(r => r.final_position === 1)?.player_label ?? null,
+        already_exists:  comp?.event_id ? eventsWithPlayoff.has(comp.event_id) : false,
+      };
+    });
+
+    // ── Totals ────────────────────────────────────────────────────────────────
+    const newChargePreviews = chargePreviews.filter(c => !c.already_exists);
+    const chargePaymentTxs  = newChargePreviews.reduce((a, c) => a + c.paid_count, 0);
+
     const response: PreviewResponse = {
       group_id: groupId,
       seasons: seasonPreviews,
       competitions: competitionPreviews,
       pots: potPreviews,
+      charges: chargePreviews,
+      payments: paymentPreviews,
+      playoffs: playoffPreviews,
       errors,
+      warnings,
       totals: {
         seasons_to_create: seasonPreviews.filter(s => !s.already_exists).length,
         competitions:      newCompPreviews.length,
@@ -484,6 +736,12 @@ export async function POST(req: Request) {
         pot_entry_fees:    newPotPreviews.reduce((a, p) => a + (p.entry_fee_amount != null && p.entry_fee_amount > 0 ? p.player_count : 0), 0),
         pot_payouts:       parsed.payouts.length,
         pot_winnings:      monetaryPayouts,
+        event_charges:        newChargePreviews.length,
+        player_charges:       newChargePreviews.reduce((a, c) => a + c.player_count, 0),
+        charge_transactions:  newChargePreviews.reduce((a, c) => a + c.player_count, 0),
+        payment_transactions: chargePaymentTxs + parsed.payments.length,
+        playoffs:             playoffPreviews.filter(p => !p.already_exists).length,
+        events_inheriting_template: competitionPreviews.filter(c => c.template_name).length,
       },
     };
 
@@ -491,276 +749,4 @@ export async function POST(req: Request) {
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 400 });
   }
-}
-
-// ── XLSX parsing ──────────────────────────────────────────────────────────────
-// Competitions sheet columns (v3, 1-based):
-//   1=event_name(A), 2=event_date(B), 3=event_type(C), 4=scoring_model(D), 5=template(E),
-//   6=allowance%(F), 7=season_name(G), 8=course_name(H), 9=tee_name(I), 10=entry_fee_override(J),
-//   11=notes(K), 12=event_id(L), 13=is_new(M), 14=course_id(N), 15=tee_box_id(O), 16=tee_found(P),
-//   17=season_id(Q), 18=default_entry_fee(R), 19=template_id(S), 20=tee_slope(T), 21=tee_rating(U),
-//   22=tee_par(V), 23=allowance_resolved(W)
-//
-// Seasons sheet columns (1-based):
-//   1=season_name, 2=year, 3=start_date_override, 4=end_date_override, 5=season_id
-//
-// Scores sheet columns (v3, 1-based):
-//   1=event_name, 2=player_label, 3=handicap_index, 4=round_number, 5-22=holes 1-18,
-//   23=course_handicap, 24=playing_handicap, 25=event_id, 26=profile_id
-//
-// Event Rounds sheet columns (1-based, optional):
-//   1=event_name, 2=round_number, 3=round_date, 4=course_name, 5=tee_name,
-//   6=event_id, 7=course_id, 8=tee_box_id, 9=tee_found, 10=tee_slope,
-//   11=tee_rating, 12=tee_par, 13=round_key
-//
-// Prizes sheet columns (1-based):
-//   1=event_name, 2=pot_name, 3=distribution_type, 4=entry_fee_amount, 5=metric_type,
-//   6=is_monetary, 7=prize_description, 8=description, 9=event_id
-//
-// Payouts sheet columns (1-based):
-//   1=event_name, 2=pot_name, 3=player_label, 4=position, 5=amount, 6=metric_value,
-//   7=note, 8=event_id, 9=profile_id
-
-type ParsedSeason = {
-  season_name: string;
-  year: number | null;
-  start_date_override: string | null;
-  end_date_override: string | null;
-};
-
-type ParsedComp = {
-  event_name: string;
-  event_date: string | null;
-  event_type: string | null;
-  scoring_model: string | null;
-  template_name: string;
-  template_id: string;
-  allowance_pct: number | null;       // user-entered (col F), may be null
-  allowance_resolved: number | null;  // effective (col W)
-  season_name: string;
-  course_name: string;
-  tee_name: string;
-  entry_fee_override: number | null;
-  event_id: string;
-  is_new_event: boolean;
-  course_id: string;
-  tee_box_id: string;
-};
-
-type ParsedScore = {
-  competition_name: string;
-  competition_id: string;
-  player_label: string;
-  profile_id: string;
-  handicap: number | null;
-  round_number: number;
-  holes: number[];
-};
-
-type ParsedRound = {
-  event_name: string;
-  round_number: number;
-  round_date: string | null;
-  course_id: string;   // col G
-  tee_box_id: string;  // col H
-};
-
-type ParsedPot = {
-  event_name: string;
-  event_id: string;
-  pot_name: string;
-  distribution_type: string;
-  entry_fee_amount: number | null;
-  metric_type: string | null;
-  is_monetary: boolean;
-  prize_description: string | null;
-  description: string | null;
-};
-
-type ParsedPayout = {
-  event_name: string;
-  event_id: string;
-  pot_name: string;
-  player_label: string;
-  profile_id: string;
-  position: number | null;
-  amount: number | null;
-  metric_value: number | null;
-  note: string | null;
-};
-
-async function parseXlsx(file: File): Promise<{
-  parsed: { seasons: ParsedSeason[]; competitions: ParsedComp[]; scores: ParsedScore[]; eventRounds: ParsedRound[]; pots: ParsedPot[]; payouts: ParsedPayout[] };
-  errors: string[];
-}> {
-  const errors: string[] = [];
-  const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(await file.arrayBuffer());
-
-  const EMPTY = { seasons: [], competitions: [], scores: [], eventRounds: [], pots: [], payouts: [] };
-
-  // Version check — guide sheet col D row 1 contains the version marker
-  const guideSheet = wb.getWorksheet("Guide");
-  if (guideSheet) {
-    const versionCell = cellString(guideSheet.getCell(1, 4));
-    if (versionCell && versionCell !== TEMPLATE_VERSION) {
-      errors.push(`This template is outdated (version "${versionCell}") — please re-download the template from Step 1.`);
-      return { parsed: EMPTY, errors };
-    }
-    if (!versionCell) {
-      errors.push(`This template is outdated (no version marker) — please re-download the template from Step 1.`);
-      return { parsed: EMPTY, errors };
-    }
-  }
-
-  const seasonSheet = wb.getWorksheet("Seasons");
-  if (!seasonSheet) errors.push("Workbook is missing the 'Seasons' sheet");
-
-  const compSheet = wb.getWorksheet("Competitions");
-  if (!compSheet) errors.push("Workbook is missing the 'Competitions' sheet");
-
-  const scoresSheet = wb.getWorksheet("Scores");
-  if (!scoresSheet) errors.push("Workbook is missing the 'Scores' sheet");
-
-  if (errors.length) return { parsed: EMPTY, errors };
-
-  const seasons: ParsedSeason[] = [];
-  seasonSheet!.eachRow((row, rowNumber) => {
-    if (rowNumber === 1) return;
-    const name = cellString(row.getCell(1));
-    if (!name) return;
-    seasons.push({
-      season_name:         name,
-      year:                cellNumber(row.getCell(2)),
-      start_date_override: cellString(row.getCell(3)) || null,
-      end_date_override:   cellString(row.getCell(4)) || null,
-    });
-  });
-
-  const competitions: ParsedComp[] = [];
-  compSheet!.eachRow((row, rowNumber) => {
-    if (rowNumber === 1) return;
-    const eventName = cellString(row.getCell(1)); // A
-    if (!eventName) return;
-    const eventId = cellString(row.getCell(12)); // L
-    competitions.push({
-      event_name:         eventName,
-      event_date:         cellString(row.getCell(2)) || null,  // B
-      event_type:         cellString(row.getCell(3)) || null,  // C
-      scoring_model:      cellString(row.getCell(4)) || null,  // D
-      template_name:      cellString(row.getCell(5)),          // E
-      allowance_pct:      cellNumber(row.getCell(6)),          // F
-      season_name:        cellString(row.getCell(7)),          // G
-      course_name:        cellString(row.getCell(8)),          // H
-      tee_name:           cellString(row.getCell(9)),          // I
-      entry_fee_override: cellNumber(row.getCell(10)),         // J
-      event_id:           eventId,
-      is_new_event:       eventId === "",
-      course_id:          cellString(row.getCell(14)),         // N
-      tee_box_id:         cellString(row.getCell(15)),         // O
-      template_id:        cellString(row.getCell(19)),         // S
-      allowance_resolved: cellNumber(row.getCell(23)),         // W
-    });
-  });
-
-  const scores: ParsedScore[] = [];
-  scoresSheet!.eachRow((row, rowNumber) => {
-    if (rowNumber === 1) return;
-    const compName    = cellString(row.getCell(1));
-    if (!compName) return;
-    const playerLabel = cellString(row.getCell(2));
-    if (!playerLabel) return;
-    const holes: number[] = [];
-    for (let h = 0; h < 18; h++) holes.push(cellNumber(row.getCell(5 + h)) ?? 0); // E-V
-    scores.push({
-      competition_name: compName,
-      competition_id:   cellString(row.getCell(25)), // Y
-      player_label:     playerLabel,
-      profile_id:       cellString(row.getCell(26)), // Z
-      handicap:         cellNumber(row.getCell(3)),
-      round_number:     cellNumber(row.getCell(4)) ?? 1,
-      holes,
-    });
-  });
-
-  const eventRounds: ParsedRound[] = [];
-  const eventRoundsSheet = wb.getWorksheet("Event Rounds");
-  eventRoundsSheet?.eachRow((row, rowNumber) => {
-    if (rowNumber === 1) return;
-    const eventName = cellString(row.getCell(1)); // A
-    if (!eventName) return;
-    const roundNum = cellNumber(row.getCell(2));  // B
-    if (!roundNum) return;
-    const courseId  = cellString(row.getCell(7)); // G
-    const teeBoxId  = cellString(row.getCell(8)); // H
-    if (!courseId || !teeBoxId) return;
-    eventRounds.push({
-      event_name:   eventName,
-      round_number: roundNum,
-      round_date:   cellString(row.getCell(3)) || null, // C
-      course_id:    courseId,
-      tee_box_id:   teeBoxId,
-    });
-  });
-
-  const pots: ParsedPot[] = [];
-  const prizesSheet = wb.getWorksheet("Prizes");
-  prizesSheet?.eachRow((row, rowNumber) => {
-    if (rowNumber === 1) return;
-    const eventName = cellString(row.getCell(1)); // A
-    const potName   = cellString(row.getCell(2)); // B
-    if (!eventName || !potName) return;
-    pots.push({
-      event_name:        eventName,
-      pot_name:          potName,
-      distribution_type: cellString(row.getCell(3)) || "position_based", // C
-      entry_fee_amount:  cellNumber(row.getCell(4)),                      // D
-      metric_type:       cellString(row.getCell(5)) || null,             // E
-      is_monetary:       (cellString(row.getCell(6)) || "Yes").toLowerCase() !== "no", // F
-      prize_description: cellString(row.getCell(7)) || null,             // G
-      description:       cellString(row.getCell(8)) || null,             // H
-      event_id:          cellString(row.getCell(9)),                      // I
-    });
-  });
-
-  const payouts: ParsedPayout[] = [];
-  const payoutsSheet = wb.getWorksheet("Payouts");
-  payoutsSheet?.eachRow((row, rowNumber) => {
-    if (rowNumber === 1) return;
-    const eventName   = cellString(row.getCell(1)); // A
-    const potName     = cellString(row.getCell(2)); // B
-    const playerLabel = cellString(row.getCell(3)); // C
-    if (!eventName || !potName || !playerLabel) return;
-    payouts.push({
-      event_name:   eventName,
-      pot_name:     potName,
-      player_label: playerLabel,
-      position:     cellNumber(row.getCell(4)), // D
-      amount:       cellNumber(row.getCell(5)), // E
-      metric_value: cellNumber(row.getCell(6)), // F
-      note:         cellString(row.getCell(7)) || null, // G
-      event_id:     cellString(row.getCell(8)), // H
-      profile_id:   cellString(row.getCell(9)), // I
-    });
-  });
-
-  return { parsed: { seasons, competitions, scores, eventRounds, pots, payouts }, errors };
-}
-
-function cellString(cell: ExcelJS.Cell): string {
-  const v = cell.value;
-  if (v == null) return "";
-  if (typeof v === "string") return v.trim();
-  if (typeof v === "number") return String(v);
-  if (typeof v === "object" && "result" in v) return cellString({ value: (v as any).result } as any);
-  return String(v).trim();
-}
-
-function cellNumber(cell: ExcelJS.Cell): number | null {
-  const v = cell.value;
-  if (v == null || v === "") return null;
-  if (typeof v === "number") return v;
-  if (typeof v === "object" && "result" in v) return cellNumber({ value: (v as any).result } as any);
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
 }

@@ -38,6 +38,11 @@ type CompetitionPreview = {
   scoring_model: string | null;
   template_name: string | null;
   allowance_pct: number | null;
+  points_model: string | null;
+  points_model_source: "sheet" | "template" | "default";
+  field_size: number | null;
+  tee_time: string | null;
+  default_pots_inherited: number;
   round_overrides: { round_number: number; course_id: string; tee_box_id: string }[];
 };
 
@@ -49,6 +54,33 @@ type PotPreview = {
   player_count: number;
   payout_count: number;
   already_exists: boolean;
+  from_template: boolean;
+};
+
+type ChargePreview = {
+  event_name: string;
+  charge_name: string;
+  category: string;
+  amount: number | null;
+  applies_to_all: boolean;
+  player_count: number;
+  paid_count: number;
+  already_exists: boolean;
+};
+
+type PaymentPreview = {
+  player_label: string;
+  event_name: string | null;
+  amount: number | null;
+  payment_date: string | null;
+};
+
+type PlayoffPreview = {
+  event_name: string;
+  resolution_type: string;
+  player_count: number;
+  winner_label: string | null;
+  already_exists: boolean;
 };
 
 type PreviewData = {
@@ -56,7 +88,11 @@ type PreviewData = {
   seasons: SeasonPreview[];
   competitions: CompetitionPreview[];
   pots: PotPreview[];
+  charges: ChargePreview[];
+  payments: PaymentPreview[];
+  playoffs: PlayoffPreview[];
   errors: string[];
+  warnings: string[];
   totals: {
     seasons_to_create: number;
     competitions: number;
@@ -68,6 +104,12 @@ type PreviewData = {
     pot_entry_fees: number;
     pot_payouts: number;
     pot_winnings: number;
+    event_charges: number;
+    player_charges: number;
+    charge_transactions: number;
+    payment_transactions: number;
+    playoffs: number;
+    events_inheriting_template: number;
   };
 };
 
@@ -87,9 +129,30 @@ type ImportSummary = {
   pot_payouts_created: number;
   pot_entry_fee_transactions: number;
   pot_winnings_transactions: number;
+  event_charges_created: number;
+  player_charges_created: number;
+  charge_transactions_created: number;
+  payment_transactions_created: number;
+  payments_skipped: number;
+  playoffs_created: number;
+  playoffs_skipped: number;
+  standings_recomputed: number;
+  handicaps_refreshed_from: string | null;
+  feed_items_created: number;
   skipped_already_imported: string[];
   competition_round_ids: Array<{ competition_name: string; event_name: string; competition_id: string; round_id: string }>;
 };
+
+function mergeSummaries(a: ImportSummary, b: ImportSummary): ImportSummary {
+  const merged: any = { ...a };
+  for (const [k, v] of Object.entries(b)) {
+    const prev = (merged as any)[k];
+    if (typeof v === "number") merged[k] = (typeof prev === "number" ? prev : 0) + v;
+    else if (Array.isArray(v)) merged[k] = [...(Array.isArray(prev) ? prev : []), ...v];
+    else if (v != null) merged[k] = v;
+  }
+  return merged as ImportSummary;
+}
 
 async function getAccessToken() {
   const { data } = await supabase.auth.getSession();
@@ -122,6 +185,7 @@ export default function SeasonImportPage() {
 
   // Step 3: import
   const [importLoading, setImportLoading] = useState(false);
+  const [importProgress, setImportProgress] = useState<string | null>(null);
   const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [showRoundIds, setShowRoundIds] = useState(false);
@@ -233,24 +297,52 @@ export default function SeasonImportPage() {
     if (!file || !selectedGroup || !preview) return;
     setImportLoading(true);
     setImportError(null);
+    setImportProgress(null);
     try {
       const token = await getAccessToken();
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("group_id", selectedGroup.id);
-      const res = await fetch("/api/admin/season-import/import", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        body: fd,
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Import failed");
-      setImportSummary(json.summary);
+
+      const callImport = async (extra: Record<string, string>) => {
+        const fd = new FormData();
+        fd.append("file", file);
+        fd.append("group_id", selectedGroup.id);
+        for (const [k, v] of Object.entries(extra)) fd.append(k, v);
+        const res = await fetch("/api/admin/season-import/import", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: fd,
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json?.error || "Import failed");
+        return json.summary as ImportSummary;
+      };
+
+      const seasonNames = preview.seasons.map(s => s.season_name);
+      let summary: ImportSummary;
+
+      if (seasonNames.length > 1) {
+        // Big workbooks: one request per season, then a finalize pass for the
+        // global steps (standings, handicap replay, feed, group payments).
+        summary = null as any;
+        for (let i = 0; i < seasonNames.length; i++) {
+          setImportProgress(`Importing season ${i + 1} of ${seasonNames.length}: ${seasonNames[i]}…`);
+          const part = await callImport({ phase: "events", season_names: JSON.stringify([seasonNames[i]]) });
+          summary = summary ? mergeSummaries(summary, part) : part;
+        }
+        setImportProgress("Finalising: standings, handicaps, feed…");
+        const fin = await callImport({ phase: "finalize" });
+        summary = mergeSummaries(summary, fin);
+      } else {
+        setImportProgress("Importing…");
+        summary = await callImport({});
+      }
+
+      setImportSummary(summary);
       setPreview(null);
     } catch (e: any) {
       setImportError(e?.message || String(e));
     } finally {
       setImportLoading(false);
+      setImportProgress(null);
     }
   }
 
@@ -382,6 +474,14 @@ export default function SeasonImportPage() {
             {preview && !importSummary && (
               <div className="rounded-xl border border-emerald-700/40 bg-emerald-900/20 p-3 space-y-4">
                 <div className="text-sm font-semibold text-emerald-300">Preview looks good</div>
+                {preview.warnings?.length > 0 && (
+                  <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-2 space-y-0.5">
+                    <div className="text-xs font-semibold text-amber-400">{preview.warnings.length} warning{preview.warnings.length !== 1 ? "s" : ""} (won&apos;t block import)</div>
+                    <ul className="list-disc ml-4 text-xs text-amber-300 space-y-0.5">
+                      {preview.warnings.slice(0, 20).map((w, i) => <li key={i}>{w}</li>)}
+                    </ul>
+                  </div>
+                )}
                 <div className="flex flex-wrap gap-4 text-sm">
                   <span><span className="font-semibold text-white">{preview.totals.seasons_to_create}</span> seasons to create</span>
                   <span><span className="font-semibold text-white">{preview.totals.competitions}</span> competitions</span>
@@ -396,6 +496,21 @@ export default function SeasonImportPage() {
                   )}
                   {preview.totals.pot_payouts > 0 && (
                     <span><span className="font-semibold text-white">{preview.totals.pot_payouts}</span> payouts</span>
+                  )}
+                  {preview.totals.event_charges > 0 && (
+                    <span><span className="font-semibold text-white">{preview.totals.event_charges}</span> charges</span>
+                  )}
+                  {preview.totals.player_charges > 0 && (
+                    <span><span className="font-semibold text-white">{preview.totals.player_charges}</span> player charges</span>
+                  )}
+                  {preview.totals.payment_transactions > 0 && (
+                    <span><span className="font-semibold text-white">{preview.totals.payment_transactions}</span> payments</span>
+                  )}
+                  {preview.totals.playoffs > 0 && (
+                    <span><span className="font-semibold text-white">{preview.totals.playoffs}</span> playoffs</span>
+                  )}
+                  {preview.totals.events_inheriting_template > 0 && (
+                    <span><span className="font-semibold text-white">{preview.totals.events_inheriting_template}</span> events from templates</span>
                   )}
                 </div>
 
@@ -440,6 +555,7 @@ export default function SeasonImportPage() {
                         <th className="text-left py-1 pr-3">Event Name</th>
                         <th className="text-left py-1 pr-3">Season</th>
                         <th className="text-left py-1 pr-3">Template</th>
+                        <th className="text-left py-1 pr-3">Points</th>
                         <th className="text-right py-1 pr-3">Allow %</th>
                         <th className="text-right py-1 pr-3">Players</th>
                         <th className="text-right py-1 pr-3">Fee</th>
@@ -460,9 +576,18 @@ export default function SeasonImportPage() {
                                 {c.round_overrides?.length > 0 && (
                                   <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-wide text-cyan-300 bg-cyan-900/30 px-1.5 py-0.5 rounded">{c.round_overrides.length} round overrides</span>
                                 )}
+                                {c.default_pots_inherited > 0 && (
+                                  <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-wide text-purple-300 bg-purple-900/30 px-1.5 py-0.5 rounded">{c.default_pots_inherited} template pot{c.default_pots_inherited !== 1 ? "s" : ""}</span>
+                                )}
                               </td>
                               <td className="py-1 pr-3 text-emerald-100/70">{c.season_name || "—"}</td>
                               <td className="py-1 pr-3 text-emerald-100/70">{c.template_name || "—"}</td>
+                              <td className="py-1 pr-3 text-emerald-100/70">
+                                {c.points_model && c.points_model !== "none" ? c.points_model : "—"}
+                                {c.points_model && c.points_model !== "none" && c.points_model_source === "template" && (
+                                  <span className="ml-1 text-[10px] font-semibold uppercase tracking-wide text-purple-300 bg-purple-900/30 px-1 py-0.5 rounded">tmpl</span>
+                                )}
+                              </td>
                               <td className="text-right py-1 pr-3 text-emerald-100/80">{c.allowance_pct != null ? `${c.allowance_pct}%` : "—"}</td>
                               <td className="text-right py-1 pr-3 text-emerald-100/80">{c.player_count}</td>
                               <td className="text-right py-1 pr-3 text-emerald-100/80">
@@ -479,7 +604,7 @@ export default function SeasonImportPage() {
                             </tr>
                             {isPartial && c.rounds.map(r => (
                               <tr key={`${c.competition_id}-${r.round_number}`} className="bg-black/10">
-                                <td colSpan={6} className="py-0.5 pl-5 pr-3 text-xs text-emerald-100/50">↳ {r.round_name}</td>
+                                <td colSpan={7} className="py-0.5 pl-5 pr-3 text-xs text-emerald-100/50">↳ {r.round_name}</td>
                                 <td className="text-right py-0.5 text-xs">
                                   {r.already_imported
                                     ? <span className="text-amber-400">Skip</span>
@@ -515,7 +640,12 @@ export default function SeasonImportPage() {
                         {preview.pots.map((p, i) => (
                           <tr key={`${p.event_name}-${p.pot_name}-${i}`} className="border-t border-emerald-900/40">
                             <td className="py-1 pr-3 text-emerald-100/80">{p.event_name}</td>
-                            <td className="py-1 pr-3 text-emerald-100">{p.pot_name}</td>
+                            <td className="py-1 pr-3 text-emerald-100">
+                              {p.pot_name}
+                              {p.from_template && (
+                                <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-wide text-purple-300 bg-purple-900/30 px-1.5 py-0.5 rounded">tmpl</span>
+                              )}
+                            </td>
                             <td className="py-1 pr-3 text-emerald-100/60">{p.distribution_type}</td>
                             <td className="text-right py-1 pr-3 text-emerald-100/80">
                               {p.entry_fee_amount != null && p.entry_fee_amount > 0 ? `£${p.entry_fee_amount.toFixed(2)}` : "—"}
@@ -525,6 +655,112 @@ export default function SeasonImportPage() {
                             <td className="text-right py-1">
                               {p.already_exists
                                 ? <span className="text-amber-400 font-medium">Exists</span>
+                                : <span className="text-emerald-400 font-medium">New</span>
+                              }
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Charges */}
+                {preview.charges.length > 0 && (
+                  <div>
+                    <div className="text-xs font-semibold text-emerald-100/60 mb-1">Charges</div>
+                    <table className="w-full text-xs border-collapse">
+                      <thead>
+                        <tr className="text-emerald-100/50">
+                          <th className="text-left py-1 pr-3">Event</th>
+                          <th className="text-left py-1 pr-3">Charge</th>
+                          <th className="text-left py-1 pr-3">Category</th>
+                          <th className="text-right py-1 pr-3">Amount</th>
+                          <th className="text-right py-1 pr-3">Players</th>
+                          <th className="text-right py-1 pr-3">Paid</th>
+                          <th className="text-right py-1">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {preview.charges.map((c, i) => (
+                          <tr key={`${c.event_name}-${c.charge_name}-${i}`} className="border-t border-emerald-900/40">
+                            <td className="py-1 pr-3 text-emerald-100/80">{c.event_name}</td>
+                            <td className="py-1 pr-3 text-emerald-100">
+                              {c.charge_name}
+                              {c.applies_to_all && (
+                                <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-wide text-cyan-300 bg-cyan-900/30 px-1.5 py-0.5 rounded">all entrants</span>
+                              )}
+                            </td>
+                            <td className="py-1 pr-3 text-emerald-100/60">{c.category}</td>
+                            <td className="text-right py-1 pr-3 text-emerald-100/80">{c.amount != null ? `£${c.amount.toFixed(2)}` : "—"}</td>
+                            <td className="text-right py-1 pr-3 text-emerald-100/80">{c.player_count}</td>
+                            <td className="text-right py-1 pr-3 text-emerald-100/80">{c.paid_count}/{c.player_count}</td>
+                            <td className="text-right py-1">
+                              {c.already_exists
+                                ? <span className="text-amber-400 font-medium">Exists</span>
+                                : <span className="text-emerald-400 font-medium">New</span>
+                              }
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Payments */}
+                {preview.payments.length > 0 && (
+                  <div>
+                    <div className="text-xs font-semibold text-emerald-100/60 mb-1">Payments</div>
+                    <table className="w-full text-xs border-collapse">
+                      <thead>
+                        <tr className="text-emerald-100/50">
+                          <th className="text-left py-1 pr-3">Player</th>
+                          <th className="text-left py-1 pr-3">Event</th>
+                          <th className="text-right py-1 pr-3">Amount</th>
+                          <th className="text-right py-1">Date</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {preview.payments.map((p, i) => (
+                          <tr key={`${p.player_label}-${i}`} className="border-t border-emerald-900/40">
+                            <td className="py-1 pr-3 text-emerald-100">{p.player_label}</td>
+                            <td className="py-1 pr-3 text-emerald-100/70">{p.event_name ?? "Group balance"}</td>
+                            <td className="text-right py-1 pr-3 text-emerald-100/80">
+                              {p.amount != null ? `£${p.amount.toFixed(2)}` : <span className="text-cyan-300">auto-settle</span>}
+                            </td>
+                            <td className="text-right py-1 text-emerald-100/70">{p.payment_date ?? "event date"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Playoffs */}
+                {preview.playoffs.length > 0 && (
+                  <div>
+                    <div className="text-xs font-semibold text-emerald-100/60 mb-1">Playoffs / Tie-breaks</div>
+                    <table className="w-full text-xs border-collapse">
+                      <thead>
+                        <tr className="text-emerald-100/50">
+                          <th className="text-left py-1 pr-3">Event</th>
+                          <th className="text-left py-1 pr-3">Type</th>
+                          <th className="text-right py-1 pr-3">Players</th>
+                          <th className="text-left py-1 pr-3">Winner</th>
+                          <th className="text-right py-1">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {preview.playoffs.map((p, i) => (
+                          <tr key={`${p.event_name}-${i}`} className="border-t border-emerald-900/40">
+                            <td className="py-1 pr-3 text-emerald-100/80">{p.event_name}</td>
+                            <td className="py-1 pr-3 text-emerald-100/70">{p.resolution_type}</td>
+                            <td className="text-right py-1 pr-3 text-emerald-100/80">{p.player_count}</td>
+                            <td className="py-1 pr-3 text-emerald-100">{p.winner_label ?? "—"}</td>
+                            <td className="text-right py-1">
+                              {p.already_exists
+                                ? <span className="text-amber-400 font-medium">Exists (skip)</span>
                                 : <span className="text-emerald-400 font-medium">New</span>
                               }
                             </td>
@@ -544,7 +780,10 @@ export default function SeasonImportPage() {
           <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 space-y-3">
             <div className="text-sm font-semibold text-[#f5e6b0]">Step 3 — Confirm Import</div>
             <div className="text-sm text-emerald-100/70">
-              This will create rounds, score events, competition entries, entry fee transactions, event leaderboards, and any prize pots &amp; payouts. This action cannot be undone from the UI.
+              This will create rounds, score events, competition entries, charges, payments, prize pots &amp; payouts, playoff results, leaderboards and season standings — all backdated to the event dates. This action cannot be undone from the UI.
+            </div>
+            <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-300">
+              Imported scorecards count toward players&apos; WHS handicap history. Handicaps will be replayed from the earliest imported round, which can change every later handicap index — including for rounds played after the imported dates.
             </div>
             <button
               type="button"
@@ -552,7 +791,7 @@ export default function SeasonImportPage() {
               disabled={!canImport}
               className="rounded-xl bg-emerald-600 hover:bg-emerald-500 px-5 py-2.5 text-sm font-semibold disabled:opacity-50 transition-colors"
             >
-              {importLoading ? "Importing…" : "Confirm Import"}
+              {importLoading ? (importProgress ?? "Importing…") : "Confirm Import"}
             </button>
             {importError && (
               <div className="text-sm text-red-400">{importError}</div>
@@ -594,7 +833,30 @@ export default function SeasonImportPage() {
               {importSummary.pot_payouts_created > 0 && (
                 <span><span className="font-semibold text-white">{importSummary.pot_payouts_created}</span> payouts</span>
               )}
+              {importSummary.event_charges_created > 0 && (
+                <span><span className="font-semibold text-white">{importSummary.event_charges_created}</span> charges</span>
+              )}
+              {importSummary.player_charges_created > 0 && (
+                <span><span className="font-semibold text-white">{importSummary.player_charges_created}</span> player charges</span>
+              )}
+              {importSummary.payment_transactions_created > 0 && (
+                <span><span className="font-semibold text-white">{importSummary.payment_transactions_created}</span> payment transactions</span>
+              )}
+              {importSummary.playoffs_created > 0 && (
+                <span><span className="font-semibold text-white">{importSummary.playoffs_created}</span> playoffs</span>
+              )}
+              {importSummary.standings_recomputed > 0 && (
+                <span><span className="font-semibold text-white">{importSummary.standings_recomputed}</span> standings recomputed</span>
+              )}
+              {importSummary.feed_items_created > 0 && (
+                <span><span className="font-semibold text-white">{importSummary.feed_items_created}</span> feed items</span>
+              )}
             </div>
+            {importSummary.handicaps_refreshed_from && (
+              <div className="text-xs text-emerald-100/60">
+                Handicaps replayed from <span className="font-semibold text-emerald-100">{importSummary.handicaps_refreshed_from}</span>.
+              </div>
+            )}
 
             {importSummary.skipped_already_imported.length > 0 && (
               <div className="text-xs text-amber-400">
