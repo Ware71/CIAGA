@@ -1147,17 +1147,18 @@ async function finalizeImport(args: {
   }
 
   // ── Handicap replay ───────────────────────────────────────────────────────
-  // Imported rounds count toward WHS — replay the handicap pipeline from the
+  // Imported rounds count toward WHS — the pipeline must be replayed from the
   // earliest imported date so every later round (imported or real) reflects it.
+  // The replay itself is NOT run here: a single ciaga_refresh_handicaps_from
+  // call covering years of rounds exceeds the DB statement timeout. The UI
+  // drives it in batches via /api/admin/season-import/refresh-handicaps using
+  // the cutoff date reported in the summary.
   const allDates = [
     ...parsed.competitions.map(c => c.event_date),
     ...parsed.eventRounds.map(r => r.round_date),
   ].filter((d): d is string => !!d && /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
   if (refreshHandicaps && allDates.length && eventIds.length) {
-    const fromDate = allDates[0];
-    const { error } = await admin.rpc("ciaga_refresh_handicaps_from", { p_from_date: fromDate });
-    if (error) throw new Error(`Handicap refresh failed: ${error.message}`);
-    summary.handicaps_refreshed_from = fromDate;
+    summary.handicaps_refreshed_from = allDates[0];
   }
 
   // ── Feed backfill ─────────────────────────────────────────────────────────

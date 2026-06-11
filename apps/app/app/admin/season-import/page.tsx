@@ -336,6 +336,37 @@ export default function SeasonImportPage() {
         summary = await callImport({});
       }
 
+      // Handicap replay — batched so no single DB statement times out. The
+      // import response only reports the cutoff date; the actual replay is
+      // driven from here so wall-clock time is unbounded.
+      if (summary.handicaps_refreshed_from) {
+        const fromDate = summary.handicaps_refreshed_from;
+        let afterTs: string | null = null;
+        let afterId: string | null = null;
+        let remaining: number | null = null;
+        while (true) {
+          setImportProgress(
+            remaining != null
+              ? `Replaying handicaps… ${remaining} rounds left`
+              : "Replaying handicaps…"
+          );
+          const res: Response = await fetch("/api/admin/season-import/refresh-handicaps", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${await getAccessToken()}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ from_date: fromDate, after_ts: afterTs, after_id: afterId }),
+          });
+          const json: any = await res.json();
+          if (!res.ok) throw new Error(json?.error || "Handicap replay failed");
+          if (!json.processed || json.remaining === 0) break;
+          afterTs = json.last_ts;
+          afterId = json.last_id;
+          remaining = json.remaining;
+        }
+      }
+
       setImportSummary(summary);
       setPreview(null);
     } catch (e: any) {
