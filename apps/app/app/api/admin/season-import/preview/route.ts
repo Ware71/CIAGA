@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { parseXlsx, type ParsedRound } from "@/lib/admin/season-import/parse";
 import { resolveTemplateDefaults } from "@/lib/admin/season-import/templates";
+import { normalizeTeeTime } from "@/lib/admin/season-import/timing";
 
 export type SeasonPreview = {
   season_name: string;
@@ -338,12 +339,15 @@ export async function POST(req: Request) {
       }
     }
 
-    // Validate score profiles
+    // Validate score profiles + tee times
     for (const score of parsed.scores) {
       if (!score.profile_id) {
         errors.push(`Scores sheet: "${score.player_label}" has no resolved profile_id — check email/name matches a profile`);
       } else if (!validProfileIds.has(score.profile_id)) {
         errors.push(`Scores sheet: profile_id "${score.profile_id}" for "${score.player_label}" not found`);
+      }
+      if (score.tee_time && !TIME_RE.test(score.tee_time)) {
+        errors.push(`Scores sheet: "${score.player_label}" (${score.competition_name}) — Tee Time "${score.tee_time}" must be HH:MM (e.g. 14:08).`);
       }
     }
 
@@ -382,24 +386,36 @@ export async function POST(req: Request) {
       const baseEventName = comp.event_name;
       const tmpl          = comp.template_id ? templateDefaults.get(comp.template_id) : undefined;
 
-      // Per-round status (only for existing events — new events have no prior rounds)
+      // Per-round status — one entry per tee-time group, matching the names the
+      // import will create (single group keeps the unsuffixed name).
       const roundNumbers = Array.from(new Set(compScores.map(s => s.round_number))).sort((a, b) => a - b);
       const effectiveRoundNumbers = roundNumbers.length > 0 ? roundNumbers : [1];
       const multiRound = effectiveRoundNumbers.length > 1;
-      const rounds: RoundPreview[] = comp.is_new_event
-        ? effectiveRoundNumbers.map(n => ({
+      const rounds: RoundPreview[] = [];
+      for (const n of effectiveRoundNumbers) {
+        const baseName      = multiRound ? `${baseEventName} — Round ${n}` : baseEventName;
+        const roundOverride = roundCourseByKey.get(`${comp.event_name}::${n}`);
+        const defaultLabel  = normalizeTeeTime(roundOverride?.tee_time)
+          ?? normalizeTeeTime(comp.tee_time)
+          ?? "09:00";
+        const labels = new Set<string>();
+        const seen   = new Set<string>();
+        for (const s of compScores) {
+          if (s.round_number !== n || !s.profile_id || seen.has(s.profile_id)) continue;
+          seen.add(s.profile_id);
+          labels.add(normalizeTeeTime(s.tee_time) ?? defaultLabel);
+        }
+        if (labels.size === 0) labels.add(defaultLabel);
+        const multiGroup = labels.size > 1;
+        for (const label of Array.from(labels).sort()) {
+          const roundName = multiGroup ? `${baseName} (${label})` : baseName;
+          rounds.push({
             round_number:     n,
-            round_name:       multiRound ? `${baseEventName} — Round ${n}` : baseEventName,
-            already_imported: false,
-          }))
-        : effectiveRoundNumbers.map(n => {
-            const roundName = multiRound ? `${baseEventName} — Round ${n}` : baseEventName;
-            return {
-              round_number:     n,
-              round_name:       roundName,
-              already_imported: alreadyImportedKeys.has(`${comp.event_id}::${roundName}`),
-            };
+            round_name:       roundName,
+            already_imported: comp.is_new_event ? false : alreadyImportedKeys.has(`${comp.event_id}::${roundName}`),
           });
+        }
+      }
 
       const already_imported = !comp.is_new_event && rounds.length > 0 && rounds.every(r => r.already_imported);
 

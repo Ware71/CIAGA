@@ -15,9 +15,11 @@ import ExcelJS from "exceljs";
 // Seasons sheet columns (1-based):
 //   1=season_name, 2=year, 3=start_date_override, 4=end_date_override, 5=season_id
 //
-// Scores sheet columns (1-based):
-//   1=event_name, 2=player_label, 3=handicap_index, 4=round_number, 5-22=holes 1-18,
-//   23=course_handicap, 24=playing_handicap, 25=event_id, 26=profile_id
+// Scores sheet columns (v5, 1-based):
+//   1=event_name, 2=player_label, 3=handicap_index, 4=round_number, 5=tee_time,
+//   6-23=holes 1-18, 24=course_handicap, 25=playing_handicap, 26=event_id, 27=profile_id
+//   tee_time (HH:MM, optional): players sharing (event, round, tee time) form one
+//   scorecard group → one rounds row, like a real tee-time group on the day.
 //
 // Event Rounds sheet columns (v4, 1-based, optional):
 //   1=event_name, 2=round_number, 3=round_date, 4=tee_time, 5=course_name, 6=tee_name,
@@ -44,7 +46,7 @@ import ExcelJS from "exceljs";
 //   1=event_name, 2=resolution_type, 3=player_label, 4=final_position, 5=note,
 //   6=event_id, 7=profile_id
 
-export const TEMPLATE_VERSION = "v4";
+export const TEMPLATE_VERSION = "v5";
 
 // ── Cell readers ──────────────────────────────────────────────────────────────
 
@@ -64,6 +66,28 @@ export function cellNumber(cell: ExcelJS.Cell): number | null {
   if (typeof v === "object" && "result" in v) return cellNumber({ value: (v as any).result } as any);
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Reads a tee-time cell as "HH:MM". Excel converts typed times into time
+ * serials (fraction of a day) or Date objects, so a plain string read would
+ * return garbage like "0.5888…" — normalise all three representations.
+ */
+export function cellTime(cell: ExcelJS.Cell): string | null {
+  const v = cell.value as unknown;
+  if (v == null || v === "") return null;
+  if (v instanceof Date) {
+    return `${String(v.getUTCHours()).padStart(2, "0")}:${String(v.getUTCMinutes()).padStart(2, "0")}`;
+  }
+  if (typeof v === "number") {
+    const mins = Math.round((v % 1) * 24 * 60);
+    return `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
+  }
+  if (typeof v === "object" && v !== null && "result" in (v as any)) {
+    return cellTime({ value: (v as any).result } as any);
+  }
+  const s = String(v).trim();
+  return s || null;
 }
 
 // ── Parsed row types ──────────────────────────────────────────────────────────
@@ -108,6 +132,7 @@ export type ParsedScore = {
   profile_id: string;
   handicap: number | null;
   round_number: number;
+  tee_time: string | null;  // HH:MM — groups players into separate scorecards
   holes: number[];
 };
 
@@ -271,7 +296,7 @@ export async function parseXlsx(file: File): Promise<{ parsed: ParsedWorkbook; e
       allowance_resolved:    cellNumber(row.getCell(23)),         // W
       points_model_override: cellString(row.getCell(24)) || null, // X
       field_size_override:   cellNumber(row.getCell(25)),         // Y
-      tee_time:              cellString(row.getCell(26)) || null, // Z
+      tee_time:              cellTime(row.getCell(26)),           // Z
     });
   });
 
@@ -283,14 +308,15 @@ export async function parseXlsx(file: File): Promise<{ parsed: ParsedWorkbook; e
     const playerLabel = cellString(row.getCell(2));
     if (!playerLabel) return;
     const holes: number[] = [];
-    for (let h = 0; h < 18; h++) holes.push(cellNumber(row.getCell(5 + h)) ?? 0); // E-V
+    for (let h = 0; h < 18; h++) holes.push(cellNumber(row.getCell(6 + h)) ?? 0); // F-W
     scores.push({
       competition_name: compName,
-      competition_id:   cellString(row.getCell(25)), // Y
+      competition_id:   cellString(row.getCell(26)), // Z
       player_label:     playerLabel,
-      profile_id:       cellString(row.getCell(26)), // Z
+      profile_id:       cellString(row.getCell(27)), // AA
       handicap:         cellNumber(row.getCell(3)),
       round_number:     cellNumber(row.getCell(4)) ?? 1,
+      tee_time:         cellTime(row.getCell(5)), // E
       holes,
     });
   });
@@ -310,7 +336,7 @@ export async function parseXlsx(file: File): Promise<{ parsed: ParsedWorkbook; e
       event_name:   eventName,
       round_number: roundNum,
       round_date:   cellString(row.getCell(3)) || null, // C
-      tee_time:     cellString(row.getCell(4)) || null, // D
+      tee_time:     cellTime(row.getCell(4)),           // D
       course_id:    courseId,
       tee_box_id:   teeBoxId,
     });

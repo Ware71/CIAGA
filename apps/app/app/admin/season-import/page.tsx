@@ -603,7 +603,7 @@ export default function SeasonImportPage() {
                               </td>
                             </tr>
                             {isPartial && c.rounds.map(r => (
-                              <tr key={`${c.competition_id}-${r.round_number}`} className="bg-black/10">
+                              <tr key={`${c.competition_id}-${r.round_name}`} className="bg-black/10">
                                 <td colSpan={7} className="py-0.5 pl-5 pr-3 text-xs text-emerald-100/50">↳ {r.round_name}</td>
                                 <td className="text-right py-0.5 text-xs">
                                   {r.already_imported

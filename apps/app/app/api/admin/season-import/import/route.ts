@@ -9,7 +9,7 @@ import {
   type ParsedWorkbook,
 } from "@/lib/admin/season-import/parse";
 import { resolveTemplateDefaults, type TemplateDefaults } from "@/lib/admin/season-import/templates";
-import { teeDateTime, holeTime, roundFinishTime } from "@/lib/admin/season-import/timing";
+import { teeDateTime, holeTime, roundFinishTime, normalizeTeeTime } from "@/lib/admin/season-import/timing";
 import { importPrizePots } from "@/lib/admin/season-import/importers/pots";
 import { importCharges, importPayments } from "@/lib/admin/season-import/importers/money";
 import { importPlayoffs } from "@/lib/admin/season-import/importers/playoffs";
@@ -665,28 +665,14 @@ async function importSeasons(args: {
       const roundKey  = `${resolvedEventId}::${roundNumber}`;
       const roundName = multiRound ? `${baseEventName} — Round ${roundNumber}` : baseEventName;
 
-      // Idempotency: skip if round already exists by name
-      const { data: existingRound } = await admin
-        .from("rounds")
-        .select("id")
-        .eq("competition_id", resolvedEventId)
-        .eq("name", roundName)
-        .maybeSingle();
-
-      if (existingRound) {
-        summary.skipped_already_imported.push(roundName);
-        continue;
-      }
-
-      // ── Resolve per-round course + tee + timing ───────────────────────
+      // ── Resolve per-round course + tee + default timing ────────────────
       const roundOverride  = roundCourseByKey.get(`${comp.event_name}::${roundNumber}`);
       const roundCourseId  = roundOverride?.course_id  || eventLevelCourseId;
       const roundTeeBoxId  = roundOverride?.tee_box_id || comp.tee_box_id;
       const roundDateStr   = roundOverride?.round_date || eventDateStr;
-      // Backdated timing: scorecards read like the round was really played,
-      // starting at the sheet's tee time (default 09:00).
-      const teeTime    = teeDateTime(roundDateStr, roundOverride?.tee_time ?? comp.tee_time);
-      const startedAt  = teeTime.toISOString();
+      const defaultTeeLabel = normalizeTeeTime(roundOverride?.tee_time)
+        ?? normalizeTeeTime(comp.tee_time)
+        ?? "09:00";
 
       const course   = await fetchCourse(roundCourseId);
       const teeBox   = await fetchTeeBox(roundTeeBoxId);
@@ -696,12 +682,48 @@ async function importSeasons(args: {
       const yardsTotal = teeHoles.reduce((a, h) => a + (h.yardage ?? 0), 0);
       const parTotal   = teeHoles.reduce((a, h) => a + (h.par    ?? 0), 0);
 
-      // ── Per-round players (needed before round insert for finish time) ──
-      const roundScores   = scoresByRound.get(roundKey) ?? [];
-      const uniquePlayers = new Map<string, ParsedScore>();
+      // ── Tee-time groups ─────────────────────────────────────────────────
+      // Players sharing (event, round, tee time) form one scorecard group —
+      // one rounds row each, exactly like live play. Blank tee times fall back
+      // to the round/event default so a sheet without times behaves as before.
+      const roundScores  = scoresByRound.get(roundKey) ?? [];
+      const seenProfiles = new Set<string>();
+      const teeGroups    = new Map<string, ParsedScore[]>(); // "HH:MM" label → rows
       for (const s of roundScores) {
-        if (s.profile_id && !uniquePlayers.has(s.profile_id)) uniquePlayers.set(s.profile_id, s);
+        if (!s.profile_id || seenProfiles.has(s.profile_id)) continue;
+        seenProfiles.add(s.profile_id);
+        const label = normalizeTeeTime(s.tee_time) ?? defaultTeeLabel;
+        if (!teeGroups.has(label)) teeGroups.set(label, []);
+        teeGroups.get(label)!.push(s);
       }
+      if (teeGroups.size === 0) teeGroups.set(defaultTeeLabel, []);
+      const multiGroup = teeGroups.size > 1;
+
+      for (const teeLabel of Array.from(teeGroups.keys()).sort()) {
+      // Single group keeps the unsuffixed name so rounds imported before
+      // tee-time support still skip correctly on re-import.
+      const groupRoundName = multiGroup ? `${roundName} (${teeLabel})` : roundName;
+
+      // Idempotency: skip if round already exists by name
+      const { data: existingRound } = await admin
+        .from("rounds")
+        .select("id")
+        .eq("competition_id", resolvedEventId)
+        .eq("name", groupRoundName)
+        .maybeSingle();
+
+      if (existingRound) {
+        summary.skipped_already_imported.push(groupRoundName);
+        continue;
+      }
+
+      // Backdated timing: scorecards read like the round was really played,
+      // starting at this group's tee time.
+      const teeTime    = teeDateTime(roundDateStr, teeLabel);
+      const startedAt  = teeTime.toISOString();
+
+      const uniquePlayers = new Map<string, ParsedScore>();
+      for (const s of teeGroups.get(teeLabel)!) uniquePlayers.set(s.profile_id, s);
       const playerCount = Math.max(uniquePlayers.size, 1);
       const finishedAt  = roundFinishTime(teeTime, playerCount - 1).toISOString();
 
@@ -714,7 +736,7 @@ async function importSeasons(args: {
           visibility:     "private",
           course_id:      course.id,
           competition_id: competition.id,
-          name:           roundName,
+          name:           groupRoundName,
           created_at:     startedAt,
           started_at:     startedAt,
           finished_at:    finishedAt,
@@ -725,7 +747,7 @@ async function importSeasons(args: {
         })
         .select("id")
         .single();
-      if (rErr || !round) throw new Error(`Create round failed for "${roundName}": ${rErr?.message}`);
+      if (rErr || !round) throw new Error(`Create round failed for "${groupRoundName}": ${rErr?.message}`);
 
       // ── Course snapshot ───────────────────────────────────────────────
       const { data: courseSnap, error: csErr } = await admin
@@ -871,7 +893,7 @@ async function importSeasons(args: {
       scoreEvents.sort((a, b) => a.created_at.localeCompare(b.created_at));
       if (scoreEvents.length) {
         const { error: seErr } = await admin.from("round_score_events").insert(scoreEvents);
-        if (seErr) throw new Error(`Create score events failed for "${roundName}": ${seErr.message}`);
+        if (seErr) throw new Error(`Create score events failed for "${groupRoundName}": ${seErr.message}`);
         summary.score_events_created += scoreEvents.length;
       }
 
@@ -884,14 +906,14 @@ async function importSeasons(args: {
       // Persist Playing Handicap (allowance applied) — must run AFTER the finish
       // replay so it reflects the replayed HI.
       const { error: phErr } = await admin.rpc("ciaga_persist_playing_handicaps", { p_round_id: round.id });
-      if (phErr) throw new Error(`Persist playing handicaps failed for "${roundName}": ${phErr.message}`);
+      if (phErr) throw new Error(`Persist playing handicaps failed for "${groupRoundName}": ${phErr.message}`);
 
       // ── Event round submissions (so the event leaderboard computes net) ──
       const { data: rpRows, error: rpFetchErr } = await admin
         .from("round_participants")
         .select("id,profile_id,playing_handicap_used,course_handicap_used")
         .eq("round_id", round.id);
-      if (rpFetchErr) throw new Error(`Participant fetch failed for "${roundName}": ${rpFetchErr.message}`);
+      if (rpFetchErr) throw new Error(`Participant fetch failed for "${groupRoundName}": ${rpFetchErr.message}`);
 
       const partIds = (rpRows ?? []).map((p: any) => p.id);
       const hrrByParticipant = new Map<string, { gross: number | null; ch: number | null }>();
@@ -900,7 +922,7 @@ async function importSeasons(args: {
           .from("handicap_round_results")
           .select("participant_id,adjusted_gross_score,course_handicap_used")
           .in("participant_id", partIds);
-        if (hrrErr) throw new Error(`Handicap results fetch failed for "${roundName}": ${hrrErr.message}`);
+        if (hrrErr) throw new Error(`Handicap results fetch failed for "${groupRoundName}": ${hrrErr.message}`);
         for (const h of hrrRows ?? []) {
           hrrByParticipant.set((h as any).participant_id, {
             gross: (h as any).adjusted_gross_score ?? null,
@@ -932,7 +954,7 @@ async function importSeasons(args: {
         const { error: subErr } = await admin
           .from("event_round_submissions")
           .upsert(submissions, { onConflict: "event_id,round_id,profile_id" });
-        if (subErr) throw new Error(`Create submissions failed for "${roundName}": ${subErr.message}`);
+        if (subErr) throw new Error(`Create submissions failed for "${groupRoundName}": ${subErr.message}`);
         summary.event_submissions_created += submissions.length;
       }
 
@@ -948,10 +970,11 @@ async function importSeasons(args: {
       summary.rounds_created++;
       summary.competition_round_ids.push({
         competition_name: comp.event_name,
-        event_name:       roundName,
+        event_name:       groupRoundName,
         competition_id:   resolvedEventId,
         round_id:         round.id,
       });
+      } // end tee-group loop
     }
   }
 
