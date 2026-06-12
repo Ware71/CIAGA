@@ -28,53 +28,71 @@ export async function GET(req: Request) {
     if (competitions.length > 0) {
       const compIds = competitions.map((c: any) => c.id as string);
 
-      // Latest season per competition (prefer completed/official, then live/published)
-      const { data: seasons } = await supabaseAdmin
-        .from("competition_seasons")
-        .select("id, competition_id, season_label, status, end_date, season_year")
-        .in("competition_id", compIds)
-        .in("status", ["completed", "live", "published", "archived"])
+      // Current group season (shared across all competitions in this group)
+      const { data: groupSeasons } = await supabaseAdmin
+        .from("group_seasons")
+        .select("id, season_label, name, status, end_date, season_year")
+        .eq("group_id", groupId)
+        .in("status", ["live", "published", "completed", "archived"])
         .order("season_year", { ascending: false })
         .order("end_date", { ascending: false });
 
-      // Pick the best season per competition
-      const latestSeasonMap = new Map<string, any>();
       const statusPriority: Record<string, number> = { live: 0, published: 1, completed: 2, archived: 3 };
-      for (const s of (seasons ?? []) as any[]) {
-        const existing = latestSeasonMap.get(s.competition_id);
-        if (!existing) {
-          latestSeasonMap.set(s.competition_id, s);
-        } else {
-          const ePrio = statusPriority[existing.status] ?? 99;
-          const nPrio = statusPriority[s.status] ?? 99;
-          if (nPrio < ePrio) latestSeasonMap.set(s.competition_id, s);
+      let currentGroupSeason: any = null;
+      if ((groupSeasons ?? []).length > 0) {
+        const sorted = [...(groupSeasons as any[])].sort((a, b) => {
+          const pa = statusPriority[a.status] ?? 99;
+          const pb = statusPriority[b.status] ?? 99;
+          if (pa !== pb) return pa - pb;
+          return (b.season_year ?? 0) - (a.season_year ?? 0);
+        });
+        currentGroupSeason = sorted[0];
+      }
+
+      // Current holder: position-1 winner of the most recent completed/official event per competition
+      const { data: compEvents } = await supabaseAdmin
+        .from("events")
+        .select("id, competition_id, event_date")
+        .in("competition_id", compIds)
+        .eq("group_id", groupId)
+        .in("majors_status", ["completed", "official"])
+        .order("event_date", { ascending: false });
+
+      const latestEventByComp = new Map<string, string>();
+      for (const ev of (compEvents ?? []) as any[]) {
+        if (ev.competition_id && !latestEventByComp.has(ev.competition_id)) {
+          latestEventByComp.set(ev.competition_id, ev.id);
         }
       }
 
-      // For completed/archived seasons, get the position-1 holder
-      const completedSeasonIds = [...latestSeasonMap.values()]
-        .filter((s: any) => s.status === "completed" || s.status === "archived")
-        .map((s: any) => s.id as string);
-
+      const holderEventIds = [...latestEventByComp.values()];
       const holderMap = new Map<string, { name: string | null; avatar_url: string | null }>();
-      if (completedSeasonIds.length > 0) {
-        const { data: holders } = await supabaseAdmin
-          .from("season_standings_entries")
-          .select("season_id, profile:profiles(name, avatar_url)")
-          .in("season_id", completedSeasonIds)
+
+      if (holderEventIds.length > 0) {
+        const { data: winners } = await supabaseAdmin
+          .from("event_leaderboard_entries")
+          .select("event_id, profile:profiles(name, avatar_url), position, playoff_final_position")
+          .in("event_id", holderEventIds)
           .eq("position", 1);
 
-        for (const h of (holders ?? []) as any[]) {
-          holderMap.set(h.season_id, { name: h.profile?.name ?? null, avatar_url: h.profile?.avatar_url ?? null });
+        // event_id → competition_id reverse map
+        const eventToComp = new Map<string, string>(
+          [...latestEventByComp.entries()].map(([cid, eid]) => [eid, cid])
+        );
+
+        for (const w of (winners ?? []) as any[]) {
+          const compId = eventToComp.get(w.event_id);
+          if (compId && ((w.playoff_final_position ?? w.position) === 1)) {
+            holderMap.set(compId, { name: w.profile?.name ?? null, avatar_url: w.profile?.avatar_url ?? null });
+          }
         }
       }
 
       for (const comp of competitions as any[]) {
-        const latestSeason = latestSeasonMap.get(comp.id) ?? null;
-        comp.latest_season = latestSeason
-          ? { id: latestSeason.id, season_label: latestSeason.season_label, status: latestSeason.status }
+        comp.latest_season = currentGroupSeason
+          ? { id: currentGroupSeason.id, season_label: currentGroupSeason.season_label ?? currentGroupSeason.name, status: currentGroupSeason.status }
           : null;
-        comp.current_holder = latestSeason ? (holderMap.get(latestSeason.id) ?? null) : null;
+        comp.current_holder = holderMap.get(comp.id) ?? null;
       }
     }
 

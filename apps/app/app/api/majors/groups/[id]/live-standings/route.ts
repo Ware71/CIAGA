@@ -94,9 +94,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     // ── 0. Determine current season for this group ────────────────────────
     // Priority: live > published > most recent completed (by end_date/season_year desc)
     const { data: allSeasons } = await supabaseAdmin
-      .from("competition_seasons")
-      .select("id, season_label, status, end_date, season_year, competition:competitions!inner(group_id)")
-      .eq("competition.group_id", groupId)
+      .from("group_seasons")
+      .select("id, season_label, name, status, end_date, season_year")
+      .eq("group_id", groupId)
       .in("status", ["live", "published", "completed", "archived"])
       .order("season_year", { ascending: false })
       .order("end_date", { ascending: false });
@@ -114,7 +114,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         return yb - ya;
       });
       const best = sorted[0];
-      currentSeason = { id: best.id, season_label: best.season_label ?? String(best.season_year ?? ""), status: best.status };
+      currentSeason = { id: best.id, season_label: best.season_label ?? best.name ?? String(best.season_year ?? ""), status: best.status };
     }
 
     // ── 1. Fetch live and completed events — scoped to current season ─────
@@ -132,8 +132,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       .in("standings_contribution", ["season", "both"]);
 
     if (currentSeason) {
-      liveQuery = liveQuery.eq("season_id", currentSeason.id);
-      completedQuery = completedQuery.eq("season_id", currentSeason.id);
+      liveQuery = liveQuery.eq("group_season_id", currentSeason.id);
+      completedQuery = completedQuery.eq("group_season_id", currentSeason.id);
     } else {
       liveQuery = liveQuery.eq("group_id", groupId);
       completedQuery = completedQuery.eq("group_id", groupId);
