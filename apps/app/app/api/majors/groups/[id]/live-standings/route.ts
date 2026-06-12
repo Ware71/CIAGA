@@ -101,9 +101,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       .from("group_seasons")
       .select("id, season_label, name, status, end_date, start_date, season_year, created_at")
       .eq("group_id", groupId)
-      .in("status", ["live", "published", "completed", "archived"])
-      .order("season_year", { ascending: false })
-      .order("end_date", { ascending: false });
+      .in("status", ["live", "published", "completed", "archived"]);
+
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
     const effectiveYear = (gs: any): number => {
       if (gs.season_year) return gs.season_year;
@@ -113,15 +113,20 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     let currentSeason: CurrentSeasonMeta | null = null;
     if (allSeasons && allSeasons.length > 0) {
-      const priorityOrder: Record<string, number> = { live: 0, published: 1, completed: 2, archived: 3 };
-      const sorted = [...allSeasons as any[]].sort((a, b) => {
-        const pa = priorityOrder[a.status] ?? 99;
-        const pb = priorityOrder[b.status] ?? 99;
-        const ya = effectiveYear(a), yb = effectiveYear(b);
-        if (ya !== yb) return yb - ya;
-        return pa - pb;
-      });
-      const best = sorted[0];
+      // 1. Prefer a season whose date range contains today
+      let best = (allSeasons as any[]).find(
+        (gs) => gs.start_date && gs.end_date && gs.start_date <= today && today <= gs.end_date
+      );
+      // 2. Fall back: most recent by effective year, then status priority
+      if (!best) {
+        const priorityOrder: Record<string, number> = { live: 0, published: 1, completed: 2, archived: 3 };
+        const sorted = [...allSeasons as any[]].sort((a, b) => {
+          const ya = effectiveYear(a), yb = effectiveYear(b);
+          if (ya !== yb) return yb - ya;
+          return (priorityOrder[a.status] ?? 99) - (priorityOrder[b.status] ?? 99);
+        });
+        best = sorted[0];
+      }
       currentSeason = { id: best.id, season_label: best.season_label ?? best.name ?? String(best.season_year ?? ""), status: best.status };
     }
 

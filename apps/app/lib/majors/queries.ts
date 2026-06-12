@@ -475,12 +475,12 @@ export async function getMajorHubSummary(profileId: string): Promise<MajorHubSum
   if (myGroupIds.length > 0) {
     const { data: groupSeasonRows } = await supabaseAdmin
       .from("group_seasons")
-      .select("id, group_id, status, season_year, start_date, created_at")
+      .select("id, group_id, status, season_year, start_date, end_date, created_at")
       .in("group_id", myGroupIds)
-      .in("status", ["live", "published", "completed", "archived"])
-      .order("season_year", { ascending: false });
+      .in("status", ["live", "published", "completed", "archived"]);
 
-    // Derive effective year: season_year → start_date year → created_at year
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+
     const effectiveYear = (gs: any): number => {
       if (gs.season_year) return gs.season_year;
       if (gs.start_date) return new Date(gs.start_date).getFullYear();
@@ -488,15 +488,30 @@ export async function getMajorHubSummary(profileId: string): Promise<MajorHubSum
     };
 
     const gsPriority: Record<string, number> = { live: 0, published: 1, completed: 2, archived: 3 };
-    const sortedGs = [...(groupSeasonRows ?? []) as any[]].sort((a, b) => {
-      const pa = gsPriority[a.status] ?? 99;
-      const pb = gsPriority[b.status] ?? 99;
-      const ya = effectiveYear(a), yb = effectiveYear(b);
-      if (ya !== yb) return yb - ya;
-      return pa - pb;
-    });
-    for (const gs of sortedGs) {
-      if (!currentSeasonByGroup.has(gs.group_id)) currentSeasonByGroup.set(gs.group_id, gs.id);
+
+    // Group rows by group_id for per-group selection
+    const rowsByGroup = new Map<string, any[]>();
+    for (const gs of groupSeasonRows ?? []) {
+      if (!rowsByGroup.has(gs.group_id)) rowsByGroup.set(gs.group_id, []);
+      rowsByGroup.get(gs.group_id)!.push(gs);
+    }
+
+    for (const [groupId, seasons] of rowsByGroup) {
+      // 1. Prefer a season whose date range contains today
+      const current = seasons.find(
+        (gs) => gs.start_date && gs.end_date && gs.start_date <= today && today <= gs.end_date
+      );
+      if (current) {
+        currentSeasonByGroup.set(groupId, current.id);
+        continue;
+      }
+      // 2. Fall back: most recent by effective year, then status priority
+      const sorted = [...seasons].sort((a, b) => {
+        const ya = effectiveYear(a), yb = effectiveYear(b);
+        if (ya !== yb) return yb - ya;
+        return (gsPriority[a.status] ?? 99) - (gsPriority[b.status] ?? 99);
+      });
+      currentSeasonByGroup.set(groupId, sorted[0].id);
     }
     currentSeasonIds = [...currentSeasonByGroup.values()];
   }
