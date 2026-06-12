@@ -475,16 +475,23 @@ export async function getMajorHubSummary(profileId: string): Promise<MajorHubSum
   if (myGroupIds.length > 0) {
     const { data: groupSeasonRows } = await supabaseAdmin
       .from("group_seasons")
-      .select("id, group_id, status, season_year")
+      .select("id, group_id, status, season_year, start_date, created_at")
       .in("group_id", myGroupIds)
       .in("status", ["live", "published", "completed", "archived"])
       .order("season_year", { ascending: false });
+
+    // Derive effective year: season_year → start_date year → created_at year
+    const effectiveYear = (gs: any): number => {
+      if (gs.season_year) return gs.season_year;
+      if (gs.start_date) return new Date(gs.start_date).getFullYear();
+      return new Date(gs.created_at).getFullYear();
+    };
 
     const gsPriority: Record<string, number> = { live: 0, published: 1, completed: 2, archived: 3 };
     const sortedGs = [...(groupSeasonRows ?? []) as any[]].sort((a, b) => {
       const pa = gsPriority[a.status] ?? 99;
       const pb = gsPriority[b.status] ?? 99;
-      const ya = a.season_year ?? 0, yb = b.season_year ?? 0;
+      const ya = effectiveYear(a), yb = effectiveYear(b);
       if (ya !== yb) return yb - ya;
       return pa - pb;
     });

@@ -99,11 +99,17 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     // Priority: live > published > most recent completed (by end_date/season_year desc)
     const { data: allSeasons } = await supabaseAdmin
       .from("group_seasons")
-      .select("id, season_label, name, status, end_date, season_year")
+      .select("id, season_label, name, status, end_date, start_date, season_year, created_at")
       .eq("group_id", groupId)
       .in("status", ["live", "published", "completed", "archived"])
       .order("season_year", { ascending: false })
       .order("end_date", { ascending: false });
+
+    const effectiveYear = (gs: any): number => {
+      if (gs.season_year) return gs.season_year;
+      if (gs.start_date) return new Date(gs.start_date).getFullYear();
+      return new Date(gs.created_at).getFullYear();
+    };
 
     let currentSeason: CurrentSeasonMeta | null = null;
     if (allSeasons && allSeasons.length > 0) {
@@ -111,7 +117,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       const sorted = [...allSeasons as any[]].sort((a, b) => {
         const pa = priorityOrder[a.status] ?? 99;
         const pb = priorityOrder[b.status] ?? 99;
-        const ya = a.season_year ?? 0, yb = b.season_year ?? 0;
+        const ya = effectiveYear(a), yb = effectiveYear(b);
         if (ya !== yb) return yb - ya;
         return pa - pb;
       });
