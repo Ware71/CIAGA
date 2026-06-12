@@ -5,7 +5,7 @@ import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 export const runtime = "nodejs";
 
 // GET /api/majors/groups/[id]/winnings
-// Owner/admin only. Returns per-player prize pot P&L with season breakdowns.
+// Any active group member can view the prize pot P&L summary.
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { profileId } = await getAuthedProfileOrThrow(req);
@@ -19,8 +19,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       .eq("status", "active")
       .maybeSingle();
 
-    if (!membership || !["owner", "admin"].includes((membership as any).role)) {
-      return NextResponse.json({ error: "Only group owner or admin can view winnings." }, { status: 403 });
+    if (!membership) {
+      return NextResponse.json({ error: "Not a member of this group." }, { status: 403 });
     }
 
     // ── Fetch all prize pots for this group ────────────────────────────────

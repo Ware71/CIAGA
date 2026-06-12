@@ -597,19 +597,19 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       const headers = { Authorization: `Bearer ${session.accessToken}` };
       const isAdmin = myRole === "owner" || myRole === "admin";
 
+      // Winnings summary is visible to all members
+      const winRes = await fetch(`/api/majors/groups/${groupId}/winnings`, { headers });
+      if (!cancelled && winRes.ok) {
+        const j = await winRes.json();
+        setWinningSummaries(j.members ?? []);
+        setWinningsLoaded(true);
+      }
+
       if (isAdmin) {
-        const [balRes, winRes] = await Promise.all([
-          fetch(`/api/majors/groups/${groupId}/balances`, { headers }),
-          fetch(`/api/majors/groups/${groupId}/winnings`, { headers }),
-        ]);
+        const balRes = await fetch(`/api/majors/groups/${groupId}/balances`, { headers });
         if (!cancelled && balRes.ok) {
           const j = await balRes.json();
           setBalanceMembers(j.members ?? []);
-        }
-        if (!cancelled && winRes.ok) {
-          const j = await winRes.json();
-          setWinningSummaries(j.members ?? []);
-          setWinningsLoaded(true);
         }
       } else {
         const res = await fetch(`/api/majors/groups/${groupId}/balance`, { headers });
@@ -1188,6 +1188,8 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         wins: number;
         total_gross: number | null;
         total_net: number | null;
+        total_gross_to_par: number | null;
+        total_net_to_par: number | null;
         avg_gross_to_par: number | null;
         avg_net_to_par: number | null;
       };
@@ -1203,6 +1205,8 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             wins: s.wins,
             total_gross: s.total_gross,
             total_net: s.total_net,
+            total_gross_to_par: (s as any).total_gross_to_par ?? null,
+            total_net_to_par: (s as any).total_net_to_par ?? null,
             avg_gross_to_par: s.avg_gross_to_par,
             avg_net_to_par: s.avg_net_to_par,
           }))
@@ -1218,6 +1222,8 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             wins: s.wins,
             total_gross: s.total_gross,
             total_net: s.total_net,
+            total_gross_to_par: (s as any).total_gross_to_par ?? null,
+            total_net_to_par: (s as any).total_net_to_par ?? null,
             avg_gross_to_par: s.avg_gross_to_par,
             avg_net_to_par: s.avg_net_to_par,
           }));
@@ -1297,11 +1303,11 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
       // ── Strokes sub-tab ──────────────────────────────────────────────────
       const renderStrokes = () => {
-        const primaryField = sortField === "net" ? "total_net" : "total_gross";
+        const primaryField = sortField === "net" ? "total_net_to_par" : "total_gross_to_par";
         const dir = sortDir === "asc" ? 1 : -1;
         const sorted = [...nRows]
-          .filter((r) => r.total_net != null || r.total_gross != null)
-          .sort((a, b) => dir * ((a[primaryField] as number ?? 9999) - (b[primaryField] as number ?? 9999)));
+          .filter((r) => r.total_net_to_par != null || r.total_gross_to_par != null)
+          .sort((a, b) => dir * (((a as any)[primaryField] as number ?? 9999) - ((b as any)[primaryField] as number ?? 9999)));
         if (sorted.length === 0) {
           return <div className="text-sm text-emerald-100/60 text-center py-8">No stroke data for this period.</div>;
         }
@@ -1322,8 +1328,8 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                 {avatarEl(s.profile)}
                 <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
                 <div className="flex gap-4 shrink-0">
-                  <span className="text-xs font-bold text-emerald-100/80 w-12 text-right">{s.total_gross ?? "—"}</span>
-                  <span className="text-xs font-bold text-[#f5e6b0]/80 w-12 text-right">{s.total_net ?? "—"}</span>
+                  <span className={`text-xs font-bold w-12 text-right ${(s as any).total_gross_to_par != null && (s as any).total_gross_to_par < 0 ? "text-emerald-400" : (s as any).total_gross_to_par != null && (s as any).total_gross_to_par > 0 ? "text-red-400" : "text-emerald-100/80"}`}>{formatToPar((s as any).total_gross_to_par ?? null)}</span>
+                  <span className={`text-xs font-bold w-12 text-right ${(s as any).total_net_to_par != null && (s as any).total_net_to_par < 0 ? "text-emerald-400" : (s as any).total_net_to_par != null && (s as any).total_net_to_par > 0 ? "text-red-400" : "text-[#f5e6b0]/80"}`}>{formatToPar((s as any).total_net_to_par ?? null)}</span>
                 </div>
               </button>
             ))}
@@ -1413,6 +1419,29 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
               {standingsMetric === "strokes" && renderStrokes()}
               {standingsMetric === "avg" && renderAvgPar()}
             </>
+          )}
+
+          {/* Earnings leaderboard — visible to all members */}
+          {winningsLoaded && winningSummaries.some((w: any) => w.all_time_won > 0) && (
+            <div className="space-y-2 mt-2">
+              <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/55">Earnings</div>
+              {[...winningSummaries]
+                .filter((w: any) => w.all_time_won > 0)
+                .sort((a: any, b: any) => b.all_time_won - a.all_time_won)
+                .map((w: any) => (
+                  <div key={w.profile_id} className="flex items-center gap-3 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/50 px-3 py-2">
+                    {w.profile?.avatar_url ? (
+                      <img src={w.profile.avatar_url} alt="" className="h-6 w-6 rounded-full object-cover shrink-0" />
+                    ) : (
+                      <div className="h-6 w-6 rounded-full bg-emerald-800 flex items-center justify-center text-[9px] font-bold text-emerald-200 shrink-0">
+                        {(w.profile?.name ?? "?").slice(0, 2).toUpperCase()}
+                      </div>
+                    )}
+                    <span className="flex-1 text-sm text-emerald-100 truncate">{w.profile?.name ?? "Unknown"}</span>
+                    <span className="text-sm font-bold text-[#f5e6b0]">£{w.all_time_won.toFixed(2)}</span>
+                  </div>
+                ))}
+            </div>
           )}
         </div>
       );
@@ -1835,11 +1864,11 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         }
 
         if (seasonMetric === "strokes") {
-          const seaStrokesField = sortField === "net" ? "total_net" : "total_gross";
+          const seaStrokesField = sortField === "net" ? "total_net_to_par" : "total_gross_to_par";
           const seaDir = sortDir === "asc" ? 1 : -1;
           const sorted = [...seasonStandings]
-            .filter((s) => s.total_net != null || s.total_gross != null)
-            .sort((a, b) => seaDir * ((a[seaStrokesField] as number ?? 9999) - (b[seaStrokesField] as number ?? 9999)));
+            .filter((s) => (s as any).total_net_to_par != null || (s as any).total_gross_to_par != null)
+            .sort((a, b) => seaDir * (((a as any)[seaStrokesField] as number ?? 9999) - ((b as any)[seaStrokesField] as number ?? 9999)));
           if (sorted.length === 0) return <div className="text-sm text-emerald-100/60 text-center py-8">No stroke data for this season.</div>;
           return (
             <div className="space-y-2">
@@ -1854,8 +1883,8 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                   {avatarEl(s.profile)}
                   <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
                   <div className="flex gap-4 shrink-0">
-                    <span className="text-xs font-bold text-emerald-100/80 w-12 text-right">{s.total_gross ?? "—"}</span>
-                    <span className="text-xs font-bold text-[#f5e6b0]/80 w-12 text-right">{s.total_net ?? "—"}</span>
+                    <span className={`text-xs font-bold w-12 text-right ${(s as any).total_gross_to_par != null && (s as any).total_gross_to_par < 0 ? "text-emerald-400" : (s as any).total_gross_to_par != null && (s as any).total_gross_to_par > 0 ? "text-red-400" : "text-emerald-100/80"}`}>{fmtTopar((s as any).total_gross_to_par ?? null)}</span>
+                    <span className={`text-xs font-bold w-12 text-right ${(s as any).total_net_to_par != null && (s as any).total_net_to_par < 0 ? "text-emerald-400" : (s as any).total_net_to_par != null && (s as any).total_net_to_par > 0 ? "text-red-400" : "text-[#f5e6b0]/80"}`}>{fmtTopar((s as any).total_net_to_par ?? null)}</span>
                   </div>
                 </button>
               ))}

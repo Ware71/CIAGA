@@ -22,17 +22,51 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     await getAuthedProfileOrThrow(req);
     const { id } = await params;
 
-    const { data, error } = await supabaseAdmin
-      .from("event_winnings")
-      .select(`
-        id, event_id, profile_id, position, amount, note, recorded_by, created_at,
-        profile:profiles!profile_id(id, name, avatar_url)
-      `)
-      .eq("event_id", id)
-      .order("position", { ascending: true, nullsFirst: false });
+    const [{ data: manualWinnings, error }, { data: eventPots }] = await Promise.all([
+      supabaseAdmin
+        .from("event_winnings")
+        .select(`
+          id, event_id, profile_id, position, amount, note, recorded_by, created_at,
+          profile:profiles!profile_id(id, name, avatar_url)
+        `)
+        .eq("event_id", id)
+        .order("position", { ascending: true, nullsFirst: false }),
+      supabaseAdmin
+        .from("prize_pots")
+        .select("id, name")
+        .eq("event_id", id),
+    ]);
 
     if (error) throw error;
-    return NextResponse.json({ winnings: data ?? [] }, { headers: { "Cache-Control": "no-store" } });
+
+    // Fetch pot payouts for any prize pots scoped to this event
+    const potIds = (eventPots ?? []).map((p: any) => p.id as string);
+    const potNameMap = new Map((eventPots ?? []).map((p: any) => [p.id as string, p.name as string]));
+    let potWinnings: any[] = [];
+    if (potIds.length > 0) {
+      const { data: potPayouts } = await supabaseAdmin
+        .from("prize_pot_payouts")
+        .select(`
+          id, prize_pot_id, profile_id, position, amount, recorded_at,
+          profile:profiles!profile_id(id, name, avatar_url)
+        `)
+        .in("prize_pot_id", potIds)
+        .order("position", { ascending: true, nullsFirst: false });
+      potWinnings = (potPayouts ?? []).map((p: any) => ({
+        ...p,
+        event_id: id,
+        note: potNameMap.get(p.prize_pot_id) ?? null,
+        recorded_by: null,
+        created_at: p.recorded_at,
+        source: "pot",
+      }));
+    }
+
+    const winnings = [...(manualWinnings ?? []), ...potWinnings].sort(
+      (a, b) => (a.position ?? 9999) - (b.position ?? 9999)
+    );
+
+    return NextResponse.json({ winnings }, { headers: { "Cache-Control": "no-store" } });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 });
   }

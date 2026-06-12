@@ -24,9 +24,13 @@ export type LiveGroupStandingEntry = {
   total_gross: number | null;
   /** Total net strokes across completed competitions */
   total_net: number | null;
-  /** Average net score relative to par per event (1 decimal) */
+  /** Total gross score relative to par across completed competitions */
+  total_gross_to_par: number | null;
+  /** Total net score relative to par across completed competitions */
+  total_net_to_par: number | null;
+  /** Average net score relative to par per round (1 decimal) */
   avg_net_to_par: number | null;
-  /** Average gross score relative to par per event (1 decimal) */
+  /** Average gross score relative to par per round (1 decimal) */
   avg_gross_to_par: number | null;
 };
 
@@ -107,11 +111,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       const sorted = [...allSeasons as any[]].sort((a, b) => {
         const pa = priorityOrder[a.status] ?? 99;
         const pb = priorityOrder[b.status] ?? 99;
-        if (pa !== pb) return pa - pb;
-        // Same priority: prefer later season
-        const ya = a.season_year ?? 0;
-        const yb = b.season_year ?? 0;
-        return yb - ya;
+        const ya = a.season_year ?? 0, yb = b.season_year ?? 0;
+        if (ya !== yb) return yb - ya;
+        return pa - pb;
       });
       const best = sorted[0];
       currentSeason = { id: best.id, season_label: best.season_label ?? best.name ?? String(best.season_year ?? ""), status: best.status };
@@ -157,6 +159,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       gross_to_par_sum: number;
       net_to_par_sum: number;
       stroke_events: number;
+      total_rounds: number;
     };
 
     const confirmedMap = new Map<string, ConfirmedAgg>();
@@ -164,7 +167,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     if (completedCompIds.length > 0) {
       const { data: confirmedEntries, error: ceErr } = await supabaseAdmin
         .from("event_leaderboard_entries")
-        .select("profile_id, points_earned, position, playoff_final_position, event_id, gross_score, net_score, to_par, course_par")
+        .select("profile_id, points_earned, position, playoff_final_position, event_id, gross_score, net_score, to_par, course_par, rounds_submitted")
         .in("event_id", completedCompIds)
         .not("net_score", "is", null);
 
@@ -181,6 +184,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
           gross_to_par_sum: 0,
           net_to_par_sum: 0,
           stroke_events: 0,
+          total_rounds: 0,
         };
         existing.confirmed_points += entry.points_earned ?? 0;
         existing.events.add(entry.event_id);
@@ -191,6 +195,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
           existing.total_net += entry.net_score;
           existing.net_to_par_sum += entry.to_par ?? 0;
           existing.stroke_events += 1;
+          existing.total_rounds += (entry as any).rounds_submitted ?? 1;
         }
         if (entry.gross_score != null) {
           existing.total_gross += entry.gross_score;
@@ -398,12 +403,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       const prof = profileMap.get(profileId);
 
       const avg_net_to_par =
-        conf && conf.stroke_events > 0
-          ? Math.round((conf.net_to_par_sum / conf.stroke_events) * 10) / 10
+        conf && conf.total_rounds > 0
+          ? Math.round((conf.net_to_par_sum / conf.total_rounds) * 10) / 10
           : null;
       const avg_gross_to_par =
-        conf && conf.stroke_events > 0
-          ? Math.round((conf.gross_to_par_sum / conf.stroke_events) * 10) / 10
+        conf && conf.total_rounds > 0
+          ? Math.round((conf.gross_to_par_sum / conf.total_rounds) * 10) / 10
           : null;
 
       return {
@@ -422,6 +427,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         live_position: liveRanks.get(profileId) ?? null,
         total_gross: conf && conf.total_gross > 0 ? conf.total_gross : null,
         total_net: conf && conf.total_net > 0 ? conf.total_net : null,
+        total_gross_to_par: conf && conf.stroke_events > 0 ? conf.gross_to_par_sum : null,
+        total_net_to_par: conf && conf.stroke_events > 0 ? conf.net_to_par_sum : null,
         avg_net_to_par,
         avg_gross_to_par,
       };
