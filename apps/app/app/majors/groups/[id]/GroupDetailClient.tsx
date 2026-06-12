@@ -160,8 +160,8 @@ function MemberDetailDrawer({
     }
   };
 
-  const memberSince = member.joined_at
-    ? new Date(member.joined_at).toLocaleDateString([], { month: "short", year: "numeric" })
+  const memberSince = member.first_participated_at
+    ? new Date(member.first_participated_at).toLocaleDateString([], { month: "short", year: "numeric" })
     : null;
 
   const displayedHI =
@@ -337,8 +337,8 @@ function MemberRow({
       ? "text-emerald-300 border-emerald-700/50 bg-emerald-900/30"
       : "text-emerald-200/50 border-emerald-900/50 bg-transparent";
 
-  const memberSince = member.joined_at
-    ? new Date(member.joined_at).toLocaleDateString([], { month: "short", year: "numeric" })
+  const memberSince = member.first_participated_at
+    ? new Date(member.first_participated_at).toLocaleDateString([], { month: "short", year: "numeric" })
     : null;
 
   const hiDisplay =
