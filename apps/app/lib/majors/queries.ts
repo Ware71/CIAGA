@@ -96,15 +96,16 @@ export async function getGroupMembers(groupId: string): Promise<MajorGroupMember
     }
   }
 
-  const participatedSet = new Set<string>();
+  const participantMap = new Map<string, string | null>();
   for (const row of (participantRes.data ?? []) as any[]) {
-    if (row.profile_id) participatedSet.add(row.profile_id);
+    if (row.profile_id) participantMap.set(row.profile_id, row.first_participated_at ?? null);
   }
 
   return members.map((m) => ({
     ...m,
     handicap_index: handicapMap.get(m.profile_id) ?? null,
-    has_participated: participatedSet.has(m.profile_id),
+    has_participated: participantMap.has(m.profile_id),
+    first_participated_at: participantMap.get(m.profile_id) ?? null,
   }));
 }
 

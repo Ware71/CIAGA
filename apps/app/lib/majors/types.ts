@@ -324,6 +324,7 @@ export type MajorGroupMembership = {
   tournament_index: number | null;
   handicap_index: number | null;
   has_participated: boolean;
+  first_participated_at: string | null;
 };
 
 export type MajorGroupMembershipWithProfile = MajorGroupMembership & {
