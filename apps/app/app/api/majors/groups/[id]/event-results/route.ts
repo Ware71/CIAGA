@@ -94,12 +94,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       points_earned: number | null;
       to_par: number | null;
       course_par: number | null;
+      rounds_submitted: number | null;
     }[] = [];
 
     if (completedIds.length > 0) {
       const { data: entriesData, error: entriesErr } = await supabaseAdmin
         .from("event_leaderboard_entries")
-        .select("event_id, profile_id, position, playoff_final_position, net_score, gross_score, points_earned, to_par, course_par")
+        .select("event_id, profile_id, position, playoff_final_position, net_score, gross_score, points_earned, to_par, course_par, rounds_submitted")
         .in("event_id", completedIds)
         .eq("is_live", false)
         .not("position", "is", null);
@@ -161,8 +162,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     type CareerAgg = {
       points: number; events: number;
-      gross_to_par_sum: number; gross_events: number;
-      net_to_par_sum: number; net_events: number;
+      gross_to_par_sum: number; gross_events: number; gross_rounds: number;
+      net_to_par_sum: number; net_events: number; net_rounds: number;
     };
     const careerMap = new Map<string, CareerAgg>();
 
@@ -183,18 +184,21 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
       // Career stat aggregation
       if (!careerMap.has(entry.profile_id)) {
-        careerMap.set(entry.profile_id, { points: 0, events: 0, gross_to_par_sum: 0, gross_events: 0, net_to_par_sum: 0, net_events: 0 });
+        careerMap.set(entry.profile_id, { points: 0, events: 0, gross_to_par_sum: 0, gross_events: 0, gross_rounds: 0, net_to_par_sum: 0, net_events: 0, net_rounds: 0 });
       }
       const career = careerMap.get(entry.profile_id)!;
       career.events += 1;
       if (entry.points_earned != null) career.points += entry.points_earned;
+      const rounds = entry.rounds_submitted ?? 1;
       if (entry.gross_score != null && entry.course_par != null) {
         career.gross_to_par_sum += entry.gross_score - entry.course_par;
         career.gross_events += 1;
+        career.gross_rounds += rounds;
       }
       if (entry.to_par != null) {
         career.net_to_par_sum += entry.to_par;
         career.net_events += 1;
+        career.net_rounds += rounds;
       }
     }
 
@@ -239,11 +243,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       });
 
       const career = careerMap.get(profileId);
-      const career_avg_gross_to_par = career && career.gross_events > 0
-        ? Math.round((career.gross_to_par_sum / career.gross_events) * 10) / 10
+      const career_avg_gross_to_par = career && career.gross_rounds > 0
+        ? Math.round((career.gross_to_par_sum / career.gross_rounds) * 10) / 10
         : null;
-      const career_avg_net_to_par = career && career.net_events > 0
-        ? Math.round((career.net_to_par_sum / career.net_events) * 10) / 10
+      const career_avg_net_to_par = career && career.net_rounds > 0
+        ? Math.round((career.net_to_par_sum / career.net_rounds) * 10) / 10
         : null;
 
       return {

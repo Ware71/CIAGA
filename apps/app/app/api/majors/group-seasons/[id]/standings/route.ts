@@ -17,6 +17,8 @@ export type SeasonStandingEntry = {
   profile: { id: string; name: string | null; avatar_url: string | null } | null;
   total_gross: number | null;
   total_net: number | null;
+  total_gross_to_par: number | null;
+  total_net_to_par: number | null;
   avg_gross_to_par: number | null;
   avg_net_to_par: number | null;
   won_events: { event_id: string; event_name: string; event_date: string | null }[];
@@ -75,6 +77,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       gross_to_par_sum: number;
       net_to_par_sum: number;
       stroke_events: number;
+      total_rounds: number;
       won_events: { event_id: string; event_name: string; event_date: string | null }[];
     };
 
@@ -83,7 +86,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     if (eventIds.length > 0) {
       const { data: leaderEntries } = await supabaseAdmin
         .from("event_leaderboard_entries")
-        .select("profile_id, event_id, position, playoff_final_position, net_score, gross_score, to_par, course_par")
+        .select("profile_id, event_id, position, playoff_final_position, net_score, gross_score, to_par, course_par, rounds_submitted")
         .in("event_id", eventIds)
         .not("net_score", "is", null);
 
@@ -95,12 +98,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
           gross_to_par_sum: 0,
           net_to_par_sum: 0,
           stroke_events: 0,
+          total_rounds: 0,
           won_events: [],
         };
         if (e.net_score != null) {
           agg.total_net += e.net_score;
           agg.net_to_par_sum += e.to_par ?? 0;
           agg.stroke_events += 1;
+          agg.total_rounds += (e as any).rounds_submitted ?? 1;
         }
         if (e.gross_score != null) {
           agg.total_gross += e.gross_score;
@@ -127,13 +132,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         season_id: s.group_season_id,
         total_gross: agg && agg.stroke_events > 0 ? agg.total_gross : null,
         total_net: agg && agg.stroke_events > 0 ? agg.total_net : null,
+        total_gross_to_par: agg && agg.stroke_events > 0 ? agg.gross_to_par_sum : null,
+        total_net_to_par: agg && agg.stroke_events > 0 ? agg.net_to_par_sum : null,
         avg_gross_to_par:
-          agg && agg.stroke_events > 0
-            ? Math.round((agg.gross_to_par_sum / agg.stroke_events) * 10) / 10
+          agg && agg.total_rounds > 0
+            ? Math.round((agg.gross_to_par_sum / agg.total_rounds) * 10) / 10
             : null,
         avg_net_to_par:
-          agg && agg.stroke_events > 0
-            ? Math.round((agg.net_to_par_sum / agg.stroke_events) * 10) / 10
+          agg && agg.total_rounds > 0
+            ? Math.round((agg.net_to_par_sum / agg.total_rounds) * 10) / 10
             : null,
         won_events: agg?.won_events ?? [],
       };

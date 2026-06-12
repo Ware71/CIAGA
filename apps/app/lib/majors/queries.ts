@@ -484,8 +484,9 @@ export async function getMajorHubSummary(profileId: string): Promise<MajorHubSum
     const sortedGs = [...(groupSeasonRows ?? []) as any[]].sort((a, b) => {
       const pa = gsPriority[a.status] ?? 99;
       const pb = gsPriority[b.status] ?? 99;
-      if (pa !== pb) return pa - pb;
-      return (b.season_year ?? 0) - (a.season_year ?? 0);
+      const ya = a.season_year ?? 0, yb = b.season_year ?? 0;
+      if (ya !== yb) return yb - ya;
+      return pa - pb;
     });
     for (const gs of sortedGs) {
       if (!currentSeasonByGroup.has(gs.group_id)) currentSeasonByGroup.set(gs.group_id, gs.id);
@@ -533,7 +534,7 @@ export async function getMajorHubSummary(profileId: string): Promise<MajorHubSum
     myGroupIds.length > 0
       ? supabaseAdmin
           .from("prize_pot_payouts")
-          .select("amount, prize_pot:prize_pots(group_id)")
+          .select("amount, prize_pot:prize_pots(group_id, group_season_id, event_id)")
           .eq("profile_id", profileId)
       : Promise.resolve({ data: [] }),
   ]);
@@ -564,7 +565,12 @@ export async function getMajorHubSummary(profileId: string): Promise<MajorHubSum
         if (eventIdToGroupId.get(r.event_id) !== g.id) return false;
         return groupSeasonId ? seasonEventIdSet.has(r.event_id) : true;
       });
-      const gPotRows = potPayoutRows.filter((r: any) => r.prize_pot?.group_id === g.id);
+      const gPotRows = potPayoutRows.filter((r: any) => {
+        const pot = r.prize_pot;
+        if (pot?.group_id !== g.id) return false;
+        if (!groupSeasonId) return true;
+        return pot.group_season_id === groupSeasonId || seasonEventIdSet.has(pot.event_id);
+      });
       return {
         group_id: g.id,
         group_name: g.name,
