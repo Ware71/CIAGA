@@ -8,8 +8,8 @@ import { supabase } from "@/lib/supabaseClient";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 import { Button } from "@/components/ui/button";
 import { BackButton } from "@/components/ui/BackButton";
+import { InfoHint } from "@/components/ui/InfoHint";
 import { RoundFormatSectionEnhanced } from "@/components/rounds/RoundFormatSectionEnhanced";
-import { ParticipantsList } from "@/components/rounds/ParticipantsList";
 import { CourseAndTeeSection } from "@/components/rounds/CourseAndTeeSection";
 import {
   courseNameFromJoin,
@@ -17,12 +17,11 @@ import {
   getProfile,
 } from "@/lib/rounds/setupHelpers";
 import type { Round, Participant, ProfileLite } from "@/lib/rounds/setupHelpers";
-import { formatHI } from "@/lib/rounds/handicapUtils";
 import { TeamBuilderSheet } from "@/components/rounds/TeamBuilderSheet";
 import type { TeamBuilderTeam, TeamBuilderParticipant } from "@/components/rounds/TeamBuilderSheet";
 import { isTeamFormat } from "@/components/rounds/FormatSelector";
-import { PlayerTeeRow } from "@/components/rounds/PlayerTeeRow";
-import type { TeeBoxOption } from "@/components/rounds/PlayerTeeRow";
+import { PlayerSetupRow } from "@/components/rounds/PlayerSetupRow";
+import type { TeeBoxOption } from "@/components/rounds/PlayerSetupRow";
 
 
 function Avatar({
@@ -333,9 +332,13 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
   const [openSwipeId, setOpenSwipeId] = useState<string | null>(null);
   const removingRef = useRef<Set<string>>(new Set());
 
-  // ✅ HI + CH (display only)
+  // ✅ HI + CH + PH (display only)
   const [hiByProfileId, setHiByProfileId] = useState<Record<string, number>>({});
   const [chByProfileId, setChByProfileId] = useState<Record<string, number>>({});
+  const [phByProfileId, setPhByProfileId] = useState<Record<string, number>>({});
+
+  // Add Players block is collapsed by default — the roster is the focus.
+  const [showAddPlayers, setShowAddPlayers] = useState(false);
 
   // Per-player tee assignments
   const [teeBoxes, setTeeBoxes] = useState<TeeBoxOption[]>([]);
@@ -529,6 +532,42 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
     }
   }
 
+  async function setParticipantHandicapIndex(participantId: string, value: number | null) {
+    const token = (await supabase.auth.getSession()).data.session?.access_token;
+    if (!token) throw new Error("Not authenticated");
+    const res = await fetch("/api/rounds/set-handicap-index", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        round_id: roundId,
+        participant_id: participantId,
+        assigned_handicap_index: value,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to update handicap");
+    }
+    // Recompute CH/PH preview server-side.
+    await fetchAll();
+  }
+
+  async function setParticipantTee(participantId: string, teeBoxId: string | null) {
+    const token = (await supabase.auth.getSession()).data.session?.access_token;
+    if (!token) throw new Error("Not authenticated");
+    const res = await fetch("/api/rounds/update-participant-tee", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ round_id: roundId, participant_id: participantId, tee_box_id: teeBoxId }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to update tee");
+    }
+    // Recompute CH/PH preview (tee affects both).
+    await fetchAll();
+  }
+
   async function fetchAll() {
     setErr(null);
     // Use a ref (not `round` state) to determine if this is the initial load.
@@ -602,6 +641,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
       setTeams((snap.teams ?? []) as TeamBuilderTeam[]);
       setHiByProfileId(snap.handicap_indexes ?? {});
       setChByProfileId(snap.course_handicaps ?? {});
+      setPhByProfileId(snap.playing_handicaps ?? {});
       fetchParticipantTees();
     } catch (e: any) {
       setErr(e?.message || "Failed to load setup");
@@ -682,6 +722,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
       setTeams((snap.teams ?? []) as TeamBuilderTeam[]);
       setHiByProfileId(snap.handicap_indexes ?? {});
       setChByProfileId(snap.course_handicaps ?? {});
+      setPhByProfileId(snap.playing_handicaps ?? {});
       if (viewerProfileId) setMeId(viewerProfileId);
       fetchParticipantTees();
       return;
@@ -724,6 +765,34 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
     if (participantProfileIds.has(profileId)) return;
 
     setErr(null);
+
+    // Optimistic: show the player immediately; HI/CH/PH fill in once reconciled.
+    const lite = [...following, ...moreResults].find((p) => p.id === profileId);
+    const tempId = `temp-${profileId}`;
+    setParticipants((prev) =>
+      prev.some((p) => p.profile_id === profileId)
+        ? prev
+        : [
+            ...prev,
+            {
+              id: tempId,
+              profile_id: profileId,
+              is_guest: false,
+              display_name: null,
+              role: "player",
+              team_id: null,
+              profiles: lite
+                ? { id: lite.id, name: lite.name, email: lite.email, avatar_url: lite.avatar_url }
+                : null,
+              handicap_index: null,
+              assigned_handicap_index: null,
+              assigned_playing_handicap: null,
+              playing_handicap_used: null,
+              course_handicap_used: null,
+            } as Participant,
+          ],
+    );
+
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData.session?.access_token;
@@ -749,6 +818,8 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
 
       await fetchAll();
     } catch (e: any) {
+      // Roll back the optimistic row.
+      setParticipants((prev) => prev.filter((p) => p.id !== tempId));
       setErr(e?.message || "Failed to add player");
     }
   }
@@ -760,6 +831,27 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
 
     setAddingGuest(true);
     setErr(null);
+
+    // Optimistic guest row.
+    const tempId = `temp-guest-${Date.now()}`;
+    setParticipants((prev) => [
+      ...prev,
+      {
+        id: tempId,
+        profile_id: null,
+        is_guest: true,
+        display_name: name,
+        role: "player",
+        team_id: null,
+        profiles: null,
+        handicap_index: null,
+        assigned_handicap_index: null,
+        assigned_playing_handicap: null,
+        playing_handicap_used: null,
+        course_handicap_used: null,
+      } as Participant,
+    ]);
+
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData.session?.access_token;
@@ -787,6 +879,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
       setShowGuest(false);
       await fetchAll();
     } catch (e: any) {
+      setParticipants((prev) => prev.filter((p) => p.id !== tempId));
       setErr(e?.message || "Failed to add guest");
     } finally {
       setAddingGuest(false);
@@ -1057,22 +1150,29 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
                 <div className="space-y-2">
                   {participants.map((p) => {
                     const d = displayParticipant(p);
-                    const hi = p.profile_id ? hiByProfileId[p.profile_id] : null;
-                    const ch = p.profile_id ? chByProfileId[p.profile_id] : null;
+                    const hi = p.profile_id ? hiByProfileId[p.profile_id] ?? null : null;
+                    const ch = p.profile_id ? chByProfileId[p.profile_id] ?? null : null;
+                    const ph = p.profile_id ? phByProfileId[p.profile_id] ?? null : null;
                     return (
-                      <div key={p.id} className="p-3 flex items-center gap-3 rounded-2xl border border-emerald-900/70 bg-[#042713]">
-                        <Avatar name={d.name} url={d.avatar_url} size={36} />
-                        <div className="min-w-0 flex-1">
-                          <div className="text-sm font-semibold text-emerald-50 truncate">{d.name}</div>
-                          <div className="text-[11px] text-emerald-100/60">
-                            {p.is_guest ? "Guest" : p.profile_id === meId ? "You" : "Player"}
-                            {!p.is_guest ? (
-                              <span className="ml-2 text-[10px] text-emerald-100/70 tabular-nums">
-                                HI {typeof hi === "number" ? formatHI(hi) : "—"} · CH {typeof ch === "number" ? ch : "—"}
-                              </span>
-                            ) : null}
-                          </div>
-                        </div>
+                      <div key={p.id} className="rounded-2xl border border-emerald-900/70 bg-[#042713]">
+                        <PlayerSetupRow
+                          avatar={<Avatar name={d.name} url={d.avatar_url} size={36} />}
+                          name={d.name}
+                          subtitle={`${p.is_guest ? "Guest" : p.profile_id === meId ? "You" : "Player"} · ${p.role}`}
+                          isGuest={p.is_guest}
+                          handicapIndex={hi}
+                          courseHandicap={ch}
+                          playingHandicap={ph}
+                          assignedHandicapIndex={p.assigned_handicap_index ?? null}
+                          currentTeeBoxId={pendingTeeByParticipantId[p.id] ?? null}
+                          defaultTeeBoxId={round.pending_tee_box_id}
+                          teeBoxes={teeBoxes}
+                          canEditHandicap={false}
+                          canEditTee={false}
+                          disabled
+                          onSetHandicapIndex={async () => {}}
+                          onSetTee={async () => {}}
+                        />
                       </div>
                     );
                   })}
@@ -1249,9 +1349,25 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
           <SectionCard title={`Players (${participants.length}/4)`}>
           <div className="space-y-3">
 
-            {/* Roster */}
+            {/* Unified roster: player · HI · CH · PH · Tee */}
             <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
-              <div className="text-[11px] font-medium text-emerald-100/80 uppercase tracking-wider mb-2">Roster</div>
+              <div className="flex items-center gap-1.5 mb-2">
+                <div className="text-[11px] font-medium text-emerald-100/80 uppercase tracking-wider">Roster</div>
+                <InfoHint label="About these numbers" align="left">
+                  <div className="space-y-1.5">
+                    <div>
+                      <span className="font-semibold">HI</span> Handicap Index ·{" "}
+                      <span className="font-semibold">CH</span> Course Handicap ·{" "}
+                      <span className="font-semibold">PH</span> Playing Handicap.
+                    </div>
+                    <div>PH is a live preview — it's finalised when the round starts.</div>
+                    <div>
+                      Tap <span className="font-semibold">Edit</span> to override a player's Handicap
+                      Index or Tee. Adjusted values show in <span className="italic">italics</span>.
+                    </div>
+                  </div>
+                </InfoHint>
+              </div>
 
               <div className="space-y-2">
                 {participants.map((p) => {
@@ -1264,8 +1380,10 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
                     p.role !== "owner" &&
                     !(p.profile_id && p.profile_id === meId);
 
-                  const hi = p.profile_id ? hiByProfileId[p.profile_id] : null;
-                  const ch = p.profile_id ? chByProfileId[p.profile_id] : null;
+                  const hi = p.profile_id ? hiByProfileId[p.profile_id] ?? null : null;
+                  const ch = p.profile_id ? chByProfileId[p.profile_id] ?? null : null;
+                  const ph = p.profile_id ? phByProfileId[p.profile_id] ?? null : null;
+                  const editDisabled = round.status !== "draft" && round.status !== "scheduled";
 
                   return (
                     <SwipeToRemoveRow
@@ -1275,23 +1393,25 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
                       setOpen={(open) => setOpenSwipeId(open ? p.id : null)}
                       onRemove={() => removeParticipant(p)}
                     >
-                      <div className="p-3 flex items-center gap-3">
-                        <Avatar name={d.name} url={d.avatar_url} size={36} />
-                        <div className="min-w-0 flex-1">
-                          <div className="text-sm font-semibold text-emerald-50 truncate">{d.name}</div>
-                          <div className="text-[11px] text-emerald-100/60">
-                            {p.is_guest ? "Guest" : p.profile_id === meId ? "You" : "Player"} · {p.role}
-                            {!p.is_guest ? (
-                              <span className="ml-2 text-[10px] text-emerald-100/70 tabular-nums">
-                                HI {typeof hi === "number" ? formatHI(hi) : "—"} · CH {typeof ch === "number" ? ch : "—"}
-                              </span>
-                            ) : null}
-                            {removable ? (
-                              <span className="ml-2 text-[10px] text-emerald-100/50">Swipe to remove</span>
-                            ) : null}
-                          </div>
-                        </div>
-                      </div>
+                      <PlayerSetupRow
+                        avatar={<Avatar name={d.name} url={d.avatar_url} size={36} />}
+                        name={d.name}
+                        subtitle={`${p.is_guest ? "Guest" : p.profile_id === meId ? "You" : "Player"} · ${p.role}`}
+                        isGuest={p.is_guest}
+                        handicapIndex={hi}
+                        courseHandicap={ch}
+                        playingHandicap={ph}
+                        assignedHandicapIndex={p.assigned_handicap_index ?? null}
+                        currentTeeBoxId={pendingTeeByParticipantId[p.id] ?? null}
+                        defaultTeeBoxId={round.pending_tee_box_id}
+                        teeBoxes={teeBoxes}
+                        canEditHandicap={isOwner || p.profile_id === meId}
+                        canEditTee={isOwner && teeBoxes.length > 0}
+                        disabled={editDisabled}
+                        removableHint={removable}
+                        onSetHandicapIndex={(value) => setParticipantHandicapIndex(p.id, value)}
+                        onSetTee={(teeBoxId) => setParticipantTee(p.id, teeBoxId)}
+                      />
                     </SwipeToRemoveRow>
                   );
                 })}
@@ -1302,10 +1422,24 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
               </div>
             </div>
 
-            {/* Add Players */}
+            {/* Add Players (collapsible) */}
             <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="text-[11px] font-medium text-emerald-100/80 uppercase tracking-wider">Add Players</div>
+              <button
+                type="button"
+                onClick={() => setShowAddPlayers((v) => !v)}
+                className="w-full flex items-center justify-between"
+              >
+                <span className="text-[11px] font-medium text-emerald-100/80 uppercase tracking-wider">
+                  Add Players
+                </span>
+                <ChevronDown
+                  className={`h-4 w-4 text-emerald-100/60 transition-transform duration-200 ${showAddPlayers ? "rotate-180" : ""}`}
+                />
+              </button>
+
+              {showAddPlayers ? (
+              <>
+              <div className="flex items-center justify-end">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1435,52 +1569,9 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
                   </div>
                 </div>
               ) : null}
+              </>
+              ) : null}
             </div>
-
-            {/* Player Handicaps */}
-            {participants.length > 0 ? (
-              <ParticipantsList
-                roundId={roundId}
-                participants={participants}
-                myProfileId={meId}
-                isOwner={isOwner}
-                isEditable={round.status === "draft" || round.status === "scheduled"}
-                onUpdate={fetchAll}
-                getDisplayName={displayParticipant as any}
-              />
-            ) : null}
-
-            {/* Player Tees */}
-            {isOwner && teeBoxes.length > 0 && participants.filter((p) => !p.is_guest).length > 0 ? (
-              <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
-                <div className="mb-3">
-                  <div className="text-sm font-semibold text-emerald-50">Player Tees</div>
-                  <div className="text-[11px] text-emerald-100/70">
-                    {round.status === "draft" || round.status === "scheduled"
-                      ? "Override tee per player — affects WHS handicap calculation"
-                      : "Tee assignments"}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  {participants
-                    .filter((p) => !p.is_guest)
-                    .map((p) => (
-                      <PlayerTeeRow
-                        key={p.id}
-                        participantId={p.id}
-                        roundId={roundId}
-                        participantName={displayParticipant(p).name}
-                        currentTeeBoxId={pendingTeeByParticipantId[p.id] ?? null}
-                        defaultTeeBoxId={round.pending_tee_box_id}
-                        teeBoxes={teeBoxes}
-                        canEdit={isOwner}
-                        disabled={round.status !== "draft" && round.status !== "scheduled"}
-                        onUpdated={fetchParticipantTees}
-                      />
-                    ))}
-                </div>
-              </div>
-            ) : null}
 
             {!isOwner ? (
               <div className="text-center text-[10px] text-emerald-100/60">
