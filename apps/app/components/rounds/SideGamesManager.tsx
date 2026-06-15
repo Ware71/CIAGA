@@ -4,6 +4,7 @@
 import { useState, useEffect } from "react";
 import type { RoundFormatType } from "./FormatSelector";
 import { isTeamFormat } from "./FormatSelector";
+import { WolfConfig, WOLF_CONFIG_DEFAULTS } from "./WolfConfig";
 
 type GameDef = {
   id: "skins" | "wolf" | "nassau";
@@ -32,9 +33,9 @@ const AVAILABLE_GAMES: GameDef[] = [
   {
     id: "wolf",
     label: "Wolf",
-    description: "Rotating team game with betting",
-    defaultConfig: { points_per_hole: 1, lone_wolf_multiplier: 2 },
-    compat: { individual: true, team: false, excludeFormats: ["matchplay"] },
+    description: "Rotating wolf picks a partner or goes it alone each hole",
+    defaultConfig: { ...WOLF_CONFIG_DEFAULTS },
+    compat: { individual: true, team: false, excludeFormats: ["matchplay", "wolf"] },
   },
   {
     id: "nassau",
@@ -224,40 +225,11 @@ export function SideGamesManager({
                 )}
 
                 {game.id === "wolf" && (
-                  <>
-                    <div className="flex items-center gap-2">
-                      <label className="text-xs text-emerald-100">Points per hole:</label>
-                      <input
-                        type="number"
-                        min={1}
-                        step={1}
-                        value={gameData?.config?.points_per_hole ?? 1}
-                        onChange={(e) =>
-                          updateGameConfig(game.id, {
-                            points_per_hole: parseInt(e.target.value),
-                          })
-                        }
-                        disabled={disabled}
-                        className="w-20 px-2 py-1 rounded border border-emerald-900/70 bg-[#0b3b21]/70 text-xs text-emerald-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                      />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <label className="text-xs text-emerald-100">Lone wolf multiplier:</label>
-                      <input
-                        type="number"
-                        min={1}
-                        step={0.5}
-                        value={gameData?.config?.lone_wolf_multiplier ?? 2}
-                        onChange={(e) =>
-                          updateGameConfig(game.id, {
-                            lone_wolf_multiplier: parseFloat(e.target.value),
-                          })
-                        }
-                        disabled={disabled}
-                        className="w-20 px-2 py-1 rounded border border-emerald-900/70 bg-[#0b3b21]/70 text-xs text-emerald-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                      />
-                    </div>
-                  </>
+                  <WolfConfig
+                    value={gameData?.config}
+                    onChange={(config) => updateGameConfig(game.id, config)}
+                    disabled={disabled}
+                  />
                 )}
 
                 {game.id === "nassau" && (

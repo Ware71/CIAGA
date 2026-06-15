@@ -47,6 +47,13 @@ export type HoleState = "completed" | "picked_up" | "not_started";
 export type HoleStateRow = { participant_id: string; hole_number: number; status: HoleState };
 export type SideGame = { name: string; enabled: boolean; config: Record<string, any> };
 
+export type WolfMode = "partner" | "lone" | "blind";
+export type WolfPick = {
+  wolf_participant_id: string | null;
+  partner_participant_id: string | null;
+  wolf_mode: WolfMode;
+};
+
 export function useRoundDetail(roundId: string, initialSnapshot?: any) {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -71,6 +78,9 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
 
   // B: hole states keyed by `${participant_id}:${hole_number}`
   const [holeStatesByKey, setHoleStatesByKey] = useState<Record<string, HoleState>>({});
+
+  // Wolf game: per-hole picks keyed by hole_number
+  const [wolfPicksByHole, setWolfPicksByHole] = useState<Record<number, WolfPick>>({});
 
   const toNumOrNull = (v: any) => {
     if (v == null) return null;
@@ -282,6 +292,67 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
     };
   }, [roundId]);
 
+  // Wolf picks: initial load + realtime. Not part of the snapshot RPC, so fetched directly.
+  useEffect(() => {
+    if (!roundId) return;
+    let cancelled = false;
+
+    const applyRow = (row: any) =>
+      setWolfPicksByHole((prev) => ({
+        ...prev,
+        [row.hole_number as number]: {
+          wolf_participant_id: row.wolf_participant_id ?? null,
+          partner_participant_id: row.partner_participant_id ?? null,
+          wolf_mode: (row.wolf_mode as WolfMode) ?? "partner",
+        },
+      }));
+
+    (async () => {
+      const { data } = await supabase
+        .from("round_wolf_picks")
+        .select("hole_number, wolf_participant_id, partner_participant_id, wolf_mode")
+        .eq("round_id", roundId);
+      if (cancelled || !data) return;
+      const map: Record<number, WolfPick> = {};
+      for (const row of data as any[]) {
+        map[row.hole_number] = {
+          wolf_participant_id: row.wolf_participant_id ?? null,
+          partner_participant_id: row.partner_participant_id ?? null,
+          wolf_mode: (row.wolf_mode as WolfMode) ?? "partner",
+        };
+      }
+      setWolfPicksByHole(map);
+    })();
+
+    const channel = supabase
+      .channel(`round-wolf-picks:${roundId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "round_wolf_picks", filter: `round_id=eq.${roundId}` },
+        (payload) => {
+          if (payload.eventType === "DELETE") {
+            const old: any = payload.old;
+            if (old?.hole_number == null) return;
+            setWolfPicksByHole((prev) => {
+              const next = { ...prev };
+              delete next[old.hole_number];
+              return next;
+            });
+            return;
+          }
+          const row: any = payload.new;
+          if (row?.hole_number == null) return;
+          applyRow(row);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
+  }, [roundId]);
+
   // realtime: meta changes (refetch all, debounced to prevent burst reloads)
   const metaDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const debouncedFetchAll = useCallback(() => {
@@ -347,6 +418,10 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
     // B
     holeStatesByKey,
     setHoleStatesByKey,
+
+    // Wolf
+    wolfPicksByHole,
+    setWolfPicksByHole,
 
     fetchAll,
     canScore,

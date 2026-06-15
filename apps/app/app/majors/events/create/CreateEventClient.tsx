@@ -14,9 +14,10 @@ import type {
   MajorGroup,
 } from "@/lib/majors/types";
 import type { PlayingHandicapMode } from "@/components/rounds/PlayingHandicapSettings";
-import { EVENT_TYPES, SCORING_MODELS, POINTS_MODELS, FORMAT_DEFAULT_SCORING, FORMAT_ALLOWS_SCORING_CHOICE, FEDEX_POINTS, FORMULA_DEFAULTS, computeFormulaPoints } from "@/lib/events/constants";
+import { EVENT_TYPES, EVENT_TYPE_LABELS, SCORING_MODELS, POINTS_MODELS, FORMAT_DEFAULT_SCORING, FORMAT_ALLOWS_SCORING_CHOICE, FEDEX_POINTS, FORMULA_DEFAULTS, computeFormulaPoints } from "@/lib/events/constants";
 import type { PointsConfig } from "@/lib/majors/types";
 import { HandicapRulesEditor } from "@/components/competitions/HandicapRulesEditor";
+import { getWhsDefaultPolicyForEvent } from "@/lib/rounds/whsDefaults";
 import { CoursePickerModal } from "@/components/rounds/CoursePickerModal";
 
 const AGGREGATE_SOURCES = [
@@ -1225,10 +1226,14 @@ export default function CreateEventClient() {
     });
 
   const handleTypeChange = (type: EventTypeV2) => {
+    const pol = getWhsDefaultPolicyForEvent(type);
     setForm((prev) => ({
       ...prev,
       event_type: type,
       scoring_model: FORMAT_DEFAULT_SCORING[type] ?? "net",
+      // Seed the WHS handicap default for this format; still editable below.
+      handicap_mode: pol.mode,
+      handicap_allowance_pct: String(pol.allowance_pct),
     }));
   };
 
@@ -1653,7 +1658,7 @@ export default function CreateEventClient() {
             <div>
               <div className="text-[10px] uppercase tracking-wider text-emerald-400/70 mb-0.5">Inherited from template</div>
               <div className="text-sm text-emerald-50">
-                {EVENT_TYPES.find((t) => t.value === form.event_type)?.label ?? form.event_type}
+                {EVENT_TYPE_LABELS[form.event_type] ?? form.event_type}
               </div>
             </div>
             <button
@@ -1970,7 +1975,7 @@ export default function CreateEventClient() {
       <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4 space-y-2">
         {[
           { label: "Name", value: form.name },
-          { label: "Format", value: EVENT_TYPES.find((t) => t.value === form.event_type)?.label ?? form.event_type },
+          { label: "Format", value: EVENT_TYPE_LABELS[form.event_type] ?? form.event_type },
           { label: "Scoring", value: form.scoring_model },
           form.scoring_model !== "gross" ? {
             label: "Handicap",

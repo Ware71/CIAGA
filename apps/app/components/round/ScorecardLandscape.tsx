@@ -59,6 +59,8 @@ export default function ScorecardLandscape(props: {
 
   getParticipantLabel: (p: Participant) => string;
   getParticipantAvatar: (p: Participant) => string | null;
+  /** Wolf role tag per `${participantId}:${holeNumber}` (W/WP/LW/BW). */
+  wolfRoleByKey?: Record<string, "W" | "WP" | "LW" | "BW">;
 }) {
   const {
     participants,
@@ -78,6 +80,7 @@ export default function ScorecardLandscape(props: {
     onOpenEntry,
     getParticipantLabel,
     getParticipantAvatar,
+    wolfRoleByKey,
   } = props;
 
   const sumPar = (k: SumKind) => (k === "OUT" ? metaSums.parOut : k === "IN" ? metaSums.parIn : metaSums.parTot);
@@ -222,10 +225,12 @@ export default function ScorecardLandscape(props: {
 
                       const badge = savingKey !== key ? scoreBadgeType(s, h.par, scoreView, formatIsBadgeable) : null;
 
+                      const wolfTag = wolfRoleByKey?.[key] ?? null;
+
                       return (
                         <button
                           key={`cell-hole-${idx}-${key}`}
-                          className={`h-10 border-r border-emerald-900/60 flex flex-col items-center justify-center font-semibold tabular-nums text-[13px]
+                          className={`relative h-10 border-r border-emerald-900/60 flex flex-col items-center justify-center font-semibold tabular-nums text-[13px]
                             ${isActive ? "bg-[#042713] text-[#f5e6b0]" : "bg-[#0b3b21]/20 text-emerald-50"}
                             ${disabled ? "opacity-80 cursor-default" : "hover:bg-emerald-900/20"}
                             ${fmtColor}
@@ -233,6 +238,11 @@ export default function ScorecardLandscape(props: {
                           onClick={() => onOpenEntry(p.id, h.hole_number)}
                           disabled={disabled}
                         >
+                          {wolfTag ? (
+                            <span className="absolute top-0 left-0 px-0.5 text-[8px] font-bold leading-none rounded-br bg-amber-500/25 text-amber-200">
+                              {wolfTag}
+                            </span>
+                          ) : null}
                           <BadgeWrap type={badge}>
                             <span className="leading-none">{savingKey === key ? "…" : (s ?? "–")}</span>
                           </BadgeWrap>

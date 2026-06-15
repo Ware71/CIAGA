@@ -4,7 +4,7 @@
  * Takes raw round data, returns display-ready results for the "Format" tab.
  */
 
-import type { Participant, Hole, Score, HoleState, Team, RoundFormatType } from "./hooks/useRoundDetail";
+import type { Participant, Hole, Score, HoleState, Team, RoundFormatType, WolfPick, WolfMode } from "./hooks/useRoundDetail";
 import { strokesReceivedOnHole, netFromGross } from "./handicapUtils";
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -373,6 +373,10 @@ function computeSkins(
   config?: Record<string, any>
 ): FormatDisplayData {
   const useGross = config?.scoring === "gross";
+  const valuePerSkin =
+    typeof config?.value_per_skin === "number" && config.value_per_skin > 0
+      ? config.value_per_skin
+      : 1;
   const holeCount = holes.length;
   const holeResults: Record<string, FormatHoleResult> = {};
   const skinCounts: Record<string, number> = {};
@@ -396,7 +400,8 @@ function computeSkins(
       }
     }
 
-    const skinValue = 1 + carryover;
+    // Holes carried into this one, plus this hole, scaled by the stake per skin.
+    const skinValue = (1 + carryover) * valuePerSkin;
 
     if (bestPids.length === 1) {
       skinCounts[bestPids[0]] += skinValue;
@@ -881,6 +886,132 @@ function computeNassauSideGame(
  * Returns an array of FormatDisplayData — one per tab.
  * Empty array means no format tabs needed (e.g. strokeplay with 100% allowance).
  */
+// ── Wolf ───────────────────────────────────────────────────────────────
+
+function posNum(v: any, fallback: number): number {
+  return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : fallback;
+}
+
+/**
+ * Wolf: each hole has one wolf who plays with a partner (2 v rest), alone
+ * (Lone Wolf, 1 v rest), or alone declared blind (Blind Wolf, 1 v rest).
+ * The best ball of each side is compared (net by default, gross if configured).
+ * Lower wins; the winning side's members each receive the hole stake:
+ *   points_per_hole × (1 + carry) × modeMultiplier
+ * where modeMultiplier is 1 / lone_wolf_multiplier / blind_wolf_multiplier, and
+ * carry is the run of preceding pushed holes (only when tie_mode = "carryover").
+ * The wolf defaults to a rotation by player order, overridable per hole.
+ */
+function computeWolf(
+  participants: Participant[],
+  holes: Hole[],
+  scoresByKey: Record<string, Score>,
+  holeStatesByKey: Record<string, HoleState>,
+  config: Record<string, any>,
+  wolfPicksByHole: Record<number, WolfPick>,
+  tabLabel: string = "Wolf"
+): FormatDisplayData {
+  const useGross = config?.scoring === "gross";
+  const tieCarry = (config?.tie_mode ?? "carryover") === "carryover";
+  const pointsPerHole = posNum(config?.points_per_hole, 1);
+  const loneMult = posNum(config?.lone_wolf_multiplier, 2);
+  const blindMult = posNum(config?.blind_wolf_multiplier, 3);
+  const holeCount = holes.length;
+
+  const participantIds = participants.map((p) => p.id);
+  const order: string[] =
+    Array.isArray(config?.wolf_order) && config.wolf_order.length
+      ? (config.wolf_order as string[]).filter((id) => participantIds.includes(id))
+      : participantIds;
+
+  const points: Record<string, number> = {};
+  for (const p of participants) points[p.id] = 0;
+  const holeResults: Record<string, FormatHoleResult> = {};
+
+  const setAll = (hole: number, value: FormatHoleResult["displayValue"], cssHint?: FormatHoleResult["cssHint"]) => {
+    for (const p of participants) holeResults[`${p.id}:${hole}`] = { displayValue: value, cssHint };
+  };
+
+  const bestOf = (ids: string[], h: Hole): number | null => {
+    let best: number | null = null;
+    for (const id of ids) {
+      const p = participants.find((pp) => pp.id === id);
+      if (!p) continue;
+      const gross = grossFor(id, h.hole_number, scoresByKey, holeStatesByKey);
+      if (gross === null) continue;
+      const score = useGross ? gross : netFromGross(gross, strokesReceivedOnHole(playingHcp(p), h.stroke_index, holeCount));
+      if (best === null || score < best) best = score;
+    }
+    return best;
+  };
+
+  let carry = 0;
+
+  holes.forEach((h, idx) => {
+    const pick = wolfPicksByHole[h.hole_number];
+    const wolfId = pick?.wolf_participant_id ?? (order.length ? order[idx % order.length] : null);
+    const mode: WolfMode = pick?.wolf_mode ?? "partner";
+    const partnerId = mode === "partner" ? pick?.partner_participant_id ?? null : null;
+
+    if (!h.par || !wolfId || !participantIds.includes(wolfId)) {
+      setAll(h.hole_number, null);
+      return;
+    }
+
+    const wolfSide = [wolfId, ...(partnerId && participantIds.includes(partnerId) ? [partnerId] : [])];
+    const otherSide = participantIds.filter((id) => !wolfSide.includes(id));
+    if (otherSide.length === 0) {
+      setAll(h.hole_number, null);
+      return;
+    }
+
+    const wolfBest = bestOf(wolfSide, h);
+    const otherBest = bestOf(otherSide, h);
+    if (wolfBest === null || otherBest === null) {
+      // Hole not yet decided — wait for both sides to have a score.
+      setAll(h.hole_number, null);
+      return;
+    }
+
+    if (wolfBest === otherBest) {
+      if (tieCarry) carry += 1;
+      setAll(h.hole_number, "–", "halved");
+      return;
+    }
+
+    const modeMult = mode === "blind" ? blindMult : mode === "lone" ? loneMult : 1;
+    const stake = pointsPerHole * (1 + (tieCarry ? carry : 0)) * modeMult;
+    const winners = new Set(wolfBest < otherBest ? wolfSide : otherSide);
+    carry = 0;
+
+    for (const p of participants) {
+      const key = `${p.id}:${h.hole_number}`;
+      if (winners.has(p.id)) {
+        points[p.id] += stake;
+        holeResults[key] = { displayValue: stake, cssHint: "won" };
+      } else {
+        holeResults[key] = { displayValue: "–", cssHint: "lost" };
+      }
+    }
+  });
+
+  const summaries: FormatSummary[] = participants.map((p) => ({
+    participantId: p.id,
+    out: "–",
+    inn: "–",
+    total: points[p.id],
+  }));
+
+  return {
+    tabLabel,
+    holeResults,
+    summaries,
+    higherIsBetter: true,
+    isTeamView: false,
+    playingHandicaps: buildPlayingHandicaps(participants),
+  };
+}
+
 export function computeFormatDisplay(
   formatType: RoundFormatType,
   formatConfig: Record<string, any>,
@@ -890,7 +1021,8 @@ export function computeFormatDisplay(
   holeStatesByKey: Record<string, HoleState>,
   teams: Team[],
   getName?: (p: Participant) => string,
-  notAcceptedIds: Set<string> = new Set()
+  notAcceptedIds: Set<string> = new Set(),
+  wolfPicksByHole: Record<number, WolfPick> = {}
 ): FormatDisplayData[] {
   const nameOf = getName ?? ((p: Participant) => p.display_name || "Player");
 
@@ -931,7 +1063,7 @@ export function computeFormatDisplay(
       return wrap(computeTeamSingleScore("Foursomes", participants, holes, scoresByKey, holeStatesByKey, teams));
 
     case "wolf":
-      return [{ tabLabel: "Wolf", holeResults: {}, summaries: [], higherIsBetter: true, isTeamView: false }];
+      return [computeWolf(participants, holes, scoresByKey, holeStatesByKey, formatConfig, wolfPicksByHole, "Wolf")];
 
     default:
       return [];
@@ -951,7 +1083,8 @@ export function computeSideGameDisplays(
   participants: Participant[],
   holes: Hole[],
   scoresByKey: Record<string, Score>,
-  holeStatesByKey: Record<string, HoleState>
+  holeStatesByKey: Record<string, HoleState>,
+  wolfPicksByHole: Record<number, WolfPick> = {}
 ): FormatDisplayData[] {
   const results: FormatDisplayData[] = [];
 
@@ -970,13 +1103,7 @@ export function computeSideGameDisplays(
         break;
       }
       case "wolf": {
-        results.push({
-          tabLabel: "Wolf (Side)",
-          holeResults: {},
-          summaries: [],
-          higherIsBetter: true,
-          isTeamView: false,
-        });
+        results.push(computeWolf(participants, holes, scoresByKey, holeStatesByKey, sg.config, wolfPicksByHole, "Wolf (Side)"));
         break;
       }
     }

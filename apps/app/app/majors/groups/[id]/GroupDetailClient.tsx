@@ -22,6 +22,7 @@ import type { GroupScoringPrefs } from "@/lib/majors/types";
 import { eventStatusLabel } from "@/lib/majors/labels";
 import { formatHI } from "@/lib/rounds/handicapUtils";
 import { EVENT_TYPES, FORMAT_DEFAULT_SCORING, FORMAT_ALLOWS_SCORING_CHOICE } from "@/lib/events/constants";
+import { getWhsDefaultPolicyForEvent } from "@/lib/rounds/whsDefaults";
 import type { MajorGroupType, EventTypeV2 } from "@/lib/majors/types";
 
 type CompetitionSeriesWithEventCount = Competition & {
@@ -2943,7 +2944,20 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                       <button
                         key={t.value}
                         type="button"
-                        onClick={() => setPrefs({ competition_type: t.value, scoring_model: FORMAT_DEFAULT_SCORING[t.value as EventTypeV2] ?? "net" })}
+                        onClick={() => {
+                          const pol = getWhsDefaultPolicyForEvent(t.value as EventTypeV2);
+                          setPrefs({
+                            competition_type: t.value,
+                            scoring_model: FORMAT_DEFAULT_SCORING[t.value as EventTypeV2] ?? "net",
+                            // Seed the WHS handicap default for this format; still
+                            // editable in the handicap rules editor below.
+                            handicap_rules: {
+                              ...((prefs as any).handicap_rules ?? {}),
+                              mode: pol.mode,
+                              allowance_pct: String(pol.allowance_pct),
+                            },
+                          });
+                        }}
                         className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors ${competitionType === t.value ? "bg-emerald-700 text-white border-emerald-600" : "border-emerald-900/60 text-emerald-200/60 hover:text-emerald-100"}`}
                       >
                         {t.label}
