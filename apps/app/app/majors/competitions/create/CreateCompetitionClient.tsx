@@ -7,6 +7,7 @@ import { getViewerSession } from "@/lib/auth/viewerSession";
 import type { EventTypeV2, EventScoringModel, EventPointsModel } from "@/lib/majors/types";
 import {
   EVENT_TYPES,
+  EVENT_TYPE_LABELS,
   SCORING_MODELS,
   POINTS_MODELS,
   FORMAT_DEFAULT_SCORING,
@@ -31,7 +32,7 @@ function ordinal(n: number): string {
 }
 
 function friendlyLabel(field: "format" | "scoring" | "points", value: string): string {
-  if (field === "format") return EVENT_TYPES.find((t) => t.value === value)?.label ?? value;
+  if (field === "format") return EVENT_TYPE_LABELS[value as keyof typeof EVENT_TYPE_LABELS] ?? value;
   if (field === "scoring") return SCORING_MODELS.find((s) => s.value === value)?.shortLabel ?? value;
   if (field === "points") return POINTS_MODELS.find((p) => p.value === value)?.shortLabel ?? value;
   return value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());

@@ -13,7 +13,7 @@ import type {
   EventTypeV2,
   EventScoringModel,
 } from "@/lib/majors/types";
-import { SCORING_MODELS, POINTS_MODELS, EVENT_TYPES, FORMAT_DEFAULT_SCORING, FORMAT_ALLOWS_SCORING_CHOICE, FEDEX_POINTS } from "@/lib/events/constants";
+import { SCORING_MODELS, POINTS_MODELS, EVENT_TYPES, EVENT_TYPE_LABELS, FORMAT_DEFAULT_SCORING, FORMAT_ALLOWS_SCORING_CHOICE, FEDEX_POINTS } from "@/lib/events/constants";
 import { HandicapRulesEditor, type HandicapRules } from "@/components/competitions/HandicapRulesEditor";
 
 const GROUP_TYPES: { value: MajorGroupType; label: string; desc: string }[] = [
@@ -92,7 +92,7 @@ function addNextSeason(seasons: SeasonDraft[]): SeasonDraft {
 function friendlyLabel(field: "type" | "access" | "format" | "points", value: string): string {
   if (field === "type")   return GROUP_TYPES.find((t) => t.value === value)?.label ?? value;
   if (field === "access") return ACCESS_OPTIONS.find((a) => a.privacy === value)?.label ?? value;
-  if (field === "format") return EVENT_TYPES.find((t) => t.value === value)?.label ?? value;
+  if (field === "format") return EVENT_TYPE_LABELS[value as keyof typeof EVENT_TYPE_LABELS] ?? value;
   if (field === "points") return POINTS_MODELS.find((p) => p.value === value)?.label ?? value;
   return value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }

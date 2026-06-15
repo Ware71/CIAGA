@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { calcCourseHandicap } from "@/lib/rounds/setupHelpers";
+import { resolvePlayingHandicapPreview } from "@/lib/rounds/playingHandicapPreview";
 
 export async function getSetupSnapshot(roundId: string) {
   const [roundRes, participantsRes, teamsRes] = await Promise.all([
@@ -102,11 +103,40 @@ export async function getSetupSnapshot(roundId: string) {
     }
   }
 
+  // Live PREVIEW of each player's playing handicap (mirrors the round-start
+  // resolver) so the setup UI can show PH before it's locked in. Keyed by
+  // profile_id. `compare_against_lowest` needs the lowest CH across the field.
+  const chValues = Object.values(courseHandicaps).filter((n) => Number.isFinite(n));
+  const lowestCourseHandicap = chValues.length > 0 ? Math.min(...chValues) : null;
+
+  const assignedHiByProfileId: Record<string, number> = {};
+  for (const row of rows as any[]) {
+    if (!row.profile_id) continue;
+    // Resolver precedence: assigned_handicap_index, else legacy assigned_playing_handicap.
+    const override = row.assigned_handicap_index ?? row.assigned_playing_handicap;
+    if (override != null) {
+      assignedHiByProfileId[row.profile_id as string] = Number(override);
+    }
+  }
+
+  const playingHandicaps: Record<string, number> = {};
+  for (const pid of profileIds) {
+    const ph = resolvePlayingHandicapPreview({
+      courseHandicap: courseHandicaps[pid] ?? null,
+      assignedHandicapIndex: assignedHiByProfileId[pid] ?? null,
+      mode: round.default_playing_handicap_mode,
+      value: round.default_playing_handicap_value,
+      lowestCourseHandicap,
+    });
+    if (ph != null) playingHandicaps[pid] = ph;
+  }
+
   return {
     round,
     participants: rows,
     teams,
     handicap_indexes: handicapIndexes,
     course_handicaps: courseHandicaps,
+    playing_handicaps: playingHandicaps,
   };
 }

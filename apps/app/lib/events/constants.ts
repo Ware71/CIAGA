@@ -31,6 +31,9 @@ export const EVENT_CATEGORIES: { value: EventCategory; label: string; desc: stri
   { value: "standalone", label: "Standalone", desc: "Own leaderboard, round is optional" },
 ];
 
+// Curated, user-selectable formats. This list is what selectors render. The
+// spec-aligned aliases below (stroke_play, *_fixture, team_*) are NOT offered
+// here on purpose — they are internal/duplicate variants of these base formats.
 export const EVENT_TYPES: { value: EventTypeV2; label: string }[] = [
   { value: "stroke", label: "Strokeplay" },
   { value: "stableford", label: "Stableford" },
@@ -40,6 +43,26 @@ export const EVENT_TYPES: { value: EventTypeV2; label: string }[] = [
   { value: "bestball", label: "Best Ball" },
   { value: "custom", label: "Custom" },
 ];
+
+// Complete display-name map for EVERY EventTypeV2, including the internal/spec
+// aliases that aren't user-selectable. Use this for labelling a stored event's
+// type (so e.g. a "team_best_ball" record renders as "Team Best Ball" rather
+// than the raw enum string). Selectors should still iterate EVENT_TYPES.
+export const EVENT_TYPE_LABELS: Record<EventTypeV2, string> = {
+  stroke: "Strokeplay",
+  stableford: "Stableford",
+  matchplay: "Match Play",
+  skins: "Skins",
+  scramble: "Scramble",
+  bestball: "Best Ball",
+  custom: "Custom",
+  stroke_play: "Strokeplay",
+  matchplay_fixture: "Match Play Fixture",
+  matchplay_knockout_match: "Knockout Match",
+  aggregate_stroke_play: "Aggregate Strokeplay",
+  team_best_ball: "Team Best Ball",
+  team_scramble: "Team Scramble",
+};
 
 export const SCORING_MODELS: { value: EventScoringModel; label: string; shortLabel: string }[] = [
   { value: "net", label: "Net (handicap adjusted)", shortLabel: "Net" },

@@ -37,6 +37,9 @@ export default function ScoreEntrySheet(props: {
   onSubmit: (strokes: number | null) => Promise<void>;
   getParticipantLabel: (p: Participant) => string;
   getParticipantAvatar: (p: Participant) => string | null;
+
+  /** Optional content rendered above the drawer card (e.g. Wolf hole details). */
+  aboveContent?: React.ReactNode;
 }) {
   const {
     participants,
@@ -62,6 +65,7 @@ export default function ScoreEntrySheet(props: {
     onSubmit,
     getParticipantLabel,
     getParticipantAvatar,
+    aboveContent,
   } = props;
 
   const p = participants.find((x) => x.id === pid)!;
@@ -103,6 +107,10 @@ export default function ScoreEntrySheet(props: {
         className={`absolute left-0 right-0 bottom-0 px-3 pb-[env(safe-area-inset-bottom)] ${isPortrait ? "max-h-[100dvh] overflow-y-auto" : "overflow-hidden"}`}
         style={!isPortrait ? { transform: "scale(0.8)", transformOrigin: "bottom center" } : undefined}
       >
+        {aboveContent ? (
+          <div className="mx-auto w-full max-w-[520px] mb-2">{aboveContent}</div>
+        ) : null}
+
         <div className="mx-auto w-full max-w-[520px] rounded-t-3xl border border-emerald-900/70 bg-[#061f12] shadow-2xl overflow-hidden">
           <div className="p-3 border-b border-emerald-900/60 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5 min-w-0">

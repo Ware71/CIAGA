@@ -8,26 +8,10 @@ import { StablefordConfigEditor } from "./StablefordConfigEditor";
 import { SideGamesManager } from "./SideGamesManager";
 import { PairsStablefordConfig, PairsScoringMode } from "./PairsStablefordConfig";
 import { BestBallConfig, BestBallScoringType } from "./BestBallConfig";
+import { WolfConfig } from "./WolfConfig";
 import { MatchupEditor } from "./MatchupEditor";
 import { supabase } from "@/lib/supabaseClient";
-
-/** WHS recommended handicap allowances per format */
-function getWHSDefaultAllowance(format: RoundFormatType): number {
-  switch (format) {
-    case "strokeplay":       return 95;
-    case "stableford":       return 95;
-    case "matchplay":        return 100;
-    case "pairs_stableford": return 85;
-    case "team_strokeplay":  return 85;
-    case "team_stableford":  return 85;
-    case "team_bestball":    return 85;
-    // Single-ball team formats — team handicap handles allowance
-    case "scramble":
-    case "greensomes":
-    case "foursomes":        return 100;
-    default:                 return 95;
-  }
-}
+import { getWhsDefaultPolicy } from "@/lib/rounds/whsDefaults";
 
 type MatchupParticipant = {
   id: string;
@@ -150,6 +134,18 @@ export function RoundFormatSectionEnhanced({
     }
   };
 
+  // When the count-of-scores changes on a team format, re-seed the WHS allowance
+  // to the count-based recommendation — but only while in percentage mode, so we
+  // never clobber a manual fixed / none / off-the-lowest choice.
+  const reseedAllowanceForCount = (
+    countPerHole?: number,
+  ): { default_playing_handicap_value?: number } => {
+    if (handicapMode !== "allowance_pct") return {};
+    const policy = getWhsDefaultPolicy(formatType, { countPerHole });
+    setHandicapValue(policy.allowance_pct);
+    return { default_playing_handicap_value: policy.allowance_pct };
+  };
+
   const showStablefordConfig =
     formatType === "stableford" ||
     formatType === "team_stableford" ||
@@ -157,6 +153,7 @@ export function RoundFormatSectionEnhanced({
 
   const showPairsConfig = formatType === "pairs_stableford";
   const showBestBallConfig = formatType === "team_bestball";
+  const showWolfConfig = formatType === "wolf";
   const showMatchups = formatType === "matchplay" || (isTeamFormat(formatType) && teams.length >= 2);
 
   return (
@@ -174,14 +171,16 @@ export function RoundFormatSectionEnhanced({
           value={formatType}
           onChange={async (format) => {
             setFormatType(format);
-            // Auto-apply WHS recommended allowance when format changes
-            const updates: Parameters<typeof handleUpdateSettings>[0] = { format_type: format };
-            if (handicapMode === "allowance_pct") {
-              const suggested = getWHSDefaultAllowance(format);
-              setHandicapValue(suggested);
-              updates.default_playing_handicap_value = suggested;
-            }
-            await handleUpdateSettings(updates);
+            // Seed the WHS-recommended handicap policy (mode + allowance) for the
+            // new format. This is a default, not a lock — still editable below.
+            const policy = getWhsDefaultPolicy(format, { countPerHole: formatConfig.count_per_hole });
+            setHandicapMode(policy.mode);
+            setHandicapValue(policy.allowance_pct);
+            await handleUpdateSettings({
+              format_type: format,
+              default_playing_handicap_mode: policy.mode,
+              default_playing_handicap_value: policy.allowance_pct,
+            });
           }}
           disabled={!isEditable}
           isOwner={isOwner}
@@ -222,7 +221,10 @@ export function RoundFormatSectionEnhanced({
             onChange={async (config) => {
               const updated = { ...formatConfig, ...config };
               setFormatConfig(updated);
-              await handleUpdateSettings({ format_config: updated });
+              await handleUpdateSettings({
+                format_config: updated,
+                ...reseedAllowanceForCount(updated.count_per_hole),
+              });
             }}
             disabled={!isEditable}
           />
@@ -240,6 +242,29 @@ export function RoundFormatSectionEnhanced({
           <BestBallConfig
             scoringType={(formatConfig.scoring_type as BestBallScoringType) || "net_strokes"}
             countPerHole={formatConfig.count_per_hole}
+            onChange={async (config) => {
+              const updated = { ...formatConfig, ...config };
+              setFormatConfig(updated);
+              await handleUpdateSettings({
+                format_config: updated,
+                ...reseedAllowanceForCount(updated.count_per_hole),
+              });
+            }}
+            disabled={!isEditable}
+          />
+        </div>
+      )}
+
+      {/* Wolf Configuration */}
+      {showWolfConfig && (
+        <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
+          <div className="mb-3">
+            <div className="text-sm font-semibold text-emerald-50">Wolf Settings</div>
+            <div className="text-[11px] text-emerald-100/70">Scoring, ties and multipliers</div>
+          </div>
+
+          <WolfConfig
+            value={formatConfig}
             onChange={async (config) => {
               const updated = { ...formatConfig, ...config };
               setFormatConfig(updated);

@@ -9,6 +9,7 @@ import { getMyProfileIdByAuthUserId } from "@/lib/myProfile";
 import { Button } from "@/components/ui/button";
 import { BackButton } from "@/components/ui/BackButton";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getWhsDefaultPolicy } from "@/lib/rounds/whsDefaults";
 
 type LinkedEvent = {
   id: string;
@@ -304,8 +305,9 @@ export default function RoundHomePage() {
           course_id: null,
           pending_tee_box_id: null,
           format_type: "strokeplay",
-          default_playing_handicap_mode: "allowance_pct",
-          default_playing_handicap_value: 100,
+          // Seed the WHS default for the initial format (still editable in setup).
+          default_playing_handicap_mode: getWhsDefaultPolicy("strokeplay").mode,
+          default_playing_handicap_value: getWhsDefaultPolicy("strokeplay").allowance_pct,
         }),
       });
 

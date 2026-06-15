@@ -8,7 +8,8 @@ import { BackButton } from "@/components/ui/BackButton";
 
 import { finishRound as finishRoundApi } from "@/lib/rounds/api";
 import { useRoundDetail } from "@/lib/rounds/hooks/useRoundDetail";
-import type { Participant, Hole, HoleState, RoundFormatType } from "@/lib/rounds/hooks/useRoundDetail";
+import type { Participant, Hole, HoleState, RoundFormatType, WolfPick } from "@/lib/rounds/hooks/useRoundDetail";
+import WolfHoleDetails from "@/components/round/WolfHoleDetails";
 import { strokesReceivedOnHole, netFromGross } from "@/lib/rounds/handicapUtils";
 import { computeFormatDisplay, computeSideGameDisplays, isFormatView, formatViewIndex, type FormatScoreView, type FormatDisplayData } from "@/lib/rounds/formatScoring";
 import { useOrientationLock } from "@/lib/useOrientationLock";
@@ -281,6 +282,8 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     setScoresByKey,
     holeStatesByKey,
     setHoleStatesByKey,
+    wolfPicksByHole,
+    setWolfPicksByHole,
     canScore,
   } = useRoundDetail(roundId, initialSnapshot);
 
@@ -430,10 +433,66 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
   }, [isFinished, participants, holesList, holeStatesByKey]);
 
   const formatDisplays = useMemo<FormatDisplayData[]>(() => {
-    const main = computeFormatDisplay(formatType, formatConfig, participants, holesList, scoresByKey, holeStatesByKey, teams, getParticipantLabel, notAcceptedIds);
-    const side = computeSideGameDisplays(sideGames, participants, holesList, scoresByKey, holeStatesByKey);
+    const main = computeFormatDisplay(formatType, formatConfig, participants, holesList, scoresByKey, holeStatesByKey, teams, getParticipantLabel, notAcceptedIds, wolfPicksByHole);
+    const side = computeSideGameDisplays(sideGames, participants, holesList, scoresByKey, holeStatesByKey, wolfPicksByHole);
     return [...main, ...side];
-  }, [formatType, formatConfig, sideGames, participants, holesList, scoresByKey, holeStatesByKey, teams, getParticipantLabel, notAcceptedIds]);
+  }, [formatType, formatConfig, sideGames, participants, holesList, scoresByKey, holeStatesByKey, teams, getParticipantLabel, notAcceptedIds, wolfPicksByHole]);
+
+  // ── Wolf live state ────────────────────────────────────────────────────
+  const wolfActive = useMemo(
+    () => formatType === "wolf" || sideGames.some((g: any) => g.name === "wolf" && g.enabled),
+    [formatType, sideGames]
+  );
+
+  // Wolf implied by rotation (player order) when no explicit pick is stored.
+  const rotationWolfForHole = useCallback(
+    (holeNumber: number): string | null => {
+      if (!participants.length) return null;
+      const idx = holesList.findIndex((h) => h.hole_number === holeNumber);
+      if (idx < 0) return null;
+      return participants[idx % participants.length].id;
+    },
+    [participants, holesList]
+  );
+
+  // Scorecard role tags keyed by `${participantId}:${holeNumber}`.
+  const wolfRoleByKey = useMemo<Record<string, "W" | "WP" | "LW" | "BW">>(() => {
+    if (!wolfActive) return {};
+    const map: Record<string, "W" | "WP" | "LW" | "BW"> = {};
+    for (const h of holesList) {
+      const pick = wolfPicksByHole[h.hole_number];
+      const wolfId = pick?.wolf_participant_id ?? rotationWolfForHole(h.hole_number);
+      const mode = pick?.wolf_mode ?? "partner";
+      if (wolfId) map[`${wolfId}:${h.hole_number}`] = mode === "lone" ? "LW" : mode === "blind" ? "BW" : "W";
+      if (mode === "partner" && pick?.partner_participant_id) {
+        map[`${pick.partner_participant_id}:${h.hole_number}`] = "WP";
+      }
+    }
+    return map;
+  }, [wolfActive, holesList, wolfPicksByHole, rotationWolfForHole]);
+
+  const saveWolfPick = useCallback(
+    async (holeNumber: number, pick: WolfPick) => {
+      setWolfPicksByHole((prev) => ({ ...prev, [holeNumber]: pick }));
+      try {
+        const { error } = await supabase.from("round_wolf_picks").upsert(
+          {
+            round_id: roundId,
+            hole_number: holeNumber,
+            wolf_participant_id: pick.wolf_participant_id,
+            partner_participant_id: pick.wolf_mode === "partner" ? pick.partner_participant_id : null,
+            wolf_mode: pick.wolf_mode,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "round_id,hole_number" }
+        );
+        if (error) throw error;
+      } catch (e: any) {
+        setErr?.(e?.message || "Failed to save wolf pick");
+      }
+    },
+    [roundId, setWolfPicksByHole, setErr]
+  );
 
   const activeFormatDisplay = useMemo<FormatDisplayData | null>(() => {
     if (!isFormatView(scoreView)) return null;
@@ -1411,6 +1470,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
               getParticipantLabel={singleBallGetLabel}
               getParticipantAvatar={singleBallGetAvatar}
               getParticipantAvatarList={getParticipantAvatarList}
+              wolfRoleByKey={wolfActive ? wolfRoleByKey : undefined}
             />
           ) : (
             <ScorecardLandscape
@@ -1431,6 +1491,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
               onOpenEntry={openEntry}
               getParticipantLabel={singleBallGetLabel}
               getParticipantAvatar={singleBallGetAvatar}
+              wolfRoleByKey={wolfActive ? wolfRoleByKey : undefined}
             />
           )
         ) : null}
@@ -1513,6 +1574,19 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
             onSubmit={submitAndAdvance}
             getParticipantLabel={getParticipantLabel}
             getParticipantAvatar={getParticipantAvatar}
+            aboveContent={
+              wolfActive && entryHole != null ? (
+                <WolfHoleDetails
+                  participants={participants}
+                  holeNumber={entryHole}
+                  pick={wolfPicksByHole[entryHole] ?? null}
+                  rotationWolfId={rotationWolfForHole(entryHole)}
+                  getParticipantLabel={getParticipantLabel}
+                  onChange={(pick) => saveWolfPick(entryHole, pick)}
+                  disabled={!canScore || isFinished}
+                />
+              ) : undefined
+            }
           />
         ) : null}
       </div>
