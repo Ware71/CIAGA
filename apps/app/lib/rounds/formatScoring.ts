@@ -896,10 +896,13 @@ function posNum(v: any, fallback: number): number {
  * Wolf: each hole has one wolf who plays with a partner (2 v rest), alone
  * (Lone Wolf, 1 v rest), or alone declared blind (Blind Wolf, 1 v rest).
  * The best ball of each side is compared (net by default, gross if configured).
- * Lower wins; the winning side's members each receive the hole stake:
- *   points_per_hole × (1 + carry) × modeMultiplier
- * where modeMultiplier is 1 / lone_wolf_multiplier / blind_wolf_multiplier, and
- * carry is the run of preceding pushed holes (only when tie_mode = "carryover").
+ * Lower wins; each member of the winning side receives a per-player award that
+ * depends on both the mode and which side won:
+ *   partner mode → partner_wolf_points  (wolf side) / partner_others_points (opponents)
+ *   lone mode    → lone_wolf_points      (wolf)      / lone_others_points    (opponents)
+ *   blind mode   → blind_wolf_points     (wolf)      / blind_others_points   (opponents)
+ * The base value is then multiplied by (1 + carry), where carry is the run of
+ * preceding pushed holes (only when tie_mode = "carryover").
  * The wolf defaults to a rotation by player order, overridable per hole.
  */
 function computeWolf(
@@ -913,9 +916,12 @@ function computeWolf(
 ): FormatDisplayData {
   const useGross = config?.scoring === "gross";
   const tieCarry = (config?.tie_mode ?? "carryover") === "carryover";
-  const pointsPerHole = posNum(config?.points_per_hole, 1);
-  const loneMult = posNum(config?.lone_wolf_multiplier, 2);
-  const blindMult = posNum(config?.blind_wolf_multiplier, 3);
+  const partnerWolfPts = posNum(config?.partner_wolf_points, 2);
+  const partnerOthersPts = posNum(config?.partner_others_points, 3);
+  const loneWolfPts = posNum(config?.lone_wolf_points, 4);
+  const loneOthersPts = posNum(config?.lone_others_points, 1);
+  const blindWolfPts = posNum(config?.blind_wolf_points, 8);
+  const blindOthersPts = posNum(config?.blind_others_points, 1);
   const holeCount = holes.length;
 
   const participantIds = participants.map((p) => p.id);
@@ -979,16 +985,28 @@ function computeWolf(
       return;
     }
 
-    const modeMult = mode === "blind" ? blindMult : mode === "lone" ? loneMult : 1;
-    const stake = pointsPerHole * (1 + (tieCarry ? carry : 0)) * modeMult;
-    const winners = new Set(wolfBest < otherBest ? wolfSide : otherSide);
+    const wolfSideWon = wolfBest < otherBest;
+    const winners = new Set(wolfSideWon ? wolfSide : otherSide);
+    const baseValue =
+      mode === "blind"
+        ? wolfSideWon
+          ? blindWolfPts
+          : blindOthersPts
+        : mode === "lone"
+        ? wolfSideWon
+          ? loneWolfPts
+          : loneOthersPts
+        : wolfSideWon
+        ? partnerWolfPts
+        : partnerOthersPts;
+    const award = baseValue * (1 + (tieCarry ? carry : 0));
     carry = 0;
 
     for (const p of participants) {
       const key = `${p.id}:${h.hole_number}`;
       if (winners.has(p.id)) {
-        points[p.id] += stake;
-        holeResults[key] = { displayValue: stake, cssHint: "won" };
+        points[p.id] += award;
+        holeResults[key] = { displayValue: award, cssHint: "won" };
       } else {
         holeResults[key] = { displayValue: "–", cssHint: "lost" };
       }

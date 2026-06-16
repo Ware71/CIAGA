@@ -7,18 +7,32 @@ export type WolfTieMode = "push" | "carryover";
 export type WolfConfigValue = {
   scoring: WolfScoring;
   tie_mode: WolfTieMode;
-  points_per_hole: number;
-  lone_wolf_multiplier: number;
-  blind_wolf_multiplier: number;
+  partner_wolf_points: number; // wolf + partner each, when the wolf side wins
+  partner_others_points: number; // opponents each, when they beat wolf + partner
+  lone_wolf_points: number; // lone wolf, when alone & wins
+  lone_others_points: number; // opponents each, when they beat the lone wolf
+  blind_wolf_points: number; // blind wolf, when alone & wins
+  blind_others_points: number; // opponents each, when they beat the blind wolf
 };
 
 export const WOLF_CONFIG_DEFAULTS: WolfConfigValue = {
   scoring: "net",
   tie_mode: "carryover",
-  points_per_hole: 1,
-  lone_wolf_multiplier: 2,
-  blind_wolf_multiplier: 3,
+  partner_wolf_points: 2,
+  partner_others_points: 3,
+  lone_wolf_points: 4,
+  lone_others_points: 1,
+  blind_wolf_points: 8,
+  blind_others_points: 1,
 };
+
+type WolfPointsKey =
+  | "partner_wolf_points"
+  | "partner_others_points"
+  | "lone_wolf_points"
+  | "lone_others_points"
+  | "blind_wolf_points"
+  | "blind_others_points";
 
 type WolfConfigProps = {
   value?: Partial<WolfConfigValue>;
@@ -32,7 +46,7 @@ export function WolfConfig({ value, onChange, disabled }: WolfConfigProps) {
 
   const numberField = (
     label: string,
-    key: keyof Pick<WolfConfigValue, "points_per_hole" | "lone_wolf_multiplier" | "blind_wolf_multiplier">,
+    key: WolfPointsKey,
     hint: string,
   ) => (
     <div>
@@ -77,9 +91,29 @@ export function WolfConfig({ value, onChange, disabled }: WolfConfigProps) {
         </select>
       </div>
 
-      {numberField("Points per hole", "points_per_hole", "Base stake awarded to each player on the winning side.")}
-      {numberField("Lone Wolf multiplier", "lone_wolf_multiplier", "Stake multiplier when the wolf plays alone.")}
-      {numberField("Blind Wolf multiplier", "blind_wolf_multiplier", "Stake multiplier when the wolf declares blind (alone, before tee shots).")}
+      <div className="space-y-2">
+        <p className="text-xs font-medium text-emerald-100/90">Partner</p>
+        <div className="grid grid-cols-2 gap-3">
+          {numberField("Wolf side wins", "partner_wolf_points", "Points to the wolf and partner each when their side wins.")}
+          {numberField("Opponents win", "partner_others_points", "Points to each opponent when they beat the wolf and partner.")}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-xs font-medium text-emerald-100/90">Lone Wolf</p>
+        <div className="grid grid-cols-2 gap-3">
+          {numberField("Wolf wins", "lone_wolf_points", "Points to the lone wolf when playing alone and winning.")}
+          {numberField("Opponents win", "lone_others_points", "Points to each opponent when they beat the lone wolf.")}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-xs font-medium text-emerald-100/90">Blind Wolf</p>
+        <div className="grid grid-cols-2 gap-3">
+          {numberField("Wolf wins", "blind_wolf_points", "Points to the blind wolf (declared alone before tee shots) when winning.")}
+          {numberField("Opponents win", "blind_others_points", "Points to each opponent when they beat the blind wolf.")}
+        </div>
+      </div>
     </div>
   );
 }
