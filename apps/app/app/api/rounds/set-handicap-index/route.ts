@@ -79,8 +79,8 @@ export async function POST(req: Request) {
     // Validate handicap index value
     if (body.assigned_handicap_index !== null) {
       const value = body.assigned_handicap_index;
-      if (typeof value !== "number" || value < 0 || value > 54) {
-        return NextResponse.json({ error: "Invalid Handicap Index (must be 0-54)" }, { status: 400 });
+      if (typeof value !== "number" || value < -10 || value > 54) {
+        return NextResponse.json({ error: "Invalid Handicap Index (must be between -10 and 54)" }, { status: 400 });
       }
     }
 

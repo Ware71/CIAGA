@@ -13,10 +13,8 @@
 import type { PlayingHandicapMode } from "@/components/rounds/PlayingHandicapSettings";
 
 export type PlayingHandicapPreviewInput = {
-  /** Course Handicap (already computed from base HI + tee). May be null if unknown. */
+  /** Course Handicap (computed from effective HI + tee — caller must apply any HI override before passing). */
   courseHandicap: number | null;
-  /** Manual HI override (`assigned_handicap_index`). When set, used as a DIRECT playing-handicap override. */
-  assignedHandicapIndex: number | null;
   mode: PlayingHandicapMode | null | undefined;
   /** Allowance % (for allowance_pct) or fixed value (for fixed). */
   value: number | null | undefined;
@@ -25,9 +23,12 @@ export type PlayingHandicapPreviewInput = {
 };
 
 /**
- * Resolve the preview playing handicap. Mirrors `ciaga_resolve_playing_handicap`:
- *   1. Manual override (assigned_handicap_index) wins → round(override).
- *   2. Otherwise apply the round's default mode to the course handicap.
+ * Resolve the preview playing handicap. Mirrors `ciaga_resolve_playing_handicap`.
+ * Apply the round's default mode to the (pre-computed) course handicap.
+ *
+ * When a player has an assigned_handicap_index override, the caller must derive
+ * courseHandicap from that override HI (not from handicap_index_history) so that
+ * the preview matches what ciaga_persist_playing_handicaps will lock in.
  *
  * Returns null only when there isn't enough data to compute (e.g. no course
  * handicap yet for an allowance/off-the-lowest mode).
@@ -35,14 +36,9 @@ export type PlayingHandicapPreviewInput = {
 export function resolvePlayingHandicapPreview(
   input: PlayingHandicapPreviewInput,
 ): number | null {
-  const { courseHandicap, assignedHandicapIndex, mode, value, lowestCourseHandicap } = input;
+  const { courseHandicap, mode, value, lowestCourseHandicap } = input;
 
-  // 1. Manual override takes precedence — treated as a direct playing handicap.
-  if (assignedHandicapIndex !== null && assignedHandicapIndex !== undefined) {
-    return Math.round(assignedHandicapIndex);
-  }
-
-  // 2. Round default calculation by mode.
+  // Apply round default calculation by mode.
   switch (mode) {
     case "fixed":
       return value != null ? Math.round(value) : 0;

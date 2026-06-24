@@ -1122,10 +1122,12 @@ function MiniScorecard({
 
 function EventSetupSheet({
   event,
+  eventRounds,
   onClose,
   onSaved,
 }: {
   event: EventWithGroup;
+  eventRounds: EventRound[];
   onClose: () => void;
   onSaved: (updated: EventWithGroup) => void;
 }) {
@@ -1149,8 +1151,9 @@ function EventSetupSheet({
   const [courseName, setCourseName] = useState(event.course?.name ?? "");
   const [showCoursePicker, setShowCoursePicker] = useState(false);
   const [setupTeeBoxes, setSetupTeeBoxes] = useState<TeeBoxOption[]>([]);
-  const [setupMaleTeeId, setSetupMaleTeeId] = useState("");
-  const [setupFemaleTeeId, setSetupFemaleTeeId] = useState("");
+  const firstMatchingRound = eventRounds.find((r) => !r.course_id || r.course_id === event.course_id);
+  const [setupMaleTeeId, setSetupMaleTeeId] = useState(firstMatchingRound?.default_tee_box_id_male ?? "");
+  const [setupFemaleTeeId, setSetupFemaleTeeId] = useState(firstMatchingRound?.default_tee_box_id_female ?? "");
   const [selectedCompType, setSelectedCompType] = useState<string>(compType ?? "stroke");
   const [scoringModel, setScoringModel] = useState<string>(event.scoring_model ?? "net");
   const [pointsModel, setPointsModel] = useState<string>(event.points_model ?? "none");
@@ -1319,7 +1322,7 @@ function EventSetupSheet({
             {courseId ? (
               <div className="flex items-center justify-between rounded-xl border border-emerald-600/60 bg-emerald-900/30 px-3 py-2">
                 <span className="text-sm text-emerald-50 truncate">{courseName}</span>
-                <button type="button" onClick={() => { setCourseId(""); setCourseName(""); }}
+                <button type="button" onClick={() => { setCourseId(""); setCourseName(""); setShowCoursePicker(true); }}
                   className="ml-2 text-[11px] text-emerald-300/60 hover:text-emerald-200 shrink-0">✕</button>
               </div>
             ) : (
@@ -4802,10 +4805,12 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
       {showSetupSheet && event && (
         <EventSetupSheet
           event={event}
+          eventRounds={eventRounds}
           onClose={() => setShowSetupSheet(false)}
           onSaved={(updated) => {
             setCompetition(updated);
             setShowSetupSheet(false);
+            refreshTeeTimes();
           }}
         />
       )}

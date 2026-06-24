@@ -86,10 +86,29 @@ export function LoadingScreen({ isReady, onDone }: Props) {
       // Early exit: data arrived during spin.
       if (isReadyRef.current) { await doExit(logo, bg); return; }
 
-      // Hold in a slow spin until auth/data is ready.
+      // Phase A — maintain peak speed for ~1 s (3 rotations at 0.35 s each).
+      {
+        const anim = animate(logo, { rotate: [360, 1440] }, { duration: 1.05, ease: "linear" });
+        await Promise.race([anim, waitUntilReady()]);
+        anim.stop();
+        if (cancelled) return;
+        if (isReadyRef.current) { await doExit(logo, bg); return; }
+      }
+
+      // Phase B — decelerate: 3 rotations easeOut over 2.5 s, signalling a slow connection.
+      // 1440 + 1080 = 2520; 2520 % 360 === 0 so the loop boundary in Phase C is seamless.
+      {
+        const anim = animate(logo, { rotate: [1440, 2520] }, { duration: 2.5, ease: "easeOut" });
+        await Promise.race([anim, waitUntilReady()]);
+        anim.stop();
+        if (cancelled) return;
+        if (isReadyRef.current) { await doExit(logo, bg); return; }
+      }
+
+      // Phase C — slow idle loop until data arrives (2520 % 360 === 0, seamless loop).
       const waitSpin = animate(
         logo,
-        { rotate: [360, 720] },
+        { rotate: [2520, 2880] },
         { duration: 2.5, ease: "linear", repeat: Infinity, repeatType: "loop" },
       );
       await waitUntilReady();

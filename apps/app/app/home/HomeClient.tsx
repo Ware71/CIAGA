@@ -148,6 +148,7 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
 
     let cancelled = false;
     let onlineRetryCleanup: (() => void) | null = null;
+    const timeoutId = setTimeout(() => { if (!cancelled) setDataReady(true); }, 10_000);
 
     const scheduleRetry = () => {
       if (onlineRetryCleanup) return;
@@ -207,6 +208,7 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
 
     return () => {
       cancelled = true;
+      clearTimeout(timeoutId);
       onlineRetryCleanup?.();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

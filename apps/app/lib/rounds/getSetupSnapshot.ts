@@ -89,10 +89,24 @@ export async function getSetupSnapshot(roundId: string) {
     };
   }
 
-  // Compute per-player course handicap using their assigned tee (fallback: round default tee)
+  // Build assigned HI overrides before computing course handicaps so we can
+  // use them as the effective HI when present (mirrors ciaga_persist_playing_handicaps Step 1).
+  const assignedHiByProfileId: Record<string, number> = {};
+  for (const row of rows as any[]) {
+    if (!row.profile_id) continue;
+    // Resolver precedence: assigned_handicap_index, else legacy assigned_playing_handicap.
+    const override = row.assigned_handicap_index ?? row.assigned_playing_handicap;
+    if (override != null) {
+      assignedHiByProfileId[row.profile_id as string] = Number(override);
+    }
+  }
+
+  // Compute per-player course handicap using their assigned tee (fallback: round default tee).
+  // When an HI override is set, use it as the effective HI so the CH and PH preview reflect
+  // what will be locked in at round start (mirrors ciaga_persist_playing_handicaps Step 1).
   const courseHandicaps: Record<string, number> = {};
   for (const pid of profileIds) {
-    const hi = handicapIndexes[pid];
+    const hi = assignedHiByProfileId[pid] ?? handicapIndexes[pid];
     if (hi == null) continue;
     const teeBoxId = participantTeeMap[pid] ?? round.pending_tee_box_id;
     const tee = teeBoxId ? teeBoxStats[teeBoxId] : null;
@@ -109,21 +123,10 @@ export async function getSetupSnapshot(roundId: string) {
   const chValues = Object.values(courseHandicaps).filter((n) => Number.isFinite(n));
   const lowestCourseHandicap = chValues.length > 0 ? Math.min(...chValues) : null;
 
-  const assignedHiByProfileId: Record<string, number> = {};
-  for (const row of rows as any[]) {
-    if (!row.profile_id) continue;
-    // Resolver precedence: assigned_handicap_index, else legacy assigned_playing_handicap.
-    const override = row.assigned_handicap_index ?? row.assigned_playing_handicap;
-    if (override != null) {
-      assignedHiByProfileId[row.profile_id as string] = Number(override);
-    }
-  }
-
   const playingHandicaps: Record<string, number> = {};
   for (const pid of profileIds) {
     const ph = resolvePlayingHandicapPreview({
       courseHandicap: courseHandicaps[pid] ?? null,
-      assignedHandicapIndex: assignedHiByProfileId[pid] ?? null,
       mode: round.default_playing_handicap_mode,
       value: round.default_playing_handicap_value,
       lowestCourseHandicap,
