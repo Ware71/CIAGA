@@ -1215,8 +1215,8 @@ function EventSetupSheet({
       const json = await res.json();
       if (!res.ok) { setError(json.error ?? "Save failed"); return; }
 
-      // If tees were selected, apply to all rounds that share this course
-      if (courseId && (setupMaleTeeId || setupFemaleTeeId)) {
+      // Propagate course (and optionally tees) to all rounds that share this course
+      if (courseId) {
         const roundsRes = await fetch(`/api/majors/events/${event.id}/rounds`, {
           headers: { Authorization: `Bearer ${session.accessToken}` },
         });
@@ -1231,6 +1231,7 @@ function EventSetupSheet({
                   method: "PATCH",
                   headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
                   body: JSON.stringify({
+                    course_id: courseId,
                     ...(setupMaleTeeId ? { default_tee_box_id_male: setupMaleTeeId } : {}),
                     ...(setupFemaleTeeId ? { default_tee_box_id_female: setupFemaleTeeId } : {}),
                   }),

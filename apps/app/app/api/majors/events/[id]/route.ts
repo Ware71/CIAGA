@@ -91,6 +91,31 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       .single();
 
     if (error) throw error;
+
+    // Reconcile event_rounds when num_rounds increases
+    if (typeof body.num_rounds === "number" && body.num_rounds > 0) {
+      const { data: existingRounds } = await supabaseAdmin
+        .from("event_rounds")
+        .select("round_number")
+        .eq("event_id", id)
+        .order("round_number", { ascending: true });
+
+      const existingNums = new Set((existingRounds ?? []).map((r: any) => r.round_number as number));
+      const missing = Array.from({ length: body.num_rounds }, (_, i) => i + 1)
+        .filter((n) => !existingNums.has(n));
+
+      if (missing.length > 0) {
+        await supabaseAdmin.from("event_rounds").insert(
+          missing.map((n) => ({
+            event_id: id,
+            round_number: n,
+            name: `Round ${n}`,
+            status: "scheduled",
+          }))
+        );
+      }
+    }
+
     return NextResponse.json({ event: data });
   } catch (e: any) {
     const msg = e?.message ?? "Unknown error";
