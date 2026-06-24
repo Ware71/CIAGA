@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 import type {
@@ -1120,44 +1120,46 @@ function MiniScorecard({
 
 // ─── Event Setup Sheet ──────────────────────────────────────────────────
 
+type RoundEditState = {
+  id: string | null;
+  round_number: number;
+  name: string;
+  course_id: string;
+  course_name: string;
+  tee_male_id: string;
+  tee_female_id: string;
+  tee_boxes: TeeBoxOption[];
+  status: EventRound["status"];
+};
+
 function EventSetupSheet({
   event,
   eventRounds,
+  teeTimes,
+  hasEntries,
   onClose,
   onSaved,
 }: {
   event: EventWithGroup;
   eventRounds: EventRound[];
+  teeTimes: EventTeeTime[];
+  hasEntries: boolean;
   onClose: () => void;
   onSaved: (updated: EventWithGroup) => void;
 }) {
-  const compType = event.event_type;
   const isAggregate = event.event_category === "aggregate";
   const handicap = (event.handicap_rules ?? {}) as Record<string, unknown>;
   const isScoringLocked = ["completed", "official"].includes(event.majors_status ?? "");
 
+  // Event-level fields
   const [name, setName] = useState(event.name ?? "");
   const [description, setDescription] = useState(event.description ?? "");
-  const [eventDate, setCompetitionDate] = useState(
-    event.event_date ? event.event_date.slice(0, 10) : ""
-  );
-  const [entryStart, setEntryStart] = useState(
-    event.entry_window_start ? event.entry_window_start.slice(0, 16) : ""
-  );
-  const [entryEnd, setEntryEnd] = useState(
-    event.entry_window_end ? event.entry_window_end.slice(0, 16) : ""
-  );
-  const [courseId, setCourseId] = useState(event.course_id ?? "");
-  const [courseName, setCourseName] = useState(event.course?.name ?? "");
-  const [showCoursePicker, setShowCoursePicker] = useState(false);
-  const [setupTeeBoxes, setSetupTeeBoxes] = useState<TeeBoxOption[]>([]);
-  const firstMatchingRound = eventRounds.find((r) => !r.course_id || r.course_id === event.course_id);
-  const [setupMaleTeeId, setSetupMaleTeeId] = useState(firstMatchingRound?.default_tee_box_id_male ?? "");
-  const [setupFemaleTeeId, setSetupFemaleTeeId] = useState(firstMatchingRound?.default_tee_box_id_female ?? "");
-  const [selectedCompType, setSelectedCompType] = useState<string>(compType ?? "stroke");
+  const [eventDate, setCompetitionDate] = useState(event.event_date ? event.event_date.slice(0, 10) : "");
+  const [entryStart, setEntryStart] = useState(event.entry_window_start ? event.entry_window_start.slice(0, 16) : "");
+  const [entryEnd, setEntryEnd] = useState(event.entry_window_end ? event.entry_window_end.slice(0, 16) : "");
+  const [selectedCompType, setSelectedCompType] = useState<string>(event.event_type ?? "stroke");
   const [scoringModel, setScoringModel] = useState<string>(event.scoring_model ?? "net");
   const [pointsModel, setPointsModel] = useState<string>(event.points_model ?? "none");
-  const [numRounds, setNumRounds] = useState(String(event.num_rounds ?? 1));
   const [standingsContrib, setStandingsContrib] = useState(event.standings_contribution ?? "event_only");
   const [teeTimeMode, setTeeTimeMode] = useState<"admin_assigned" | "self_select">((event as any).tee_time_mode ?? "admin_assigned");
   const [rulesText, setRulesText] = useState(event.rules_text ?? "");
@@ -1165,15 +1167,94 @@ function EventSetupSheet({
   const [handicapPct, setHandicapPct] = useState(handicap.allowance_pct != null ? String(handicap.allowance_pct) : "100");
   const [handicapMax, setHandicapMax] = useState(handicap.max_handicap != null ? String(handicap.max_handicap) : "");
   const [majorsStatus, setMajorsStatus] = useState<string>(event.majors_status ?? "upcoming");
+
+  // Per-round state
+  const [rounds, setRounds] = useState<RoundEditState[]>(() =>
+    eventRounds.map((r) => ({
+      id: r.id,
+      round_number: r.round_number,
+      name: r.name,
+      course_id: r.course_id ?? "",
+      course_name: r.course?.name ?? "",
+      tee_male_id: r.default_tee_box_id_male ?? "",
+      tee_female_id: r.default_tee_box_id_female ?? "",
+      tee_boxes: [],
+      status: r.status,
+    }))
+  );
+  const [pendingDeletes, setPendingDeletes] = useState<string[]>([]);
+  const [showCoursePickerIdx, setShowCoursePickerIdx] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Fetch tee boxes for rounds that already have a course on mount
   useEffect(() => {
-    if (!courseId) { setSetupTeeBoxes([]); setSetupMaleTeeId(""); setSetupFemaleTeeId(""); return; }
-    fetch(`/api/courses/tee-boxes?course_id=${courseId}`)
-      .then((r) => r.json())
-      .then((j) => setSetupTeeBoxes(j.tee_boxes ?? []));
-  }, [courseId]);
+    eventRounds.forEach((r, idx) => {
+      if (!r.course_id) return;
+      fetch(`/api/courses/tee-boxes?course_id=${r.course_id}`)
+        .then((res) => res.json())
+        .then((j) => {
+          setRounds((prev) => {
+            const next = [...prev];
+            if (next[idx]) next[idx] = { ...next[idx], tee_boxes: j.tee_boxes ?? [] };
+            return next;
+          });
+        });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const hasTeeTimesByRound = useMemo(
+    () => new Set(teeTimes.map((tt) => tt.event_round_id).filter(Boolean) as string[]),
+    [teeTimes]
+  );
+
+  const deleteHint = (r: RoundEditState): string | null => {
+    if (!r.id) return null;
+    if (hasTeeTimesByRound.has(r.id)) return "Remove tee times first";
+    if (r.status !== "scheduled") return `Round is ${r.status}`;
+    return null;
+  };
+
+  const handleRoundCourseSelect = async (idx: number, courseId: string, courseName: string) => {
+    setRounds((prev) => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], course_id: courseId, course_name: courseName, tee_male_id: "", tee_female_id: "", tee_boxes: [] };
+      return next;
+    });
+    setShowCoursePickerIdx(null);
+    if (!courseId) return;
+    const res = await fetch(`/api/courses/tee-boxes?course_id=${courseId}`);
+    const j = await res.json();
+    setRounds((prev) => {
+      const next = [...prev];
+      if (next[idx]?.course_id === courseId) next[idx] = { ...next[idx], tee_boxes: j.tee_boxes ?? [] };
+      return next;
+    });
+  };
+
+  const updateRound = (idx: number, fields: Partial<RoundEditState>) =>
+    setRounds((prev) => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], ...fields };
+      return next;
+    });
+
+  const addRound = () => {
+    const nextNum = Math.max(0, ...rounds.map((r) => r.round_number)) + 1;
+    setRounds((prev) => [
+      ...prev,
+      { id: null, round_number: nextNum, name: `Round ${nextNum}`, course_id: "", course_name: "", tee_male_id: "", tee_female_id: "", tee_boxes: [], status: "scheduled" },
+    ]);
+  };
+
+  const removeRound = (idx: number) => {
+    const r = rounds[idx];
+    const hint = deleteHint(r);
+    if (hint) { setError(hint); return; }
+    if (r.id) setPendingDeletes((prev) => [...prev, r.id!]);
+    setRounds((prev) => prev.filter((_, i) => i !== idx));
+  };
 
   const handleSave = async () => {
     if (!name.trim()) return;
@@ -1182,30 +1263,43 @@ function EventSetupSheet({
     try {
       const session = await getViewerSession();
       if (!session) { setError("Not signed in"); return; }
+      const headers = { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" };
+
+      // 1. Delete removed rounds (sequential so a guard error stops early)
+      for (const rid of pendingDeletes) {
+        const delRes = await fetch(`/api/majors/events/${event.id}/rounds/${rid}`, { method: "DELETE", headers });
+        if (!delRes.ok) {
+          const j = await delRes.json();
+          setError(j.error ?? "Failed to delete round");
+          return;
+        }
+      }
+
+      // 2. Derive event-level course from first round that has one
+      const firstCourse = rounds.find((r) => r.course_id);
+      const newCourseId = firstCourse?.course_id ?? null;
+      const newCourseName = firstCourse?.course_name ?? null;
 
       const handicap_rules = scoringModel !== "gross"
-        ? {
-            mode: handicapMode,
-            allowance_pct: handicapMode === "allowance_pct" ? (parseInt(handicapPct, 10) || 100) : null,
-            max_handicap: handicapMax ? parseInt(handicapMax, 10) : null,
-          }
+        ? { mode: handicapMode, allowance_pct: handicapMode === "allowance_pct" ? (parseInt(handicapPct, 10) || 100) : null, max_handicap: handicapMax ? parseInt(handicapMax, 10) : null }
         : {};
 
+      // 3. PATCH event
       const res = await fetch(`/api/majors/events/${event.id}`, {
         method: "PATCH",
-        headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           name: name.trim(),
           description: description.trim() || null,
           event_date: eventDate || null,
           entry_window_start: entryStart || null,
           entry_window_end: entryEnd || null,
-          course_id: courseId || null,
+          course_id: newCourseId,
           event_type: isAggregate ? event.event_type : selectedCompType,
           scoring_model: scoringModel,
           handicap_rules,
           points_model: pointsModel,
-          num_rounds: isAggregate ? event.num_rounds : (parseInt(numRounds, 10) || 1),
+          num_rounds: rounds.length,
           rules_text: rulesText.trim() || null,
           standings_contribution: standingsContrib,
           tee_time_mode: teeTimeMode,
@@ -1215,285 +1309,283 @@ function EventSetupSheet({
       const json = await res.json();
       if (!res.ok) { setError(json.error ?? "Save failed"); return; }
 
-      // Propagate course (and optionally tees) to all rounds that share this course
-      if (courseId) {
-        const roundsRes = await fetch(`/api/majors/events/${event.id}/rounds`, {
-          headers: { Authorization: `Bearer ${session.accessToken}` },
-        });
-        if (roundsRes.ok) {
-          const rj = await roundsRes.json();
-          const rounds: { id: string; course_id: string | null }[] = rj.rounds ?? [];
-          await Promise.all(
-            rounds
-              .filter((r) => !r.course_id || r.course_id === courseId)
-              .map((r) =>
-                fetch(`/api/majors/events/${event.id}/rounds/${r.id}`, {
-                  method: "PATCH",
-                  headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    course_id: courseId,
-                    ...(setupMaleTeeId ? { default_tee_box_id_male: setupMaleTeeId } : {}),
-                    ...(setupFemaleTeeId ? { default_tee_box_id_female: setupFemaleTeeId } : {}),
-                  }),
-                })
-              )
-          );
-        }
-      }
+      // 4. PATCH existing rounds / POST new rounds
+      await Promise.all(
+        rounds.map((r) =>
+          r.id
+            ? fetch(`/api/majors/events/${event.id}/rounds/${r.id}`, {
+                method: "PATCH", headers,
+                body: JSON.stringify({ course_id: r.course_id || null, default_tee_box_id_male: r.tee_male_id || null, default_tee_box_id_female: r.tee_female_id || null }),
+              })
+            : fetch(`/api/majors/events/${event.id}/rounds`, {
+                method: "POST", headers,
+                body: JSON.stringify({ round_number: r.round_number, name: r.name, course_id: r.course_id || null, default_tee_box_id_male: r.tee_male_id || null, default_tee_box_id_female: r.tee_female_id || null }),
+              })
+        )
+      );
 
-      onSaved({
-        ...event,
-        ...json.event,
-        group: event.group,
-        course: courseId ? { id: courseId, name: courseName } : event.course,
-      });
+      onSaved({ ...event, ...json.event, group: event.group, course: newCourseId ? { id: newCourseId, name: newCourseName ?? "" } : event.course });
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end bg-black/60 pb-[env(safe-area-inset-bottom)]" onClick={onClose}>
-      <div
-        className="w-full max-w-sm mx-auto rounded-t-3xl bg-[#071f13] border-t border-emerald-900/70 px-4 pt-5 space-y-4 max-h-[90dvh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="w-10 h-1 rounded-full bg-emerald-800/60 mx-auto mb-1" />
-        <div className="text-sm font-semibold text-emerald-50">Edit Event Setup</div>
+    <>
+      <div className="fixed inset-0 z-50 flex items-end bg-black/60 pb-[env(safe-area-inset-bottom)]" onClick={onClose}>
+        <div
+          className="w-full max-w-sm mx-auto rounded-t-3xl bg-[#071f13] border-t border-emerald-900/70 px-4 pt-5 space-y-4 max-h-[90dvh] overflow-y-auto"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="w-10 h-1 rounded-full bg-emerald-800/60 mx-auto mb-1" />
+          <div className="text-sm font-semibold text-emerald-50">Edit Event Setup</div>
 
-        <div className="space-y-4 pb-6">
-          {/* Status */}
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Status</label>
-            <div className="grid grid-cols-4 gap-1">
-              {(["upcoming", "live", "completed", "cancelled"] as const).map((s) => (
-                <button key={s} type="button" onClick={() => setMajorsStatus(s)}
-                  className={`rounded-xl border px-2 py-1.5 text-[10px] text-center capitalize transition-colors ${
-                    majorsStatus === s
-                      ? s === "live" ? "border-amber-600 bg-amber-900/40 text-amber-200"
-                        : s === "completed" ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                        : s === "cancelled" ? "border-red-700 bg-red-900/30 text-red-300"
-                        : "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                      : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"
-                  }`}>
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Name */}
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Name *</label>
-            <input className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 focus:outline-none"
-              value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-
-          {/* Description */}
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Description</label>
-            <textarea className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 focus:outline-none resize-none"
-              rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
-          </div>
-
-          {/* Date */}
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Event Date</label>
-            <input type="date" className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 focus:outline-none"
-              value={eventDate} onChange={(e) => setCompetitionDate(e.target.value)} />
-          </div>
-
-          {/* Entry window */}
-          <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-4 pb-6">
+            {/* Status */}
             <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Entry Opens</label>
-              <input type="datetime-local" className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-2 py-2 text-xs text-emerald-50 focus:outline-none"
-                value={entryStart} onChange={(e) => setEntryStart(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Entry Closes</label>
-              <input type="datetime-local" className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-2 py-2 text-xs text-emerald-50 focus:outline-none"
-                value={entryEnd} onChange={(e) => setEntryEnd(e.target.value)} />
-            </div>
-          </div>
-
-          {/* Course */}
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Course</label>
-            {courseId ? (
-              <div className="flex items-center justify-between rounded-xl border border-emerald-600/60 bg-emerald-900/30 px-3 py-2">
-                <span className="text-sm text-emerald-50 truncate">{courseName}</span>
-                <button type="button" onClick={() => { setCourseId(""); setCourseName(""); setShowCoursePicker(true); }}
-                  className="ml-2 text-[11px] text-emerald-300/60 hover:text-emerald-200 shrink-0">✕</button>
-              </div>
-            ) : (
-              <button type="button" onClick={() => setShowCoursePicker(true)}
-                className="w-full rounded-xl border border-emerald-800/40 bg-emerald-900/20 px-3 py-2 text-sm text-emerald-200/60 text-left">
-                Select course…
-              </button>
-            )}
-            <CoursePickerModal
-              open={showCoursePicker}
-              onClose={() => setShowCoursePicker(false)}
-              onSelect={(id, name) => { setCourseId(id); setCourseName(name ?? ""); setShowCoursePicker(false); }}
-            />
-          </div>
-
-          {/* Default tee boxes — shown once a course is selected */}
-          {courseId && setupTeeBoxes.length > 0 && (
-            <div className="grid grid-cols-2 gap-1.5">
-              {[
-                {
-                  label: "Men's tee",
-                  value: setupMaleTeeId,
-                  set: setSetupMaleTeeId,
-                  options: setupTeeBoxes.filter((t) => !t.gender || t.gender === "male" || t.gender === "unisex"),
-                },
-                {
-                  label: "Women's tee",
-                  value: setupFemaleTeeId,
-                  set: setSetupFemaleTeeId,
-                  options: setupTeeBoxes.filter((t) => !t.gender || t.gender === "female" || t.gender === "unisex"),
-                },
-              ].map(({ label, value, set, options }) => (
-                <div key={label} className="space-y-1">
-                  <label className="text-[10px] uppercase tracking-wider text-emerald-200/50">{label}</label>
-                  <select
-                    value={value}
-                    onChange={(e) => set(e.target.value)}
-                    className="w-full rounded-xl bg-emerald-900/20 border border-emerald-800/40 px-2 py-1.5 text-[11px] text-emerald-50 focus:outline-none [color-scheme:dark]"
-                  >
-                    <option value="">— optional —</option>
-                    {options.map((t) => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </select>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Format */}
-          {!isAggregate && (
-            <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Format</label>
-              <div className="grid grid-cols-2 gap-1.5">
-                {EVENT_TYPES.map((t) => (
-                  <button key={t.value} type="button" onClick={() => setSelectedCompType(t.value)}
-                    className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${selectedCompType === t.value ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
-                    {t.label}
+              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Status</label>
+              <div className="grid grid-cols-4 gap-1">
+                {(["upcoming", "live", "completed", "cancelled"] as const).map((s) => (
+                  <button key={s} type="button" onClick={() => setMajorsStatus(s)}
+                    className={`rounded-xl border px-2 py-1.5 text-[10px] text-center capitalize transition-colors ${
+                      majorsStatus === s
+                        ? s === "live" ? "border-amber-600 bg-amber-900/40 text-amber-200"
+                          : s === "completed" ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
+                          : s === "cancelled" ? "border-red-700 bg-red-900/30 text-red-300"
+                          : "border-emerald-500 bg-emerald-900/50 text-emerald-50"
+                        : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"
+                    }`}>
+                    {s}
                   </button>
                 ))}
               </div>
             </div>
-          )}
 
-          {/* Scoring model */}
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Scoring</label>
-            {isScoringLocked && (
-              <p className="text-[10px] text-amber-400/70">Locked — event is {event.majors_status}. Revert to live to change scoring config.</p>
-            )}
-            <div className="grid grid-cols-2 gap-1.5">
-              {SCORING_MODELS.map((s) => (
-                <button key={s.value} type="button" onClick={() => !isScoringLocked && setScoringModel(s.value)}
-                  disabled={isScoringLocked}
-                  className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${scoringModel === s.value ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
-                  {s.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Handicap rules */}
-          {scoringModel !== "gross" && (
-            <div className="rounded-xl border border-emerald-900/40 bg-emerald-950/30 p-3 space-y-2">
-              <div className="text-[10px] uppercase tracking-wider text-emerald-200/50 font-semibold">Handicap Rules</div>
-              <HandicapRulesEditor
-                compact
-                disabled={isScoringLocked}
-                value={{ mode: handicapMode as any, allowance_pct: handicapPct, max_handicap: handicapMax }}
-                onChange={(v) => { setHandicapMode(v.mode); setHandicapPct(v.allowance_pct); setHandicapMax(v.max_handicap); }}
-              />
-            </div>
-          )}
-
-          {/* Points model */}
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Points</label>
-            <div className="grid grid-cols-2 gap-1.5">
-              {POINTS_MODELS.map((p) => (
-                <button key={p.value} type="button" onClick={() => !isScoringLocked && setPointsModel(p.value)}
-                  disabled={isScoringLocked}
-                  className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${pointsModel === p.value ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
-                  {p.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Num rounds */}
-          {!isAggregate && (
+            {/* Name */}
             <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Rounds</label>
-              <input type="number" min={1} max={10} value={numRounds}
-                onChange={(e) => setNumRounds(e.target.value)}
-                className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 focus:outline-none" />
+              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Name *</label>
+              <input className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 focus:outline-none"
+                value={name} onChange={(e) => setName(e.target.value)} />
             </div>
-          )}
 
-          {/* Rules */}
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Rules</label>
-            <textarea className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none resize-none"
-              rows={3} value={rulesText} onChange={(e) => setRulesText(e.target.value)} />
-          </div>
+            {/* Description */}
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Description</label>
+              <textarea className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 focus:outline-none resize-none"
+                rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
+            </div>
 
-          {/* Standings contribution */}
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Season Standings</label>
-            <div className="grid grid-cols-3 gap-1.5">
-              {(["event_only", "season", "both"] as const).map((v) => (
-                <button key={v} type="button" onClick={() => setStandingsContrib(v)}
-                  className={`rounded-xl border px-2 py-1.5 text-[10px] text-center transition-colors ${standingsContrib === v ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
-                  {v === "event_only" ? "Event only" : v === "season" ? "Season" : "Both"}
+            {/* Date */}
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Event Date</label>
+              <input type="date" className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 focus:outline-none"
+                value={eventDate} onChange={(e) => setCompetitionDate(e.target.value)} />
+            </div>
+
+            {/* Entry window */}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Entry Opens</label>
+                <input type="datetime-local" className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-2 py-2 text-xs text-emerald-50 focus:outline-none"
+                  value={entryStart} onChange={(e) => setEntryStart(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Entry Closes</label>
+                <input type="datetime-local" className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-2 py-2 text-xs text-emerald-50 focus:outline-none"
+                  value={entryEnd} onChange={(e) => setEntryEnd(e.target.value)} />
+              </div>
+            </div>
+
+            {/* Per-round course + tees */}
+            {!isAggregate && (
+              <div className="space-y-2">
+                <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Rounds</label>
+                {rounds.map((r, idx) => {
+                  const tees = r.tee_boxes;
+                  const hint = deleteHint(r);
+                  return (
+                    <div key={r.id ?? `new-${idx}`} className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/30 p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="text-[10px] uppercase tracking-wider text-emerald-200/55 font-semibold">
+                          {rounds.length > 1 ? r.name : "Course (optional)"}
+                        </div>
+                        {rounds.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeRound(idx)}
+                            title={hint ?? "Remove round"}
+                            className={`text-[10px] px-1.5 py-0.5 rounded-lg transition-colors ${hint ? "text-emerald-200/25 cursor-not-allowed" : "text-red-400/60 hover:text-red-300 hover:bg-red-900/20"}`}
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                      {r.course_id ? (
+                        <div className="flex items-center justify-between rounded-xl border border-emerald-600/60 bg-emerald-900/30 px-3 py-2">
+                          <span className="text-sm text-emerald-50 truncate">{r.course_name}</span>
+                          <button type="button"
+                            onClick={() => { updateRound(idx, { course_id: "", course_name: "", tee_male_id: "", tee_female_id: "", tee_boxes: [] }); setShowCoursePickerIdx(idx); }}
+                            className="ml-3 text-[11px] text-emerald-300/60 hover:text-emerald-200 shrink-0">✕</button>
+                        </div>
+                      ) : (
+                        <button type="button" onClick={() => setShowCoursePickerIdx(idx)}
+                          className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2 text-sm text-emerald-100/40 hover:border-emerald-700/60 text-left">
+                          Search for a course…
+                        </button>
+                      )}
+                      {r.course_id && tees.length > 0 && (
+                        <div className="grid grid-cols-2 gap-2 pt-1">
+                          {[
+                            { label: "Men's tee", field: "tee_male_id" as const, options: tees.filter((t) => !t.gender || t.gender === "male" || t.gender === "unisex") },
+                            { label: "Women's tee", field: "tee_female_id" as const, options: tees.filter((t) => !t.gender || t.gender === "female" || t.gender === "unisex") },
+                          ].map(({ label, field, options }) => (
+                            <div key={field} className="space-y-1">
+                              <label className="text-[10px] uppercase tracking-wider text-emerald-200/65">{label}</label>
+                              <select value={r[field]} onChange={(e) => updateRound(idx, { [field]: e.target.value })}
+                                className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-2 py-1.5 text-[11px] text-emerald-50 focus:outline-none [color-scheme:dark]">
+                                <option value="">— optional —</option>
+                                {options.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                              </select>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                <button type="button" onClick={addRound}
+                  className="w-full py-2 rounded-xl border border-dashed border-emerald-800/50 text-[11px] text-emerald-400/60 hover:text-emerald-300 hover:border-emerald-700/60 transition-colors">
+                  + Add Round
                 </button>
-              ))}
+              </div>
+            )}
+
+            {/* Format */}
+            {!isAggregate && (
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Format</label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {EVENT_TYPES.map((t) => (
+                    <button key={t.value} type="button" onClick={() => setSelectedCompType(t.value)}
+                      className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${selectedCompType === t.value ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Entry guard */}
+            {hasEntries && (
+              <div className="rounded-xl border border-amber-800/40 bg-amber-900/15 px-3 py-2 text-[10px] text-amber-300/80 leading-relaxed">
+                Players are entered — scoring and format changes will affect their results.
+              </div>
+            )}
+
+            {/* Scoring model */}
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Scoring</label>
+              {isScoringLocked && (
+                <p className="text-[10px] text-amber-400/70">Locked — event is {event.majors_status}. Revert to live to change scoring config.</p>
+              )}
+              <div className="grid grid-cols-2 gap-1.5">
+                {SCORING_MODELS.map((s) => (
+                  <button key={s.value} type="button" onClick={() => !isScoringLocked && setScoringModel(s.value)}
+                    disabled={isScoringLocked}
+                    className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${scoringModel === s.value ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
+                    {s.label}
+                  </button>
+                ))}
+              </div>
             </div>
-            <p className="text-[10px] text-emerald-200/45 leading-relaxed mt-1">
-              {standingsContrib === "event_only" && "Result stays on this event's leaderboard only — won't affect season standings."}
-              {standingsContrib === "season" && "Feeds into the group's cumulative season standings — no event leaderboard points."}
-              {standingsContrib === "both" && "Counted in both this event's result and the group's season standings."}
-            </p>
+
+            {/* Handicap rules */}
+            {scoringModel !== "gross" && (
+              <div className="rounded-xl border border-emerald-900/40 bg-emerald-950/30 p-3 space-y-2">
+                <div className="text-[10px] uppercase tracking-wider text-emerald-200/50 font-semibold">Handicap Rules</div>
+                <HandicapRulesEditor
+                  compact
+                  disabled={isScoringLocked}
+                  value={{ mode: handicapMode as any, allowance_pct: handicapPct, max_handicap: handicapMax }}
+                  onChange={(v) => { setHandicapMode(v.mode); setHandicapPct(v.allowance_pct); setHandicapMax(v.max_handicap); }}
+                />
+              </div>
+            )}
+
+            {/* Points model */}
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Points</label>
+              <div className="grid grid-cols-2 gap-1.5">
+                {POINTS_MODELS.map((p) => (
+                  <button key={p.value} type="button" onClick={() => !isScoringLocked && setPointsModel(p.value)}
+                    disabled={isScoringLocked}
+                    className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${pointsModel === p.value ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Rules */}
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Rules</label>
+              <textarea className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none resize-none"
+                rows={3} value={rulesText} onChange={(e) => setRulesText(e.target.value)} />
+            </div>
+
+            {/* Standings contribution */}
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Season Standings</label>
+              <div className="grid grid-cols-3 gap-1.5">
+                {(["event_only", "season", "both"] as const).map((v) => (
+                  <button key={v} type="button" onClick={() => setStandingsContrib(v)}
+                    className={`rounded-xl border px-2 py-1.5 text-[10px] text-center transition-colors ${standingsContrib === v ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
+                    {v === "event_only" ? "Event only" : v === "season" ? "Season" : "Both"}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] text-emerald-200/45 leading-relaxed mt-1">
+                {standingsContrib === "event_only" && "Result stays on this event's leaderboard only — won't affect season standings."}
+                {standingsContrib === "season" && "Feeds into the group's cumulative season standings — no event leaderboard points."}
+                {standingsContrib === "both" && "Counted in both this event's result and the group's season standings."}
+              </p>
+            </div>
+
+            {/* Tee time mode */}
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Tee Time Assignment</label>
+              <div className="grid grid-cols-2 gap-1.5">
+                {(["admin_assigned", "self_select"] as const).map((v) => (
+                  <button key={v} type="button" onClick={() => setTeeTimeMode(v)}
+                    className={`rounded-xl border px-2 py-1.5 text-[10px] text-center transition-colors ${teeTimeMode === v ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
+                    {v === "admin_assigned" ? "Admin assigned" : "Self select"}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
-          {/* Tee time mode */}
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Tee Time Assignment</label>
-            <div className="grid grid-cols-2 gap-1.5">
-              {(["admin_assigned", "self_select"] as const).map((v) => (
-                <button key={v} type="button" onClick={() => setTeeTimeMode(v)}
-                  className={`rounded-xl border px-2 py-1.5 text-[10px] text-center transition-colors ${teeTimeMode === v ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
-                  {v === "admin_assigned" ? "Admin assigned" : "Self select"}
-                </button>
-              ))}
-            </div>
+          {error && <div className="text-sm text-red-400 pb-2">{error}</div>}
+          <div className="flex gap-3 pb-6">
+            <button type="button" onClick={onClose}
+              className="flex-1 py-3 rounded-full border border-emerald-900/60 text-sm text-emerald-200/70">
+              Cancel
+            </button>
+            <button type="button" onClick={handleSave} disabled={!name.trim() || saving}
+              className="flex-1 py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50">
+              {saving ? "Saving…" : "Save"}
+            </button>
           </div>
-        </div>
-
-        {error && <div className="text-sm text-red-400 pb-2">{error}</div>}
-        <div className="flex gap-3 pb-6">
-          <button type="button" onClick={onClose}
-            className="flex-1 py-3 rounded-full border border-emerald-900/60 text-sm text-emerald-200/70">
-            Cancel
-          </button>
-          <button type="button" onClick={handleSave} disabled={!name.trim() || saving}
-            className="flex-1 py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50">
-            {saving ? "Saving…" : "Save"}
-          </button>
         </div>
       </div>
-    </div>
+      {showCoursePickerIdx !== null && (
+        <CoursePickerModal
+          open={true}
+          onClose={() => setShowCoursePickerIdx(null)}
+          onSelect={(id, cname) => handleRoundCourseSelect(showCoursePickerIdx, id, cname ?? "")}
+        />
+      )}
+    </>
   );
 }
 
@@ -4807,6 +4899,8 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
         <EventSetupSheet
           event={event}
           eventRounds={eventRounds}
+          teeTimes={teeTimes}
+          hasEntries={participants.length > 0}
           onClose={() => setShowSetupSheet(false)}
           onSaved={(updated) => {
             setCompetition(updated);
