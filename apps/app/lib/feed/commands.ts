@@ -2,6 +2,17 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import type { FeedAudience, FeedItemType } from "@/lib/feed/types";
 import { parseFeedPayload } from "@/lib/feed/schemas";
 import { fanOutFeedItemToFollowers } from "@/lib/feed/fanout";
+import { createNotification } from "@/lib/notifications/notify";
+
+/** Look up a profile's display name (for "X tagged you" copy). */
+async function getProfileName(profileId: string): Promise<string> {
+  const { data } = await supabaseAdmin
+    .from("profiles")
+    .select("name")
+    .eq("id", profileId)
+    .maybeSingle();
+  return (data as any)?.name ?? "Someone";
+}
 
 /**
  * Writes for Social Feed:
@@ -72,6 +83,30 @@ export async function createUserPost(params: {
     audience,
   });
 
+  // Notify tagged users (excluding the author). Best-effort.
+  const tagged = Array.isArray(parsed.tagged_profiles) ? parsed.tagged_profiles : [];
+  const mentionIds = Array.from(
+    new Set(tagged.map((t) => t.profile_id).filter((id) => id && id !== actorProfileId))
+  );
+  if (mentionIds.length > 0) {
+    const actorName = await getProfileName(actorProfileId);
+    const excerpt = typeof parsed.text === "string" ? parsed.text : "";
+    await Promise.allSettled(
+      mentionIds.map((recipientProfileId) =>
+        createNotification({
+          recipientProfileId,
+          type: "mention_post",
+          payload: {
+            feed_item_id: data.id,
+            actor_profile_id: actorProfileId,
+            actor_name: actorName,
+            excerpt,
+          },
+        })
+      )
+    );
+  }
+
   return { feed_item_id: data.id };
 }
 
@@ -135,8 +170,9 @@ export async function createComment(params: {
   profileId: string;
   body: string;
   parentCommentId?: string | null;
+  mentionedProfileIds?: string[] | null;
 }): Promise<{ comment_id: string }> {
-  const { feedItemId, profileId, body, parentCommentId } = params;
+  const { feedItemId, profileId, body, parentCommentId, mentionedProfileIds } = params;
 
   if (!feedItemId || !profileId) throw new Error("Missing ids");
   if (typeof body !== "string") throw new Error("Invalid body");
@@ -161,6 +197,35 @@ export async function createComment(params: {
 
   if (error) throw error;
   if (!data?.id) throw new Error("Failed to create comment");
+
+  // Notify mentioned users (excluding the commenter). Best-effort. Only notify
+  // mentions that can actually see the feed item (RLS via feed_item_targets).
+  const mentionIds = Array.from(
+    new Set((mentionedProfileIds ?? []).filter((id) => id && id !== profileId))
+  );
+  if (mentionIds.length > 0) {
+    const actorName = await getProfileName(profileId);
+    await Promise.allSettled(
+      mentionIds.map(async (recipientProfileId) => {
+        try {
+          await assertViewerCanReadFeedItem(feedItemId, recipientProfileId);
+        } catch {
+          return; // mentioned user can't see this item — skip
+        }
+        await createNotification({
+          recipientProfileId,
+          type: "mention_comment",
+          payload: {
+            feed_item_id: feedItemId,
+            comment_id: data.id,
+            actor_profile_id: profileId,
+            actor_name: actorName,
+            excerpt: trimmed,
+          },
+        });
+      })
+    );
+  }
 
   return { comment_id: data.id };
 }

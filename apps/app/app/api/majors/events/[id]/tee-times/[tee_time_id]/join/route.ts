@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 import { getEventById } from "@/lib/majors/queries";
+import { createNotification } from "@/lib/notifications/notify";
 
 export const runtime = "nodejs";
 
@@ -149,9 +150,9 @@ export async function POST(
       }
     }
 
-    // Send notification confirming the slot
-    await supabaseAdmin.from("user_notifications").insert({
-      profile_id: profileId,
+    // Send notification confirming the slot (in-app + push, best-effort)
+    await createNotification({
+      recipientProfileId: profileId,
       type: "tee_time_assigned",
       payload: {
         event_id: id,

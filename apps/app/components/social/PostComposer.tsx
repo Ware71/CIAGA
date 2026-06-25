@@ -4,8 +4,8 @@
 import { useMemo, useRef, useState } from "react";
 import { createPost } from "@/lib/social/api";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/lib/supabaseClient";
+import MentionInput, { type Mention } from "@/components/social/MentionInput";
 
 type Props = {
   onPosted?: () => void;
@@ -25,6 +25,7 @@ function uniqueName(original: string) {
 
 export default function PostComposer({ onPosted, onCancel }: Props) {
   const [text, setText] = useState("");
+  const [mentions, setMentions] = useState<Mention[]>([]);
   const [images, setImages] = useState<UploadingImage[]>([]);
   const [isPosting, setIsPosting] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -122,10 +123,14 @@ export default function PostComposer({ onPosted, onCancel }: Props) {
     try {
       const image_urls = await uploadImagesToStorage();
 
+      // Only keep mentions still present in the final text.
+      const finalMentions = mentions.filter((m) => trimmed.includes(`@${m.name}`));
+
       await createPost({
         audience: "followers",
         text: trimmed,
         image_urls: image_urls.length > 0 ? image_urls : null,
+        tagged_profiles: finalMentions.length > 0 ? finalMentions : null,
       });
 
       // cleanup previews
@@ -134,6 +139,7 @@ export default function PostComposer({ onPosted, onCancel }: Props) {
       }
 
       setText("");
+      setMentions([]);
       setImages([]);
       onPosted?.();
     } catch (e: any) {
@@ -145,12 +151,14 @@ export default function PostComposer({ onPosted, onCancel }: Props) {
 
   return (
     <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 shadow-sm space-y-3">
-      {/* Caption */}
-      <Textarea
+      {/* Caption — supports @mentions */}
+      <MentionInput
         value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="Add a caption…"
-        className="min-h-[90px] bg-[#042713] border-emerald-900/70 text-emerald-50 placeholder:text-emerald-100/40"
+        onChange={setText}
+        mentions={mentions}
+        onMentionsChange={setMentions}
+        placeholder="Add a caption… use @ to tag people"
+        className="w-full min-h-[90px] rounded-md border border-emerald-900/70 bg-[#042713] px-3 py-2 text-base text-emerald-50 placeholder:text-emerald-100/40 outline-none focus:ring-2 focus:ring-emerald-600/40"
       />
 
       {/* Image picker */}

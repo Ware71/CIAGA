@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getOwnedProfileIdOrThrow } from "@/lib/serverOwnedProfile";
+import { notifyFollowersOfRoundActivity } from "@/lib/notifications/roundActivity";
 
 type Body = { round_id: string };
 
@@ -302,6 +303,10 @@ export async function POST(req: Request) {
       .eq("id", round.id);
 
     if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 });
+
+    // Notify followers of the players that this round has started (grouped,
+    // best-effort — runs only on the request that won the start claim).
+    await notifyFollowersOfRoundActivity({ roundId: round.id, kind: "started" }).catch(() => {});
 
     return NextResponse.json({ ok: true, round_id: round.id, tee_snapshot_id: teeSnapId });
   } catch (e: any) {

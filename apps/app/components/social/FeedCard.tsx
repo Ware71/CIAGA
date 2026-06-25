@@ -1,7 +1,7 @@
 // components/social/FeedCard.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { FeedItemVM } from "@/lib/feed/types";
 import ReactionBar from "@/components/social/ReactionBar";
@@ -209,13 +209,43 @@ function ReactionSummary({ counts }: { counts: Record<string, number> }) {
 
 // ---- Body renderers --------------------------------------------
 
+// Highlight @mentions in post text using the tagged_profiles names.
+function renderWithMentions(text: string, tagged: Array<{ name?: string }> | null | undefined) {
+  const names = (tagged ?? []).map((t) => t?.name).filter((n): n is string => !!n);
+  if (names.length === 0) return text;
+  const escaped = names
+    .map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .sort((a, b) => b.length - a.length);
+  const re = new RegExp(`@(?:${escaped.join("|")})`, "g");
+  const parts: ReactNode[] = [];
+  let last = 0;
+  let key = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parts.push(text.slice(last, m.index));
+    parts.push(
+      <span key={key++} className="font-bold text-emerald-300">
+        {m[0]}
+      </span>
+    );
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts;
+}
+
 function UserPostBody({ payload }: { payload: any }) {
   const text = typeof payload?.text === "string" ? payload.text : "";
   const images = Array.isArray(payload?.image_urls) ? payload.image_urls : [];
+  const tagged = Array.isArray(payload?.tagged_profiles) ? payload.tagged_profiles : [];
 
   return (
     <div className="space-y-3">
-      {text ? <div className="text-sm font-semibold text-emerald-50/95 whitespace-pre-wrap">{text}</div> : null}
+      {text ? (
+        <div className="text-sm font-semibold text-emerald-50/95 whitespace-pre-wrap">
+          {renderWithMentions(text, tagged)}
+        </div>
+      ) : null}
 
       {Array.isArray(images) && images.length > 0 ? (
         <div

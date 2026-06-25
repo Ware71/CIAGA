@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 import { getEventById } from "@/lib/majors/queries";
+import { createNotification } from "@/lib/notifications/notify";
 
 export const runtime = "nodejs";
 
@@ -156,9 +157,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
           .update({ status: "offered", offered_at: new Date().toISOString() })
           .eq("id", nextWaiting.id);
 
-        // Notify the promoted player
-        await supabaseAdmin.from("user_notifications").insert({
-          profile_id: nextWaiting.profile_id,
+        // Notify the promoted player (in-app + push, best-effort)
+        await createNotification({
+          recipientProfileId: nextWaiting.profile_id,
           type: "waitlist_offered",
           payload: {
             event_id: id,
