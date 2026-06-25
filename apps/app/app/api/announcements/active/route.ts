@@ -9,21 +9,27 @@ export const runtime = "nodejs";
 export async function GET(req: Request) {
   try {
     const { profileId } = await getAuthedProfileOrThrow(req);
-    const nowIso = new Date().toISOString();
+    const now = Date.now();
 
     const { data: anns, error } = await supabaseAdmin
       .from("announcements")
-      .select("id, slug, kind, title, body, image_url, cta_label, cta_url, priority, created_at")
+      .select(
+        "id, slug, kind, title, body, image_url, cta_label, cta_url, priority, created_at, publish_at, expires_at"
+      )
       .eq("active", true)
-      .or(`publish_at.is.null,publish_at.lte.${nowIso}`)
-      .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
       .order("priority", { ascending: false })
       .order("created_at", { ascending: false })
-      .limit(20);
+      .limit(50);
 
     if (error) throw error;
 
-    const list = anns ?? [];
+    // Filter the publish/expiry window in JS — ISO timestamps inside PostgREST
+    // .or() filters are brittle, so keep the query simple and window here.
+    const list = (anns ?? []).filter((a: any) => {
+      const publishOk = !a.publish_at || new Date(a.publish_at).getTime() <= now;
+      const notExpired = !a.expires_at || new Date(a.expires_at).getTime() > now;
+      return publishOk && notExpired;
+    });
     if (list.length === 0) return NextResponse.json({ announcements: [] });
 
     const { data: views } = await supabaseAdmin

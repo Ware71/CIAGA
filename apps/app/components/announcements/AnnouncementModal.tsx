@@ -11,6 +11,7 @@ import {
   registerPush,
   type RegisterPushResult,
 } from "@/lib/push/clientPush";
+import { markPushPromptShown } from "@/lib/notifications/usePushPrompt";
 
 type Props = {
   items: Announcement[];
@@ -44,7 +45,15 @@ export default function AnnouncementModal({ items, onSeen }: Props) {
             transition={{ type: "spring", damping: 28, stiffness: 320 }}
           >
             {current.kind === "onboarding" ? (
-              <OnboardingFlow ann={current} onDone={() => onSeen(current.id)} />
+              <OnboardingFlow
+                ann={current}
+                onDone={() => {
+                  // Onboarding already asks for push — start the 3-month cooldown
+                  // so the dedicated prompt doesn't fire in the same session.
+                  markPushPromptShown();
+                  onSeen(current.id);
+                }}
+              />
             ) : (
               <InfoCard ann={current} onDone={() => onSeen(current.id)} />
             )}

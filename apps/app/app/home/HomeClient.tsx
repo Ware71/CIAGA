@@ -21,6 +21,7 @@ import NotificationCenter from "@/components/notifications/NotificationCenter";
 import { useNotifications } from "@/lib/notifications/useNotifications";
 import AnnouncementModal from "@/components/announcements/AnnouncementModal";
 import { useAnnouncements } from "@/lib/announcements/useAnnouncements";
+import PushPermissionPrompt from "@/components/notifications/PushPermissionPrompt";
 
 type MenuItem = { id: string; label: string };
 
@@ -485,6 +486,16 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
             {dataReady && !showSplash && (
               <AnnouncementModal items={announcements.items} onSeen={announcements.markSeen} />
             )}
+
+            {/* Recurring push-permission prompt (3-month cooldown) — only once
+                any pending announcement/onboarding has been cleared. */}
+            {dataReady &&
+              !showSplash &&
+              myProfileId &&
+              announcements.loaded &&
+              announcements.items.length === 0 && (
+                <PushPermissionPrompt profileId={myProfileId} suppressed={false} />
+              )}
           </header>
 
           {/* Subtle summary */}
