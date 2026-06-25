@@ -3,10 +3,6 @@
     {
       "path": "/api/cron/auto-complete-rounds",
       "schedule": "0 3 * * *"
-    },
-    {
-      "path": "/api/cron/entry-open-notifications",
-      "schedule": "*/15 * * * *"
     }
   ]
 }
