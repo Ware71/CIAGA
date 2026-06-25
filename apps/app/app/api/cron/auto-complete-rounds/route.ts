@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { finishRound } from "@/lib/rounds/finishRound";
 import { reconcileEventStatus } from "@/lib/majors/reconcileStatus";
+import { runEntryOpenNotifications } from "@/lib/notifications/entryOpenSweep";
 
 export const runtime = "nodejs";
 
@@ -90,6 +91,15 @@ export async function GET(req: Request) {
     );
   }
 
+  // Entry-open notifications run here too — a single daily cron keeps us within
+  // the Vercel Hobby once-per-day cron limit. Best-effort.
+  let entryOpen: { processed: number; notified: number } | null = null;
+  try {
+    entryOpen = await runEntryOpenNotifications();
+  } catch (e: any) {
+    console.error("[auto-complete-rounds] entry-open sweep failed:", e?.message);
+  }
+
   const completed = results.filter((r) => r.status === "ok").length;
-  return NextResponse.json({ ok: true, completed, results });
+  return NextResponse.json({ ok: true, completed, results, entryOpen });
 }
