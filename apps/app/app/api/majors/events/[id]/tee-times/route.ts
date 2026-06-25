@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 import { getEventById } from "@/lib/majors/queries";
+import { createNotificationsForMany } from "@/lib/notifications/notify";
 
 export const runtime = "nodejs";
 
@@ -323,22 +324,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
 
     // Send tee_time_assigned notifications to all non-guest participants
-    const notifInserts = participantInserts
+    // (in-app + push, best-effort).
+    const notifRecipients = participantInserts
       .filter((p) => p.profile_id && !p.is_guest)
-      .map((p) => ({
-        profile_id: p.profile_id,
-        type: "tee_time_assigned",
-        payload: {
-          event_id: id,
-          event_name: event.name,
-          tee_time,
-          group_number: group_number ?? null,
-          round_id: round.id,
-        },
-      }));
+      .map((p) => p.profile_id as string);
 
-    if (notifInserts.length > 0) {
-      await supabaseAdmin.from("user_notifications").insert(notifInserts);
+    if (notifRecipients.length > 0) {
+      await createNotificationsForMany(notifRecipients, "tee_time_assigned", {
+        event_id: id,
+        event_name: event.name,
+        tee_time,
+        group_number: group_number ?? null,
+        round_id: round.id,
+      });
     }
 
     return NextResponse.json({ tee_time: teeTimeRow }, { status: 201 });

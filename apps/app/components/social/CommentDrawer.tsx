@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { commentOnFeedItem, fetchComments, toggleCommentLike } from "@/lib/social/api";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import MentionInput, { type Mention } from "@/components/social/MentionInput";
 
 type Comment = {
   id: string;
@@ -50,6 +50,7 @@ function displayAuthorName(c: Comment) {
 
 export default function CommentDrawer({ open, onOpenChange, feedItemId, onCommentCreated }: Props) {
   const [body, setBody] = useState("");
+  const [mentions, setMentions] = useState<Mention[]>([]);
   const [isSending, setIsSending] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -123,10 +124,13 @@ export default function CommentDrawer({ open, onOpenChange, feedItemId, onCommen
       i_liked: false,
     };
 
+    const finalMentions = mentions.filter((m) => trimmed.includes(`@${m.name}`));
+
     try {
       // Optimistically prepend immediately
       setComments((prev) => [optimistic, ...prev]);
       setBody("");
+      setMentions([]);
 
       // Let parent update "top comment preview" immediately
       onCommentCreated?.({
@@ -137,7 +141,11 @@ export default function CommentDrawer({ open, onOpenChange, feedItemId, onCommen
       });
 
       // Send to server
-      await commentOnFeedItem(feedItemId, trimmed);
+      await commentOnFeedItem(
+        feedItemId,
+        trimmed,
+        finalMentions.map((m) => m.profile_id)
+      );
 
       // Sync from server (don’t block UI waiting)
       void load();
@@ -299,11 +307,13 @@ export default function CommentDrawer({ open, onOpenChange, feedItemId, onCommen
         </div>
 
         <div className="border-t border-emerald-900/70 p-4 space-y-2">
-          <Textarea
+          <MentionInput
             value={body}
-            onChange={(e) => setBody(e.target.value)}
-            placeholder="Write a comment…"
-            className="min-h-[90px] bg-emerald-950/10 text-emerald-50 border-emerald-900/60"
+            onChange={setBody}
+            mentions={mentions}
+            onMentionsChange={setMentions}
+            placeholder="Write a comment… use @ to mention"
+            className="w-full min-h-[90px] rounded-md border border-emerald-900/60 bg-emerald-950/10 px-3 py-2 text-base text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-600/40"
           />
           <div className="flex justify-end">
             <Button

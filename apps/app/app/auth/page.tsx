@@ -75,7 +75,9 @@ function AuthPageContent() {
       return;
     }
 
-    if (searchParams.get('recovery') === 'true') {
+    const isRecovery = searchParams.get('recovery') === 'true';
+
+    if (isRecovery) {
       setMode('reset');
       setMsg({ text: 'Enter your new password below.', isError: false });
     } else if (searchParams.get('error') === 'invite_expired') {
@@ -91,17 +93,21 @@ function AuthPageContent() {
       });
     }
 
-    // If the user already has a valid session, send them to the app.
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) router.replace('/');
-    });
+    // If the user already has a valid session, send them to the app — but not
+    // during password recovery, where the callback has already created a session
+    // and we must stay on the reset form so the user can set a new password.
+    if (!isRecovery) {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) router.replace('/');
+      });
+    }
 
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY') {
         setMode('reset');
         setMsg({ text: 'Enter your new password below.', isError: false });
       }
-      if (event === 'SIGNED_IN') {
+      if (event === 'SIGNED_IN' && !isRecovery) {
         router.replace('/');
       }
     });

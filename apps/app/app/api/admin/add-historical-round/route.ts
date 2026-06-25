@@ -169,6 +169,9 @@ export async function POST(req: Request) {
           is_guest: false,
           role: "player",
           handicap_index: player.handicap_index,
+          // Freeze the entered HI so handicap replays can never drift to the
+          // player's current HI — matches the season-import pattern.
+          assigned_handicap_index: player.handicap_index,
           tee_snapshot_id: teeSnap.id,
         })
         .select("id")
@@ -196,7 +199,16 @@ export async function POST(req: Request) {
     const { error: seErr } = await admin.from("round_score_events").insert(scoreEvents);
     if (seErr) throw new Error(`Create score events failed: ${seErr.message}`);
 
-    // 7) UPDATE status to 'finished' — this fires the DB triggers for handicap computation
+    // 7) Compute CH and PH from the entered handicap indexes before locking.
+    // The DB triggers (trg_compute_results_on_round_finish etc.) handle WHS score
+    // differential but do NOT call ciaga_persist_playing_handicaps. We must call
+    // the backdated variant so course_handicap_used and playing_handicap_used are
+    // populated for competition scoring — and so the historical HI is never
+    // replaced by the player's current HI (backdated = no current_handicaps lookup).
+    const { error: phErr } = await admin.rpc("ciaga_persist_playing_handicaps_backdated", { p_round_id: round.id });
+    if (phErr) throw new Error(`Persist playing handicaps failed: ${phErr.message}`);
+
+    // 8) UPDATE status to 'finished' — fires DB triggers for WHS handicap computation
     const { error: finErr } = await admin
       .from("rounds")
       .update({ status: "finished" })

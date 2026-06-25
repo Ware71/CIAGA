@@ -91,6 +91,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       .single();
 
     if (error) throw error;
+
     return NextResponse.json({ event: data });
   } catch (e: any) {
     const msg = e?.message ?? "Unknown error";

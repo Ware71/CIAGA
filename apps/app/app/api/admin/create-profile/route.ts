@@ -26,6 +26,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    const adminProfileId = rows[0].id;
+
     // 2) Parse payload
     const body = await req.json();
     const name = body?.name ? String(body.name).trim() : null;
@@ -39,6 +41,7 @@ export async function POST(req: Request) {
         email,
         owner_user_id: null,
         is_admin: false,
+        created_by: adminProfileId,
       })
       .select("id, name, email, owner_user_id, created_at")
       .single();

@@ -115,6 +115,29 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchResults, setSearchResults] = useState<ProfileRow[]>([]);
 
+  // -------- Self-only: Invite a friend modal --------
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteName, setInviteName] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteWorking, setInviteWorking] = useState(false);
+  const [inviteMsg, setInviteMsg] = useState<{ text: string; isError: boolean } | null>(null);
+
+  // -------- Public: manage an unclaimed profile (email + invite) --------
+  type ManageInfo = {
+    email: string | null;
+    claimed: boolean;
+    created_by_name: string | null;
+    is_creator: boolean;
+    can_edit_email: boolean;
+    can_invite: boolean;
+    has_active_invite: boolean;
+  };
+  const [manageInfo, setManageInfo] = useState<ManageInfo | null>(null);
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [emailDraft, setEmailDraft] = useState("");
+  const [manageWorking, setManageWorking] = useState(false);
+  const [manageMsg, setManageMsg] = useState<{ text: string; isError: boolean } | null>(null);
+
   // -------- Round history state (for THIS player) --------
   const [historyLoading, setHistoryLoading] = useState<boolean>(true);
   const [historyError, setHistoryError] = useState<string | null>(null);
@@ -349,6 +372,147 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
     }
   };
 
+  const getToken = async () => {
+    const { data: sessionData } = await supabase.auth.getSession();
+    return sessionData.session?.access_token ?? null;
+  };
+
+  // -------- Self-only: invite a friend to join --------
+  const sendFriendInvite = async () => {
+    const name = inviteName.trim();
+    const email = inviteEmail.trim();
+    if (!name) {
+      setInviteMsg({ text: "Please enter a name.", isError: true });
+      return;
+    }
+    if (!email) {
+      setInviteMsg({ text: "Please enter an email to invite them.", isError: true });
+      return;
+    }
+
+    setInviteWorking(true);
+    setInviteMsg(null);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Not signed in");
+
+      const res = await fetch("/api/friends/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name, email, send_invite: true }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j?.error || "Failed to send invite");
+
+      setInviteMsg({
+        text: j?.warning || `Invite sent to ${email}.`,
+        isError: false,
+      });
+      setInviteName("");
+      setInviteEmail("");
+
+      // The new mutual-follow means they now show in your Following list.
+      if (myProfileId) await refreshMyFollowingSet(myProfileId);
+      if (profile?.id) await fetchCounts(profile.id);
+      if (listOpen && listMode === "following") await openList("following");
+
+      setTimeout(() => setInviteOpen(false), 1200);
+    } catch (e: any) {
+      setInviteMsg({ text: e?.message || "Failed to send invite.", isError: true });
+    } finally {
+      setInviteWorking(false);
+    }
+  };
+
+  // -------- Public: load/manage an unclaimed profile --------
+  const loadManageInfo = async (pid: string) => {
+    try {
+      const token = await getToken();
+      if (!token) {
+        setManageInfo(null);
+        return;
+      }
+      const res = await fetch(`/api/profiles/manage-info?profile_id=${encodeURIComponent(pid)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setManageInfo(null);
+        return;
+      }
+      setManageInfo({
+        email: j.email ?? null,
+        claimed: !!j.claimed,
+        created_by_name: j.created_by_name ?? null,
+        is_creator: !!j.is_creator,
+        can_edit_email: !!j.can_edit_email,
+        can_invite: !!j.can_invite,
+        has_active_invite: !!j.has_active_invite,
+      });
+    } catch {
+      setManageInfo(null);
+    }
+  };
+
+  const saveProfileEmail = async () => {
+    if (!profile?.id) return;
+    const email = emailDraft.trim();
+    if (!email) {
+      setManageMsg({ text: "Please enter an email.", isError: true });
+      return;
+    }
+    setManageWorking(true);
+    setManageMsg(null);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Not signed in");
+      const res = await fetch("/api/profiles/set-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ profile_id: profile.id, email }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j?.error || "Failed to update email");
+
+      setEditingEmail(false);
+      setManageMsg({ text: "Email updated.", isError: false });
+      await loadManageInfo(profile.id);
+    } catch (e: any) {
+      setManageMsg({ text: e?.message || "Failed to update email.", isError: true });
+    } finally {
+      setManageWorking(false);
+    }
+  };
+
+  const sendProfileInvite = async () => {
+    if (!profile?.id) return;
+    setManageWorking(true);
+    setManageMsg(null);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Not signed in");
+      const res = await fetch("/api/profiles/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ profile_id: profile.id }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const text =
+          j?.error === "rate_limited"
+            ? "Rate-limited — please wait a moment and try again."
+            : j?.error || "Failed to send invite";
+        throw new Error(text);
+      }
+      setManageMsg({ text: `Invite sent${j?.email ? ` to ${j.email}` : ""}.`, isError: false });
+      await loadManageInfo(profile.id);
+    } catch (e: any) {
+      setManageMsg({ text: e?.message || "Failed to send invite.", isError: true });
+    } finally {
+      setManageWorking(false);
+    }
+  };
+
   // -------- Self-only: save name (UPDATED: uses /api/profiles/update) --------
   const saveDisplayName = async () => {
     if (!isMe) return;
@@ -572,6 +736,16 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
     // IMPORTANT: initialProfile only used as a one-time seed for /profile wrapper
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetProfileId, mode]);
+
+  // -------- Public: load management info for an unclaimed profile --------
+  useEffect(() => {
+    if (isMe || !authUserId || !profile?.id) {
+      setManageInfo(null);
+      return;
+    }
+    loadManageInfo(profile.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMe, authUserId, profile?.id]);
 
   // -------- Load round history for THIS player --------
   useEffect(() => {
@@ -986,6 +1160,104 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
             </Button>
           )}
 
+          {/* Manage panel: unclaimed profile (public view) */}
+          {!isMe && manageInfo && !manageInfo.claimed && (
+            <div className="mt-4 w-full rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4 space-y-3">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">
+                Hasn’t joined yet
+              </div>
+              {manageInfo.created_by_name && (
+                <div className="text-xs text-emerald-100/60">
+                  Added by {manageInfo.created_by_name}
+                </div>
+              )}
+
+              {manageMsg && (
+                <div
+                  className={[
+                    "rounded-xl border p-2 text-xs",
+                    manageMsg.isError
+                      ? "border-red-900/40 bg-red-950/20 text-red-200"
+                      : "border-emerald-900/70 bg-[#0b3b21]/70 text-emerald-100/90",
+                  ].join(" ")}
+                >
+                  {manageMsg.text}
+                </div>
+              )}
+
+              {/* Email row / editor */}
+              {editingEmail ? (
+                <div className="space-y-2">
+                  <input
+                    value={emailDraft}
+                    onChange={(e) => setEmailDraft(e.target.value)}
+                    placeholder="Email address"
+                    type="email"
+                    autoComplete="off"
+                    className="w-full rounded-xl border border-emerald-900/70 bg-[#08341b] px-3 py-2 text-sm outline-none placeholder:text-emerald-200/40"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 px-3 text-emerald-100 hover:bg-emerald-900/30"
+                      onClick={() => setEditingEmail(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      disabled={manageWorking || !emailDraft.trim()}
+                      onClick={saveProfileEmail}
+                      className="h-8 rounded-xl bg-emerald-700/80 hover:bg-emerald-700"
+                    >
+                      {manageWorking ? "Saving…" : "Save email"}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-[11px] uppercase tracking-wide text-emerald-200/50">Email</div>
+                    <div className="text-sm text-emerald-50 truncate">
+                      {manageInfo.email || "No email set"}
+                    </div>
+                  </div>
+                  {manageInfo.can_edit_email && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 rounded-xl border-emerald-900/70 bg-transparent text-emerald-100 hover:bg-emerald-900/30"
+                      onClick={() => {
+                        setEmailDraft(manageInfo.email || "");
+                        setManageMsg(null);
+                        setEditingEmail(true);
+                      }}
+                    >
+                      {manageInfo.email ? "Change" : "Add email"}
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {/* Invite button (any user, when an email is set) */}
+              {manageInfo.can_invite && !editingEmail && (
+                <Button
+                  type="button"
+                  disabled={manageWorking}
+                  onClick={sendProfileInvite}
+                  className="w-full h-10 rounded-xl bg-emerald-700/80 hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {manageWorking
+                    ? "Sending…"
+                    : manageInfo.has_active_invite
+                    ? "Resend invite"
+                    : "Send invite"}
+                </Button>
+              )}
+            </div>
+          )}
+
           {/* Self-only avatar upload */}
           {isMe && (
             <>
@@ -1118,6 +1390,24 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
               </div>
             </div>
 
+            {/* Invite friends to join (self + following view) */}
+            {isMe && listMode === "following" && (
+              <div className="px-4 py-3 border-b border-emerald-900/70">
+                <Button
+                  type="button"
+                  className="w-full h-11 rounded-xl bg-emerald-700/80 hover:bg-emerald-700"
+                  onClick={() => {
+                    setInviteName("");
+                    setInviteEmail("");
+                    setInviteMsg(null);
+                    setInviteOpen(true);
+                  }}
+                >
+                  + Invite friends to join
+                </Button>
+              </div>
+            )}
+
             <div className="flex-1 overflow-y-auto">
               {listLoading ? (
                 <div className="p-4 text-sm text-emerald-100/70">Loading…</div>
@@ -1194,6 +1484,75 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
               )}
             </div>
           </div>
+
+          {/* INVITE A FRIEND MODAL (self-only) */}
+          {isMe && inviteOpen && (
+            <div className="fixed inset-0 z-[60] bg-black/70 px-4 py-6">
+              <div className="mx-auto w-full max-w-sm rounded-2xl border border-emerald-900/70 bg-[#0b3b21] shadow-xl overflow-hidden flex flex-col">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-emerald-900/70">
+                  <div>
+                    <div className="text-sm font-semibold text-[#f5e6b0]">Invite a friend</div>
+                    <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">
+                      They’ll join and follow you
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2 text-emerald-100 hover:bg-emerald-900/30"
+                    onClick={() => setInviteOpen(false)}
+                  >
+                    Close
+                  </Button>
+                </div>
+
+                <div className="p-4 space-y-3">
+                  {inviteMsg && (
+                    <div
+                      className={[
+                        "rounded-xl border p-3 text-sm",
+                        inviteMsg.isError
+                          ? "border-red-900/40 bg-red-950/20 text-red-200"
+                          : "border-emerald-900/70 bg-[#0b3b21]/70 text-emerald-100/90",
+                      ].join(" ")}
+                    >
+                      {inviteMsg.text}
+                    </div>
+                  )}
+
+                  <input
+                    value={inviteName}
+                    onChange={(e) => setInviteName(e.target.value)}
+                    placeholder="Friend’s name"
+                    maxLength={30}
+                    className="w-full rounded-xl border border-emerald-900/70 bg-[#08341b] px-3 py-2 text-base outline-none placeholder:text-emerald-200/40"
+                  />
+                  <input
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="Friend’s email"
+                    type="email"
+                    autoComplete="off"
+                    className="w-full rounded-xl border border-emerald-900/70 bg-[#08341b] px-3 py-2 text-base outline-none placeholder:text-emerald-200/40"
+                  />
+
+                  <Button
+                    type="button"
+                    disabled={inviteWorking}
+                    onClick={sendFriendInvite}
+                    className="w-full h-11 rounded-xl bg-emerald-700/80 hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    {inviteWorking ? "Sending…" : "Send invite"}
+                  </Button>
+
+                  <div className="text-xs text-emerald-200/50">
+                    We’ll create their profile and send an invite to set up their account. You’ll
+                    automatically follow each other.
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* SEARCH MODAL (self-only) */}
           {isMe && searchOpen && (

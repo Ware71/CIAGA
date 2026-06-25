@@ -3,6 +3,7 @@ import { emitRoundPlayedFeedItem } from "@/lib/feed/generators/roundPlayed";
 import { emitHoleEventFeedItems } from "@/lib/feed/generators/holeEvents";
 import { emitAchievementFeedItems } from "@/lib/feed/generators/achievements";
 import { tryCompleteEventRound } from "@/lib/majors/tryCompleteEventRound";
+import { notifyFollowersOfRoundActivity } from "@/lib/notifications/roundActivity";
 
 /**
  * Marks a round as finished and triggers all downstream effects:
@@ -69,6 +70,14 @@ export async function finishRound({
     emitHoleEventFeedItems({ roundId, actorProfileId }),
     emitAchievementFeedItems({ roundId, actorProfileId }),
   ]);
+
+  // Notify followers that the round completed (grouped, with a course-record
+  // callout). Only fire when THIS call performed the live→finished transition
+  // (roundRow truthy) so a re-run / double-finish doesn't re-notify. Runs after
+  // achievement emission so the course_record feed item exists to detect.
+  if (roundRow) {
+    await notifyFollowersOfRoundActivity({ roundId, kind: "completed" }).catch(() => {});
+  }
 }
 
 // ---------------------------------------------------------------------------

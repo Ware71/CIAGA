@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
+import { createNotificationsForMany } from "@/lib/notifications/notify";
 
 export const runtime = "nodejs";
 
@@ -144,6 +145,56 @@ export async function POST(req: Request) {
         };
       });
       await supabaseAdmin.from("event_rounds").insert(roundRows);
+    }
+
+    // Notify active group members (excluding the creator) that a new event was
+    // added, and — if entry is already open — that entry is open. Best-effort.
+    if (group_id) {
+      try {
+        const [{ data: members }, { data: grp }] = await Promise.all([
+          supabaseAdmin
+            .from("major_group_memberships")
+            .select("profile_id")
+            .eq("group_id", group_id)
+            .eq("status", "active")
+            .neq("profile_id", profileId),
+          supabaseAdmin.from("major_groups").select("name").eq("id", group_id).maybeSingle(),
+        ]);
+
+        const recipientIds = (members ?? [])
+          .map((m: any) => m.profile_id)
+          .filter(Boolean) as string[];
+
+        if (recipientIds.length > 0) {
+          const evt = event as any;
+          const basePayload = {
+            event_id: evt.id,
+            event_name: evt.name,
+            group_id,
+            group_name: (grp as any)?.name ?? null,
+          };
+
+          await createNotificationsForMany(recipientIds, "event_created", basePayload);
+
+          // Entry already open (no window, or start time has passed)?
+          const startsAt = evt.entry_window_start
+            ? new Date(evt.entry_window_start).getTime()
+            : null;
+          const entryOpen = startsAt === null || startsAt <= Date.now();
+          if (entryOpen) {
+            await createNotificationsForMany(recipientIds, "entry_open", {
+              ...basePayload,
+              entry_window_end: evt.entry_window_end ?? null,
+            });
+            await supabaseAdmin
+              .from("events")
+              .update({ entry_open_notified_at: new Date().toISOString() })
+              .eq("id", evt.id);
+          }
+        }
+      } catch (notifyErr: any) {
+        console.error("[events] notification fan-out failed:", notifyErr?.message);
+      }
     }
 
     return NextResponse.json({ event }, { status: 201 });

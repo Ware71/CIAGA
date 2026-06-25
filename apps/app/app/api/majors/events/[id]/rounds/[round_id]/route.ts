@@ -70,3 +70,90 @@ export async function PATCH(
     return NextResponse.json({ error: msg }, { status });
   }
 }
+
+// DELETE /api/majors/events/[id]/rounds/[round_id]
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ id: string; round_id: string }> }
+) {
+  try {
+    const { profileId } = await getAuthedProfileOrThrow(req);
+    const { id, round_id } = await params;
+
+    const { data: evt } = await supabaseAdmin
+      .from("events")
+      .select("group_id")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (!evt) return NextResponse.json({ error: "Event not found" }, { status: 404 });
+
+    const groupId = (evt as any).group_id;
+    if (groupId) {
+      const { data: membership } = await supabaseAdmin
+        .from("major_group_memberships")
+        .select("role")
+        .eq("group_id", groupId)
+        .eq("profile_id", profileId)
+        .eq("status", "active")
+        .maybeSingle();
+
+      if (!membership || !["owner", "admin"].includes((membership as any).role)) {
+        return NextResponse.json({ error: "Only group owner or admin can delete rounds" }, { status: 403 });
+      }
+    }
+
+    // Guard: check tee times
+    const { count: ttCount } = await supabaseAdmin
+      .from("event_tee_times")
+      .select("id", { count: "exact", head: true })
+      .eq("event_round_id", round_id);
+    if ((ttCount ?? 0) > 0) {
+      return NextResponse.json({ error: "Remove tee times from this round before deleting it" }, { status: 409 });
+    }
+
+    // Guard: check accepted submissions
+    const { count: subCount } = await supabaseAdmin
+      .from("event_round_submissions")
+      .select("id", { count: "exact", head: true })
+      .eq("event_round_id", round_id)
+      .eq("accepted", true);
+    if ((subCount ?? 0) > 0) {
+      return NextResponse.json({ error: "Round has accepted score submissions and cannot be deleted" }, { status: 409 });
+    }
+
+    // Guard: check round-specific charges
+    const { count: chargeCount } = await supabaseAdmin
+      .from("event_charges")
+      .select("id", { count: "exact", head: true })
+      .eq("round_id", round_id);
+    if ((chargeCount ?? 0) > 0) {
+      return NextResponse.json({ error: "Remove charges assigned to this round before deleting it" }, { status: 409 });
+    }
+
+    const { error } = await supabaseAdmin
+      .from("event_rounds")
+      .delete()
+      .eq("id", round_id)
+      .eq("event_id", id);
+
+    if (error) throw error;
+
+    // Keep events.num_rounds in sync
+    const { count: remaining } = await supabaseAdmin
+      .from("event_rounds")
+      .select("id", { count: "exact", head: true })
+      .eq("event_id", id);
+
+    await supabaseAdmin
+      .from("events")
+      .update({ num_rounds: remaining ?? 0 })
+      .eq("id", id);
+
+    return NextResponse.json({ ok: true });
+  } catch (e: any) {
+    const msg = e?.message ?? "Unknown error";
+    const status = String(msg).toLowerCase().includes("auth") ? 401 : 500;
+    return NextResponse.json({ error: msg }, { status });
+  }
+}

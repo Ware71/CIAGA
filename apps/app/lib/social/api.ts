@@ -137,10 +137,18 @@ export async function reactToFeedItem(feedItemId: string, emoji: string) {
 }
 
 /** CommentDrawer expects this */
-export async function commentOnFeedItem(feedItemId: string, body: string) {
+export async function commentOnFeedItem(
+  feedItemId: string,
+  body: string,
+  mentionedProfileIds?: string[]
+) {
   const res = await authedFetch(`/api/feed/${feedItemId}/comment`, {
     method: "POST",
-    body: JSON.stringify({ body }),
+    body: JSON.stringify({
+      body,
+      mentioned_profile_ids:
+        mentionedProfileIds && mentionedProfileIds.length > 0 ? mentionedProfileIds : undefined,
+    }),
   });
   if (!res.ok) await throwReadableError(res);
   return (await res.json()) as { ok: true } | any;
@@ -179,6 +187,7 @@ export async function createPost(params: {
   audience: "followers" | "public";
   text: string;
   image_urls: string[] | null;
+  tagged_profiles?: Array<{ profile_id: string; name: string }> | null;
 }) {
   const res = await authedFetch(`/api/feed/post`, {
     method: "POST",
@@ -186,6 +195,10 @@ export async function createPost(params: {
       audience: params.audience,
       text: params.text,
       image_urls: params.image_urls,
+      tagged_profiles:
+        params.tagged_profiles && params.tagged_profiles.length > 0
+          ? params.tagged_profiles
+          : undefined,
     }),
   });
 

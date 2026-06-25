@@ -17,6 +17,11 @@ import type { MajorHubSummary } from "@/lib/majors/types";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 import { LoadingScreen } from "@/components/ui/loading-screen";
 import { getCachedHomeData, setCachedHomeData } from "@/lib/home/homeDataCache";
+import NotificationCenter from "@/components/notifications/NotificationCenter";
+import { useNotifications } from "@/lib/notifications/useNotifications";
+import AnnouncementModal from "@/components/announcements/AnnouncementModal";
+import { useAnnouncements } from "@/lib/announcements/useAnnouncements";
+import PushPermissionPrompt from "@/components/notifications/PushPermissionPrompt";
 
 type MenuItem = { id: string; label: string };
 
@@ -99,7 +104,13 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
   const [majorsPreload, setMajorsPreload] = useState<MajorHubSummary | null>(initialMajors ?? null);
   const [retryKey, setRetryKey] = useState(0);
   const [showInviteSheet, setShowInviteSheet] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
   const [actioningInvite, setActioningInvite] = useState<Record<string, "declining">>({});
+
+  const notif = useNotifications(myProfileId);
+  const announcements = useAnnouncements(myProfileId);
+  const pendingInvitesCount = majorsPreload?.pending_invites?.length ?? 0;
+  const badgeCount = notif.unreadCount + pendingInvitesCount;
 
   useEffect(() => {
     const updateViewport = () => {
@@ -148,6 +159,7 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
 
     let cancelled = false;
     let onlineRetryCleanup: (() => void) | null = null;
+    const timeoutId = setTimeout(() => { if (!cancelled) setDataReady(true); }, 10_000);
 
     const scheduleRetry = () => {
       if (onlineRetryCleanup) return;
@@ -207,6 +219,7 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
 
     return () => {
       cancelled = true;
+      clearTimeout(timeoutId);
       onlineRetryCleanup?.();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -360,17 +373,15 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
               <button
                 type="button"
                 className="relative h-14 w-14 rounded-full grid place-items-center text-emerald-100/75 hover:text-emerald-50 hover:bg-emerald-900/25"
-                onClick={() => {
-                  if ((majorsPreload?.pending_invites?.length ?? 0) > 0) {
-                    setShowInviteSheet(true);
-                  }
-                }}
+                onClick={() => setShowNotifications(true)}
                 aria-label="Notifications"
                 title="Notifications"
               >
                 <BellIcon size={28} className="opacity-90" />
-                {(majorsPreload?.pending_invites?.length ?? 0) > 0 && (
-                  <span className="absolute top-2.5 right-2.5 h-2.5 w-2.5 rounded-full bg-red-500 border border-[#071c10]" />
+                {badgeCount > 0 && (
+                  <span className="absolute top-1.5 right-1.5 min-w-[18px] h-[18px] px-1 grid place-items-center rounded-full bg-red-500 text-[10px] font-bold text-white border border-[#071c10]">
+                    {badgeCount > 9 ? "9+" : badgeCount}
+                  </span>
                 )}
               </button>
 
@@ -458,6 +469,33 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
                 </div>
               </div>
             )}
+
+            <NotificationCenter
+              open={showNotifications}
+              onClose={() => setShowNotifications(false)}
+              items={notif.items}
+              loading={notif.loading}
+              unreadCount={notif.unreadCount}
+              markRead={notif.markRead}
+              markAllRead={notif.markAllRead}
+              pendingInvitesCount={pendingInvitesCount}
+              onOpenInvites={() => setShowInviteSheet(true)}
+            />
+
+            {/* First-run onboarding + admin announcements (shown once each) */}
+            {dataReady && !showSplash && (
+              <AnnouncementModal items={announcements.items} onSeen={announcements.markSeen} />
+            )}
+
+            {/* Recurring push-permission prompt (3-month cooldown) — only once
+                any pending announcement/onboarding has been cleared. */}
+            {dataReady &&
+              !showSplash &&
+              myProfileId &&
+              announcements.loaded &&
+              announcements.items.length === 0 && (
+                <PushPermissionPrompt profileId={myProfileId} suppressed={false} />
+              )}
           </header>
 
           {/* Subtle summary */}
