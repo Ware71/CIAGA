@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { resolveClaimableProfile } from "@/lib/server/managedProfiles";
 
 export async function POST(req: Request) {
   try {
@@ -14,26 +15,17 @@ export async function POST(req: Request) {
     const email = (user.email || "").trim().toLowerCase();
     if (!email) return NextResponse.json({ error: "No email on user" }, { status: 400 });
 
-    // 1) Find newest active invite for this email
-    const { data: invite, error: invErr } = await supabaseAdmin
-      .from("invites")
-      .select("id, email, profile_id, created_at, accepted_at, revoked_at")
-      .eq("email", email)
-      .is("accepted_at", null)
-      .is("revoked_at", null)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .single();
-
-    if (invErr || !invite) {
-      return NextResponse.json({ error: "No active invite found" }, { status: 404 });
+    // 1) Resolve which profile this user may claim (active invite, else unclaimed profile by email)
+    const claimable = await resolveClaimableProfile(email);
+    if (!claimable) {
+      return NextResponse.json({ error: "Nothing to claim" }, { status: 404 });
     }
 
     // 2) Read current profile (don't overwrite admin-entered fields)
     const { data: currentProfile, error: curErr } = await supabaseAdmin
       .from("profiles")
       .select("id, owner_user_id, email, name")
-      .eq("id", invite.profile_id)
+      .eq("id", claimable.profileId)
       .single();
 
     if (curErr) return NextResponse.json({ error: curErr.message }, { status: 500 });
@@ -72,34 +64,34 @@ export async function POST(req: Request) {
     const { data: claimedProfile, error: profErr } = await supabaseAdmin
       .from("profiles")
       .update(updatePayload)
-      .eq("id", invite.profile_id)
+      .eq("id", claimable.profileId)
       .is("owner_user_id", null)
       .select("id, owner_user_id, email, name")
       .single();
 
     if (profErr) return NextResponse.json({ error: profErr.message }, { status: 500 });
 
-    // 4) Mark this invite accepted
     const now = new Date().toISOString();
 
-    const { error: acceptErr } = await supabaseAdmin
-      .from("invites")
-      .update({
-        accepted_at: now,
-        accepted_by: user.id,
-      })
-      .eq("id", invite.id);
+    // 4) Mark the originating invite accepted (if the claim came from one)
+    if (claimable.inviteId) {
+      const { error: acceptErr } = await supabaseAdmin
+        .from("invites")
+        .update({ accepted_at: now, accepted_by: user.id })
+        .eq("id", claimable.inviteId);
 
-    if (acceptErr) return NextResponse.json({ error: acceptErr.message }, { status: 500 });
+      if (acceptErr) return NextResponse.json({ error: acceptErr.message }, { status: 500 });
+    }
 
     // 5) Revoke any OTHER active invites for this email (prevents "pending invite" loops)
-    await supabaseAdmin
+    let revokeQuery = supabaseAdmin
       .from("invites")
       .update({ revoked_at: now })
       .eq("email", email)
-      .neq("id", invite.id)
       .is("accepted_at", null)
       .is("revoked_at", null);
+    if (claimable.inviteId) revokeQuery = revokeQuery.neq("id", claimable.inviteId);
+    await revokeQuery;
 
     // 6) Clear invite markers from user metadata (prevents onboarding loop)
     await supabaseAdmin.auth.admin.updateUserById(user.id, {

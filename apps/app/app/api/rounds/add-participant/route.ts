@@ -1,10 +1,18 @@
 // app/api/rounds/add-participant/route.ts
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { createManagedProfile } from "@/lib/server/managedProfiles";
 
 type Body =
   | { round_id: string; kind: "profile"; profile_id: string; role?: "owner" | "scorer" | "player" }
-  | { round_id: string; kind: "guest"; display_name: string; role?: "owner" | "scorer" | "player" };
+  | {
+      round_id: string;
+      kind: "guest";
+      display_name: string;
+      email?: string;
+      send_invite?: boolean;
+      role?: "owner" | "scorer" | "player";
+    };
 
 async function getMyProfileIdFromAuthUserId(authUserId: string) {
   const { data, error } = await supabaseAdmin
@@ -96,34 +104,48 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
 
-    // --- Add guest participant ---
+    // --- Add a non-registered player ---
+    // Instead of a guest placeholder, create a real (unclaimed) profile attributed to the
+    // adder, mutually following them, then attach it to the round as a normal participant.
     if (body.kind === "guest") {
       const name = body.display_name?.trim();
       if (!name) {
-        return NextResponse.json({ error: "Guest name required" }, { status: 400 });
+        return NextResponse.json({ error: "Player name required" }, { status: 400 });
       }
 
-      // Optional duplicate protection (uncomment if you want it):
-      // const { data: existing } = await supabaseAdmin
-      //   .from("round_participants")
-      //   .select("id")
-      //   .eq("round_id", body.round_id)
-      //   .eq("is_guest", true)
-      //   .ilike("display_name", name)
-      //   .maybeSingle();
-      // if (existing?.id) return NextResponse.json({ ok: true, existed: true });
+      const email = typeof body.email === "string" ? body.email.trim() : "";
+      const sendInvite = !!email && body.send_invite !== false;
+
+      let created;
+      try {
+        created = await createManagedProfile({
+          name,
+          email: email || null,
+          creatorProfileId: myProfileId,
+          sendInvite,
+          siteOrigin: new URL(req.url).origin,
+        });
+      } catch (e: any) {
+        return NextResponse.json(
+          { error: e?.message || "Failed to create player profile" },
+          { status: 500 }
+        );
+      }
 
       const { error: insErr } = await supabaseAdmin.from("round_participants").insert({
         round_id: body.round_id,
-        profile_id: null,
-        is_guest: true,
-        display_name: name,
+        profile_id: created.profileId,
+        is_guest: false,
         role,
       });
 
       if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 });
 
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({
+        ok: true,
+        profile_id: created.profileId,
+        invited: created.invited,
+      });
     }
 
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });

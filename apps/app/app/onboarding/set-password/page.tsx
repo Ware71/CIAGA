@@ -8,6 +8,7 @@ type ProfilePreview = {
   name: string | null;
   email: string | null;
   created_at: string | null;
+  created_by_name: string | null;
 };
 
 type InviteState =
@@ -98,6 +99,7 @@ function SetPasswordPageContent() {
               name: null,
               email: null,
               created_at: null,
+              created_by_name: null,
             },
           });
         } else {
@@ -233,6 +235,11 @@ function SetPasswordPageContent() {
             )}
             {preview.email && (
               <div className="text-xs text-emerald-200/60">{preview.email}</div>
+            )}
+            {preview.created_by_name && (
+              <div className="text-xs text-emerald-200/60">
+                Created by {preview.created_by_name}
+              </div>
             )}
             {preview.created_at && (
               <div className="text-xs text-emerald-200/40">

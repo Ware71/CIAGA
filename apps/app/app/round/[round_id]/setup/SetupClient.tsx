@@ -323,9 +323,11 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
   const [searchingMore, setSearchingMore] = useState(false);
   const debounceRef = useRef<number | null>(null);
 
-  // Guest add
+  // Guest add (creates a real, unclaimed profile owned by nobody yet)
   const [showGuest, setShowGuest] = useState(false);
   const [guestName, setGuestName] = useState("");
+  const [guestEmail, setGuestEmail] = useState("");
+  const [guestSendInvite, setGuestSendInvite] = useState(true);
   const [addingGuest, setAddingGuest] = useState(false);
 
   // swipe state (only one open at a time)
@@ -829,6 +831,9 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
     const name = guestName.trim();
     if (!name) return;
 
+    const email = guestEmail.trim();
+    const sendInvite = !!email && guestSendInvite;
+
     setAddingGuest(true);
     setErr(null);
 
@@ -867,6 +872,8 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
           round_id: roundId,
           kind: "guest",
           display_name: name,
+          email: email || undefined,
+          send_invite: sendInvite,
           requester_profile_id: meId,
           role: "player",
         }),
@@ -876,11 +883,12 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
       if (!res.ok) throw new Error(json.error || `Failed (${res.status})`);
 
       setGuestName("");
+      setGuestEmail("");
       setShowGuest(false);
       await fetchAll();
     } catch (e: any) {
       setParticipants((prev) => prev.filter((p) => p.id !== tempId));
-      setErr(e?.message || "Failed to add guest");
+      setErr(e?.message || "Failed to add player");
     } finally {
       setAddingGuest(false);
     }
@@ -1504,7 +1512,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
                   onClick={() => setShowGuest((v) => !v)}
                   disabled={!canAdd}
                 >
-                  {showGuest ? "Cancel guest" : "Add guest"}
+                  {showGuest ? "Cancel" : "Add player"}
                 </Button>
               </div>
 
@@ -1550,7 +1558,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
 
               {showGuest ? (
                 <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/50 p-3 space-y-2">
-                  <div className="text-[11px] text-emerald-100/70">Guest name</div>
+                  <div className="text-[11px] text-emerald-100/70">Player name</div>
                   <div className="flex gap-2">
                     <input
                       className="flex-1 rounded-xl bg-[#042713] border border-emerald-900/70 px-3 py-2 text-sm outline-none"
@@ -1567,6 +1575,34 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
                       {addingGuest ? "…" : "Add"}
                     </Button>
                   </div>
+
+                  <div className="text-[11px] text-emerald-100/70 pt-1">Email (optional)</div>
+                  <input
+                    className="w-full rounded-xl bg-[#042713] border border-emerald-900/70 px-3 py-2 text-sm outline-none"
+                    placeholder="Invite them to join (optional)"
+                    type="email"
+                    autoComplete="off"
+                    value={guestEmail}
+                    onChange={(e) => setGuestEmail(e.target.value)}
+                    disabled={!canAdd || addingGuest}
+                  />
+
+                  {guestEmail.trim() ? (
+                    <label className="flex items-center gap-2 text-[11px] text-emerald-100/70">
+                      <input
+                        type="checkbox"
+                        checked={guestSendInvite}
+                        onChange={(e) => setGuestSendInvite(e.target.checked)}
+                        disabled={!canAdd || addingGuest}
+                      />
+                      Send invite email now
+                    </label>
+                  ) : (
+                    <div className="text-[10px] text-emerald-100/50">
+                      Creates their profile now — you can add an email and invite them later from
+                      their profile.
+                    </div>
+                  )}
                 </div>
               ) : null}
               </>
