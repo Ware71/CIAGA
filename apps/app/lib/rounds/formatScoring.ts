@@ -343,8 +343,11 @@ function computeMatchPlayPair(
   if (isMatchDecided) {
     const result = formatMatchPlayResult(Math.abs(cumulativeState), holesRemaining);
     const lead = Math.abs(cumulativeState);
-    totalA = cumulativeState > 0 ? `W ${result}` : `L ${lead} DN`;
-    totalB = cumulativeState < 0 ? `W ${result}` : `L ${lead} DN`;
+    const winText = `W ${result}`;
+    // Early finish mirrors the winner (L 3&2); full 18 uses down notation (L 1 DN)
+    const loseText = holesRemaining > 0 ? `L ${result}` : `L ${lead} DN`;
+    totalA = cumulativeState > 0 ? winText : loseText;
+    totalB = cumulativeState < 0 ? winText : loseText;
   } else {
     // In-progress: show running state
     const formatState = (state: number, isA: boolean): string => {
