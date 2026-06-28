@@ -51,8 +51,15 @@ export function resolvePlayingHandicapPreview(
 
     case "compare_against_lowest": {
       if (courseHandicap == null || lowestCourseHandicap == null) return null;
-      // Best player plays off scratch; everyone else gets the difference.
-      return Math.round(courseHandicap - lowestCourseHandicap);
+      // Allowance applied to each CH first, then subtract the lowest
+      // allowance-adjusted CH. Stored 0 means 100% (backward compat) — mirrors
+      // ciaga_resolve_playing_handicap.
+      const pct = value && value !== 0 ? value : 100;
+      return Math.max(
+        0,
+        Math.round((courseHandicap * pct) / 100) -
+          Math.round((lowestCourseHandicap * pct) / 100),
+      );
     }
 
     case "none":
