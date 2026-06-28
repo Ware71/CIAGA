@@ -239,19 +239,33 @@ function _computeFromParsedData(
   let format_winner: string | null = null;
 
   if (primary) {
-    // Map summaries → per-participant scores
-    for (const s of primary.summaries) {
-      player_scores.set(s.participantId, s.total);
+    // Map summaries → per-participant scores across ALL matchups/displays
+    // (a single matchplay round may have multiple pairings).
+    for (const fd of formatDisplays) {
+      for (const s of fd.summaries) {
+        player_scores.set(s.participantId, s.total);
+      }
     }
 
-    // Determine winner
-    format_winner = determineWinner(
-      primary.summaries,
-      primary.higherIsBetter,
-      primary.isTeamView,
-      participants,
-      teams,
-    );
+    if (formatDisplays.length > 1) {
+      // Multiple matchplay pairings: generic label + one winner line per match
+      format_label = formatLabelForType(formatType);
+      const lines = formatDisplays
+        .map((fd) =>
+          determineWinner(fd.summaries, fd.higherIsBetter, fd.isTeamView, participants, teams),
+        )
+        .filter(Boolean) as string[];
+      format_winner = lines.length ? lines.join(" · ") : null;
+    } else {
+      // Single matchup / non-matchplay format
+      format_winner = determineWinner(
+        primary.summaries,
+        primary.higherIsBetter,
+        primary.isTeamView,
+        participants,
+        teams,
+      );
+    }
   } else {
     // Strokeplay with no adjusted handicap: computeFormatDisplay returns []
     // Build gross to-par scores manually
@@ -355,16 +369,20 @@ function determineWinner(
     (s) => typeof s.total === "number" && Number.isFinite(s.total as number),
   );
 
-  // For string totals (matchplay), find the first non-tie result
+  // For string totals (matchplay), pick the actual winner — not the first-listed player
   if (!numeric.length) {
-    const strResults = summaries.filter(
-      (s) => typeof s.total === "string" && s.total !== "AS" && s.total !== "—",
-    );
-    if (strResults.length) {
-      const best = strResults[0];
-      const name = resolveEntityName(best, isTeamView, participants, teams);
-      return `${name} won (${best.total})`;
+    const strings = summaries.filter((s) => typeof s.total === "string");
+    // Decided match → winner's total is prefixed "W " (e.g. "W 3&2", "W 1 UP")
+    let winner = strings.find((s) => (s.total as string).startsWith("W "));
+    // In-progress (live) → leader's total ends in "UP" (e.g. "3 UP")
+    if (!winner) winner = strings.find((s) => /UP$/.test((s.total as string).trim()));
+    if (winner) {
+      const name = resolveEntityName(winner, isTeamView, participants, teams);
+      const result = (winner.total as string).replace(/^W\s+/, ""); // "W 3&2" → "3&2"
+      return `${name} won (${result})`;
     }
+    // No leader but string results exist → halved (all "AS")
+    if (strings.some((s) => s.total === "AS")) return "Match halved";
     return null;
   }
 
