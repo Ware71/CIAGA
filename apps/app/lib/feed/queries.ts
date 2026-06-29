@@ -78,8 +78,28 @@ export async function getFeedPage(params: {
   const trimmed = rawItems.slice(0, limit);
   const hasMore = rawItems.length > limit;
 
+  const items = await enrichFeedItems(trimmed, viewerProfileId);
+
+  const next_cursor =
+    hasMore && trimmed.length
+      ? {
+          occurred_at: trimmed[trimmed.length - 1].occurred_at ?? trimmed[trimmed.length - 1].created_at,
+          id: trimmed[trimmed.length - 1].id,
+        }
+      : null;
+
+  return { items, next_cursor };
+}
+
+/**
+ * Enrich raw feed_items rows into FeedItemVMs (actor, subjects, reactions,
+ * comments, top comment). Shared by getFeedPage and getFeedItemById.
+ */
+export async function enrichFeedItems(rows: any[], viewerProfileId: string): Promise<FeedItemVM[]> {
+  if (!rows.length) return [];
+
   // Actor profiles
-  const actorIds = Array.from(new Set(trimmed.map((i: any) => i.actor_profile_id).filter(Boolean)));
+  const actorIds = Array.from(new Set(rows.map((i: any) => i.actor_profile_id).filter(Boolean)));
 
   const { data: actors, error: aErr } = await supabaseAdmin
     .from("profiles")
@@ -92,7 +112,7 @@ export async function getFeedPage(params: {
   for (const a of actors ?? []) actorMap.set(a.id, a);
 
   // Subjects (feed_item_subjects -> profiles)
-  const feedItemIdsForSubjects = trimmed.map((i: any) => i.id).filter(Boolean);
+  const feedItemIdsForSubjects = rows.map((i: any) => i.id).filter(Boolean);
   const subjectMap = new Map<string, any[]>();
 
   if (feedItemIdsForSubjects.length) {
@@ -141,7 +161,7 @@ export async function getFeedPage(params: {
   }
 
   // Aggregates (reactions/comments + top comment)
-  const feedItemIds = trimmed.map((i: any) => i.id);
+  const feedItemIds = rows.map((i: any) => i.id);
 
   const [reactionAgg, commentAgg, myReactions] = await Promise.all([
     getReactionCounts(feedItemIds),
@@ -153,8 +173,10 @@ export async function getFeedPage(params: {
   const feedItemIdsWithComments = feedItemIds.filter((id) => (commentAgg.get(id) ?? 0) > 0);
   const topComments = await getTopComments(feedItemIdsWithComments);
 
+  // Viewer-specific "best of your circle" flag for PB cards.
+  const friendBestIds = await computeFriendBestForPbs(rows, viewerProfileId);
 
-  const items: FeedItemVM[] = trimmed.map((i: any) => {
+  return rows.map((i: any) => {
     const actor = i.actor_profile_id ? normalizeActor(actorMap.get(i.actor_profile_id)) : null;
 
     const reaction_counts = reactionAgg.get(i.id) ?? {};
@@ -187,19 +209,93 @@ export async function getFeedPage(params: {
         comment_count: commentAgg.get(i.id) ?? 0,
         my_reaction: myReactions.get(i.id) ?? null,
         top_comment: topComments.get(i.id) ?? null,
+        friend_best: friendBestIds.has(i.id),
       },
     } as FeedItemVM;
   });
+}
 
-  const next_cursor =
-    hasMore && trimmed.length
-      ? {
-          occurred_at: trimmed[trimmed.length - 1].occurred_at ?? trimmed[trimmed.length - 1].created_at,
-          id: trimmed[trimmed.length - 1].id,
-        }
-      : null;
+/**
+ * Returns the set of PB feed-item ids whose gross is the best among the people
+ * the viewer follows (incl. self) at that course+tee — i.e. "best of your circle".
+ */
+async function computeFriendBestForPbs(rows: any[], viewerProfileId: string): Promise<Set<string>> {
+  const result = new Set<string>();
 
-  return { items, next_cursor };
+  const pbRows = rows.filter(
+    (i) => i.type === "pb" && i.payload?.course_id && typeof i.payload?.gross_total === "number",
+  );
+  if (!pbRows.length) return result;
+
+  // Followed profiles (+ self) define "your circle".
+  const { data: followRows } = await supabaseAdmin
+    .from("follows")
+    .select("following_id")
+    .eq("follower_id", viewerProfileId);
+  const circle = new Set<string>([viewerProfileId, ...(followRows ?? []).map((r: any) => r.following_id)]);
+
+  const courseIds = Array.from(new Set(pbRows.map((i) => i.payload.course_id as string)));
+
+  // All gross scores by people in the circle at those courses.
+  const { data: crRows } = await supabaseAdmin
+    .from("v_course_record_rounds")
+    .select("profile_id, course_id, tee_name, gross_score, is_complete")
+    .in("course_id", courseIds)
+    .eq("is_complete", true);
+
+  // min gross per (course_id, tee_name) among the circle
+  const minByKey = new Map<string, number>();
+  for (const r of (crRows ?? []) as any[]) {
+    if (!circle.has(r.profile_id)) continue;
+    const gross = typeof r.gross_score === "number" ? r.gross_score : null;
+    if (gross === null) continue;
+    const key = `${r.course_id}::${r.tee_name ?? "null"}`;
+    const cur = minByKey.get(key);
+    if (cur === undefined || gross < cur) minByKey.set(key, gross);
+  }
+
+  for (const i of pbRows) {
+    const key = `${i.payload.course_id}::${i.payload.tee_name ?? "null"}`;
+    const min = minByKey.get(key);
+    if (min !== undefined && i.payload.gross_total <= min) result.add(i.id);
+  }
+
+  return result;
+}
+
+/**
+ * Fetch a single feed item by id for the viewer (respects feed_item_targets
+ * visibility). Returns null if not found or not visible to the viewer.
+ * Live items (id prefixed "live:") are not stored and return null.
+ */
+export async function getFeedItemById(id: string, viewerProfileId: string): Promise<FeedItemVM | null> {
+  if (!id || id.startsWith("live:")) return null;
+
+  const { data, error } = await supabaseAdmin
+    .from("feed_items")
+    .select(
+      `
+      id,
+      type,
+      actor_profile_id,
+      audience,
+      visibility,
+      occurred_at,
+      created_at,
+      payload,
+      feed_item_targets!inner(viewer_profile_id)
+    `
+    )
+    .eq("id", id)
+    .eq("feed_item_targets.viewer_profile_id", viewerProfileId)
+    .neq("visibility", "removed")
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+
+  const items = await enrichFeedItems([data], viewerProfileId);
+  return items[0] ?? null;
 }
 
 export async function getReactionCounts(feedItemIds: string[]) {

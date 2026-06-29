@@ -24,7 +24,20 @@ self.addEventListener("push", (event) => {
     data: { url: data.url || "/home" },
   };
 
-  event.waitUntil(self.registration.showNotification(title, options));
+  const tasks = [self.registration.showNotification(title, options)];
+
+  // Set the installed-PWA app-icon badge to the recipient's unread count.
+  // Supported on iOS 16.4+ home-screen apps and Android/desktop Chrome; the
+  // foreground hook keeps it in sync and clears it once everything is read.
+  if (typeof data.badgeCount === "number" && self.navigator && "setAppBadge" in self.navigator) {
+    tasks.push(
+      data.badgeCount > 0
+        ? self.navigator.setAppBadge(data.badgeCount).catch(() => {})
+        : self.navigator.clearAppBadge().catch(() => {})
+    );
+  }
+
+  event.waitUntil(Promise.all(tasks));
 });
 
 self.addEventListener("notificationclick", (event) => {

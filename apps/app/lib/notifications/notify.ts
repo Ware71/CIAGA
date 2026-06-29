@@ -99,6 +99,14 @@ export async function createNotification(params: {
 
   // Push delivery (best-effort).
   try {
+    // Current unread count for this recipient — stamped into the push so the
+    // service worker can set the app-icon badge while the app is closed.
+    const { count: unread } = await supabaseAdmin
+      .from("user_notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("profile_id", recipientProfileId)
+      .eq("read", false);
+
     const rendered = renderNotification(type, finalPayload);
     await sendPushToProfiles([recipientProfileId], {
       title: rendered.title,
@@ -106,6 +114,7 @@ export async function createNotification(params: {
       url: rendered.url,
       icon: rendered.icon,
       tag: groupKey ?? undefined,
+      badgeCount: unread ?? undefined,
     });
   } catch (e: any) {
     console.error("[notify] push failed:", e?.message);

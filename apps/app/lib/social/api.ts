@@ -123,6 +123,13 @@ export async function fetchLiveFeedItems() {
   return (await res.json()) as { items: any[] };
 }
 
+/** Fetch a single feed item (used to pin a deep-linked card to the top). */
+export async function fetchFeedItem(feedItemId: string) {
+  const res = await authedFetch(`/api/feed/${encodeURIComponent(feedItemId)}`, { method: "GET" });
+  if (!res.ok) await throwReadableError(res);
+  return (await res.json()) as { item: any };
+}
+
 /** ReactionBar expects this */
 export async function reactToFeedItem(feedItemId: string, emoji: string) {
   const res = await authedFetch(`/api/feed/${feedItemId}/react`, {

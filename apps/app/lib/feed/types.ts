@@ -214,6 +214,13 @@ export type FeedItemAggregates = {
    */
   top_comment?: FeedTopComment | null;
   reaction_summary?: FeedReactionSummary | null;
+
+  /**
+   * Viewer-specific: for a PB card, true when this player's PB is the best gross
+   * among the people the viewer follows (incl. self) at that course+tee.
+   * Computed at feed-build time — not stored on the shared payload.
+   */
+  friend_best?: boolean;
 };
 
 export type FeedItemVM<TType extends FeedItemType = FeedItemType> = {
@@ -243,3 +250,73 @@ export type FeedPageResponse = {
   items: FeedItemVM[];
   next_cursor: FeedCursor | null;
 };
+
+/**
+ * Type-specific detail computed server-side for the feed-item detail page.
+ * (See lib/feed/detail.ts / components/social/detail/*)
+ */
+export type RoundDetailPlayer = { key: string; name: string; avatar_url: string | null };
+
+/** One row per hole: keyed by series ids (e.g. p0/p0_rank or m0). */
+export type HoleRow = Record<string, number | null> & { hole: number };
+
+export type H2HTally = { a_wins: number; b_wins: number; draws: number; total: number };
+
+/** Matchplay head-to-head record (the per-match margin lines live in FormatChart). */
+export type MatchplayDetail = {
+  a_name: string;
+  b_name: string;
+  all_time: H2HTally;
+  through_this_match: H2HTally;
+};
+
+/**
+ * The format-aware progression line chart (the "Format" toggle).
+ * - kind "points": cumulative format points per player (higher = better), series = players.
+ * - kind "margin": matchplay 1up/1down margin, one series per match.
+ */
+export type FormatChartSeries = { key: string; name: string };
+export type FormatChart = {
+  label: string;
+  kind: "points" | "margin";
+  series: FormatChartSeries[];
+  rows: HoleRow[];
+  higher_is_better: boolean;
+};
+
+export type HoleStatBlock = { avg_score: number | null; plays: number; event_pct: number | null };
+
+export type FeedItemDetail =
+  | {
+      kind: "round";
+      holes_count: number;
+      players: RoundDetailPlayer[];
+      gross_rows: HoleRow[];
+      net_rows: HoleRow[];
+      /** Format-aware progression (stableford points / matchplay margin / …). */
+      format_chart?: FormatChart | null;
+      /** Present for matchplay rounds: head-to-head record. */
+      matchplay?: MatchplayDetail | null;
+    }
+  | {
+      kind: "hole_event";
+      event_label: string;
+      hole_number: number | null;
+      par: number | null;
+      yardage: number | null;
+      stroke_index: number | null;
+      /** This player's history on the hole. */
+      player: HoleStatBlock;
+      /** Everyone who has played the hole. */
+      everyone: HoleStatBlock;
+    }
+  | {
+      kind: "pb";
+      gross: number | null;
+      previous_best: { gross: number; date: string | null } | null;
+    }
+  | {
+      kind: "course_record";
+      gross: number | null;
+      beat: { name: string | null; gross: number; date: string | null } | null;
+    };

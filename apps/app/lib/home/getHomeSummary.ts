@@ -12,7 +12,7 @@ import {
   enforceAtLeastOneAchievement,
 } from "@/lib/feed/feedItemUtils";
 
-export type HomeSummary = {
+export type HomeCore = {
   live_round_id: string | null;
   handicap: { current: number | null; delta_30d: number };
   rounds_played: number | null;
@@ -24,8 +24,13 @@ export type HomeSummary = {
     diff: number | null;
     played_at: string | null;
   } | null;
+};
+
+export type HomeMiniFeed = {
   mini_feed: FeedItemVM[];
 };
+
+export type HomeSummary = HomeCore & HomeMiniFeed;
 
 export async function detectLiveRound(profileId: string): Promise<string | null> {
   const partRes = await supabaseAdmin
@@ -235,24 +240,44 @@ export function curateMiniFeed(liveItemsRaw: FeedItemVM[], feedItemsRaw: FeedIte
   return [...liveItems, ...pickedNonLive].slice(0, 5);
 }
 
-export async function getHomeSummary(profileId: string): Promise<HomeSummary> {
-  const [liveRoundId, handicap, roundsPlayed, lastRound, liveItems, feedPage] =
-    await Promise.all([
-      detectLiveRound(profileId),
-      fetchHandicapSnapshot(profileId),
-      fetchRoundsPlayed(profileId),
-      fetchLastRound(profileId),
-      getLiveRoundsAsFeedItems({ viewerProfileId: profileId }),
-      getFeedPage({ viewerProfileId: profileId, limit: 60 }),
-    ]);
-
-  const mini_feed = curateMiniFeed(liveItems, feedPage.items);
+/**
+ * Essential player info shown on the home screen — the fast path that gates the
+ * splash screen. Deliberately excludes the social feed (see getHomeMiniFeed).
+ */
+export async function getHomeCore(profileId: string): Promise<HomeCore> {
+  const [liveRoundId, handicap, roundsPlayed, lastRound] = await Promise.all([
+    detectLiveRound(profileId),
+    fetchHandicapSnapshot(profileId),
+    fetchRoundsPlayed(profileId),
+    fetchLastRound(profileId),
+  ]);
 
   return {
     live_round_id: liveRoundId,
     handicap,
     rounds_played: roundsPlayed,
     last_round: lastRound,
-    mini_feed,
   };
+}
+
+/**
+ * Curated 5-item social feed for the home screen. Slower than the core data, so
+ * it's fetched separately and never blocks the splash.
+ */
+export async function getHomeMiniFeed(profileId: string): Promise<HomeMiniFeed> {
+  const [liveItems, feedPage] = await Promise.all([
+    getLiveRoundsAsFeedItems({ viewerProfileId: profileId }),
+    getFeedPage({ viewerProfileId: profileId, limit: 60 }),
+  ]);
+
+  return { mini_feed: curateMiniFeed(liveItems, feedPage.items) };
+}
+
+export async function getHomeSummary(profileId: string): Promise<HomeSummary> {
+  const [core, feed] = await Promise.all([
+    getHomeCore(profileId),
+    getHomeMiniFeed(profileId),
+  ]);
+
+  return { ...core, ...feed };
 }

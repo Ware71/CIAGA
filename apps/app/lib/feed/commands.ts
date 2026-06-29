@@ -198,6 +198,20 @@ export async function createComment(params: {
   if (error) throw error;
   if (!data?.id) throw new Error("Failed to create comment");
 
+  // Persist the full mention set on the comment so it can be colorized on read.
+  // Best-effort: tolerate environments where the column hasn't been migrated yet.
+  const allMentionIds = Array.from(new Set((mentionedProfileIds ?? []).filter(Boolean)));
+  if (allMentionIds.length > 0) {
+    try {
+      await supabaseAdmin
+        .from("feed_comments")
+        .update({ mentioned_profile_ids: allMentionIds })
+        .eq("id", data.id);
+    } catch {
+      // column not present yet — coloring degrades gracefully
+    }
+  }
+
   // Notify mentioned users (excluding the commenter). Best-effort. Only notify
   // mentions that can actually see the feed item (RLS via feed_item_targets).
   const mentionIds = Array.from(

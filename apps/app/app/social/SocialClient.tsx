@@ -9,6 +9,7 @@ import FeedList from "@/components/social/FeedList";
 import type { FeedItemVM } from "@/lib/feed/types";
 
 type Props = {
+  focusId?: string | null;
   initialFeedData?: {
     items: FeedItemVM[];
     liveItems: FeedItemVM[];
@@ -16,7 +17,7 @@ type Props = {
   };
 };
 
-export default function SocialClient({ initialFeedData }: Props) {
+export default function SocialClient({ initialFeedData, focusId }: Props) {
   const router = useRouter();
 
   const [composerOpen, setComposerOpen] = useState(false);
@@ -43,7 +44,7 @@ export default function SocialClient({ initialFeedData }: Props) {
         </header>
 
         {/* Feed (includes live rounds at top) */}
-        <FeedList refreshKey={refreshKey} initialData={initialFeedData} />
+        <FeedList refreshKey={refreshKey} initialData={initialFeedData} focusId={focusId ?? null} />
       </div>
 
       {/* Floating Action Button (Composer hidden by default) */}

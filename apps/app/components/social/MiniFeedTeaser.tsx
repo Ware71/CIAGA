@@ -94,34 +94,68 @@ export function AvatarStack({ item }: { item: FeedItemVM }) {
   );
 }
 
+function relTime(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return null;
+  const mins = Math.floor(Math.max(0, Date.now() - t) / 60000);
+  if (mins < 1) return "now";
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d`;
+  return `${Math.floor(days / 7)}w`;
+}
+
+/** Short secondary line: who + a key stat + age. */
+function miniFeedDetail(item: FeedItemVM): string | null {
+  const p: any = item.payload ?? {};
+  const name =
+    (item as any).subject?.display_name ??
+    (item as any).actor?.display_name ??
+    (typeof p.name === "string" ? p.name : null) ??
+    (Array.isArray(p.players) && p.players[0]?.name) ??
+    null;
+
+  let stat: string | null = null;
+  if (item.type === "pb" || item.type === "course_record") {
+    if (typeof p.gross_total === "number") stat = `Gross ${p.gross_total}`;
+  } else if (item.type === "hole_event") {
+    if (typeof p.hole_number === "number") stat = `Hole ${p.hole_number}`;
+  } else if (item.type === "round_played") {
+    const n = Array.isArray(p.players) ? p.players.length : 0;
+    if (n > 1) stat = `${n} players`;
+  }
+
+  const age = relTime(item.occurred_at ?? item.created_at);
+  return [name, stat, age].filter(Boolean).join(" · ") || null;
+}
+
 export function MiniFeedTeaserCard({ item, onOpen }: { item: FeedItemVM; onOpen: () => void }) {
   const live = isLiveItem(item);
+  const detail = miniFeedDetail(item);
 
   return (
     <button
       type="button"
       onClick={onOpen}
       className={[
-        "w-full text-left rounded-2xl border",
+        "group w-full text-left rounded-2xl border",
         live ? "border-emerald-300/35 bg-emerald-900/10" : "border-emerald-900/35 bg-emerald-950/10",
-        "px-2.5 py-2 hover:bg-emerald-950/15 transition",
+        "px-2.5 py-2 hover:bg-emerald-900/25 active:scale-[0.99] transition",
         "flex items-center gap-2.5",
       ].join(" ")}
-      aria-label="Open social"
-      title="Open social"
+      aria-label="Open in social feed"
+      title="Open in social feed"
     >
       <div className="shrink-0">
         <AvatarStack item={item} />
       </div>
 
       <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between gap-2">
-          <div
-            className={[
-              "text-[11px] font-extrabold text-emerald-50/95 leading-snug",
-              "truncate",
-            ].join(" ")}
-          >
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1 text-[11px] font-extrabold text-emerald-50/95 leading-snug truncate">
             {miniFeedCopy(item)}
           </div>
 
@@ -131,6 +165,14 @@ export function MiniFeedTeaserCard({ item, onOpen }: { item: FeedItemVM; onOpen:
             </span>
           ) : null}
         </div>
+
+        {detail ? (
+          <div className="mt-0.5 text-[10px] font-semibold text-emerald-100/55 truncate">{detail}</div>
+        ) : null}
+      </div>
+
+      <div className="shrink-0 text-emerald-100/40 group-hover:text-emerald-100/70 transition text-base leading-none">
+        ›
       </div>
     </button>
   );
