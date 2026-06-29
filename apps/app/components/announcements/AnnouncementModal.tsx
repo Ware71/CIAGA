@@ -119,6 +119,8 @@ function OnboardingFlow({ ann, onDone }: { ann: Announcement; onDone: () => void
   const [pushStatus, setPushStatus] = useState<RegisterPushResult["status"] | "working" | null>(
     null
   );
+  const [pushStep, setPushStep] = useState<string | null>(null);
+  const [pushError, setPushError] = useState<string | null>(null);
   const [locStatus, setLocStatus] = useState<"working" | "granted" | "denied" | "unsupported" | null>(
     null
   );
@@ -126,8 +128,11 @@ function OnboardingFlow({ ann, onDone }: { ann: Announcement; onDone: () => void
   const iosNeedsInstall = isIOS() && !isStandalone();
 
   async function enablePush() {
+    setPushError(null);
+    setPushStep(null);
     setPushStatus("working");
-    const r = await registerPush();
+    const r = await registerPush({ onStep: setPushStep });
+    if (r.status === "error") setPushError(r.error);
     setPushStatus(r.status);
   }
 
@@ -187,7 +192,7 @@ function OnboardingFlow({ ann, onDone }: { ann: Announcement; onDone: () => void
             {pushStatus === "subscribed"
               ? "Notifications enabled ✓"
               : pushStatus === "working"
-                ? "Enabling…"
+                ? pushStep ?? "Enabling…"
                 : "Enable notifications"}
           </button>
           {pushStatus === "denied" && (
@@ -200,9 +205,10 @@ function OnboardingFlow({ ann, onDone }: { ann: Announcement; onDone: () => void
               Push isn’t supported on this device/browser.
             </div>
           )}
-          {(pushStatus === "error") && (
+          {pushStatus === "error" && (
             <div className="text-xs font-medium text-emerald-100/60">
-              Couldn’t enable notifications — you can try again later.
+              Couldn’t enable notifications{pushError ? `: ${pushError}` : ""}. Tap to try
+              again.
             </div>
           )}
         </div>
