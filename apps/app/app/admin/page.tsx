@@ -29,6 +29,11 @@ export default function AdminPage() {
   // Invite form state keyed by profile id
   const [inviteEmailByProfile, setInviteEmailByProfile] = useState<Record<string, string>>({});
 
+  // Push diagnostics
+  const [pushTesting, setPushTesting] = useState(false);
+  const [pushResult, setPushResult] = useState<any | null>(null);
+  const [pushError, setPushError] = useState<string | null>(null);
+
   async function refreshUnownedProfiles() {
     const { data: auth } = await supabase.auth.getUser();
     if (!auth.user) return;
@@ -198,6 +203,40 @@ export default function AdminPage() {
     }
   }
 
+  async function sendTestPush() {
+    setPushError(null);
+    setPushResult(null);
+    setPushTesting(true);
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+
+      if (!accessToken) {
+        setPushError("Not authenticated. Please sign in again.");
+        return;
+      }
+
+      const res = await fetch("/api/admin/push-test", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        setPushError(json.error || `Test failed (${res.status})`);
+        return;
+      }
+
+      setPushResult(json);
+    } catch (e: any) {
+      setPushError(e?.message || "Test failed.");
+    } finally {
+      setPushTesting(false);
+    }
+  }
+
   if (checking) {
     return (
       <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8">
@@ -278,6 +317,76 @@ export default function AdminPage() {
             <div className="text-sm font-semibold text-[#f5e6b0]">Announcements</div>
             <div className="text-xs text-emerald-100/50 mt-1">Push info &amp; promos to users&apos; startup pop-up</div>
           </button>
+        </div>
+
+        {/* PUSH DIAGNOSTICS */}
+        <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <div className="text-sm font-semibold text-[#f5e6b0]">Push diagnostics</div>
+              <div className="text-xs text-emerald-100/50 mt-1">
+                Send a test Web Push to your own devices and see the result.
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={sendTestPush}
+              disabled={pushTesting}
+              className="rounded-xl bg-emerald-700/80 hover:bg-emerald-700 px-4 py-2 text-sm font-medium disabled:opacity-50"
+            >
+              {pushTesting ? "Sending…" : "Send test notification"}
+            </button>
+          </div>
+
+          {pushError && (
+            <div className="rounded-xl border border-red-900/60 bg-red-950/40 p-3 text-sm text-red-200">
+              {pushError}
+            </div>
+          )}
+
+          {pushResult && (
+            <div className="space-y-2">
+              {!pushResult.configured && (
+                <div className="rounded-xl border border-amber-900/60 bg-amber-950/40 p-3 text-sm text-amber-200">
+                  Server VAPID not configured. Missing env:{" "}
+                  {(pushResult.missingEnv ?? []).join(", ") || "unknown"}
+                </div>
+              )}
+
+              <div className="text-xs text-emerald-100/70">
+                {pushResult.total} subscription(s) · {pushResult.sent} sent ·{" "}
+                {pushResult.failed} failed
+              </div>
+
+              {pushResult.total === 0 && pushResult.configured && (
+                <div className="text-sm text-emerald-100/60">
+                  No subscriptions found for your profile — enable notifications on this
+                  device first.
+                </div>
+              )}
+
+              {Array.isArray(pushResult.results) &&
+                pushResult.results.map((r: any, i: number) => (
+                  <div
+                    key={i}
+                    className={`rounded-xl border p-3 text-xs break-all ${
+                      r.ok
+                        ? "border-emerald-900/60 bg-black/20 text-emerald-100/80"
+                        : "border-red-900/60 bg-red-950/30 text-red-200"
+                    }`}
+                  >
+                    <div className="font-medium">
+                      {r.ok ? "✓" : "✕"} {r.host}{" "}
+                      <span className="text-emerald-100/50">
+                        status {r.statusCode ?? "?"}
+                        {r.pruned ? " · pruned (dead)" : ""}
+                      </span>
+                    </div>
+                    {r.body && <div className="mt-1 opacity-80">{r.body}</div>}
+                  </div>
+                ))}
+            </div>
+          )}
         </div>
 
         {/* CREATE PROFILE */}
