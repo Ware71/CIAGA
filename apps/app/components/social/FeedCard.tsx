@@ -1,12 +1,12 @@
 // components/social/FeedCard.tsx
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { FeedItemVM } from "@/lib/feed/types";
 import ReactionBar from "@/components/social/ReactionBar";
-import CommentDrawer from "@/components/social/CommentDrawer";
 import { Button } from "@/components/ui/button";
+import { renderWithMentions } from "@/lib/social/mentions";
 
 // ---- Time formatting --------------------------------------------
 
@@ -208,31 +208,6 @@ function ReactionSummary({ counts }: { counts: Record<string, number> }) {
 }
 
 // ---- Body renderers --------------------------------------------
-
-// Highlight @mentions in post text using the tagged_profiles names.
-function renderWithMentions(text: string, tagged: Array<{ name?: string }> | null | undefined) {
-  const names = (tagged ?? []).map((t) => t?.name).filter((n): n is string => !!n);
-  if (names.length === 0) return text;
-  const escaped = names
-    .map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-    .sort((a, b) => b.length - a.length);
-  const re = new RegExp(`@(?:${escaped.join("|")})`, "g");
-  const parts: ReactNode[] = [];
-  let last = 0;
-  let key = 0;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    if (m.index > last) parts.push(text.slice(last, m.index));
-    parts.push(
-      <span key={key++} className="font-bold text-emerald-300">
-        {m[0]}
-      </span>
-    );
-    last = m.index + m[0].length;
-  }
-  if (last < text.length) parts.push(text.slice(last));
-  return parts;
-}
 
 function UserPostBody({ payload }: { payload: any }) {
   const text = typeof payload?.text === "string" ? payload.text : "";
@@ -514,28 +489,21 @@ function CompetitionRoundBody({ payload }: { payload: any }) {
 
 type TopCommentVM = { author: string; body: string; like_count: number; created_at?: string };
 
-function isBetterTopComment(a: TopCommentVM | null, b: TopCommentVM | null) {
-  // returns true if b should replace a
-  if (!b) return false;
-  if (!a) return true;
-
-  const aLikes = typeof a.like_count === "number" ? a.like_count : 0;
-  const bLikes = typeof b.like_count === "number" ? b.like_count : 0;
-
-  if (bLikes !== aLikes) return bLikes > aLikes;
-
-  const aTs = a.created_at ? new Date(a.created_at).getTime() : 0;
-  const bTs = b.created_at ? new Date(b.created_at).getTime() : 0;
-  return bTs > aTs;
-}
-
-export default function FeedCard({ item }: { item: FeedItemVM }) {
+export default function FeedCard({
+  item,
+  variant = "feed",
+}: {
+  item: FeedItemVM;
+  /** "detail" reuses the card as the summary on the detail page: not clickable,
+   * no inline comment drawer (comments live in a section below), reactions kept. */
+  variant?: "feed" | "detail";
+}) {
   const router = useRouter();
+  const isDetail = variant === "detail";
 
   const [myReaction, setMyReaction] = useState<string | null>(item.aggregates.my_reaction ?? null);
   const [reactionCounts, setReactionCounts] = useState<Record<string, number>>(item.aggregates.reaction_counts ?? {});
   const [commentCount, setCommentCount] = useState<number>(item.aggregates.comment_count ?? 0);
-  const [commentsOpen, setCommentsOpen] = useState(false);
 
   // Keep local counts in sync with parent re-fetch/pagination updates.
   // (Preserves optimistic UI because ReactionBar owns the immediate updates;
@@ -607,19 +575,30 @@ export default function FeedCard({ item }: { item: FeedItemVM }) {
     return typeof p.event_id === "string" ? p.event_id : null;
   }, [item.type, item.payload]);
 
-  const isClickable = canOpenRound || !!competitionEventId;
+  // Feed cards open the detail page. Live items (unstored "live:" ids) have no
+  // detail page, so they open the round directly; competition rounds jump to the
+  // event leaderboard.
+  const isClickable = !isDetail && (isLive ? canOpenRound : true);
 
   const timeLabel = useMemo(() => {
     return isLive ? formatLiveStarted(item.occurred_at) : formatAgeOrDate(item.occurred_at);
   }, [isLive, item.occurred_at]);
 
   function handleCardClick() {
+    if (isDetail) return;
+    if (isLive) {
+      if (canOpenRound) router.push(`/round/${openRoundId}?from=social`);
+      return;
+    }
     if (competitionEventId) {
       router.push(`/majors/events/${competitionEventId}?tab=leaderboard`);
       return;
     }
-    if (!canOpenRound) return;
-    router.push(`/round/${openRoundId}?from=social`);
+    router.push(`/social/${item.id}`);
+  }
+
+  function goToDetail() {
+    router.push(`/social/${item.id}`);
   }
 
   // Server-provided top comment
@@ -643,15 +622,9 @@ export default function FeedCard({ item }: { item: FeedItemVM }) {
     return { author: authorName, body, like_count: likeCount, created_at };
   }, [item]);
 
-  // Local override that can update instantly after posting a comment
-  const [topCommentOverride, setTopCommentOverride] = useState<TopCommentVM | null>(null);
-
-  // If the feed re-renders with a new server top comment, clear any stale override
-  useEffect(() => {
-    setTopCommentOverride(null);
-  }, [item.id, serverTopComment?.body, serverTopComment?.like_count, serverTopComment?.created_at]);
-
-  const topComment = topCommentOverride ?? serverTopComment;
+  // Comments are posted on the detail page now, so the card just shows the
+  // server-provided top comment.
+  const topComment = serverTopComment;
 
   // Collaboration header label for round cards
   const collaborationLabel = useMemo(() => {
@@ -675,7 +648,7 @@ export default function FeedCard({ item }: { item: FeedItemVM }) {
   return (
     <div
       className={[
-        "rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/60 p-4 shadow-sm",
+        "rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/60 p-3 shadow-sm",
         isClickable ? "cursor-pointer hover:bg-[#0b3b21]/75" : "",
       ].join(" ")}
       onClick={() => handleCardClick()}
@@ -752,6 +725,12 @@ export default function FeedCard({ item }: { item: FeedItemVM }) {
                 LIVE
               </span>
             ) : null}
+
+            {item.type === "pb" && item.aggregates.friend_best ? (
+              <span className="shrink-0 rounded-full border border-sky-700/50 bg-sky-900/30 px-2 py-0.5 text-[10px] font-extrabold tracking-wide text-sky-300">
+                CIRCLE BEST
+              </span>
+            ) : null}
           </div>
 
           {item.type === "round_played" ? (
@@ -780,49 +759,23 @@ export default function FeedCard({ item }: { item: FeedItemVM }) {
                 }}
               />
 
-              <Button
-                variant="secondary"
-                size="sm"
-                className="bg-emerald-900/40 text-emerald-50 hover:bg-emerald-900/55"
-                onClick={() => setCommentsOpen(true)}
-              >
-                💬 {commentCount}
-              </Button>
-
-              <CommentDrawer
-                open={commentsOpen}
-                onOpenChange={setCommentsOpen}
-                feedItemId={item.id}
-                onCommentCreated={(c) => {
-                  setCommentCount((n) => n + 1);
-
-                  // If the new comment should become top under the rule:
-                  // - higher likes wins
-                  // - tie -> newest wins
-                  if (c?.body) {
-                    const candidate: TopCommentVM = {
-                      author: c.author ?? "Player",
-                      body: c.body,
-                      like_count: typeof c.like_count === "number" ? c.like_count : 0,
-                      created_at: c.created_at,
-                    };
-
-                    if (isBetterTopComment(serverTopComment, candidate) || isBetterTopComment(topComment, candidate)) {
-                      setTopCommentOverride(candidate);
-                    } else if (!topComment) {
-                      // If there was no topComment shown, show this.
-                      setTopCommentOverride(candidate);
-                    }
-                  }
-                }}
-              />
+              {!isDetail ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="bg-emerald-900/40 text-emerald-50 hover:bg-emerald-900/55"
+                  onClick={goToDetail}
+                >
+                  💬 {commentCount}
+                </Button>
+              ) : null}
             </>
           ) : null}
         </div>
       </div>
 
       {/* Body */}
-      <div className="mt-4 space-y-3">
+      <div className="mt-3 space-y-2">
         {item.type === "user_post" ? (
           <UserPostBody payload={item.payload as any} />
         ) : item.type === "round_played" ? (
@@ -841,7 +794,7 @@ export default function FeedCard({ item }: { item: FeedItemVM }) {
         <div className="space-y-2">
           <ReactionSummary counts={reactionCounts} />
 
-          {topComment ? (
+          {topComment && !isDetail ? (
             <div className="rounded-xl border border-emerald-900/40 bg-emerald-950/10 px-3 py-2">
               <div className="flex items-center justify-between gap-2">
                 <div className="text-[11px] font-extrabold text-emerald-50 truncate">

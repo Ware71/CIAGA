@@ -4,8 +4,12 @@ import { getFeedPage, getLiveRoundsAsFeedItems } from "@/lib/feed/queries";
 import { encodeFeedCursor } from "@/lib/feed/schemas";
 import SocialClient from "./SocialClient";
 
-export default async function SocialPage() {
-  const viewerResult = await getServerViewer();
+export default async function SocialPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ focus?: string }>;
+}) {
+  const [viewerResult, sp] = await Promise.all([getServerViewer(), searchParams]);
   if (viewerResult.status === "signed_out") redirect("/auth");
   if (viewerResult.status === "needs_onboarding") redirect("/onboarding/set-password");
   const viewer = viewerResult.viewer;
@@ -17,6 +21,7 @@ export default async function SocialPage() {
 
   return (
     <SocialClient
+      focusId={sp?.focus ?? null}
       initialFeedData={{
         items: feedPage.items,
         liveItems,

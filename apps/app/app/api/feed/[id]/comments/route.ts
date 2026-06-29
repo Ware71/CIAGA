@@ -50,9 +50,11 @@ export async function GET(req: Request, context: { params: any }) {
     const url = new URL(req.url);
     const limit = clampInt(url.searchParams.get("limit"), 100, 1, 200);
 
+    // select("*") so we tolerate environments where mentioned_profile_ids
+    // hasn't been migrated yet (column simply absent from the result).
     const { data: comments, error } = await supabaseAdmin
       .from("feed_comments")
-      .select("id, feed_item_id, profile_id, body, created_at, parent_comment_id, vote_count")
+      .select("*")
       .eq("feed_item_id", feedItemId)
       .order("created_at", { ascending: false })
       .limit(limit);
@@ -75,7 +77,16 @@ export async function GET(req: Request, context: { params: any }) {
       likedSet = new Set((likedRows ?? []).map((r: any) => r.comment_id));
     }
 
-    const profileIds = Array.from(new Set((comments ?? []).map((c: any) => c.profile_id).filter(Boolean)));
+    // Collect author ids + any mentioned ids so we can resolve names once.
+    const mentionedIds = (comments ?? []).flatMap((c: any) =>
+      Array.isArray(c.mentioned_profile_ids) ? c.mentioned_profile_ids : [],
+    );
+    const profileIds = Array.from(
+      new Set([
+        ...(comments ?? []).map((c: any) => c.profile_id),
+        ...mentionedIds,
+      ].filter(Boolean)),
+    );
 
     const profilesMap = new Map<string, { id: string; name: string; avatar_url: string | null }>();
 
@@ -101,6 +112,13 @@ export async function GET(req: Request, context: { params: any }) {
       const authorName = p?.name ?? "Player";
       const authorAvatar = p?.avatar_url ?? null;
 
+      const mentions = (Array.isArray(c.mentioned_profile_ids) ? c.mentioned_profile_ids : [])
+        .map((id: string) => {
+          const mp = profilesMap.get(id);
+          return mp ? { profile_id: id, name: mp.name } : null;
+        })
+        .filter(Boolean);
+
       return {
         id: c.id,
         profile_id: c.profile_id,
@@ -109,6 +127,7 @@ export async function GET(req: Request, context: { params: any }) {
         is_mine: c.profile_id === profileId,
         like_count: c.vote_count ?? 0,
         i_liked: likedSet.has(c.id),
+        mentions,
 
         // Back-compat + consistent keys for new UI:
         author: {

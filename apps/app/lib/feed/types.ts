@@ -214,6 +214,13 @@ export type FeedItemAggregates = {
    */
   top_comment?: FeedTopComment | null;
   reaction_summary?: FeedReactionSummary | null;
+
+  /**
+   * Viewer-specific: for a PB card, true when this player's PB is the best gross
+   * among the people the viewer follows (incl. self) at that course+tee.
+   * Computed at feed-build time — not stored on the shared payload.
+   */
+  friend_best?: boolean;
 };
 
 export type FeedItemVM<TType extends FeedItemType = FeedItemType> = {
@@ -243,3 +250,47 @@ export type FeedPageResponse = {
   items: FeedItemVM[];
   next_cursor: FeedCursor | null;
 };
+
+/**
+ * Type-specific detail computed server-side for the feed-item detail page.
+ * (See lib/feed/detail.ts / components/social/detail/*)
+ */
+export type RoundDetailPlayer = { key: string; name: string; avatar_url: string | null };
+
+export type FeedItemDetail =
+  | {
+      kind: "round";
+      holes_count: number;
+      players: RoundDetailPlayer[];
+      /** One row per hole: { hole, p0: toPar, p0_rank: rank, p1: …, … } */
+      rows: Array<Record<string, number | null> & { hole: number }>;
+    }
+  | {
+      kind: "matchplay";
+      players: Array<{ name: string; avatar_url: string | null }>;
+      this_match: string | null;
+      all_time:
+        | { a_name: string; b_name: string; a_wins: number; b_wins: number; draws: number; total: number }
+        | null;
+    }
+  | {
+      kind: "hole_event";
+      event_label: string;
+      hole_number: number | null;
+      par: number | null;
+      yardage: number | null;
+      stroke_index: number | null;
+      avg_score: number | null;
+      plays: number;
+      event_pct: number | null;
+    }
+  | {
+      kind: "pb";
+      gross: number | null;
+      previous_best: { gross: number; date: string | null } | null;
+    }
+  | {
+      kind: "course_record";
+      gross: number | null;
+      beat: { name: string | null; gross: number; date: string | null } | null;
+    };

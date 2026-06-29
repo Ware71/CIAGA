@@ -34,6 +34,7 @@ export default function MentionInput({
   onMentionsChange,
   placeholder,
   className,
+  dropdownDirection = "down",
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -41,6 +42,8 @@ export default function MentionInput({
   onMentionsChange: (mentions: Mention[]) => void;
   placeholder?: string;
   className?: string;
+  /** Open the suggestion panel above ("up") or below ("down") the input. */
+  dropdownDirection?: "up" | "down";
 }) {
   const ref = useRef<HTMLTextAreaElement | null>(null);
   const [query, setQuery] = useState<string | null>(null);
@@ -118,7 +121,12 @@ export default function MentionInput({
       />
 
       {open && (
-        <div className="absolute left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-xl border border-emerald-900/70 bg-[#071c10] shadow-lg">
+        <div
+          className={[
+            "absolute left-0 right-0 z-50 max-h-48 overflow-y-auto rounded-xl border border-emerald-900/70 bg-[#071c10] shadow-lg",
+            dropdownDirection === "up" ? "bottom-full mb-1" : "mt-1",
+          ].join(" ")}
+        >
           {results.map((r) => (
             <button
               key={r.id}

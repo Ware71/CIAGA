@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 import { ServerTiming } from "@/lib/perf/serverTiming";
-import { getHomeSummary } from "@/lib/home/getHomeSummary";
+import { getHomeSummary, getHomeCore, getHomeMiniFeed } from "@/lib/home/getHomeSummary";
+import type { HomeCore, HomeMiniFeed, HomeSummary } from "@/lib/home/getHomeSummary";
 
 export const runtime = "nodejs";
 
@@ -11,7 +12,16 @@ export async function GET(req: Request) {
 
     const { profileId } = await timing.measure("auth", () => getAuthedProfileOrThrow(req));
 
-    const data = await timing.measure("queries", () => getHomeSummary(profileId));
+    // `part=core` → essential player info only (gates the splash, fast).
+    // `part=feed` → the curated social feed only (low priority, slower).
+    // default     → the full summary (back-compat).
+    const part = new URL(req.url).searchParams.get("part");
+    const load: () => Promise<HomeCore | HomeMiniFeed | HomeSummary> =
+      part === "core" ? () => getHomeCore(profileId)
+      : part === "feed" ? () => getHomeMiniFeed(profileId)
+      : () => getHomeSummary(profileId);
+
+    const data = await timing.measure("queries", load);
 
     const headers = new Headers();
     headers.set("Cache-Control", "no-store");

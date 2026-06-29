@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { AuthUser } from "@/components/ui/auth-user";
 
 import type { FeedItemVM } from "@/lib/feed/types";
-import type { HomeSummary } from "@/lib/home/getHomeSummary";
+import type { HomeSummary, HomeCore, HomeMiniFeed } from "@/lib/home/getHomeSummary";
 
 import { clamp, formatSigned } from "@/lib/feed/feedItemUtils";
 import { formatHI } from "@/lib/rounds/handicapUtils";
@@ -107,8 +107,11 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [actioningInvite, setActioningInvite] = useState<Record<string, "declining">>({});
 
-  const notif = useNotifications(myProfileId);
-  const announcements = useAnnouncements(myProfileId);
+  // Notifications + announcements are the lowest priority — don't let them
+  // contend with the essential load. Hold them until the splash has cleared.
+  const lowPriorityProfileId = dataReady ? myProfileId : null;
+  const notif = useNotifications(lowPriorityProfileId);
+  const announcements = useAnnouncements(lowPriorityProfileId);
   const pendingInvitesCount = majorsPreload?.pending_invites?.length ?? 0;
   const badgeCount = notif.unreadCount + pendingInvitesCount;
 
@@ -134,23 +137,25 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
     };
   }, []);
 
-  // Home data fetch — uses module cache on back navigation, fetches fresh otherwise
+  // Home data fetch — uses module cache on back navigation, fetches fresh otherwise.
+  // Loads in priority order: essential player info gates the splash; the social
+  // feed + Majors hub stream in afterwards without blocking it.
   useEffect(() => {
     if (initialData) return;
 
-    const applyData = (data: HomeSummary) => {
+    const applyCore = (data: HomeCore) => {
       setLiveRoundId(data.live_round_id ?? null);
       setHandicapIndex(data.handicap?.current ?? null);
       setHandicapDelta30(data.handicap?.delta_30d ?? 0);
       setRoundsPlayed(data.rounds_played ?? null);
       setLastRound(data.last_round ?? null);
-      setMiniFeed((data.mini_feed as FeedItemVM[]) ?? []);
     };
 
     // Serve cached data instantly on back navigation (no network, no loading state)
     const cached = getCachedHomeData();
     if (cached) {
-      applyData(cached.home);
+      applyCore(cached.home);
+      setMiniFeed((cached.home.mini_feed as FeedItemVM[]) ?? []);
       setMajorsPreload(cached.majors);
       setDataReady(true);
       setMiniFeedLoading(false);
@@ -159,6 +164,7 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
 
     let cancelled = false;
     let onlineRetryCleanup: (() => void) | null = null;
+    // Safety net: never spin forever if the essential fetch wedges entirely.
     const timeoutId = setTimeout(() => { if (!cancelled) setDataReady(true); }, 10_000);
 
     const scheduleRetry = () => {
@@ -171,8 +177,6 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
     };
 
     (async () => {
-      setMiniFeedLoading(true);
-      setMiniFeedError(null);
       try {
         const session = await getViewerSession();
         if (!session || cancelled) {
@@ -184,36 +188,50 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
           return;
         }
         if (!cancelled) setMyProfileId(session.profileId);
+        const authHeader = { Authorization: `Bearer ${session.accessToken}` };
 
-        const [homeRes, majorsRes] = await Promise.all([
-          fetch("/api/home/summary", { headers: { Authorization: `Bearer ${session.accessToken}` } }),
-          fetch("/api/majors/hub", { headers: { Authorization: `Bearer ${session.accessToken}` } }),
-        ]);
+        // ESSENTIAL — gates the splash. Kept small/fast so it resolves before
+        // the 10s safety net and never dismisses the splash prematurely.
+        const coreRes = await fetch("/api/home/summary?part=core", { headers: authHeader });
         if (cancelled) return;
-        if (!homeRes.ok) {
+        if (!coreRes.ok) {
           setDataReady(true);
           scheduleRetry();
           return;
         }
-        const [homeData, majorsData] = await Promise.all([
-          homeRes.json() as Promise<HomeSummary>,
-          majorsRes.ok ? majorsRes.json() as Promise<MajorHubSummary> : Promise.resolve(null),
-        ]);
+        const coreData = (await coreRes.json()) as HomeCore;
+        if (cancelled) return;
+        applyCore(coreData);
+        setMiniFeedLoading(true);
+        setMiniFeedError(null);
+        setDataReady(true); // splash may dismiss now
 
-        if (!cancelled) {
-          setCachedHomeData(homeData, majorsData);
-          applyData(homeData);
-          setMajorsPreload(majorsData);
-          setDataReady(true);
-        }
+        // LOW PRIORITY — background, never blocks the splash. The Majors hub is
+        // fetched eagerly so the swipe-up view is hydrated if the user goes
+        // straight there (MajorsHubPreview self-fetches as a fallback otherwise).
+        const [feedRes, majorsRes] = await Promise.all([
+          fetch("/api/home/summary?part=feed", { headers: authHeader }),
+          fetch("/api/majors/hub", { headers: authHeader }),
+        ]);
+        if (cancelled) return;
+        const feedData = feedRes.ok ? ((await feedRes.json()) as HomeMiniFeed) : null;
+        const majorsData = majorsRes.ok ? ((await majorsRes.json()) as MajorHubSummary) : null;
+        if (cancelled) return;
+
+        const miniFeed = (feedData?.mini_feed as FeedItemVM[]) ?? [];
+        setMiniFeed(miniFeed);
+        setMajorsPreload(majorsData);
+        setMiniFeedLoading(false);
+        if (!feedRes.ok) setMiniFeedError("Failed to load");
+
+        setCachedHomeData({ ...coreData, mini_feed: miniFeed }, majorsData);
       } catch (e: any) {
         if (!cancelled) {
           setMiniFeedError(e?.message ?? "Failed to load");
+          setMiniFeedLoading(false);
           setDataReady(true);
           scheduleRetry();
         }
-      } finally {
-        if (!cancelled) setMiniFeedLoading(false);
       }
     })();
 
@@ -231,7 +249,8 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
     );
   }, [liveRoundId]);
 
-  const closedOffset = clamp(vh * 0.28, 170, 260);
+  // Sit the closed wheel a touch lower to reclaim dead space for the mini feed.
+  const closedOffset = clamp(vh * 0.34, 210, 300);
 
   const goToMajors = () => {
     setOpen(false);
@@ -317,7 +336,9 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
     </AnimatePresence>
   );
 
-  const MINI_CARD_H = 44;
+  // Mini cards now carry a second detail line, so they're a little taller.
+  // The lower wheel frees vertical room to show them without clipping.
+  const MINI_CARD_H = 52;
   const MINI_GAP = 8;
   const miniFeedMaxH = MINI_CARD_H * 5 + MINI_GAP * 4;
 
@@ -595,7 +616,11 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
                 <div className="text-sm font-semibold text-emerald-100/70">Loading…</div>
               ) : miniFeed.length ? (
                 miniFeed.map((it) => (
-                  <MiniFeedTeaserCard key={it.id} item={it} onOpen={() => router.push("/social")} />
+                  <MiniFeedTeaserCard
+                    key={it.id}
+                    item={it}
+                    onOpen={() => router.push(`/social?focus=${encodeURIComponent(it.id)}`)}
+                  />
                 ))
               ) : miniFeedError ? (
                 <div className="text-sm font-semibold text-red-200/90">{miniFeedError}</div>
