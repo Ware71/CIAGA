@@ -257,21 +257,46 @@ export type FeedPageResponse = {
  */
 export type RoundDetailPlayer = { key: string; name: string; avatar_url: string | null };
 
+/** One row per hole: keyed by series ids (e.g. p0/p0_rank or m0). */
+export type HoleRow = Record<string, number | null> & { hole: number };
+
+export type H2HTally = { a_wins: number; b_wins: number; draws: number; total: number };
+
+/** Matchplay head-to-head record (the per-match margin lines live in FormatChart). */
+export type MatchplayDetail = {
+  a_name: string;
+  b_name: string;
+  all_time: H2HTally;
+  through_this_match: H2HTally;
+};
+
+/**
+ * The format-aware progression line chart (the "Format" toggle).
+ * - kind "points": cumulative format points per player (higher = better), series = players.
+ * - kind "margin": matchplay 1up/1down margin, one series per match.
+ */
+export type FormatChartSeries = { key: string; name: string };
+export type FormatChart = {
+  label: string;
+  kind: "points" | "margin";
+  series: FormatChartSeries[];
+  rows: HoleRow[];
+  higher_is_better: boolean;
+};
+
+export type HoleStatBlock = { avg_score: number | null; plays: number; event_pct: number | null };
+
 export type FeedItemDetail =
   | {
       kind: "round";
       holes_count: number;
       players: RoundDetailPlayer[];
-      /** One row per hole: { hole, p0: toPar, p0_rank: rank, p1: …, … } */
-      rows: Array<Record<string, number | null> & { hole: number }>;
-    }
-  | {
-      kind: "matchplay";
-      players: Array<{ name: string; avatar_url: string | null }>;
-      this_match: string | null;
-      all_time:
-        | { a_name: string; b_name: string; a_wins: number; b_wins: number; draws: number; total: number }
-        | null;
+      gross_rows: HoleRow[];
+      net_rows: HoleRow[];
+      /** Format-aware progression (stableford points / matchplay margin / …). */
+      format_chart?: FormatChart | null;
+      /** Present for matchplay rounds: head-to-head record. */
+      matchplay?: MatchplayDetail | null;
     }
   | {
       kind: "hole_event";
@@ -280,9 +305,10 @@ export type FeedItemDetail =
       par: number | null;
       yardage: number | null;
       stroke_index: number | null;
-      avg_score: number | null;
-      plays: number;
-      event_pct: number | null;
+      /** This player's history on the hole. */
+      player: HoleStatBlock;
+      /** Everyone who has played the hole. */
+      everyone: HoleStatBlock;
     }
   | {
       kind: "pb";

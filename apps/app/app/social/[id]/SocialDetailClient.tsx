@@ -3,9 +3,9 @@
 import { useRouter } from "next/navigation";
 import type { FeedItemVM, FeedItemDetail as FeedItemDetailData } from "@/lib/feed/types";
 import { BackButton } from "@/components/ui/BackButton";
-import FeedCard from "@/components/social/FeedCard";
-import CommentSection from "@/components/social/CommentSection";
+import DetailHeader from "@/components/social/detail/DetailHeader";
 import FeedItemDetail from "@/components/social/detail/FeedItemDetail";
+import CommentBar from "@/components/social/CommentBar";
 
 function roundIdForItem(item: FeedItemVM): string | null {
   const p: any = item.payload ?? {};
@@ -29,18 +29,14 @@ export default function SocialDetailClient({
   const roundId = roundIdForItem(item);
 
   return (
-    <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
-      <div className="mx-auto w-full max-w-sm space-y-4">
-        {/* Header */}
-        <header className="relative flex items-center justify-center">
-          <BackButton className="absolute left-0 font-semibold" onClick={() => router.push("/social")} />
-          <div className="text-center">
-            <div className="text-lg font-extrabold tracking-wide text-[#f5e6b0]">Detail</div>
-          </div>
-        </header>
+    <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-4 pb-[26vh]">
+      <div className="mx-auto w-full max-w-sm space-y-3">
+        <div className="flex items-center">
+          <BackButton className="font-semibold" onClick={() => router.push("/social")} />
+        </div>
 
-        {/* Summary card (reused, non-interactive) */}
-        <FeedCard item={item} variant="detail" />
+        {/* Compact, informative header (avatars, pill, course·tee·date, key figure, reactions) */}
+        <DetailHeader item={item} />
 
         {/* Subtle "view scorecard" */}
         {roundId ? (
@@ -53,17 +49,12 @@ export default function SocialDetailClient({
           </button>
         ) : null}
 
-        {/* Type-specific detail (charts, h2h, hole stats, record context) */}
+        {/* Type-specific detail (chart + toggles, h2h, hole stats, record context) */}
         <FeedItemDetail detail={detail} />
-
-        {/* Comments live at the bottom of this screen */}
-        <div className="rounded-2xl border border-emerald-900/70 bg-[#062a18]/60 overflow-hidden">
-          <div className="border-b border-emerald-900/70 px-4 py-3 text-sm font-extrabold text-emerald-50">
-            Comments
-          </div>
-          <CommentSection feedItemId={item.id} mentionDirection="up" listClassName="max-h-[50vh] overflow-y-auto" />
-        </div>
       </div>
+
+      {/* Persistent comments bar (expands to a drawer) */}
+      <CommentBar feedItemId={item.id} />
     </div>
   );
 }
