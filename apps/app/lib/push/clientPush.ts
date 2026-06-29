@@ -84,6 +84,24 @@ export function notificationPermission(): NotificationPermission | "unsupported"
   return Notification.permission;
 }
 
+/**
+ * Mirror an unread count onto the installed PWA's app-icon badge via the Web App
+ * Badging API. Best-effort and feature-detected: silently no-ops in browsers
+ * that don't support it (desktop Safari, non-installed tabs). On iOS 16.4+ the
+ * badge only shows for a home-screen app with notifications permission granted —
+ * the same gate the push flow already passes through.
+ */
+export function syncAppBadge(count: number): void {
+  try {
+    if (typeof navigator === "undefined" || !("setAppBadge" in navigator)) return;
+    const nav = navigator as any;
+    if (count > 0) nav.setAppBadge(count).catch(() => {});
+    else nav.clearAppBadge?.().catch(() => {});
+  } catch {
+    /* best-effort */
+  }
+}
+
 async function authedFetch(input: string, init?: RequestInit) {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;

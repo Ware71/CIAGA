@@ -52,6 +52,8 @@ export type PushMessage = {
   icon?: string;
   /** Coalesce notifications on the device (e.g. one per grouped key). */
   tag?: string;
+  /** Recipient's current unread count — set on the app icon by the SW. */
+  badgeCount?: number;
 };
 
 /** Per-subscription outcome of a push send. */
@@ -118,6 +120,7 @@ export async function sendPushToProfiles(
     url: message.url ?? "/home",
     icon: message.icon,
     tag: message.tag,
+    badgeCount: message.badgeCount,
   });
 
   const deadIds: string[] = [];

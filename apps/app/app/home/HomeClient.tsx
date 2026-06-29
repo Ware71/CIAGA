@@ -19,6 +19,7 @@ import { LoadingScreen } from "@/components/ui/loading-screen";
 import { getCachedHomeData, setCachedHomeData } from "@/lib/home/homeDataCache";
 import NotificationCenter from "@/components/notifications/NotificationCenter";
 import { useNotifications } from "@/lib/notifications/useNotifications";
+import { useAppBadge } from "@/lib/notifications/useAppBadge";
 import AnnouncementModal from "@/components/announcements/AnnouncementModal";
 import { useAnnouncements } from "@/lib/announcements/useAnnouncements";
 import PushPermissionPrompt from "@/components/notifications/PushPermissionPrompt";
@@ -114,6 +115,10 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
   const announcements = useAnnouncements(lowPriorityProfileId);
   const pendingInvitesCount = majorsPreload?.pending_invites?.length ?? 0;
   const badgeCount = notif.unreadCount + pendingInvitesCount;
+
+  // Mirror unread notifications onto the installed PWA's app-icon badge while
+  // the app is open (the service worker sets it on push while it's closed).
+  useAppBadge(notif.unreadCount);
 
   useEffect(() => {
     const updateViewport = () => {
