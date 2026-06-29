@@ -22,6 +22,35 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return output;
 }
 
+/** URL-safe base64 of an ArrayBuffer (for comparing applicationServerKey). */
+function bufToBase64Url(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/**
+ * Race a promise against a timeout. iOS WebKit can leave `serviceWorker.ready`
+ * or `pushManager.subscribe()` pending forever; without this the "Enable
+ * notifications" button hangs on "Enabling…" indefinitely.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(label)), ms);
+    promise.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      }
+    );
+  });
+}
+
 export function isPushSupported(): boolean {
   return (
     typeof window !== "undefined" &&
@@ -75,36 +104,87 @@ export type RegisterPushResult =
 /**
  * Request permission (must be called from a user gesture) and register a push
  * subscription. Returns a status the UI can react to.
+ *
+ * Every async step is bounded by a timeout and reported via `onStep`, so the UI
+ * can never hang on "Enabling…" and we can see exactly where iOS stalls.
  */
-export async function registerPush(): Promise<RegisterPushResult> {
+export async function registerPush(opts?: {
+  onStep?: (step: string) => void;
+}): Promise<RegisterPushResult> {
+  const step = (s: string) => opts?.onStep?.(s);
+
   if (!isPushSupported()) return { status: "unsupported" };
   if (isIOS() && !isStandalone()) return { status: "needs_install" };
   if (!VAPID_PUBLIC_KEY) return { status: "error", error: "Push not configured" };
 
   try {
+    step("Requesting permission…");
     const permission = await Notification.requestPermission();
     if (permission !== "granted") return { status: "denied" };
 
-    const reg = await navigator.serviceWorker.ready;
+    step("Preparing service worker…");
+    const reg = await withTimeout(
+      navigator.serviceWorker.ready,
+      10000,
+      "Service worker not ready"
+    );
 
-    let sub = await reg.pushManager.getSubscription();
-    if (!sub) {
-      sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) as BufferSource,
-      });
+    step("Checking subscription…");
+    let sub = await withTimeout(
+      reg.pushManager.getSubscription(),
+      10000,
+      "Could not read existing subscription"
+    );
+
+    // Drop a stale subscription created against a different VAPID key — otherwise
+    // the server signs with a key the push service won't accept (silent failure),
+    // and re-subscribing with the same key can hang on iOS.
+    if (sub) {
+      const existingKey = sub.options?.applicationServerKey;
+      const existingKeyB64 = existingKey ? bufToBase64Url(existingKey) : null;
+      if (existingKeyB64 && existingKeyB64 !== VAPID_PUBLIC_KEY) {
+        step("Updating subscription…");
+        await sub.unsubscribe().catch(() => {});
+        sub = null;
+      }
     }
 
+    if (!sub) {
+      step("Subscribing…");
+      sub = await withTimeout(
+        reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) as BufferSource,
+        }),
+        20000,
+        "Subscribe timed out"
+      );
+    }
+
+    step("Saving…");
     const json = sub.toJSON();
-    const res = await authedFetch("/api/push/subscribe", {
-      method: "POST",
-      body: JSON.stringify({
-        endpoint: json.endpoint,
-        p256dh: json.keys?.p256dh,
-        auth: json.keys?.auth,
-        user_agent: navigator.userAgent,
-      }),
-    });
+    const controller = new AbortController();
+    const saveTimer = setTimeout(() => controller.abort(), 15000);
+    let res: Response;
+    try {
+      res = await authedFetch("/api/push/subscribe", {
+        method: "POST",
+        body: JSON.stringify({
+          endpoint: json.endpoint,
+          p256dh: json.keys?.p256dh,
+          auth: json.keys?.auth,
+          user_agent: navigator.userAgent,
+        }),
+        signal: controller.signal,
+      });
+    } catch (e: any) {
+      return {
+        status: "error",
+        error: e?.name === "AbortError" ? "Saving subscription timed out" : e?.message,
+      };
+    } finally {
+      clearTimeout(saveTimer);
+    }
     if (!res.ok) {
       const j = await res.json().catch(() => ({}));
       return { status: "error", error: j?.error || `HTTP ${res.status}` };

@@ -34,15 +34,20 @@ export default function PushPermissionPrompt({
   const { show, dismiss } = usePushPrompt({ profileId, suppressed });
   const [variant, setVariant] = useState<Variant>(initialVariant);
   const [working, setWorking] = useState(false);
+  const [stepLabel, setStepLabel] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   async function enable() {
+    setError(null);
+    setStepLabel(null);
     setWorking(true);
-    const r = await registerPush();
+    const r = await registerPush({ onStep: setStepLabel });
     setWorking(false);
     if (r.status === "subscribed") dismiss();
     else if (r.status === "denied") setVariant("denied");
     else if (r.status === "needs_install") setVariant("ios_install");
-    // unsupported / error: leave the modal so the user can dismiss it
+    else if (r.status === "error") setError(r.error || "Couldn’t enable notifications.");
+    // unsupported: leave the modal so the user can dismiss it
   }
 
   return (
@@ -80,8 +85,13 @@ export default function PushPermissionPrompt({
                     disabled={working}
                     className="w-full rounded-full bg-[#f5e6b0] px-4 py-2.5 text-sm font-extrabold text-[#042713] disabled:opacity-60"
                   >
-                    {working ? "Enabling…" : "Enable notifications"}
+                    {working ? stepLabel ?? "Enabling…" : "Enable notifications"}
                   </button>
+                  {error && (
+                    <div className="text-xs font-medium text-emerald-100/60">
+                      {error} Tap to try again.
+                    </div>
+                  )}
                   <button
                     type="button"
                     onClick={dismiss}
