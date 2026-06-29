@@ -9,6 +9,10 @@ const nextConfig = {
 export default withPWA({
   dest: 'public',
   disable: !isProd,  // PWA only in production
-  register: true,
+  // next-pwa's auto-register injects into the `main.js` entry, which the App
+  // Router never loads — so we register /sw.js ourselves in
+  // components/ServiceWorkerRegistrar.tsx instead. next-pwa still generates the
+  // service worker + custom push worker.
+  register: false,
   skipWaiting: true,
 })(nextConfig);
