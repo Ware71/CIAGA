@@ -123,6 +123,14 @@ export async function registerPush(opts?: {
     if (permission !== "granted") return { status: "denied" };
 
     step("Preparing service worker…");
+    // The SW is registered app-wide by ServiceWorkerRegistrar, but self-heal in
+    // case it hasn't completed yet (or this is the very first launch).
+    const existingReg = await navigator.serviceWorker.getRegistration();
+    if (!existingReg) {
+      await navigator.serviceWorker
+        .register("/sw.js", { scope: "/" })
+        .catch(() => {});
+    }
     const reg = await withTimeout(
       navigator.serviceWorker.ready,
       10000,
