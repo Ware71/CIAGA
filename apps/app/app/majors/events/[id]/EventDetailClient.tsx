@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getViewerSession } from "@/lib/auth/viewerSession";
+import { InvitePlayerSheet } from "@/app/majors/groups/InvitePlayerSheet";
 import type {
   EventWithGroup,
   EventTypeV2,
@@ -1625,6 +1626,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
   const [isEntered, setIsEntered] = useState(false);
   const [entering, setEntering] = useState(false);
   const [enterError, setEnterError] = useState<string | null>(null);
+  const [showInvitePlayers, setShowInvitePlayers] = useState(false);
   // Join drawer
   const [showJoinDrawer, setShowJoinDrawer] = useState(false);
   const [joinPreview, setJoinPreview] = useState<any | null>(null);
@@ -2199,6 +2201,17 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
     myRole === "admin" ||
     (!event?.group_id && event?.created_by_profile_id === myProfileId);
 
+  // Accepting an event invite from Home navigates here with ?autoEnter=1 — open
+  // the entry drawer once the data has loaded and entry is open.
+  const autoEnter = searchParams.get("autoEnter") === "1";
+  const [autoEnterHandled, setAutoEnterHandled] = useState(false);
+  useEffect(() => {
+    if (autoEnter && !autoEnterHandled && entryOpen && !isEntered) {
+      setAutoEnterHandled(true);
+      void openJoinDrawer();
+    }
+  }, [autoEnter, autoEnterHandled, entryOpen, isEntered]);
+
   const scoringModel = event?.scoring_model ?? "net";
   const displayScore = (row: any) =>
     scoringModel === "gross"
@@ -2329,6 +2342,49 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
           >
             Edit Setup
           </button>
+        )}
+
+        {/* Admin: invite players to the event */}
+        {isAdminOrOwner && entryOpen && (
+          <button
+            type="button"
+            onClick={() => setShowInvitePlayers(true)}
+            className="w-full py-2 rounded-full border border-emerald-800/60 text-[11px] font-semibold text-emerald-300/70 hover:text-emerald-200 hover:border-emerald-700/60 transition-colors"
+          >
+            Invite Players
+          </button>
+        )}
+
+        {showInvitePlayers && (
+          <div
+            className="fixed inset-0 z-50 flex items-end justify-center bg-black/60"
+            onClick={() => setShowInvitePlayers(false)}
+          >
+            <div
+              className="w-full max-w-sm rounded-t-2xl bg-[#0b3b21] border border-emerald-800/60 px-4 py-5 max-h-[80vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <InvitePlayerSheet
+                title="Invite Players"
+                groupId={event?.group_id ?? undefined}
+                excludedProfileIds={new Set(participants.map((p) => p.profile_id))}
+                onInvite={async (pid) => {
+                  const session = await getViewerSession();
+                  if (!session) return;
+                  await fetch(`/api/majors/events/${eventId}/invitations`, {
+                    method: "POST",
+                    headers: {
+                      Authorization: `Bearer ${session.accessToken}`,
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ profile_id: pid }),
+                  });
+                }}
+                onInvited={() => {}}
+                onClose={() => setShowInvitePlayers(false)}
+              />
+            </div>
+          </div>
         )}
 
         {/* Entry / Submit CTAs */}

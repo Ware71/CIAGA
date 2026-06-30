@@ -739,6 +739,12 @@ export type PendingInvite = {
   group: { id: string; name: string; image_url: string | null };
 };
 
+export type PendingEventInvite = {
+  event_id: string;
+  event: { id: string; name: string };
+  group_name: string | null;
+};
+
 export type MajorHubSummary = {
   season_events: number;
   season_rounds_played: number;
@@ -754,6 +760,7 @@ export type MajorHubSummary = {
   my_groups: Array<MajorGroup & { member_count: number }>;
   discover_groups: Array<MajorGroup & { member_count: number }>;
   pending_invites: PendingInvite[];
+  pending_event_invites: PendingEventInvite[];
 };
 
 export type MajorScheduleItem = EventWithGroup & {

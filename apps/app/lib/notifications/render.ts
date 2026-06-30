@@ -57,6 +57,16 @@ function truncate(s: string, n = 80): string {
   return t.length > n ? `${t.slice(0, n - 1)}…` : t;
 }
 
+/** ISO timestamp → "Jun 30 at 2:30 PM" (viewer's local time on the client).
+ *  Non-ISO / already-formatted values are returned unchanged. */
+function formatTeeTime(v: string): string {
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return v;
+  const date = d.toLocaleDateString([], { month: "short", day: "numeric" });
+  const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return `${date} at ${time}`;
+}
+
 export function renderNotification(
   type: string,
   payload: Record<string, any>
@@ -139,7 +149,7 @@ export function renderNotification(
         title: "Tee time assigned",
         body: p.event_name
           ? `You've been placed in a tee time for ${p.event_name}${
-              p.tee_time ? ` at ${p.tee_time}` : ""
+              p.tee_time ? ` at ${formatTeeTime(p.tee_time)}` : ""
             }`
           : "You've been placed in a tee time",
         url: p.event_id ? `/majors/events/${p.event_id}` : "/majors",
@@ -150,7 +160,7 @@ export function renderNotification(
       return {
         title: "Tee time reminder",
         body: `Upcoming tee time${p.event_name ? ` for ${p.event_name}` : ""}${
-          p.tee_time ? ` at ${p.tee_time}` : ""
+          p.tee_time ? ` at ${formatTeeTime(p.tee_time)}` : ""
         }`,
         url: p.event_id ? `/majors/events/${p.event_id}` : "/majors",
         icon: "clock",

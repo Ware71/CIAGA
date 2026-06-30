@@ -41,7 +41,7 @@ export async function POST(
     // Fetch the tee time (including event_round_id for default tee lookup)
     const { data: teeTime } = await supabaseAdmin
       .from("event_tee_times")
-      .select("id, round_id, event_id, event_round_id")
+      .select("id, round_id, event_id, event_round_id, tee_time")
       .eq("id", tee_time_id)
       .eq("event_id", id)
       .maybeSingle();
@@ -158,6 +158,7 @@ export async function POST(
         event_id: id,
         event_name: event.name,
         tee_time_id,
+        tee_time: teeTime.tee_time,
         round_id: teeTime.round_id,
       },
     });

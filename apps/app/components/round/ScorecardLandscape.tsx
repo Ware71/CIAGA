@@ -3,7 +3,7 @@
 import React from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import type { Participant, Hole, HoleState } from "@/lib/rounds/hooks/useRoundDetail";
-import { isFormatView, type FormatScoreView, type FormatDisplayData } from "@/lib/rounds/formatScoring";
+import { isFormatView, relToParForRange, type FormatScoreView, type FormatDisplayData } from "@/lib/rounds/formatScoring";
 import { strokesReceivedOnHole, formatHI } from "@/lib/rounds/handicapUtils";
 import { BadgeWrap, StrokeDots, PlusIndicator, scoreBadgeType } from "./ScorecardCells";
 
@@ -273,8 +273,8 @@ export default function ScorecardLandscape(props: {
                     const label: SumKind =
                       c.kind === "outMid" || c.kind === "outEnd" ? "OUT" : c.kind === "inEnd" ? "IN" : "TOT";
 
-                    const par = sumPar(label);
-                    const toPar = suppressToPar || typeof value !== "number" ? null : (typeof par === "number" ? value - par : null);
+                    const [from, to] = label === "OUT" ? [1, 9] : label === "IN" ? [10, 18] : [1, 18];
+                    const toPar = suppressToPar ? null : relToParForRange(p.id, holesList, displayedScoreFor, from, to);
 
                     const isTot = c.kind === "totEnd";
 

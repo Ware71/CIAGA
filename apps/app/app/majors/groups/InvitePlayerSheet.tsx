@@ -12,7 +12,13 @@ type ProfileLite = {
 };
 
 type Props = {
-  groupId: string;
+  /** Group context: scopes the profile search and is the default invite target. */
+  groupId?: string;
+  /** Custom invite action (e.g. event invites). When set, overrides the default
+   *  group-membership POST. */
+  onInvite?: (profileId: string) => Promise<void>;
+  /** Sheet header label. */
+  title?: string;
   excludedProfileIds: Set<string>;
   onInvited: (profile: { id: string; name: string | null }) => void;
   onClose?: () => void;
@@ -69,7 +75,7 @@ function ProfileRow({
   );
 }
 
-export function InvitePlayerSheet({ groupId, excludedProfileIds, onInvited, onClose }: Props) {
+export function InvitePlayerSheet({ groupId, onInvite, title, excludedProfileIds, onInvited, onClose }: Props) {
   const [query, setQuery] = useState("");
   const [following, setFollowing] = useState<ProfileLite[]>([]);
   const [loadingFollowing, setLoadingFollowing] = useState(true);
@@ -112,7 +118,7 @@ export function InvitePlayerSheet({ groupId, excludedProfileIds, onInvited, onCl
         const session = await getViewerSession();
         if (!session) return;
         const res = await fetch(
-          `/api/profiles/search?q=${encodeURIComponent(q)}&exclude_group_id=${groupId}`,
+          `/api/profiles/search?q=${encodeURIComponent(q)}${groupId ? `&exclude_group_id=${groupId}` : ""}`,
           { headers: { Authorization: `Bearer ${session.accessToken}` } }
         );
         if (res.ok) {
@@ -154,16 +160,20 @@ export function InvitePlayerSheet({ groupId, excludedProfileIds, onInvited, onCl
   async function handleInvite(profile: ProfileLite) {
     setInviting(profile.id);
     try {
-      const session = await getViewerSession();
-      if (!session) return;
-      await fetch(`/api/majors/groups/${groupId}/members`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${session.accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ profile_id: profile.id }),
-      });
+      if (onInvite) {
+        await onInvite(profile.id);
+      } else if (groupId) {
+        const session = await getViewerSession();
+        if (!session) return;
+        await fetch(`/api/majors/groups/${groupId}/members`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${session.accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ profile_id: profile.id }),
+        });
+      }
       setInvited((prev) => new Set([...prev, profile.id]));
       onInvited({ id: profile.id, name: profile.name });
     } finally {
@@ -179,7 +189,7 @@ export function InvitePlayerSheet({ groupId, excludedProfileIds, onInvited, onCl
     <div className="space-y-3">
       {onClose && (
         <div className="flex items-center justify-between">
-          <div className="text-sm font-semibold text-emerald-50">Invite Members</div>
+          <div className="text-sm font-semibold text-emerald-50">{title ?? "Invite Members"}</div>
           <button
             type="button"
             onClick={onClose}
