@@ -121,6 +121,28 @@ function sumRange(
   return anyValue ? sum : "–";
 }
 
+/** Cumulative strokes-to-par over holes actually played in [from, to].
+ *  A hole counts when displayedScoreFor returns a number. Returns null if none. */
+export function relToParForRange(
+  pid: string,
+  holes: Hole[],
+  displayedScoreFor: (pid: string, hole: number) => string | number | null,
+  from: number,
+  to: number
+): number | null {
+  let sum = 0;
+  let any = false;
+  for (const h of holes) {
+    if (h.hole_number < from || h.hole_number > to) continue;
+    const v = displayedScoreFor(pid, h.hole_number);
+    if (typeof v === "number" && typeof h.par === "number") {
+      sum += v - h.par;
+      any = true;
+    }
+  }
+  return any ? sum : null;
+}
+
 // ── Default stableford points table ────────────────────────────────────
 
 const DEFAULT_STABLEFORD: Record<string, number> = {

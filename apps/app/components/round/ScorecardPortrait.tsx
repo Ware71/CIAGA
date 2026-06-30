@@ -3,7 +3,7 @@
 import React from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import type { Participant, Hole, HoleState } from "@/lib/rounds/hooks/useRoundDetail";
-import { isFormatView, type FormatScoreView, type FormatDisplayData } from "@/lib/rounds/formatScoring";
+import { isFormatView, relToParForRange, type FormatScoreView, type FormatDisplayData } from "@/lib/rounds/formatScoring";
 import { strokesReceivedOnHole, formatHI } from "@/lib/rounds/handicapUtils";
 
 type SumKind = "OUT" | "IN" | "TOT";
@@ -380,9 +380,8 @@ export default function ScorecardPortrait(props: {
               );
 
               participants.forEach((p) => {
-                const par = metaSums.parOut;
                 const val = totals[p.id]?.out ?? 0;
-                const toPar = suppressToPar || typeof val !== "number" ? null : (typeof par === "number" ? val - par : null);
+                const toPar = suppressToPar ? null : relToParForRange(p.id, holesList, displayedScoreFor, 1, 9);
 
                 nodes.push(
                   <div
@@ -434,7 +433,8 @@ export default function ScorecardPortrait(props: {
             participants.forEach((p) => {
               const t = totals[p.id];
               const val = label === "OUT" ? t?.out ?? 0 : label === "IN" ? t?.in ?? 0 : t?.total ?? 0;
-              const toPar = suppressToPar || typeof val !== "number" ? null : (typeof par === "number" ? val - par : null);
+              const [from, to] = label === "OUT" ? [1, 9] : label === "IN" ? [10, 18] : [1, 18];
+              const toPar = suppressToPar ? null : relToParForRange(p.id, holesList, displayedScoreFor, from, to);
 
               nodes.push(
                 <div
