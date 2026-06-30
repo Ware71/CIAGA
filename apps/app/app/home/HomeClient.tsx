@@ -113,7 +113,9 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
   const lowPriorityProfileId = dataReady ? myProfileId : null;
   const notif = useNotifications(lowPriorityProfileId);
   const announcements = useAnnouncements(lowPriorityProfileId);
-  const pendingInvitesCount = majorsPreload?.pending_invites?.length ?? 0;
+  const pendingInvitesCount =
+    (majorsPreload?.pending_invites?.length ?? 0) +
+    (majorsPreload?.pending_event_invites?.length ?? 0);
   const badgeCount = notif.unreadCount + pendingInvitesCount;
 
   // Mirror unread notifications onto the installed PWA's app-icon badge while
@@ -417,7 +419,10 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
             </div>
 
             {/* Invite sheet */}
-            {showInviteSheet && (majorsPreload?.pending_invites?.length ?? 0) > 0 && (
+            {showInviteSheet &&
+              ((majorsPreload?.pending_invites?.length ?? 0) +
+                (majorsPreload?.pending_event_invites?.length ?? 0)) >
+                0 && (
               <div
                 className="fixed inset-0 z-50 flex items-end"
                 onClick={() => setShowInviteSheet(false)}
@@ -428,7 +433,9 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
                   onClick={(e) => e.stopPropagation()}
                 >
                   <div className="w-10 h-1 rounded-full bg-emerald-800/60 mx-auto mb-3" />
-                  <div className="text-[11px] uppercase tracking-widest text-emerald-200/50 font-semibold mb-3">Group Invites</div>
+                  {(majorsPreload?.pending_invites?.length ?? 0) > 0 && (
+                    <div className="text-[11px] uppercase tracking-widest text-emerald-200/50 font-semibold mb-3">Group Invites</div>
+                  )}
                   {(majorsPreload?.pending_invites ?? []).map((inv) => {
                     const isActioning = !!actioningInvite[inv.group_id];
                     return (
@@ -473,13 +480,80 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
                                 setMajorsPreload((prev) => {
                                   if (!prev) return prev;
                                   const updated = prev.pending_invites.filter((i) => i.group_id !== inv.group_id);
-                                  if (updated.length === 0) setShowInviteSheet(false);
+                                  if (updated.length === 0 && (prev.pending_event_invites?.length ?? 0) === 0) setShowInviteSheet(false);
                                   return { ...prev, pending_invites: updated };
                                 });
                               } finally {
                                 setActioningInvite((prev) => {
                                   const next = { ...prev };
                                   delete next[inv.group_id];
+                                  return next;
+                                });
+                              }
+                            }}
+                            className="text-[11px] font-semibold text-emerald-200/60 hover:text-emerald-200 disabled:opacity-50 rounded-full border border-emerald-900/60 px-3 py-1.5 leading-none"
+                          >
+                            {isActioning ? "…" : "Decline"}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {(majorsPreload?.pending_event_invites?.length ?? 0) > 0 && (
+                    <div className="text-[11px] uppercase tracking-widest text-emerald-200/50 font-semibold mb-3 mt-1">Event Invites</div>
+                  )}
+                  {(majorsPreload?.pending_event_invites ?? []).map((inv) => {
+                    const isActioning = !!actioningInvite[inv.event_id];
+                    return (
+                      <div
+                        key={inv.event_id}
+                        className="w-full flex items-center gap-3 rounded-2xl border border-emerald-900/50 bg-emerald-950/40 px-4 py-3"
+                      >
+                        <div className="h-9 w-9 rounded-full bg-emerald-900/60 grid place-items-center text-[11px] font-bold text-emerald-200 shrink-0">
+                          {inv.event.name.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-semibold text-emerald-50 truncate">{inv.event.name}</div>
+                          <div className="text-[11px] text-emerald-200/50 truncate">
+                            {inv.group_name ? `${inv.group_name} · ` : ""}You&apos;ve been invited
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            disabled={isActioning}
+                            onClick={() => {
+                              setShowInviteSheet(false);
+                              router.push(`/majors/events/${inv.event_id}?autoEnter=1`);
+                            }}
+                            className="text-[11px] font-semibold text-emerald-900 bg-emerald-400 hover:bg-emerald-300 disabled:opacity-50 rounded-full px-3 py-1.5 leading-none"
+                          >
+                            Accept
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isActioning}
+                            onClick={async () => {
+                              if (!myProfileId) return;
+                              setActioningInvite((prev) => ({ ...prev, [inv.event_id]: "declining" }));
+                              try {
+                                const session = await getViewerSession();
+                                if (!session) return;
+                                await fetch(`/api/majors/events/${inv.event_id}/invitations?profile_id=${myProfileId}`, {
+                                  method: "DELETE",
+                                  headers: { Authorization: `Bearer ${session.accessToken}` },
+                                });
+                                setMajorsPreload((prev) => {
+                                  if (!prev) return prev;
+                                  const updated = prev.pending_event_invites.filter((i) => i.event_id !== inv.event_id);
+                                  if (updated.length === 0 && (prev.pending_invites?.length ?? 0) === 0) setShowInviteSheet(false);
+                                  return { ...prev, pending_event_invites: updated };
+                                });
+                              } finally {
+                                setActioningInvite((prev) => {
+                                  const next = { ...prev };
+                                  delete next[inv.event_id];
                                   return next;
                                 });
                               }

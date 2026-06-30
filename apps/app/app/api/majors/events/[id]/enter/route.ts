@@ -220,6 +220,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     if (error) throw error;
 
+    // Clear any pending invitation now that the player has entered, so the
+    // "event invites" banner stops showing this event.
+    await supabaseAdmin
+      .from("event_invitations")
+      .delete()
+      .eq("event_id", id)
+      .eq("profile_id", profileId);
+
     // ── Auto-charge event entry fee (legacy field) ────────────────────────────
     const entryFee = (event as any).entry_fee_amount as number | null;
     if (entryFee && entryFee > 0 && event.group_id) {

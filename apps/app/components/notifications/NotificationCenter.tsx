@@ -236,7 +236,7 @@ export default function NotificationCenter({
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-extrabold text-amber-100">
-                      {pendingInvitesCount} group invite{pendingInvitesCount === 1 ? "" : "s"}
+                      {pendingInvitesCount} invite{pendingInvitesCount === 1 ? "" : "s"}
                     </div>
                     <div className="text-xs font-medium text-amber-100/70">Tap to review</div>
                   </div>
