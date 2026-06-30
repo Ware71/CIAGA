@@ -3,6 +3,7 @@
 import React from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import type { FormatDisplayData } from "@/lib/rounds/formatScoring";
+import { formatHI } from "@/lib/rounds/handicapUtils";
 
 type FinalRow = {
   participantId: string;
@@ -13,6 +14,22 @@ type FinalRow = {
   in: number | string;
   toPar: number | null;
 };
+
+type HandicapFigures = { hi?: number | null; ch?: number | null; ph?: number | null };
+
+/** Compact HI / CH / PH line shown on Net / Format final results. */
+function HandicapLine({ figures }: { figures?: HandicapFigures }) {
+  if (!figures) return null;
+  const { hi, ch, ph } = figures;
+  if (hi == null && ch == null && ph == null) return null;
+  return (
+    <div className="mt-0.5 flex items-center gap-2.5 text-[9px] tabular-nums text-emerald-100/55">
+      {hi != null && <span><span className="text-emerald-200/45">HI</span> {formatHI(hi)}</span>}
+      {ch != null && <span><span className="text-emerald-200/45">CH</span> {ch}</span>}
+      {ph != null && <span><span className="text-emerald-200/45">PH</span> {ph}</span>}
+    </div>
+  );
+}
 
 function initialsFrom(name: string) {
   const parts = (name || "").trim().split(/\s+/).filter(Boolean);
@@ -32,8 +49,10 @@ export default function FinalResultsPanel(props: {
   finalRows: FinalRow[];
   formatDisplay?: FormatDisplayData | null;
   notAcceptedIds?: Set<string>;
+  /** Per-participant HI/CH/PH, shown on Net / Format results. */
+  handicaps?: Record<string, HandicapFigures>;
 }) {
-  const { winner, finalRows, formatDisplay, notAcceptedIds } = props;
+  const { winner, finalRows, formatDisplay, notAcceptedIds, handicaps } = props;
   const isStringTotal = typeof winner.total === "string";
   const scoreLabel = isStringTotal ? "Result" : formatDisplay?.higherIsBetter ? "Points" : "Total";
   const showOutIn = !isStringTotal;
@@ -67,6 +86,7 @@ export default function FinalResultsPanel(props: {
               {notAcceptedIds?.has(winner.participantId) && (
                 <div className="text-[9px] text-amber-400/80 mt-0.5">Not accepted for handicap</div>
               )}
+              <HandicapLine figures={handicaps?.[winner.participantId]} />
             </div>
           </div>
 
@@ -111,6 +131,7 @@ export default function FinalResultsPanel(props: {
                   {notAcceptedIds?.has(r.participantId) && (
                     <div className="text-[9px] text-amber-400/80 mt-0.5">Not accepted for handicap</div>
                   )}
+                  <HandicapLine figures={handicaps?.[r.participantId]} />
                 </div>
               </div>
 

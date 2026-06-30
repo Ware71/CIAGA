@@ -19,10 +19,9 @@ export default async function RoundDetailPage({ params }: { params: Promise<{ ro
     return <RoundDetailClient roundId={roundId} />;
   }
 
-  // Redirect draft rounds to setup
-  if (data.round.status === "draft") {
-    redirect(`/round/${roundId}/setup`);
-  }
+  // Draft & scheduled rounds render the scorecard in PREVIEW mode (the round only
+  // goes live on the first score entry). The client falls back to a "Go to setup"
+  // panel when no tee has been chosen yet, so no redirect is needed here.
 
   const initialSnapshot = { ...data, viewer_profile_id: viewer.profileId };
 

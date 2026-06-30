@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getOwnedProfileIdOrThrow } from "@/lib/serverOwnedProfile";
+import { notifyRoundSchedule } from "@/lib/notifications/roundSchedule";
 
 type Body = { round_id: string };
 
@@ -33,7 +34,7 @@ export async function POST(req: Request) {
     // Confirm round is draft (and not live)
     const { data: round, error: roundErr } = await supabaseAdmin
       .from("rounds")
-      .select("id, status, event_tee_time_id")
+      .select("id, status, event_tee_time_id, scheduled_at, courses(name)")
       .eq("id", body.round_id)
       .single();
 
@@ -52,6 +53,21 @@ export async function POST(req: Request) {
     }
 
     const roundId = body.round_id;
+
+    // Capture participants BEFORE the cascade delete so we can tell the other
+    // players the scheduled round was cancelled (drafts don't notify).
+    let cancelRecipients: string[] = [];
+    if (round.status === "scheduled") {
+      const { data: capturedParts } = await supabaseAdmin
+        .from("round_participants")
+        .select("profile_id, role, is_guest")
+        .eq("round_id", roundId)
+        .eq("is_guest", false)
+        .not("profile_id", "is", null);
+      cancelRecipients = (capturedParts ?? [])
+        .filter((p: any) => p.role !== "owner" && p.profile_id)
+        .map((p: any) => p.profile_id as string);
+    }
 
     // Collect any tee snapshot ids referenced anywhere (defensive)
     const teeIds = new Set<string>();
@@ -115,6 +131,17 @@ export async function POST(req: Request) {
     // Finally the round
     const { error: delRoundErr } = await supabaseAdmin.from("rounds").delete().eq("id", roundId);
     if (delRoundErr) return NextResponse.json({ error: delRoundErr.message }, { status: 500 });
+
+    if (cancelRecipients.length > 0) {
+      await notifyRoundSchedule({
+        roundId,
+        actorProfileId: myProfileId,
+        type: "round_cancelled",
+        recipientProfileIds: cancelRecipients,
+        courseName: (round as any)?.courses?.name ?? null,
+        scheduledAt: (round as any)?.scheduled_at ?? null,
+      });
+    }
 
     return NextResponse.json({ ok: true, round_id: roundId });
   } catch (e: any) {

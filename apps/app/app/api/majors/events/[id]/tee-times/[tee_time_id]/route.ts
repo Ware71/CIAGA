@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 import { getEventById } from "@/lib/majors/queries";
+import { notifyRoundSchedule } from "@/lib/notifications/roundSchedule";
 
 export const runtime = "nodejs";
 
@@ -81,6 +82,7 @@ export async function PATCH(
 
     // Sync scheduled_at on the linked round when tee_time changes
     const roundId = (teeTime as any).round_id as string | null;
+    const teeTimeChanged = tee_time !== undefined && tee_time !== (teeTime as any).tee_time;
     if (tee_time !== undefined && roundId) {
       const { error: rErr } = await supabaseAdmin
         .from("rounds")
@@ -88,6 +90,11 @@ export async function PATCH(
         .eq("id", roundId);
       if (rErr) throw rErr;
     }
+
+    // Notification bookkeeping — fired after all mutations succeed.
+    let playersReconciled = false;
+    let priorRecipientIds: string[] = [];
+    let addedProfileIds: string[] = [];
 
     // Reconcile player list if provided
     if (players !== undefined && roundId) {
@@ -104,6 +111,19 @@ export async function PATCH(
       const existing = existingParticipants ?? [];
       const ownerRow = existing.find((p) => (p as any).role === "owner");
       const ownerProfileId = ownerRow ? (ownerRow as any).profile_id : null;
+
+      // Players already in the tee time before this reconciliation (for the
+      // "time changed" notification — newly added players get "scheduled" instead).
+      playersReconciled = true;
+      priorRecipientIds = existing
+        .filter(
+          (p) =>
+            (p as any).role !== "owner" &&
+            !(p as any).is_guest &&
+            (p as any).profile_id &&
+            (p as any).profile_id !== profileId
+        )
+        .map((p) => (p as any).profile_id as string);
 
       // Profile IDs requested in the new list
       const newProfileIds = newList
@@ -129,6 +149,9 @@ export async function PATCH(
         if (p.is_guest) return true;
         return p.profile_id && !existingProfileIds.includes(p.profile_id) && p.profile_id !== ownerProfileId;
       });
+      addedProfileIds = toAdd
+        .filter((p) => !p.is_guest && p.profile_id && p.profile_id !== profileId)
+        .map((p) => p.profile_id as string);
       if (toAdd.length > 0) {
         // Remove any newly-added non-guest players from other tee times in this event
         const newNonGuestIds = toAdd.filter((p) => !p.is_guest && p.profile_id).map((p) => p.profile_id as string);
@@ -158,6 +181,37 @@ export async function PATCH(
             pending_tee_box_id: p.tee_box_id ?? null,
           }))
         );
+      }
+    }
+
+    // Notify the affected players (best-effort, after all mutations).
+    if (roundId) {
+      const effectiveTeeTime =
+        tee_time !== undefined ? tee_time : ((teeTime as any).tee_time ?? null);
+
+      // Newly added players → "a round was scheduled for you".
+      if (addedProfileIds.length > 0) {
+        await notifyRoundSchedule({
+          roundId,
+          actorProfileId: profileId,
+          type: "round_scheduled",
+          recipientProfileIds: addedProfileIds,
+          scheduledAt: effectiveTeeTime,
+        });
+      }
+
+      // Time moved → tell the players who were already in (excluding new adds).
+      if (teeTimeChanged) {
+        const changedRecipients = playersReconciled
+          ? priorRecipientIds.filter((id) => !addedProfileIds.includes(id))
+          : undefined; // undefined → helper derives from current participants
+        await notifyRoundSchedule({
+          roundId,
+          actorProfileId: profileId,
+          type: "round_schedule_changed",
+          recipientProfileIds: changedRecipients,
+          scheduledAt: effectiveTeeTime,
+        });
       }
     }
 
@@ -209,12 +263,27 @@ export async function DELETE(
       }
     }
 
+    // Capture participants BEFORE the cascade delete so we can notify them.
+    const deletedRoundId = (teeTime as any).round_id as string | null;
+    let cancelRecipients: string[] = [];
+    if (deletedRoundId) {
+      const { data: capturedParts } = await supabaseAdmin
+        .from("round_participants")
+        .select("profile_id, role, is_guest")
+        .eq("round_id", deletedRoundId)
+        .eq("is_guest", false)
+        .not("profile_id", "is", null);
+      cancelRecipients = (capturedParts ?? [])
+        .filter((p: any) => p.role !== "owner" && p.profile_id && p.profile_id !== profileId)
+        .map((p: any) => p.profile_id as string);
+    }
+
     // Delete linked round (will cascade-remove participants)
-    if ((teeTime as any).round_id) {
+    if (deletedRoundId) {
       const { error: roundErr } = await supabaseAdmin
         .from("rounds")
         .delete()
-        .eq("id", (teeTime as any).round_id);
+        .eq("id", deletedRoundId);
       if (roundErr) throw roundErr;
     }
 
@@ -225,6 +294,17 @@ export async function DELETE(
       .eq("id", tee_time_id);
 
     if (error) throw error;
+
+    if (deletedRoundId && cancelRecipients.length > 0) {
+      await notifyRoundSchedule({
+        roundId: deletedRoundId,
+        actorProfileId: profileId,
+        type: "round_cancelled",
+        recipientProfileIds: cancelRecipients,
+        courseName: null,
+        scheduledAt: (teeTime as any).tee_time ?? null,
+      });
+    }
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {

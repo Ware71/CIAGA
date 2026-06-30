@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { createManagedProfile } from "@/lib/server/managedProfiles";
+import { notifyRoundSchedule } from "@/lib/notifications/roundSchedule";
 
 type Body =
   | { round_id: string; kind: "profile"; profile_id: string; role?: "owner" | "scorer" | "player" }
@@ -66,6 +67,25 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Only owner can add participants" }, { status: 403 });
     }
 
+    // Round context — used to notify the added player when the round is scheduled.
+    const { data: roundInfo } = await supabaseAdmin
+      .from("rounds")
+      .select("status, scheduled_at, courses(name)")
+      .eq("id", body.round_id)
+      .maybeSingle();
+    const isScheduled = (roundInfo as any)?.status === "scheduled";
+    const notifyAddedPlayer = async (addedProfileId: string | null | undefined) => {
+      if (!isScheduled || !addedProfileId) return;
+      await notifyRoundSchedule({
+        roundId: body.round_id,
+        actorProfileId: myProfileId,
+        type: "round_scheduled",
+        recipientProfileIds: [addedProfileId],
+        courseName: (roundInfo as any)?.courses?.name ?? null,
+        scheduledAt: (roundInfo as any)?.scheduled_at ?? null,
+      });
+    };
+
     // --- Player limit (max 4) ---
     const { count, error: countErr } = await supabaseAdmin
       .from("round_participants")
@@ -100,6 +120,8 @@ export async function POST(req: Request) {
       });
 
       if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 });
+
+      await notifyAddedPlayer(body.profile_id);
 
       return NextResponse.json({ ok: true });
     }
@@ -140,6 +162,8 @@ export async function POST(req: Request) {
       });
 
       if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 });
+
+      await notifyAddedPlayer(created.profileId);
 
       return NextResponse.json({
         ok: true,

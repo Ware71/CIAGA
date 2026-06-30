@@ -990,29 +990,12 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
     setStarting(true);
     setErr(null);
 
-    try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData.session?.access_token;
-      if (!accessToken) throw new Error("Not authenticated.");
-
-      const res = await fetch("/api/rounds/start", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ round_id: roundId }),
-      });
-
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || `Failed (${res.status})`);
-
-      router.replace(`/round/${roundId}`);
-    } catch (e: any) {
-      setErr(e?.message || "Failed to start round");
-    } finally {
-      setStarting(false);
-    }
+    // Open the scorecard in PREVIEW mode. The round only goes live when the
+    // first score is entered (handled in RoundDetailClient), so no status
+    // change / snapshot freeze happens here — the tee and handicaps stay
+    // dynamic until then. The page is the same screen, so the transition is
+    // seamless to the player.
+    router.replace(`/round/${roundId}`);
   }
 
   const filteredFollowing = useMemo(() => {

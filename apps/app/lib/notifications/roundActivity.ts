@@ -2,23 +2,37 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { createNotification } from "@/lib/notifications/notify";
 import type { NotificationActor } from "@/lib/notifications/render";
 
+/** Best-effort round result, supplied at finish for the completion copy. */
+export type RoundResult = {
+  winner_name?: string | null;
+  winner_profile_id?: string | null;
+  /** Match play only */
+  loser_name?: string | null;
+  /** Match play only — e.g. "3&2", "2 up" */
+  margin?: string | null;
+  /** Match play only — true when all square */
+  match_halved?: boolean;
+};
+
 /**
  * Notify the followers of a round's players that the round has started or
- * completed. Grouped per recipient per day so that:
+ * completed. Grouped per recipient PER ROUND so that:
  *  - multiple followed players in the SAME round → one notification listing all,
- *  - the same recipient seeing several rounds in a day → one merged card.
+ *  - the winner/result copy stays unambiguous (one card per round, not per day).
  *
- * For completed rounds, any player who set a new course record (detected by the
- * existing achievement emitter, which writes a `course_record` feed item keyed
- * to this round) is flagged so the copy reads "🏆 New course record".
+ * Recipients who are themselves participants of the round are flagged
+ * (`co_player`) so the copy reads "… your round". For completed rounds the body
+ * states the result (winner, or who-beat-who + margin for match play), plus a
+ * "🏆 New course record" callout when a player set one.
  *
  * Best-effort: never throws — the round start/finish must not fail on this.
  */
 export async function notifyFollowersOfRoundActivity(params: {
   roundId: string;
   kind: "started" | "completed";
+  result?: RoundResult;
 }): Promise<void> {
-  const { roundId, kind } = params;
+  const { roundId, kind, result } = params;
   if (!roundId) return;
 
   try {
@@ -80,7 +94,21 @@ export async function notifyFollowersOfRoundActivity(params: {
 
     const type = kind === "started" ? "follow_round_started" : "follow_round_completed";
     const date = new Date().toISOString().slice(0, 10);
-    const groupKey = `follow_${kind}:${date}`;
+    // Per-round grouping: one card per round (collapses multiple followed
+    // co-players in the same round) and keeps the winner copy unambiguous.
+    const groupKey = `follow_${kind}:${roundId}`;
+    const subjectIdSet = new Set(subjectIds);
+
+    const resultPayload =
+      kind === "completed" && result
+        ? {
+            winner_name: result.winner_name ?? null,
+            winner_profile_id: result.winner_profile_id ?? null,
+            loser_name: result.loser_name ?? null,
+            margin: result.margin ?? null,
+            match_halved: !!result.match_halved,
+          }
+        : {};
 
     await Promise.allSettled(
       Array.from(followedByRecipient.entries()).map(([recipientId, subjects]) => {
@@ -93,10 +121,13 @@ export async function notifyFollowersOfRoundActivity(params: {
           return actor;
         });
 
+        // The recipient is also playing in this round → "… your round".
+        const coPlayer = subjectIdSet.has(recipientId);
+
         return createNotification({
           recipientProfileId: recipientId,
           type,
-          payload: { actors, date, round_id: roundId },
+          payload: { actors, date, round_id: roundId, co_player: coPlayer, ...resultPayload },
           groupKey,
         });
       })

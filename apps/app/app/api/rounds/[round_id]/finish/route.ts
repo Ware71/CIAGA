@@ -28,7 +28,17 @@ export async function POST(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    await finishRound({ roundId, actorProfileId: profileId });
+    // Optional client-computed result (winner / match-play margin) for the
+    // completion notification. Best-effort — ignore a malformed/missing body.
+    let result: Record<string, any> | undefined;
+    try {
+      const body = await req.json();
+      if (body && typeof body === "object" && body.result) result = body.result;
+    } catch {
+      /* no body */
+    }
+
+    await finishRound({ roundId, actorProfileId: profileId, result });
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {
