@@ -3,7 +3,7 @@ import { emitRoundPlayedFeedItem } from "@/lib/feed/generators/roundPlayed";
 import { emitHoleEventFeedItems } from "@/lib/feed/generators/holeEvents";
 import { emitAchievementFeedItems } from "@/lib/feed/generators/achievements";
 import { tryCompleteEventRound } from "@/lib/majors/tryCompleteEventRound";
-import { notifyFollowersOfRoundActivity } from "@/lib/notifications/roundActivity";
+import { notifyFollowersOfRoundActivity, type RoundResult } from "@/lib/notifications/roundActivity";
 
 /**
  * Marks a round as finished and triggers all downstream effects:
@@ -21,9 +21,12 @@ import { notifyFollowersOfRoundActivity } from "@/lib/notifications/roundActivit
 export async function finishRound({
   roundId,
   actorProfileId,
+  result,
 }: {
   roundId: string;
   actorProfileId: string;
+  /** Best-effort round result for the completion notification (client-computed). */
+  result?: RoundResult;
 }): Promise<void> {
   // Only update if still live — safe to call twice (idempotency guard).
   // Also set finished_at which is used by feed items and achievement detection.
@@ -76,7 +79,7 @@ export async function finishRound({
   // (roundRow truthy) so a re-run / double-finish doesn't re-notify. Runs after
   // achievement emission so the course_record feed item exists to detect.
   if (roundRow) {
-    await notifyFollowersOfRoundActivity({ roundId, kind: "completed" }).catch(() => {});
+    await notifyFollowersOfRoundActivity({ roundId, kind: "completed", result }).catch(() => {});
   }
 }
 

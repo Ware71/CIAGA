@@ -9,6 +9,7 @@ import type { FormatDisplayData } from "@/lib/rounds/formatScoring";
 import { supabase } from "@/lib/supabaseClient";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 import { FEDEX_POINTS } from "@/lib/events/constants";
+import { formatHI } from "@/lib/rounds/handicapUtils";
 
 const FORMAT_LABELS: Record<RoundFormatType, string> = {
   strokeplay: "Stroke Play",
@@ -24,6 +25,22 @@ const FORMAT_LABELS: Record<RoundFormatType, string> = {
   skins: "Skins",
   wolf: "Wolf",
 };
+
+/** Human label for the round's handicap allowance setting. */
+function allowanceLabel(mode: string | null | undefined, value: number | null | undefined): string | null {
+  switch (mode) {
+    case "allowance_pct":
+      return `${value ?? 100}%`;
+    case "fixed":
+      return value != null ? `Fixed (${value})` : "Fixed";
+    case "compare_against_lowest":
+      return `${value && value !== 0 ? value : 100}% vs lowest`;
+    case "none":
+      return "Gross (0%)";
+    default:
+      return null;
+  }
+}
 
 function initialsFrom(name: string) {
   const parts = (name || "").trim().split(/\s+/).filter(Boolean);
@@ -83,6 +100,10 @@ type LeaderboardRow = {
   score: number | string;
   toPar: number | null;
   thru: number | null;
+  // Handicap figures shown on Net / Format tabs (not Gross).
+  hi?: number | null;
+  ch?: number | null;
+  ph?: number | null;
 };
 
 type CompetitionStandingEntry = {
@@ -144,6 +165,9 @@ export default function RoundMenuSheet(props: {
   getParticipantAvatar: (p: Participant) => string | null;
   courseLabel: string;
   formatType: RoundFormatType;
+  defaultTeeName?: string | null;
+  playingHandicapMode?: string | null;
+  playingHandicapValue?: number | null;
   holesCompletedByParticipantId: Record<string, number>;
   teams?: Array<{ id: string; name: string }>;
   allParticipants?: Participant[];
@@ -169,6 +193,9 @@ export default function RoundMenuSheet(props: {
     getParticipantAvatar,
     courseLabel,
     formatType,
+    defaultTeeName,
+    playingHandicapMode,
+    playingHandicapValue,
     holesCompletedByParticipantId,
     teams,
     allParticipants,
@@ -404,6 +431,9 @@ export default function RoundMenuSheet(props: {
           score: total,
           toPar: typeof parThru === "number" && total > 0 ? total - parThru : null,
           thru: thru > 0 ? thru : null,
+          hi: (p as any).handicap_index ?? null,
+          ch: (p as any).course_handicap ?? null,
+          ph: (p as any).playing_handicap_used ?? null,
         };
       });
     }
@@ -436,6 +466,9 @@ export default function RoundMenuSheet(props: {
           score: rawScore,
           toPar: computedToPar,
           thru: thru > 0 ? thru : null,
+          hi: (p as any).handicap_index ?? null,
+          ch: (p as any).course_handicap ?? null,
+          ph: fd.playingHandicaps?.[p.id] ?? (p as any).playing_handicap_used ?? null,
         };
       });
   }
@@ -595,6 +628,20 @@ export default function RoundMenuSheet(props: {
                             </div>
                           </div>
                         </div>
+                        {/* HI / CH / PH — shown on Net & Format tabs for individual players */}
+                        {!isTeamFormat && activeTab !== "gross" && (r.hi != null || r.ch != null || r.ph != null) && (
+                          <div className="pl-11 pr-3 pb-2 flex items-center gap-3 text-[9px] tabular-nums text-emerald-100/55">
+                            {r.hi != null && (
+                              <span><span className="text-emerald-200/45">HI</span> {formatHI(r.hi)}</span>
+                            )}
+                            {r.ch != null && (
+                              <span><span className="text-emerald-200/45">CH</span> {r.ch}</span>
+                            )}
+                            {r.ph != null && (
+                              <span><span className="text-emerald-200/45">PH</span> {r.ph}</span>
+                            )}
+                          </div>
+                        )}
                         {isTeamFormat && teamMembers && teamMembers.length > 0 && (
                           <div className="pl-11 pr-3 pb-2 flex flex-wrap gap-1.5">
                             {teamMembers.map((m) => {
@@ -783,6 +830,18 @@ export default function RoundMenuSheet(props: {
                   <div className="px-3 py-2.5 flex justify-between items-center">
                     <span className="text-[11px] text-emerald-100/70">Course</span>
                     <span className="text-[12px] font-semibold text-emerald-50 truncate ml-4 text-right">{courseLabel}</span>
+                  </div>
+                )}
+                {defaultTeeName && (
+                  <div className="px-3 py-2.5 flex justify-between items-center">
+                    <span className="text-[11px] text-emerald-100/70">Default tee</span>
+                    <span className="text-[12px] font-semibold text-emerald-50 truncate ml-4 text-right">{defaultTeeName}</span>
+                  </div>
+                )}
+                {allowanceLabel(playingHandicapMode, playingHandicapValue) && (
+                  <div className="px-3 py-2.5 flex justify-between items-center">
+                    <span className="text-[11px] text-emerald-100/70">Allowance</span>
+                    <span className="text-[12px] font-semibold text-emerald-50">{allowanceLabel(playingHandicapMode, playingHandicapValue)}</span>
                   </div>
                 )}
                 <div className="px-3 py-2.5 flex justify-between items-center">

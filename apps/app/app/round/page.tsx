@@ -29,6 +29,8 @@ type RoundRow = {
   courses?: { name: string | null } | null;
   /** Populated when the round is linked to a Majors tee time */
   linked_event?: LinkedEvent;
+  /** The viewer's role on this round (owner vs scorer/player) */
+  myRole?: "owner" | "scorer" | "player";
 };
 
 type ParticipantRow = {
@@ -85,8 +87,9 @@ function SwipeToDeleteRow(props: {
     enabled: boolean;
     onDelete: () => void;
     deleting?: boolean;
+    actionLabel?: string;
   }) {
-    const { children, enabled, onDelete, deleting } = props;
+    const { children, enabled, onDelete, deleting, actionLabel } = props;
 
     const maxReveal = 96; // px
     const threshold = 12; // px before we decide direction
@@ -185,7 +188,7 @@ function SwipeToDeleteRow(props: {
             }}
             disabled={!!deleting}
           >
-            {deleting ? "…" : "Delete"}
+            {deleting ? "…" : (actionLabel ?? "Delete")}
           </button>
         </div>
 
@@ -223,7 +226,7 @@ export default function RoundHomePage() {
   const [err, setErr] = useState<string | null>(null);
   const [rows, setRows] = useState<ParticipantRow[]>([]);
 
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{ id: string; type: "delete" | "withdraw" } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [creatingRound, setCreatingRound] = useState(false);
 
@@ -279,10 +282,31 @@ export default function RoundHomePage() {
         // Flatten the nested event join into a top-level field
         const teeTimeJoin = round.event_tee_time;
         const linked_event: LinkedEvent = teeTimeJoin?.events ?? null;
-        return { ...round, linked_event } as RoundRow;
+        return { ...round, linked_event, myRole: r.role } as RoundRow;
       })
       .filter(Boolean)
-      .sort((a, b) => ((b as RoundRow).created_at ?? "").localeCompare((a as RoundRow).created_at ?? "")) as RoundRow[];
+      .sort((a, b) => {
+        const ra = a as RoundRow;
+        const rb = b as RoundRow;
+        // Group order: in-progress (live/starting) → drafts → scheduled.
+        const group = (r: RoundRow) =>
+          r.status === "live" || r.status === "starting" ? 0 : r.status === "draft" ? 1 : 2;
+        const ga = group(ra);
+        const gb = group(rb);
+        if (ga !== gb) return ga - gb;
+
+        // Scheduled: soonest first (ISO sorts lexicographically); undated last.
+        if (ga === 2) {
+          const sa = ra.scheduled_at;
+          const sb = rb.scheduled_at;
+          if (sa && sb) return sa.localeCompare(sb);
+          if (sa) return -1;
+          if (sb) return 1;
+        }
+
+        // In-progress & drafts: newest first.
+        return (rb.created_at ?? "").localeCompare(ra.created_at ?? "");
+      }) as RoundRow[];
   }, [rows]);
 
   async function handleCreateNewRound() {
@@ -349,7 +373,38 @@ export default function RoundHomePage() {
       setErr(e?.message || "Failed to delete draft");
     } finally {
       setDeletingId(null);
-      setConfirmDeleteId(null);
+      setConfirmAction(null);
+    }
+  }
+
+  async function withdrawRound(roundId: string) {
+    setErr(null);
+    setDeletingId(roundId);
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("Not authenticated.");
+
+      const res = await fetch("/api/rounds/withdraw", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ round_id: roundId }),
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error ?? `Failed (${res.status})`);
+
+      // Optimistic remove from UI
+      setRows((prev) => prev.filter((p) => p.round?.id !== roundId));
+    } catch (e: any) {
+      setErr(e?.message || "Failed to withdraw from round");
+    } finally {
+      setDeletingId(null);
+      setConfirmAction(null);
     }
   }
 
@@ -394,8 +449,11 @@ export default function RoundHomePage() {
               const isDraft = r.status === "draft";
               const isScheduled = r.status === "scheduled";
               const isMajorsRound = !!r.event_tee_time_id;
-              // Majors-linked rounds must not be deleted from here
-              const isDeletable = (isDraft || isScheduled) && !isMajorsRound;
+              const isOwner = r.myRole === "owner";
+              // Owners delete the round; non-owners withdraw themselves. Majors-linked
+              // rounds are managed from the Majors section, never swiped here.
+              const canSwipe = (isDraft || isScheduled) && !isMajorsRound;
+              const swipeAction: "delete" | "withdraw" = isOwner ? "delete" : "withdraw";
               const isDeleting = deletingId === r.id;
 
               // Label shown under the round title
@@ -435,9 +493,10 @@ export default function RoundHomePage() {
                           })}
                         </div>
                       ) : null}
-                      {isDeletable ? (
+                      {canSwipe ? (
                         <div className="mt-1 text-[10px] text-emerald-100/50">
-                          Swipe left to delete {isScheduled ? "scheduled round" : "draft"}
+                          Swipe left to {isOwner ? "delete" : "withdraw from"}{" "}
+                          {isScheduled ? "scheduled round" : "draft"}
                         </div>
                       ) : isMajorsRound && isScheduled ? (
                         <Link
@@ -456,13 +515,15 @@ export default function RoundHomePage() {
                 </Link>
               );
 
-              // Drafts and scheduled rounds get swipe delete (Majors rounds do not)
+              // Drafts and scheduled rounds get a swipe action — Delete for the
+              // owner, Withdraw for everyone else (Majors rounds do not).
               return (
                 <SwipeToDeleteRow
                   key={r.id}
-                  enabled={isDeletable}
+                  enabled={canSwipe}
                   deleting={isDeleting}
-                  onDelete={() => setConfirmDeleteId(r.id)}
+                  actionLabel={isOwner ? "Delete" : "Withdraw"}
+                  onDelete={() => setConfirmAction({ id: r.id, type: swipeAction })}
                 >
                   {card}
                 </SwipeToDeleteRow>
@@ -471,19 +532,35 @@ export default function RoundHomePage() {
           </div>
         )}
 
-        {confirmDeleteId ? (() => {
-          const round = rounds.find((r) => r.id === confirmDeleteId);
+        {confirmAction ? (() => {
+          const round = rounds.find((r) => r.id === confirmAction.id);
           const isScheduled = round?.status === "scheduled";
+          const roundWord = isScheduled ? "scheduled round" : "draft";
+          const busy = deletingId === confirmAction.id;
+
+          if (confirmAction.type === "withdraw") {
+            return (
+              <ConfirmSheet
+                title={`Withdraw from ${roundWord}?`}
+                subtitle="You'll be removed from this round's setup. The organiser can re-add you later."
+                confirmLabel={busy ? "Withdrawing…" : "Withdraw"}
+                confirmDisabled={busy}
+                onClose={() => setConfirmAction(null)}
+                onConfirm={() => withdrawRound(confirmAction.id)}
+              />
+            );
+          }
+
           return (
             <ConfirmSheet
               title={isScheduled ? "Delete scheduled round?" : "Delete draft round?"}
               subtitle={isScheduled
                 ? "This removes the scheduled round and any related data from the database."
                 : "This removes the draft and any related data from the database."}
-              confirmLabel={deletingId === confirmDeleteId ? "Deleting…" : "Delete"}
-              confirmDisabled={deletingId === confirmDeleteId}
-              onClose={() => setConfirmDeleteId(null)}
-              onConfirm={() => deleteDraft(confirmDeleteId)}
+              confirmLabel={busy ? "Deleting…" : "Delete"}
+              confirmDisabled={busy}
+              onClose={() => setConfirmAction(null)}
+              onConfirm={() => deleteDraft(confirmAction.id)}
             />
           );
         })() : null}

@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
 import { BackButton } from "@/components/ui/BackButton";
 
-import { finishRound as finishRoundApi } from "@/lib/rounds/api";
+import { finishRound as finishRoundApi, type RoundResultInput } from "@/lib/rounds/api";
 import { useRoundDetail } from "@/lib/rounds/hooks/useRoundDetail";
 import type { Participant, Hole, HoleState, RoundFormatType, WolfPick } from "@/lib/rounds/hooks/useRoundDetail";
 import WolfHoleDetails from "@/components/round/WolfHoleDetails";
@@ -277,6 +277,11 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     teams,
     teeSnapshotId,
     holes,
+    defaultTeeName,
+    playingHandicapMode,
+    playingHandicapValue,
+    courseId,
+    previewLoading,
     eventTeeTimeId,
     scoresByKey,
     setScoresByKey,
@@ -285,6 +290,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     wolfPicksByHole,
     setWolfPicksByHole,
     canScore,
+    fetchAll,
   } = useRoundDetail(roundId, initialSnapshot);
 
   // Resolve event ID via the reliable FK direction: event_tee_times.round_id → rounds.id
@@ -805,6 +811,19 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     return finalRows[0] ?? null;
   }, [finalRows, formatDisplays, holesList, holeStatesByKey]);
 
+  // HI / CH / PH per participant for the final-results handicap line.
+  const finalHandicapsByParticipant = useMemo(() => {
+    const map: Record<string, { hi?: number | null; ch?: number | null; ph?: number | null }> = {};
+    for (const p of participants) {
+      map[p.id] = {
+        hi: p.handicap_index ?? null,
+        ch: p.course_handicap ?? null,
+        ph: p.playing_handicap_used ?? null,
+      };
+    }
+    return map;
+  }, [participants]);
+
   const finishWarning = useMemo<string | null>(() => {
     const { names } = getNotAcceptedParticipants(participants, holesList, holeStatesByKey);
     if (names.length === 0) return null;
@@ -822,12 +841,49 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     setActiveHole((prev) => (prev === next ? prev : next));
   }, [participants, holesList, isHoleCompleteForPlayer, isFinished]);
 
+  // Start the round (preview → live). The first scoring action triggers this;
+  // /api/rounds/start is idempotent so concurrent first entries are safe.
+  // Pass { silent: true } when the caller will queue on failure (no error banner).
+  const activatingRef = useRef(false);
+  const activateRound = useCallback(async (opts?: { silent?: boolean }): Promise<boolean> => {
+    if (status === "live" || isFinished) return true;
+    if (activatingRef.current) return true; // another entry is already starting it
+    activatingRef.current = true;
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("Not authenticated.");
+      const res = await fetch("/api/rounds/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ round_id: roundId }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error || `Failed to start round (${res.status})`);
+      // The realtime meta subscription re-hydrates with the now-live snapshot
+      // (real tee snapshot + locked handicaps); flip status optimistically.
+      setStatus("live");
+      return true;
+    } catch (e: any) {
+      if (!opts?.silent) setErr(e?.message || "Failed to start round");
+      return false;
+    } finally {
+      activatingRef.current = false;
+    }
+  }, [status, isFinished, roundId, setStatus, setErr]);
+
   // Flush pending offline ops when connection is restored
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const flushPendingOps = useCallback(async () => {
     if (!meId) return;
     const ops = loadQueue().sort((a, b) => a.timestamp - b.timestamp);
     if (!ops.length) return;
+
+    // A queued first score must start the round before its events are synced.
+    if (status !== "live" && !isFinished) {
+      const ok = await activateRound();
+      if (!ok) return; // still can't start — retry on the next "online" event
+    }
 
     const flushed: string[] = [];
     for (const op of ops) {
@@ -866,7 +922,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
       });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meId, roundId]);
+  }, [meId, roundId, status, isFinished, activateRound]);
 
   useEffect(() => {
     flushPendingOps();
@@ -975,11 +1031,50 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
       setHoleStatesByKey((prev) => { const next = { ...prev }; delete next[key]; return next; });
     }
 
-    // 2. If offline, queue the op and return success
+    // 2. If offline, queue the op and return success. The round will be started
+    //    server-side by flushPendingOps when connectivity returns.
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       upsertQueueOp({ key, roundId, participantId, holeNumber, strokes, enteredBy: meId, holeStatus: typeof strokes === "number" ? "completed" : "not_started", timestamp: Date.now() });
       setPendingKeys((prev) => { const next = new Set(prev); next.add(key); return next; });
       return true;
+    }
+
+    // 3. The first real score (a stroke) starts the round (preview → live).
+    //    Do this in the BACKGROUND so the entry sheet advances instantly — the
+    //    heavy /api/rounds/start no longer blocks. Clearing a score never starts
+    //    a round.
+    //
+    //    INSERT-FIRST: persist the score + its 'completed' hole-state BEFORE
+    //    activating. Activation claims status='starting' up front, which fires a
+    //    realtime re-hydrate; a hole is seeded 'not_started' at setup, so if we
+    //    activate first that re-hydrate reads 'not_started' and the value blinks
+    //    out. Committing 'completed' first means the re-hydrate reads 'completed'.
+    //    Reliability: on write failure we queue (flushPendingOps activates+syncs);
+    //    if only activation fails, the score is saved and the next entry retries.
+    if (status !== "live" && typeof strokes === "number") {
+      // NOTE: no setSavingKey — it would mask the value with "…" (cell renders
+      // `savingKey === key ? "…" : score`). Keep the optimistic number visible.
+      void (async () => {
+        try {
+          const { error } = await supabase.from("round_score_events").insert({
+            round_id: roundId, participant_id: participantId, hole_number: holeNumber, strokes, entered_by: meId,
+          });
+          if (error) throw error;
+          await supabase.from("round_hole_states").upsert(
+            { round_id: roundId, participant_id: participantId, hole_number: holeNumber, status: "completed" },
+            { onConflict: "participant_id,hole_number" }
+          );
+          removeQueueOp(key);
+          setPendingKeys((prev) => { const next = new Set(prev); next.delete(key); return next; });
+          // Score is safely persisted — now start the round (best-effort).
+          await activateRound({ silent: true });
+        } catch {
+          // Write failed (offline/transient) — queue so flushPendingOps activates + syncs.
+          upsertQueueOp({ key, roundId, participantId, holeNumber, strokes, enteredBy: meId, holeStatus: "completed", timestamp: Date.now() });
+          setPendingKeys((prev) => { const next = new Set(prev); next.add(key); return next; });
+        }
+      })();
+      return true; // advance immediately
     }
 
     setSavingKey(key);
@@ -1035,6 +1130,34 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
       upsertQueueOp({ key, roundId, participantId, holeNumber, strokes: null, enteredBy: meId, holeStatus: "picked_up", timestamp: Date.now() });
       setPendingKeys((prev) => { const next = new Set(prev); next.add(key); return next; });
       return;
+    }
+
+    // Picking up is a real scoring action — it starts the round (preview → live).
+    // Do it in the BACKGROUND so the sheet advances instantly; queue on failure.
+    if (status !== "live") {
+      // No setSavingKey — keep the optimistic "PU" visible; write in background.
+      // INSERT-FIRST: commit the 'picked_up' state before activating, so the
+      // activation re-hydrate doesn't read the seeded 'not_started' and blink.
+      void (async () => {
+        try {
+          const { error: stErr } = await supabase.from("round_hole_states").upsert(
+            { round_id: roundId, participant_id: participantId, hole_number: holeNumber, status: "picked_up" },
+            { onConflict: "participant_id,hole_number" }
+          );
+          if (stErr) throw stErr;
+          const { error: scErr } = await supabase.from("round_score_events").insert({
+            round_id: roundId, participant_id: participantId, hole_number: holeNumber, strokes: null, entered_by: meId,
+          });
+          if (scErr) throw scErr;
+          removeQueueOp(key);
+          setPendingKeys((prev) => { const next = new Set(prev); next.delete(key); return next; });
+          await activateRound({ silent: true });
+        } catch {
+          upsertQueueOp({ key, roundId, participantId, holeNumber, strokes: null, enteredBy: meId, holeStatus: "picked_up", timestamp: Date.now() });
+          setPendingKeys((prev) => { const next = new Set(prev); next.add(key); return next; });
+        }
+      })();
+      return; // advance immediately
     }
 
     setSavingKey(key);
@@ -1108,6 +1231,34 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     }
   }
 
+  // Best-effort winner/result for the completion notification. Reuses the same
+  // finalRows/winner the FinalResultsPanel renders. Match-play totals are strings
+  // like "W 3&2" / "L …" / "AS"; everything else uses the leaderboard winner.
+  function computeRoundResult(): RoundResultInput | undefined {
+    if (!finalRows.length) return undefined;
+    const profileIdFor = (pid: string) =>
+      participants.find((p) => p.id === pid)?.profile_id ?? null;
+    const isMatch = finalRows.some((r) => /^(W|L|AS)/.test(String(r.total)));
+    if (isMatch) {
+      const winRow = finalRows.find((r) => String(r.total).startsWith("W"));
+      if (!winRow) return { match_halved: true };
+      const loseRow = finalRows.find((r) => String(r.total).startsWith("L"));
+      return {
+        winner_name: winRow.name,
+        winner_profile_id: profileIdFor(winRow.participantId),
+        loser_name: loseRow?.name ?? null,
+        margin: String(winRow.total).replace(/^W\s*/, "").trim() || null,
+      };
+    }
+    if (winner) {
+      return {
+        winner_name: winner.name,
+        winner_profile_id: profileIdFor(winner.participantId),
+      };
+    }
+    return undefined;
+  }
+
   async function finishRound() {
     if (!canScore || isFinished) return;
     setErr(null);
@@ -1120,7 +1271,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
           return;
         }
       }
-      await finishRoundApi(roundId);
+      await finishRoundApi(roundId, computeRoundResult());
       setFinishOpen(false);
       setStatus("finished");
       setEntryOpen(false);
@@ -1230,7 +1381,9 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     [isSingleBall, teamAvatarMap]
   );
 
-  if (loading) {
+  // Keep the scorecard-shaped skeleton up until the preview holes are ready, so
+  // the "Round not started" panel never flashes while preview is loading.
+  if (loading || (previewLoading && holes.length === 0 && !isFinished)) {
     return (
       <div className="min-h-screen bg-[#042713] text-slate-100 px-1.5 sm:px-2 pt-4 pb-[env(safe-area-inset-bottom)]">
         <div className="mx-auto w-full max-w-none space-y-2">
@@ -1259,7 +1412,12 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
   }
 
   const hasStarted = status === "live" || isFinished;
-  const needsSetup = !hasStarted || !teeSnapshotId;
+  // We can render the scorecard whenever hole data is available — from the live
+  // snapshot, or from the pending tee in preview (draft/scheduled). "Needs setup"
+  // is only when no tee has been chosen yet (no holes resolved).
+  const hasHoles = holes.length > 0;
+  const isPreview = !hasStarted && hasHoles;
+  const needsSetup = !hasHoles;
   const canFinish = hasStarted && !!teeSnapshotId && canScore && !isFinished;
 
   const compactPlayers = visibleParticipants.length >= 6;
@@ -1429,7 +1587,8 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
           <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 space-y-3">
             <div className="text-sm font-semibold text-emerald-50">Round not started</div>
             <div className="text-[11px] text-emerald-100/70">
-              Select players and start the round to generate tee + hole snapshots.
+              Choose a tee in setup to preview the scorecard. The round starts when the first
+              score is entered.
             </div>
             {canScore ? (
               <Button
@@ -1446,7 +1605,22 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
           </div>
         ) : null}
 
-        {!needsSetup && isFinished && winner ? <FinalResultsPanel winner={winner} finalRows={finalRows} formatDisplay={formatDisplays[0] ?? null} notAcceptedIds={notAcceptedIds} /> : null}
+        {isPreview ? (
+          <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100/90">
+            Preview — entering a score will start the round. First check the course setup is
+            correct; if not, fix it on the{" "}
+            <button
+              type="button"
+              className="font-semibold underline underline-offset-2 text-amber-50"
+              onClick={() => router.push(courseId ? `/courses/${courseId}` : "/courses")}
+            >
+              Courses page
+            </button>{" "}
+            before scoring.
+          </div>
+        ) : null}
+
+        {!needsSetup && isFinished && winner ? <FinalResultsPanel winner={winner} finalRows={finalRows} formatDisplay={formatDisplays[0] ?? null} notAcceptedIds={notAcceptedIds} handicaps={scoreView === "gross" ? undefined : finalHandicapsByParticipant} /> : null}
 
         {!needsSetup ? (
           isPortrait ? (
@@ -1514,6 +1688,9 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
             getParticipantAvatar={singleBallGetAvatar}
             courseLabel={courseLabel}
             formatType={formatType}
+            defaultTeeName={defaultTeeName}
+            playingHandicapMode={playingHandicapMode}
+            playingHandicapValue={playingHandicapValue}
             holesCompletedByParticipantId={holesCompletedByParticipantId}
             teams={isSingleBall ? teams : undefined}
             allParticipants={isSingleBall ? participants : undefined}

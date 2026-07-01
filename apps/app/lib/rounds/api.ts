@@ -14,10 +14,18 @@ async function authedFetch(input: RequestInfo, init?: RequestInit) {
   return fetch(input, { ...init, headers });
 }
 
-export async function finishRound(roundId: string) {
+export type RoundResultInput = {
+  winner_name?: string | null;
+  winner_profile_id?: string | null;
+  loser_name?: string | null;
+  margin?: string | null;
+  match_halved?: boolean;
+};
+
+export async function finishRound(roundId: string, result?: RoundResultInput) {
   const res = await authedFetch(`/api/rounds/${roundId}/finish`, {
     method: "POST",
-    body: JSON.stringify({}),
+    body: JSON.stringify(result ? { result } : {}),
   });
 
   if (!res.ok) throw new Error(await res.text());

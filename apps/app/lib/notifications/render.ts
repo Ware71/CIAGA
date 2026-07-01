@@ -13,7 +13,10 @@ export type NotificationType =
   | "mention_post"
   | "mention_comment"
   | "follow_round_started"
-  | "follow_round_completed";
+  | "follow_round_completed"
+  | "round_scheduled"
+  | "round_schedule_changed"
+  | "round_cancelled";
 
 export type NotificationActor = {
   profile_id: string;
@@ -116,10 +119,16 @@ export function renderNotification(
       const actors: NotificationActor[] = Array.isArray(p.actors) ? p.actors : [];
       const who = formatActorNames(actors);
       const plural = actors.length > 1;
+      // co_player: the recipient is also playing in this round.
+      const coPlayer = !!p.co_player;
       return {
-        title: "Round started",
-        body: `${who} ${plural ? "started rounds" : "started a round"}`,
-        url: actors.length === 1 ? `/player/${actors[0].profile_id}` : "/social",
+        title: coPlayer ? "Your round started" : "Round started",
+        body: coPlayer
+          ? `${who} ${plural ? "have" : "has"} started your round`
+          : `${who} ${plural ? "started rounds" : "started a round"}`,
+        url: coPlayer && p.round_id
+          ? `/round/${p.round_id}`
+          : actors.length === 1 ? `/player/${actors[0].profile_id}` : "/social",
         icon: "flag",
       };
     }
@@ -128,8 +137,23 @@ export function renderNotification(
       const actors: NotificationActor[] = Array.isArray(p.actors) ? p.actors : [];
       const who = formatActorNames(actors);
       const plural = actors.length > 1;
+      const coPlayer = !!p.co_player;
       const recordHolders = actors.filter((a) => a.course_record);
-      let body = `${who} ${plural ? "completed rounds" : "completed a round"}`;
+
+      // Body always states the result (for participants AND non-participants).
+      let body: string;
+      if (p.match_halved) {
+        body = "Match halved";
+      } else if (p.winner_name && p.loser_name && p.margin) {
+        // Match play: who beat who and by how much.
+        body = `${p.winner_name} beat ${p.loser_name} ${p.margin}`;
+      } else if (p.winner_name) {
+        body = `${p.winner_name} won ${coPlayer ? "your" : "the"} round`;
+      } else {
+        // Fallback to the generic copy when no result was supplied.
+        body = `${who} ${plural ? "completed rounds" : "completed a round"}`;
+      }
+
       if (recordHolders.length === 1) {
         const cn = recordHolders[0].course_name;
         body += ` · 🏆 New course record${cn ? ` at ${cn}` : ""}!`;
@@ -139,8 +163,49 @@ export function renderNotification(
       return {
         title: recordHolders.length ? "Course record!" : "Round completed",
         body,
-        url: actors.length === 1 ? `/player/${actors[0].profile_id}` : "/social",
+        url: coPlayer && p.round_id
+          ? `/round/${p.round_id}`
+          : actors.length === 1 ? `/player/${actors[0].profile_id}` : "/social",
         icon: recordHolders.length ? "trophy" : "flag-checkered",
+      };
+    }
+
+    case "round_scheduled": {
+      const actors: NotificationActor[] = Array.isArray(p.actors) ? p.actors : [];
+      const who = formatActorNames(actors);
+      const where = p.course_name ? ` at ${p.course_name}` : "";
+      const when = p.scheduled_at ? ` · ${formatTeeTime(p.scheduled_at)}` : "";
+      return {
+        title: "Round scheduled",
+        body: `${who} scheduled a round for you${where}${when}`,
+        url: p.round_id ? `/round/${p.round_id}/setup` : "/round",
+        icon: "calendar-plus",
+      };
+    }
+
+    case "round_schedule_changed": {
+      const actors: NotificationActor[] = Array.isArray(p.actors) ? p.actors : [];
+      const who = formatActorNames(actors);
+      const where = p.course_name ? ` at ${p.course_name}` : "";
+      const when = p.scheduled_at ? ` · now ${formatTeeTime(p.scheduled_at)}` : "";
+      return {
+        title: "Round time changed",
+        body: `${who} changed the time of your round${where}${when}`,
+        url: p.round_id ? `/round/${p.round_id}/setup` : "/round",
+        icon: "calendar-clock",
+      };
+    }
+
+    case "round_cancelled": {
+      const actors: NotificationActor[] = Array.isArray(p.actors) ? p.actors : [];
+      const who = formatActorNames(actors);
+      const where = p.course_name ? ` at ${p.course_name}` : "";
+      const when = p.scheduled_at ? ` · ${formatTeeTime(p.scheduled_at)}` : "";
+      return {
+        title: "Round cancelled",
+        body: `${who} cancelled a scheduled round${where}${when}`,
+        url: "/round",
+        icon: "calendar-x",
       };
     }
 

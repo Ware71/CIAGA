@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getOwnedProfileIdOrThrow } from "@/lib/serverOwnedProfile";
+import { notifyRoundSchedule } from "@/lib/notifications/roundSchedule";
 
 type Body = {
   round_id: string;
@@ -32,7 +33,7 @@ export async function POST(req: Request) {
     // Load round and verify participant
     const { data: round, error: roundErr } = await supabaseAdmin
       .from("rounds")
-      .select("id, status, created_by")
+      .select("id, status, created_by, scheduled_at")
       .eq("id", body.round_id)
       .single();
 
@@ -91,6 +92,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, round_id: body.round_id });
     }
 
+    // Decide whether this change should notify the other players (before applying).
+    // - draft → scheduled: tell existing players the round was scheduled for them.
+    // - scheduled time changed: tell existing players the time moved.
+    let scheduleNotifType: "round_scheduled" | "round_schedule_changed" | null = null;
+    if (isOwner && body.scheduled_at !== undefined && body.scheduled_at) {
+      if (round.status === "draft") {
+        scheduleNotifType = "round_scheduled";
+      } else if (round.status === "scheduled" && body.scheduled_at !== round.scheduled_at) {
+        scheduleNotifType = "round_schedule_changed";
+      }
+    }
+
     // Apply updates
     const { error: updateErr } = await supabaseAdmin
       .from("rounds")
@@ -98,6 +111,15 @@ export async function POST(req: Request) {
       .eq("id", body.round_id);
 
     if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 });
+
+    if (scheduleNotifType) {
+      await notifyRoundSchedule({
+        roundId: body.round_id,
+        actorProfileId: myProfileId,
+        type: scheduleNotifType,
+        scheduledAt: body.scheduled_at,
+      });
+    }
 
     return NextResponse.json({ ok: true, round_id: body.round_id });
   } catch (e: any) {
