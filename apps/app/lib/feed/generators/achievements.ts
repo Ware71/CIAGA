@@ -33,8 +33,25 @@ function courseKey(
   return `${c}::tee:${tee_name ?? "unknown"}`;
 }
 
-async function upsertSubjects(feedItemId: string, subjectProfileIds: string[], role: string) {
+/**
+ * Set a feed item's subjects to exactly `subjectProfileIds` (replace, not merge).
+ *
+ * Course-record items are shared per course+tee and updated in place when the
+ * record is broken; a plain upsert would leave the previous holder(s) behind as
+ * stale subjects, and the feed renderer (which shows subjects[0] sorted by name)
+ * could then credit the wrong person. Deleting subjects not in the new set keeps
+ * exactly the current holder. Fan-out is unaffected — it uses the passed
+ * subjectProfileIds, not these rows.
+ */
+async function replaceSubjects(feedItemId: string, subjectProfileIds: string[], role: string) {
   const unique = Array.from(new Set(subjectProfileIds)).filter(Boolean);
+
+  // Drop stale subjects (e.g. a previous course-record holder who was beaten).
+  let del = supabaseAdmin.from("feed_item_subjects").delete().eq("feed_item_id", feedItemId);
+  if (unique.length) del = del.not("subject_profile_id", "in", `(${unique.join(",")})`);
+  const { error: delErr } = await del;
+  if (delErr) throw delErr;
+
   if (!unique.length) return;
 
   const rows = unique.map((pid) => ({
@@ -95,7 +112,7 @@ async function upsertIfBetterRecord(params: {
     if (upErr) throw upErr;
 
     // Re-index subjects and re-fan-out
-    await upsertSubjects(existing.id, subjectProfileIds, "player");
+    await replaceSubjects(existing.id, subjectProfileIds, "player");
     await fanOutFeedItemToSubjectsAndFollowers({
       feedItemId: existing.id,
       actorProfileId: actor_profile_id,
@@ -124,7 +141,7 @@ async function upsertIfBetterRecord(params: {
   if (insErr) throw insErr;
   if (!inserted?.id) return null;
 
-  await upsertSubjects(inserted.id, subjectProfileIds, "player");
+  await replaceSubjects(inserted.id, subjectProfileIds, "player");
   await fanOutFeedItemToSubjectsAndFollowers({
     feedItemId: inserted.id,
     actorProfileId: actor_profile_id,
