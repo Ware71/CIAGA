@@ -843,8 +843,9 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
 
   // Start the round (preview → live). The first scoring action triggers this;
   // /api/rounds/start is idempotent so concurrent first entries are safe.
+  // Pass { silent: true } when the caller will queue on failure (no error banner).
   const activatingRef = useRef(false);
-  const activateRound = useCallback(async (): Promise<boolean> => {
+  const activateRound = useCallback(async (opts?: { silent?: boolean }): Promise<boolean> => {
     if (status === "live" || isFinished) return true;
     if (activatingRef.current) return true; // another entry is already starting it
     activatingRef.current = true;
@@ -864,7 +865,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
       setStatus("live");
       return true;
     } catch (e: any) {
-      setErr(e?.message || "Failed to start round");
+      if (!opts?.silent) setErr(e?.message || "Failed to start round");
       return false;
     } finally {
       activatingRef.current = false;
@@ -1039,15 +1040,35 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     }
 
     // 3. The first real score (a stroke) starts the round (preview → live).
-    //    Clearing a score never starts a round.
+    //    Do this in the BACKGROUND so the entry sheet advances instantly — the
+    //    heavy /api/rounds/start no longer blocks. Reliability via the queue on
+    //    failure (flushPendingOps activates + syncs on retry). Clearing a score
+    //    never starts a round.
     if (status !== "live" && typeof strokes === "number") {
-      const ok = await activateRound();
-      if (!ok) {
-        // Couldn't start (transient) — queue so it syncs + activates on retry.
-        upsertQueueOp({ key, roundId, participantId, holeNumber, strokes, enteredBy: meId, holeStatus: "completed", timestamp: Date.now() });
-        setPendingKeys((prev) => { const next = new Set(prev); next.add(key); return next; });
-        return true;
-      }
+      setSavingKey(key);
+      void (async () => {
+        try {
+          const started = await activateRound({ silent: true });
+          if (!started) throw new Error("activation-failed");
+          const { error } = await supabase.from("round_score_events").insert({
+            round_id: roundId, participant_id: participantId, hole_number: holeNumber, strokes, entered_by: meId,
+          });
+          if (error) throw error;
+          await supabase.from("round_hole_states").upsert(
+            { round_id: roundId, participant_id: participantId, hole_number: holeNumber, status: "completed" },
+            { onConflict: "participant_id,hole_number" }
+          );
+          removeQueueOp(key);
+          setPendingKeys((prev) => { const next = new Set(prev); next.delete(key); return next; });
+        } catch {
+          // Queue for retry — flushPendingOps activates the round then syncs.
+          upsertQueueOp({ key, roundId, participantId, holeNumber, strokes, enteredBy: meId, holeStatus: "completed", timestamp: Date.now() });
+          setPendingKeys((prev) => { const next = new Set(prev); next.add(key); return next; });
+        } finally {
+          setSavingKey((prev) => (prev === key ? null : prev));
+        }
+      })();
+      return true; // advance immediately
     }
 
     setSavingKey(key);
@@ -1106,13 +1127,32 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     }
 
     // Picking up is a real scoring action — it starts the round (preview → live).
+    // Do it in the BACKGROUND so the sheet advances instantly; queue on failure.
     if (status !== "live") {
-      const ok = await activateRound();
-      if (!ok) {
-        upsertQueueOp({ key, roundId, participantId, holeNumber, strokes: null, enteredBy: meId, holeStatus: "picked_up", timestamp: Date.now() });
-        setPendingKeys((prev) => { const next = new Set(prev); next.add(key); return next; });
-        return;
-      }
+      setSavingKey(key);
+      void (async () => {
+        try {
+          const started = await activateRound({ silent: true });
+          if (!started) throw new Error("activation-failed");
+          const { error: stErr } = await supabase.from("round_hole_states").upsert(
+            { round_id: roundId, participant_id: participantId, hole_number: holeNumber, status: "picked_up" },
+            { onConflict: "participant_id,hole_number" }
+          );
+          if (stErr) throw stErr;
+          const { error: scErr } = await supabase.from("round_score_events").insert({
+            round_id: roundId, participant_id: participantId, hole_number: holeNumber, strokes: null, entered_by: meId,
+          });
+          if (scErr) throw scErr;
+          removeQueueOp(key);
+          setPendingKeys((prev) => { const next = new Set(prev); next.delete(key); return next; });
+        } catch {
+          upsertQueueOp({ key, roundId, participantId, holeNumber, strokes: null, enteredBy: meId, holeStatus: "picked_up", timestamp: Date.now() });
+          setPendingKeys((prev) => { const next = new Set(prev); next.add(key); return next; });
+        } finally {
+          setSavingKey((prev) => (prev === key ? null : prev));
+        }
+      })();
+      return; // advance immediately
     }
 
     setSavingKey(key);
