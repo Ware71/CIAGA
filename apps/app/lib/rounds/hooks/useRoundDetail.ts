@@ -76,6 +76,11 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
   const [defaultTeeName, setDefaultTeeName] = useState<string | null>(null);
   const [playingHandicapMode, setPlayingHandicapMode] = useState<string | null>(null);
   const [playingHandicapValue, setPlayingHandicapValue] = useState<number | null>(null);
+  const [courseId, setCourseId] = useState<string | null>(null);
+  // True until the (non-live) preview scorecard has been built or we've confirmed
+  // there's no tee. Gates a scorecard skeleton so the "Round not started" panel
+  // never flashes while preview holes are loading. Only ever set false.
+  const [previewLoading, setPreviewLoading] = useState<boolean>(true);
 
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -176,7 +181,14 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
     const teeId = mappedParticipants.find((p: any) => p.tee_snapshot_id)?.tee_snapshot_id ?? null;
     setTeeSnapshotId(teeId);
     setTeams((snap.teams ?? []) as Team[]);
-    setHoles(((snap.holes ?? []) as Hole[]).sort((a, b) => a.hole_number - b.hole_number));
+    // Only replace holes when the snapshot actually has some. Preview rounds have
+    // no snapshot holes (the preview effect builds them from the pending tee); and
+    // a just-activated round's hole snapshots may lag a beat. Preserving the
+    // existing holes in those windows avoids a flash of the "not started" panel.
+    const snapHoles = (snap.holes ?? []) as Hole[];
+    if (snapHoles.length) {
+      setHoles([...snapHoles].sort((a, b) => a.hole_number - b.hole_number));
+    }
 
     const scoreMap: Record<string, Score> = {};
     for (const s of (snap.scores ?? []) as Score[]) scoreMap[`${s.participant_id}:${s.hole_number}`] = s;
@@ -408,107 +420,114 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
     let cancelled = false;
 
     (async () => {
-      const { data: round } = await supabase
-        .from("rounds")
-        .select("pending_tee_box_id, default_playing_handicap_mode, default_playing_handicap_value")
-        .eq("id", roundId)
-        .maybeSingle();
-      if (cancelled || !round) return;
+      try {
+        const { data: round } = await supabase
+          .from("rounds")
+          .select("course_id, pending_tee_box_id, default_playing_handicap_mode, default_playing_handicap_value")
+          .eq("id", roundId)
+          .maybeSingle();
+        if (cancelled || !round) return;
 
-      const mode = ((round as any).default_playing_handicap_mode as PlayingHandicapMode) ?? null;
-      const value = toNumOrNull((round as any).default_playing_handicap_value);
-      setPlayingHandicapMode(mode);
-      setPlayingHandicapValue(value);
+        setCourseId(((round as any).course_id as string) ?? null);
+        const mode = ((round as any).default_playing_handicap_mode as PlayingHandicapMode) ?? null;
+        const value = toNumOrNull((round as any).default_playing_handicap_value);
+        setPlayingHandicapMode(mode);
+        setPlayingHandicapValue(value);
 
-      const notLive = status === "draft" || status === "scheduled";
-      if (!notLive) return; // live/finished render from the snapshot
+        const notLive = status === "draft" || status === "scheduled";
+        if (!notLive) return; // live/finished render from the snapshot
 
-      // Already built for this exact field + we have holes → nothing to do.
-      if (previewBuiltRef.current === participantIdsKey && holes.length > 0) return;
-      if (!participantIdsKey) return;
+        // Already built for this exact field + we have holes → nothing to do.
+        if (previewBuiltRef.current === participantIdsKey && holes.length > 0) return;
+        if (!participantIdsKey) return;
 
-      const defaultTeeBoxId = ((round as any).pending_tee_box_id as string) ?? null;
-      if (!defaultTeeBoxId) {
-        setDefaultTeeName(null);
-        return; // no tee chosen yet → "Go to setup"
-      }
+        const defaultTeeBoxId = ((round as any).pending_tee_box_id as string) ?? null;
+        if (!defaultTeeBoxId) {
+          setDefaultTeeName(null);
+          return; // no tee chosen yet → "Go to setup"
+        }
 
-      const { data: partRows } = await supabase
-        .from("round_participants")
-        .select("id, pending_tee_box_id, handicap_index, assigned_playing_handicap")
-        .eq("round_id", roundId);
+        const { data: partRows } = await supabase
+          .from("round_participants")
+          .select("id, pending_tee_box_id, handicap_index, assigned_playing_handicap")
+          .eq("round_id", roundId);
 
-      const teeIds = Array.from(
-        new Set([
-          defaultTeeBoxId,
-          ...((partRows ?? []).map((p: any) => p.pending_tee_box_id).filter(Boolean) as string[]),
-        ])
-      );
+        const teeIds = Array.from(
+          new Set([
+            defaultTeeBoxId,
+            ...((partRows ?? []).map((p: any) => p.pending_tee_box_id).filter(Boolean) as string[]),
+          ])
+        );
 
-      const [{ data: teeBoxes }, { data: holeRows }] = await Promise.all([
-        supabase
-          .from("course_tee_boxes")
-          .select("id, name, rating, slope, par, holes_count")
-          .in("id", teeIds),
-        supabase
-          .from("course_tee_holes")
-          .select("hole_number, par, yardage, handicap")
-          .eq("tee_box_id", defaultTeeBoxId)
-          .order("hole_number", { ascending: true }),
-      ]);
-      if (cancelled) return;
+        const [{ data: teeBoxes }, { data: holeRows }] = await Promise.all([
+          supabase
+            .from("course_tee_boxes")
+            .select("id, name, rating, slope, par, holes_count")
+            .in("id", teeIds),
+          supabase
+            .from("course_tee_holes")
+            .select("hole_number, par, yardage, handicap")
+            .eq("tee_box_id", defaultTeeBoxId)
+            .order("hole_number", { ascending: true }),
+        ]);
+        if (cancelled) return;
 
-      const teeById = new Map((teeBoxes ?? []).map((t: any) => [t.id, t]));
-      const defaultTee = teeById.get(defaultTeeBoxId);
-      const partById = new Map((partRows ?? []).map((p: any) => [p.id, p]));
+        const teeById = new Map((teeBoxes ?? []).map((t: any) => [t.id, t]));
+        const defaultTee = teeById.get(defaultTeeBoxId);
+        const partById = new Map((partRows ?? []).map((p: any) => [p.id, p]));
 
-      const chWith = (hi: number | null, tee: any): number | null => {
-        if (hi == null || !tee || tee.rating == null || tee.slope == null || tee.par == null) return null;
-        const hc = tee.holes_count ?? 18;
-        const eff = hc === 9 ? hi / 2 : hi;
-        return Math.round(eff * (tee.slope / 113) + (tee.rating - tee.par));
-      };
+        const chWith = (hi: number | null, tee: any): number | null => {
+          if (hi == null || !tee || tee.rating == null || tee.slope == null || tee.par == null) return null;
+          const hc = tee.holes_count ?? 18;
+          const eff = hc === 9 ? hi / 2 : hi;
+          return Math.round(eff * (tee.slope / 113) + (tee.rating - tee.par));
+        };
 
-      // First pass: CH per participant (needed for compare_against_lowest).
-      const chById = new Map<string, number | null>();
-      for (const p of participants) {
-        const row = partById.get(p.id);
-        const hi = p.handicap_index ?? toNumOrNull(row?.handicap_index);
-        const tee = row?.pending_tee_box_id ? teeById.get(row.pending_tee_box_id) : defaultTee;
-        chById.set(p.id, chWith(hi, tee));
-      }
-      const chVals = Array.from(chById.values()).filter((v): v is number => v != null);
-      const lowestCH = chVals.length ? Math.min(...chVals) : null;
-
-      const previewHoles: Hole[] = (holeRows ?? [])
-        .map((h: any) => ({
-          hole_number: h.hole_number,
-          par: h.par,
-          yardage: h.yardage,
-          stroke_index: h.handicap,
-        }))
-        .sort((a, b) => a.hole_number - b.hole_number);
-
-      setHoles(previewHoles);
-      setDefaultTeeName(defaultTee?.name ?? null);
-      setParticipants((prev) =>
-        prev.map((p) => {
+        // First pass: CH per participant (needed for compare_against_lowest).
+        const chById = new Map<string, number | null>();
+        for (const p of participants) {
           const row = partById.get(p.id);
-          const ch = chById.get(p.id) ?? null;
-          const override = toNumOrNull(row?.assigned_playing_handicap);
-          const ph =
-            override != null
-              ? override
-              : resolvePlayingHandicapPreview({
-                  courseHandicap: ch,
-                  mode,
-                  value,
-                  lowestCourseHandicap: lowestCH,
-                });
-          return { ...p, course_handicap: ch, playing_handicap_used: ph };
-        })
-      );
-      previewBuiltRef.current = participantIdsKey;
+          const hi = p.handicap_index ?? toNumOrNull(row?.handicap_index);
+          const tee = row?.pending_tee_box_id ? teeById.get(row.pending_tee_box_id) : defaultTee;
+          chById.set(p.id, chWith(hi, tee));
+        }
+        const chVals = Array.from(chById.values()).filter((v): v is number => v != null);
+        const lowestCH = chVals.length ? Math.min(...chVals) : null;
+
+        const previewHoles: Hole[] = (holeRows ?? [])
+          .map((h: any) => ({
+            hole_number: h.hole_number,
+            par: h.par,
+            yardage: h.yardage,
+            stroke_index: h.handicap,
+          }))
+          .sort((a, b) => a.hole_number - b.hole_number);
+
+        setHoles(previewHoles);
+        setDefaultTeeName(defaultTee?.name ?? null);
+        setParticipants((prev) =>
+          prev.map((p) => {
+            const row = partById.get(p.id);
+            const ch = chById.get(p.id) ?? null;
+            const override = toNumOrNull(row?.assigned_playing_handicap);
+            const ph =
+              override != null
+                ? override
+                : resolvePlayingHandicapPreview({
+                    courseHandicap: ch,
+                    mode,
+                    value,
+                    lowestCourseHandicap: lowestCH,
+                  });
+            return { ...p, course_handicap: ch, playing_handicap_used: ph };
+          })
+        );
+        previewBuiltRef.current = participantIdsKey;
+      } finally {
+        // Preview has resolved (built holes, no tee, or live) — stop gating the
+        // skeleton. Never set back to true, so later rebuilds don't re-flash it.
+        if (!cancelled) setPreviewLoading(false);
+      }
     })();
 
     return () => {
@@ -547,6 +566,8 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
     defaultTeeName,
     playingHandicapMode,
     playingHandicapValue,
+    courseId,
+    previewLoading,
 
     eventTeeTimeId,
 

@@ -280,6 +280,8 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     defaultTeeName,
     playingHandicapMode,
     playingHandicapValue,
+    courseId,
+    previewLoading,
     eventTeeTimeId,
     scoresByKey,
     setScoresByKey,
@@ -1334,7 +1336,9 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     [isSingleBall, teamAvatarMap]
   );
 
-  if (loading) {
+  // Keep the scorecard-shaped skeleton up until the preview holes are ready, so
+  // the "Round not started" panel never flashes while preview is loading.
+  if (loading || (previewLoading && holes.length === 0 && !isFinished)) {
     return (
       <div className="min-h-screen bg-[#042713] text-slate-100 px-1.5 sm:px-2 pt-4 pb-[env(safe-area-inset-bottom)]">
         <div className="mx-auto w-full max-w-none space-y-2">
@@ -1558,7 +1562,16 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
 
         {isPreview ? (
           <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100/90">
-            Preview — entering a score will start the round.
+            Preview — entering a score will start the round. First check the course setup is
+            correct; if not, fix it on the{" "}
+            <button
+              type="button"
+              className="font-semibold underline underline-offset-2 text-amber-50"
+              onClick={() => router.push(courseId ? `/courses/${courseId}` : "/courses")}
+            >
+              Courses page
+            </button>{" "}
+            before scoring.
           </div>
         ) : null}
 
