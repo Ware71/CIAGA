@@ -190,15 +190,21 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
       setHoles([...snapHoles].sort((a, b) => a.hole_number - b.hole_number));
     }
 
+    // Merge (server-wins) rather than replace, so a re-hydrate that fires mid
+    // first-score activation (the status='starting' update) doesn't momentarily
+    // drop the just-entered optimistic score/state before its background write
+    // lands. Server values overwrite for keys it has; client-only keys (pending
+    // writes) are preserved. Clears arrive as null-stroke events (they overwrite)
+    // and genuine removals come via the realtime DELETE subscriptions.
     const scoreMap: Record<string, Score> = {};
     for (const s of (snap.scores ?? []) as Score[]) scoreMap[`${s.participant_id}:${s.hole_number}`] = s;
-    setScoresByKey(scoreMap);
+    setScoresByKey((prev) => ({ ...prev, ...scoreMap }));
 
     const hsMap: Record<string, HoleState> = {};
     for (const row of (snap.hole_states ?? []) as HoleStateRow[]) {
       hsMap[`${row.participant_id}:${row.hole_number}`] = row.status;
     }
-    setHoleStatesByKey(hsMap);
+    setHoleStatesByKey((prev) => ({ ...prev, ...hsMap }));
 
     setMeId(snap.viewer_profile_id ?? null);
   }, []);

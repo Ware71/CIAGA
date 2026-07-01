@@ -1045,7 +1045,9 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     //    failure (flushPendingOps activates + syncs on retry). Clearing a score
     //    never starts a round.
     if (status !== "live" && typeof strokes === "number") {
-      setSavingKey(key);
+      // NOTE: no setSavingKey here — activation is slow (~0.8s) and the cell
+      // masks its value with "…" while savingKey === key. Keep the optimistic
+      // number visible; the write happens silently in the background.
       void (async () => {
         try {
           const started = await activateRound({ silent: true });
@@ -1064,8 +1066,6 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
           // Queue for retry — flushPendingOps activates the round then syncs.
           upsertQueueOp({ key, roundId, participantId, holeNumber, strokes, enteredBy: meId, holeStatus: "completed", timestamp: Date.now() });
           setPendingKeys((prev) => { const next = new Set(prev); next.add(key); return next; });
-        } finally {
-          setSavingKey((prev) => (prev === key ? null : prev));
         }
       })();
       return true; // advance immediately
@@ -1129,7 +1129,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     // Picking up is a real scoring action — it starts the round (preview → live).
     // Do it in the BACKGROUND so the sheet advances instantly; queue on failure.
     if (status !== "live") {
-      setSavingKey(key);
+      // No setSavingKey — keep the optimistic "PU" visible; write in background.
       void (async () => {
         try {
           const started = await activateRound({ silent: true });
@@ -1148,8 +1148,6 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
         } catch {
           upsertQueueOp({ key, roundId, participantId, holeNumber, strokes: null, enteredBy: meId, holeStatus: "picked_up", timestamp: Date.now() });
           setPendingKeys((prev) => { const next = new Set(prev); next.add(key); return next; });
-        } finally {
-          setSavingKey((prev) => (prev === key ? null : prev));
         }
       })();
       return; // advance immediately
