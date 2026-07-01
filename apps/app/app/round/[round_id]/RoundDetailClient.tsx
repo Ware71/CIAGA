@@ -1041,17 +1041,21 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
 
     // 3. The first real score (a stroke) starts the round (preview → live).
     //    Do this in the BACKGROUND so the entry sheet advances instantly — the
-    //    heavy /api/rounds/start no longer blocks. Reliability via the queue on
-    //    failure (flushPendingOps activates + syncs on retry). Clearing a score
-    //    never starts a round.
+    //    heavy /api/rounds/start no longer blocks. Clearing a score never starts
+    //    a round.
+    //
+    //    INSERT-FIRST: persist the score + its 'completed' hole-state BEFORE
+    //    activating. Activation claims status='starting' up front, which fires a
+    //    realtime re-hydrate; a hole is seeded 'not_started' at setup, so if we
+    //    activate first that re-hydrate reads 'not_started' and the value blinks
+    //    out. Committing 'completed' first means the re-hydrate reads 'completed'.
+    //    Reliability: on write failure we queue (flushPendingOps activates+syncs);
+    //    if only activation fails, the score is saved and the next entry retries.
     if (status !== "live" && typeof strokes === "number") {
-      // NOTE: no setSavingKey here — activation is slow (~0.8s) and the cell
-      // masks its value with "…" while savingKey === key. Keep the optimistic
-      // number visible; the write happens silently in the background.
+      // NOTE: no setSavingKey — it would mask the value with "…" (cell renders
+      // `savingKey === key ? "…" : score`). Keep the optimistic number visible.
       void (async () => {
         try {
-          const started = await activateRound({ silent: true });
-          if (!started) throw new Error("activation-failed");
           const { error } = await supabase.from("round_score_events").insert({
             round_id: roundId, participant_id: participantId, hole_number: holeNumber, strokes, entered_by: meId,
           });
@@ -1062,8 +1066,10 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
           );
           removeQueueOp(key);
           setPendingKeys((prev) => { const next = new Set(prev); next.delete(key); return next; });
+          // Score is safely persisted — now start the round (best-effort).
+          await activateRound({ silent: true });
         } catch {
-          // Queue for retry — flushPendingOps activates the round then syncs.
+          // Write failed (offline/transient) — queue so flushPendingOps activates + syncs.
           upsertQueueOp({ key, roundId, participantId, holeNumber, strokes, enteredBy: meId, holeStatus: "completed", timestamp: Date.now() });
           setPendingKeys((prev) => { const next = new Set(prev); next.add(key); return next; });
         }
@@ -1130,10 +1136,10 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     // Do it in the BACKGROUND so the sheet advances instantly; queue on failure.
     if (status !== "live") {
       // No setSavingKey — keep the optimistic "PU" visible; write in background.
+      // INSERT-FIRST: commit the 'picked_up' state before activating, so the
+      // activation re-hydrate doesn't read the seeded 'not_started' and blink.
       void (async () => {
         try {
-          const started = await activateRound({ silent: true });
-          if (!started) throw new Error("activation-failed");
           const { error: stErr } = await supabase.from("round_hole_states").upsert(
             { round_id: roundId, participant_id: participantId, hole_number: holeNumber, status: "picked_up" },
             { onConflict: "participant_id,hole_number" }
@@ -1145,6 +1151,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
           if (scErr) throw scErr;
           removeQueueOp(key);
           setPendingKeys((prev) => { const next = new Set(prev); next.delete(key); return next; });
+          await activateRound({ silent: true });
         } catch {
           upsertQueueOp({ key, roundId, participantId, holeNumber, strokes: null, enteredBy: meId, holeStatus: "picked_up", timestamp: Date.now() });
           setPendingKeys((prev) => { const next = new Set(prev); next.add(key); return next; });
