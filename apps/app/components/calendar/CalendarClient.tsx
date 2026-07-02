@@ -242,12 +242,6 @@ export function CalendarClient() {
     [filtered, viewDays]
   );
 
-  // Agenda ignores the filter — everything upcoming.
-  const agendaByDay = useMemo(
-    () => groupOccurrencesByDay(occurrences, viewDays),
-    [occurrences, viewDays]
-  );
-
   // LFG occurrences (availability only), grouped by day.
   const lfgByDay = useMemo(() => {
     const occ = hidePastAvailability(resolveOccurrences(lfgEvents, [], range.start, range.end)).filter(
@@ -375,18 +369,16 @@ export function CalendarClient() {
                 { value: "agenda", label: "Agenda" },
               ]}
             />
-            {!isAgenda ? (
-              <SegmentedControl<AvailabilityFilter>
-                size="sm"
-                value={filter}
-                onChange={setFilter}
-                options={[
-                  { value: "all", label: "Show all" },
-                  { value: "hide_unavailable", label: "Hide busy" },
-                  { value: "available_only", label: "Available" },
-                ]}
-              />
-            ) : null}
+            <SegmentedControl<AvailabilityFilter>
+              size="sm"
+              value={filter}
+              onChange={setFilter}
+              options={[
+                { value: "all", label: "Show all" },
+                { value: "hide_unavailable", label: "Hide busy" },
+                { value: "available_only", label: "Available" },
+              ]}
+            />
           </div>
         ) : null}
 
@@ -428,7 +420,7 @@ export function CalendarClient() {
             ) : viewMode === "agenda" ? (
               <AgendaView
                 days={viewDays}
-                occurrencesByDay={agendaByDay}
+                occurrencesByDay={occurrencesByDay}
                 showOwners={showOwners}
                 nameById={nameById}
                 onOccurrenceClick={handleOccurrenceClick}
