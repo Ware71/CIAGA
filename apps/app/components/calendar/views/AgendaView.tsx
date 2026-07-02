@@ -1,7 +1,12 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import type { AvailabilityFilter, BucketState, ResolvedOccurrence } from "@/lib/calendar/types";
+import type {
+  AvailabilityFilter,
+  BucketState,
+  ProfileLite,
+  ResolvedOccurrence,
+} from "@/lib/calendar/types";
 import { dayKey, formatDayLabel, isToday } from "@/lib/calendar/dateUtils";
 import { isDayVisible } from "@/lib/calendar/recurrence";
 import { EventChip } from "../EventChip";
@@ -12,10 +17,11 @@ export function AgendaView(props: {
   occurrencesByDay: Map<string, ResolvedOccurrence[]>;
   dayStates: Map<string, BucketState>;
   filter: AvailabilityFilter;
-  showOwnerDots: boolean;
+  showOwners: boolean;
+  nameById: Map<string, ProfileLite>;
   onOccurrenceClick: (occ: ResolvedOccurrence) => void;
 }) {
-  const { days, occurrencesByDay, dayStates, filter, showOwnerDots, onOccurrenceClick } = props;
+  const { days, occurrencesByDay, dayStates, filter, showOwners, nameById, onOccurrenceClick } = props;
 
   const rows = days
     .map((day) => {
@@ -53,7 +59,7 @@ export function AgendaView(props: {
               <EventChip
                 key={occ.key}
                 occ={occ}
-                showOwnerDot={showOwnerDots}
+                owner={showOwners ? nameById.get(occ.profileId) : undefined}
                 onClick={onOccurrenceClick}
               />
             ))}

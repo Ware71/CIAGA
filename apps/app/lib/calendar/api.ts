@@ -4,7 +4,7 @@
 
 import { supabase } from "@/lib/supabaseClient";
 import { getViewerSession } from "@/lib/auth/viewerSession";
-import type { CalendarEvent, CalendarRound, Circle } from "./types";
+import type { CalendarEvent, CalendarRound, Circle, ProfileLite } from "./types";
 
 async function authHeaders(): Promise<Record<string, string>> {
   const session = await getViewerSession();
@@ -68,6 +68,64 @@ export async function fetchCircles(): Promise<Circle[]> {
       avatar_url: m.profiles?.avatar_url ?? null,
     })),
   }));
+}
+
+/**
+ * Resolve names/avatars for a set of profile ids via the shared public RPC
+ * (same source InvitePlayerSheet uses — reliable regardless of profiles RLS).
+ */
+export async function resolveProfileNames(ids: string[]): Promise<ProfileLite[]> {
+  const unique = Array.from(new Set(ids.filter(Boolean)));
+  if (unique.length === 0) return [];
+  const { data, error } = await supabase.rpc("get_profiles_public", { ids: unique });
+  if (error) throw error;
+  return (data ?? []).map((p: any) => ({
+    id: p.id,
+    name: p.name ?? null,
+    avatar_url: p.avatar_url ?? null,
+  }));
+}
+
+/** Profile ids of everyone the current viewer follows. */
+export async function fetchFollowingIds(myProfileId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("follows")
+    .select("following_id")
+    .eq("follower_id", myProfileId);
+  if (error) throw error;
+  return (data ?? []).map((r: any) => r.following_id).filter(Boolean) as string[];
+}
+
+/**
+ * "Who's looking for a round": availability events for people I follow + my
+ * circle members, over the range. Returns the raw events (expanded by the
+ * caller) plus resolved names for rendering.
+ */
+export async function fetchLookingForRound(
+  myProfileId: string,
+  circleMemberIds: string[],
+  rangeStart: Date,
+  rangeEnd: Date
+): Promise<{ events: CalendarEvent[]; profiles: ProfileLite[] }> {
+  const followIds = await fetchFollowingIds(myProfileId);
+  const ids = Array.from(new Set([...followIds, ...circleMemberIds])).filter(
+    (id) => id !== myProfileId
+  );
+  if (ids.length === 0) return { events: [], profiles: [] };
+
+  const { data, error } = await supabase
+    .from("calendar_events")
+    .select("*")
+    .in("profile_id", ids)
+    .eq("kind", "available")
+    .or(
+      `rrule.not.is.null,and(start_at.lt.${rangeEnd.toISOString()},end_at.gte.${rangeStart.toISOString()})`
+    );
+  if (error) throw error;
+
+  const events = (data ?? []) as CalendarEvent[];
+  const profiles = await resolveProfileNames(events.map((e) => e.profile_id));
+  return { events, profiles };
 }
 
 export type ProfileSearchResult = { id: string; name: string | null; avatar_url: string | null };

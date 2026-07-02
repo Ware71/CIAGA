@@ -67,6 +67,19 @@ export type CircleMember = {
 
 export type ViewMode = "week" | "month" | "weekends" | "agenda";
 
+export type ProfileLite = {
+  id: string;
+  name: string | null;
+  avatar_url: string | null;
+};
+
+/** What the calendar is currently showing. */
+export type Scope =
+  | { kind: "me" }
+  | { kind: "people"; ids: string[]; includeSelf: boolean }
+  | { kind: "circle"; id: string }
+  | { kind: "looking" };
+
 export type AvailabilityFilter = "all" | "hide_unavailable" | "available_only";
 
 /** Aggregate availability state for a day (or slot) across displayed people. */

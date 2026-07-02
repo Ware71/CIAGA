@@ -1,22 +1,27 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import type { ResolvedOccurrence } from "@/lib/calendar/types";
+import type { ProfileLite, ResolvedOccurrence } from "@/lib/calendar/types";
 import { formatTime } from "@/lib/calendar/dateUtils";
-import { chipClasses, ownerColor } from "./eventStyles";
+import { chipClasses } from "./eventStyles";
+import { InitialsAvatar } from "./Avatar";
 
 export function EventChip(props: {
   occ: ResolvedOccurrence;
-  /** Show a coloured dot per owner when layering multiple calendars. */
-  showOwnerDot?: boolean;
+  /** When set (shared views), show whose event this is. */
+  owner?: ProfileLite;
   onClick?: (occ: ResolvedOccurrence) => void;
   compact?: boolean;
 }) {
-  const { occ, showOwnerDot, onClick, compact } = props;
+  const { occ, owner, onClick, compact } = props;
   const label =
     occ.kind === "round"
       ? occ.title ?? "Round"
       : occ.title ?? (occ.kind === "available" ? "Available" : "Busy");
+
+  const timeLabel = occ.allDay
+    ? null
+    : `${formatTime(occ.start)}${occ.kind !== "round" ? `–${formatTime(occ.end)}` : ""}`;
 
   return (
     <button
@@ -24,21 +29,16 @@ export function EventChip(props: {
       onClick={onClick ? (e) => { e.stopPropagation(); onClick(occ); } : undefined}
       title={label}
       className={cn(
-        "flex w-full items-center gap-1 rounded-md px-1.5 text-left truncate",
+        "flex w-full items-center gap-1 rounded-lg px-1.5 text-left shadow-sm shadow-black/10 transition-transform active:scale-[0.98]",
         compact ? "py-[1px] text-[9px]" : "py-0.5 text-[10px]",
         chipClasses(occ.kind),
-        occ.recurring && "opacity-90"
+        occ.recurring && "border-dashed"
       )}
     >
-      {showOwnerDot ? (
-        <span
-          className="inline-block h-1.5 w-1.5 shrink-0 rounded-full"
-          style={{ backgroundColor: ownerColor(occ.profileId) }}
-        />
+      {owner ? (
+        <InitialsAvatar profileId={owner.id} name={owner.name} size={compact ? 12 : 14} />
       ) : null}
-      {!occ.allDay && occ.kind !== "round" ? (
-        <span className="shrink-0 opacity-70">{formatTime(occ.start)}</span>
-      ) : null}
+      {timeLabel ? <span className="shrink-0 opacity-70">{timeLabel}</span> : null}
       <span className="truncate">{label}</span>
     </button>
   );

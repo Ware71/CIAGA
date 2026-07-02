@@ -96,6 +96,36 @@ export function formatMonthLabel(d: Date): string {
   return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
 
+/** e.g. "W/C Mon 6 Jul" for the start of the week containing `d`. */
+export function formatWeekCommencing(d: Date): string {
+  const start = startOfWeek(d);
+  return `W/C ${start.toLocaleDateString(undefined, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  })}`;
+}
+
+/** e.g. "Sat 5 Jul – Sun 13 Jul" for an inclusive day span. */
+export function formatRangeLabel(start: Date, endExclusive: Date): string {
+  const last = addDays(endExclusive, -1);
+  const fmt = (x: Date) =>
+    x.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  return `${fmt(start)} – ${fmt(last)}`;
+}
+
+/** Short weekday + date for a time-grid column header, e.g. "Mon 6". */
+export function formatColumnHeader(d: Date): { weekday: string; day: number } {
+  return { weekday: d.toLocaleDateString(undefined, { weekday: "short" }), day: d.getDate() };
+}
+
+/** Format an hour (0-23) as a compact axis label, e.g. "6 AM", "12 PM". */
+export function formatHourLabel(hour: number): string {
+  const d = new Date();
+  d.setHours(hour, 0, 0, 0);
+  return d.toLocaleTimeString(undefined, { hour: "numeric" });
+}
+
 /**
  * The visible date range for a view, as [start, end) — used to bound
  * recurrence expansion and round queries.

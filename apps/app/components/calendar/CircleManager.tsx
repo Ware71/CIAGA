@@ -18,12 +18,13 @@ import {
 
 export function CircleManager(props: {
   circles: Circle[];
+  initialExpandedId?: string | null;
   onClose: () => void;
   onChanged: () => void; // re-fetch circles in the parent
 }) {
-  const { circles, onClose, onChanged } = props;
+  const { circles, initialExpandedId, onClose, onChanged } = props;
   const [newName, setNewName] = useState("");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(initialExpandedId ?? null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 

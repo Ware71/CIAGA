@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, Users2, Loader2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { motion, AnimatePresence } from "framer-motion";
+import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { BackButton } from "@/components/ui/BackButton";
 import { Button } from "@/components/ui/button";
 import { getViewerSession } from "@/lib/auth/viewerSession";
@@ -12,27 +12,43 @@ import type {
   CalendarEvent,
   CalendarRound,
   Circle,
+  ProfileLite,
   ResolvedOccurrence,
+  Scope,
   ViewMode,
 } from "@/lib/calendar/types";
 import {
   addDays,
-  dayKey,
   formatMonthLabel,
+  formatRangeLabel,
+  formatWeekCommencing,
   getMonthMatrix,
   getWeekDays,
-  getWeekendDays,
   rangeForView,
   startOfDay,
 } from "@/lib/calendar/dateUtils";
-import { applyAvailabilityFilter, resolveDayStates, resolveOccurrences } from "@/lib/calendar/recurrence";
-import { fetchCircles, fetchEvents, fetchRounds, deleteEvent } from "@/lib/calendar/api";
+import {
+  applyAvailabilityFilter,
+  groupOccurrencesByDay,
+  resolveDayStates,
+  resolveOccurrences,
+} from "@/lib/calendar/recurrence";
+import {
+  deleteEvent,
+  fetchCircles,
+  fetchEvents,
+  fetchLookingForRound,
+  fetchRounds,
+  resolveProfileNames,
+} from "@/lib/calendar/api";
 import { SegmentedControl } from "./SegmentedControl";
 import { MonthView } from "./views/MonthView";
-import { WeekView } from "./views/WeekView";
+import { TimeGridView } from "./views/TimeGridView";
 import { AgendaView } from "./views/AgendaView";
+import { LookingForRoundView } from "./views/LookingForRoundView";
 import { CreateEventSheet } from "./CreateEventSheet";
 import { CircleManager } from "./CircleManager";
+import { ScopePicker, ScopePickerButton } from "./ScopePicker";
 
 function enumerateDays(start: Date, end: Date): Date[] {
   const out: Date[] = [];
@@ -52,31 +68,45 @@ export function CalendarClient() {
   const [viewMode, setViewMode] = useState<ViewMode>("month");
   const [filter, setFilter] = useState<AvailabilityFilter>("all");
 
+  const [scope, setScope] = useState<Scope>({ kind: "me" });
   const [circles, setCircles] = useState<Circle[]>([]);
-  const [activeCircleId, setActiveCircleId] = useState<string | null>(null);
-  const [circleManagerOpen, setCircleManagerOpen] = useState(false);
+  const [nameById, setNameById] = useState<Map<string, ProfileLite>>(new Map());
+
+  const [scopePickerOpen, setScopePickerOpen] = useState(false);
+  const [circleManager, setCircleManager] = useState<{ open: boolean; id?: string | null }>({
+    open: false,
+  });
 
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [rounds, setRounds] = useState<CalendarRound[]>([]);
+  const [lfgEvents, setLfgEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
-  const [createDay, setCreateDay] = useState<Date | null>(null);
+  const [createTarget, setCreateTarget] = useState<{ day: Date; hour?: number | null } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ResolvedOccurrence | null>(null);
 
-  const activeCircle = useMemo(
-    () => circles.find((c) => c.id === activeCircleId) ?? null,
-    [circles, activeCircleId]
-  );
+  const isLooking = scope.kind === "looking";
 
-  // People whose calendars are displayed (self + active circle's members).
+  // People whose calendars are displayed for the main views.
   const profileIds = useMemo(() => {
     if (!selfId) return [];
-    if (!activeCircle) return [selfId];
-    return Array.from(new Set([selfId, ...activeCircle.members.map((m) => m.profile_id)]));
-  }, [selfId, activeCircle]);
+    if (scope.kind === "me") return [selfId];
+    if (scope.kind === "circle") {
+      const c = circles.find((x) => x.id === scope.id);
+      return Array.from(new Set([selfId, ...(c?.members.map((m) => m.profile_id) ?? [])]));
+    }
+    if (scope.kind === "people") {
+      const ids = scope.includeSelf ? [selfId, ...scope.ids] : scope.ids;
+      return Array.from(new Set(ids));
+    }
+    return [selfId];
+  }, [scope, circles, selfId]);
 
-  const range = useMemo(() => rangeForView(anchor, viewMode), [anchor, viewMode]);
+  const range = useMemo(
+    () => rangeForView(anchor, isLooking ? "agenda" : viewMode),
+    [anchor, viewMode, isLooking]
+  );
 
   // Resolve session + circles once.
   useEffect(() => {
@@ -95,9 +125,32 @@ export function CalendarClient() {
     })();
   }, [router]);
 
-  // Fetch events + rounds for the displayed people and range.
+  const mergeNames = useCallback((profiles: ProfileLite[]) => {
+    if (profiles.length === 0) return;
+    setNameById((prev) => {
+      const next = new Map(prev);
+      for (const p of profiles) next.set(p.id, p);
+      return next;
+    });
+  }, []);
+
+  // Resolve display names for everyone currently shown.
   useEffect(() => {
-    if (profileIds.length === 0) return;
+    const missing = profileIds.filter((id) => !nameById.has(id));
+    if (missing.length === 0) return;
+    (async () => {
+      try {
+        mergeNames(await resolveProfileNames(missing));
+      } catch {
+        /* ignore */
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profileIds]);
+
+  // Main calendar fetch.
+  useEffect(() => {
+    if (isLooking || profileIds.length === 0) return;
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -119,20 +172,49 @@ export function CalendarClient() {
     return () => {
       cancelled = true;
     };
-  }, [profileIds, range.start, range.end]);
+  }, [profileIds, range.start, range.end, isLooking]);
+
+  // "Looking for a round" fetch.
+  useEffect(() => {
+    if (!isLooking || !selfId) return;
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setErr(null);
+      try {
+        const circleMemberIds = circles.flatMap((c) => c.members.map((m) => m.profile_id));
+        const { events: ev, profiles } = await fetchLookingForRound(
+          selfId,
+          circleMemberIds,
+          range.start,
+          range.end
+        );
+        if (cancelled) return;
+        setLfgEvents(ev);
+        mergeNames(profiles);
+      } catch (e: any) {
+        if (!cancelled) setErr(e?.message || "Failed to load");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isLooking, selfId, circles, range.start, range.end, mergeNames]);
 
   const occurrences = useMemo(
     () => resolveOccurrences(events, rounds, range.start, range.end),
     [events, rounds, range.start, range.end]
   );
 
-  // Days spanned by the current view (for aggregate day states + agenda).
   const viewDays = useMemo(() => {
+    if (isLooking || viewMode === "agenda") return enumerateDays(range.start, range.end);
     if (viewMode === "week") return getWeekDays(anchor);
-    if (viewMode === "weekends") return getWeekendDays(anchor);
-    if (viewMode === "agenda") return enumerateDays(range.start, range.end);
+    if (viewMode === "weekends")
+      return getWeekDays(anchor).filter((d) => d.getDay() === 0 || d.getDay() === 6);
     return getMonthMatrix(anchor).flat();
-  }, [viewMode, anchor, range.start, range.end]);
+  }, [viewMode, anchor, range.start, range.end, isLooking]);
 
   const dayStates = useMemo(
     () => resolveDayStates(occurrences, profileIds, viewDays),
@@ -144,21 +226,33 @@ export function CalendarClient() {
     [occurrences, dayStates, filter]
   );
 
-  const occurrencesByDay = useMemo(() => {
-    const map = new Map<string, ResolvedOccurrence[]>();
-    for (const occ of filtered) {
-      const key = dayKey(occ.start);
-      const list = map.get(key);
-      if (list) list.push(occ);
-      else map.set(key, [occ]);
-    }
-    return map;
-  }, [filtered]);
+  const occurrencesByDay = useMemo(
+    () => groupOccurrencesByDay(filtered, viewDays),
+    [filtered, viewDays]
+  );
 
-  const showOwnerDots = profileIds.length > 1;
+  // LFG occurrences (availability only), grouped by day.
+  const lfgByDay = useMemo(() => {
+    const occ = resolveOccurrences(lfgEvents, [], range.start, range.end).filter(
+      (o) => o.kind === "available"
+    );
+    return groupOccurrencesByDay(occ, viewDays);
+  }, [lfgEvents, range.start, range.end, viewDays]);
+
+  const showOwners = profileIds.length > 1 || isLooking;
+
+  const scopeLabel = useMemo(() => {
+    if (scope.kind === "me") return "Me";
+    if (scope.kind === "looking") return "Looking for a round";
+    if (scope.kind === "circle") return circles.find((c) => c.id === scope.id)?.name ?? "Circle";
+    // people
+    const names = scope.ids.map((id) => nameById.get(id)?.name?.split(" ")[0] ?? "Player");
+    const base = names.length === 1 ? names[0] : `${scope.ids.length} players`;
+    return scope.includeSelf ? `${base} + me` : base;
+  }, [scope, circles, nameById]);
 
   function shift(dir: -1 | 1) {
-    if (viewMode === "week" || viewMode === "agenda") {
+    if (isLooking || viewMode === "week" || viewMode === "weekends" || viewMode === "agenda") {
       setAnchor((a) => addDays(a, dir * 7));
     } else {
       setAnchor((a) => new Date(a.getFullYear(), a.getMonth() + dir, 1));
@@ -172,7 +266,6 @@ export function CalendarClient() {
       router.push(path);
       return;
     }
-    // Only your own availability/unavailability can be edited/removed here.
     if (occ.profileId === selfId) setDeleteTarget(occ);
   }
 
@@ -188,7 +281,7 @@ export function CalendarClient() {
     }
   }
 
-  async function refreshData() {
+  async function refreshMain() {
     if (profileIds.length === 0) return;
     const [ev, rd] = await Promise.all([
       fetchEvents(profileIds, range.start, range.end),
@@ -198,92 +291,80 @@ export function CalendarClient() {
     setRounds(rd);
   }
 
+  const headerSubtitle = isLooking
+    ? formatRangeLabel(range.start, range.end)
+    : viewMode === "week" || viewMode === "weekends"
+      ? formatWeekCommencing(anchor)
+      : viewMode === "agenda"
+        ? formatRangeLabel(range.start, range.end)
+        : null;
+
   return (
-    <div className="min-h-screen bg-[#042713] text-slate-100 px-3 pt-8 pb-[env(safe-area-inset-bottom)]">
-      <div className="mx-auto w-full max-w-md space-y-4">
+    <div className="min-h-screen bg-gradient-to-b from-[#042713] via-[#04240f] to-[#031a0c] text-slate-100 px-3 pt-8 pb-[env(safe-area-inset-bottom)]">
+      <div className="mx-auto w-full max-w-md space-y-3">
         <header className="flex items-center justify-between">
           <BackButton onClick={() => router.replace("/round")} />
-          <div className="text-center flex-1">
-            <div className="text-lg font-semibold tracking-wide text-[#f5e6b0]">Calendar</div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">
-              {activeCircle ? activeCircle.name : "My schedule"}
-            </div>
-          </div>
-          <button
-            onClick={() => setCircleManagerOpen(true)}
-            className="flex h-9 w-[60px] items-center justify-end text-emerald-200/70 hover:text-emerald-50"
-            aria-label="Manage circles"
-          >
-            <Users2 size={20} />
-          </button>
+          <div className="text-lg font-semibold tracking-wide text-[#f5e6b0]">Calendar</div>
+          <div className="w-[60px]" />
         </header>
 
-        {/* Scope: me + circles */}
-        {circles.length > 0 ? (
-          <div className="flex gap-1.5 overflow-x-auto pb-1">
-            <ScopeChip active={!activeCircleId} onClick={() => setActiveCircleId(null)}>
-              Me
-            </ScopeChip>
-            {circles.map((c) => (
-              <ScopeChip
-                key={c.id}
-                active={activeCircleId === c.id}
-                onClick={() => setActiveCircleId(c.id)}
-              >
-                {c.name}
-              </ScopeChip>
-            ))}
-          </div>
-        ) : null}
+        {/* Scope selector */}
+        <div className="flex justify-center">
+          <ScopePickerButton label={scopeLabel} onClick={() => setScopePickerOpen(true)} />
+        </div>
 
-        {/* Month/week navigation */}
-        <div className="flex items-center justify-between">
+        {/* Month / week navigation */}
+        <div className="flex items-center justify-between rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/30 px-2 py-1.5">
           <button
             onClick={() => shift(-1)}
-            className="rounded-full p-1.5 text-emerald-100/70 hover:bg-emerald-900/30"
+            className="rounded-full p-1.5 text-emerald-100/70 hover:bg-emerald-900/40"
           >
             <ChevronLeft size={18} />
           </button>
-          <button
-            onClick={() => setAnchor(new Date())}
-            className="text-sm font-semibold text-emerald-50"
-          >
-            {formatMonthLabel(anchor)}
+          <button onClick={() => setAnchor(new Date())} className="text-center">
+            <div className="text-sm font-semibold text-emerald-50">
+              {isLooking ? "Looking for a round" : formatMonthLabel(anchor)}
+            </div>
+            {headerSubtitle ? (
+              <div className="text-[10px] uppercase tracking-[0.16em] text-emerald-200/60">
+                {headerSubtitle}
+              </div>
+            ) : null}
           </button>
           <button
             onClick={() => shift(1)}
-            className="rounded-full p-1.5 text-emerald-100/70 hover:bg-emerald-900/30"
+            className="rounded-full p-1.5 text-emerald-100/70 hover:bg-emerald-900/40"
           >
             <ChevronRight size={18} />
           </button>
         </div>
 
-        {/* View mode + availability filter */}
-        <div className="space-y-2">
-          <SegmentedControl<ViewMode>
-            className="w-full justify-between"
-            size="sm"
-            value={viewMode}
-            onChange={setViewMode}
-            options={[
-              { value: "week", label: "Week" },
-              { value: "month", label: "Month" },
-              { value: "weekends", label: "Weekends" },
-              { value: "agenda", label: "Agenda" },
-            ]}
-          />
-          <SegmentedControl<AvailabilityFilter>
-            className="w-full justify-between"
-            size="sm"
-            value={filter}
-            onChange={setFilter}
-            options={[
-              { value: "all", label: "Show all" },
-              { value: "hide_unavailable", label: "Hide unavailable" },
-              { value: "available_only", label: "Available only" },
-            ]}
-          />
-        </div>
+        {/* View mode + availability filter (hidden for LFG) */}
+        {!isLooking ? (
+          <div className="space-y-2">
+            <SegmentedControl<ViewMode>
+              size="sm"
+              value={viewMode}
+              onChange={setViewMode}
+              options={[
+                { value: "week", label: "Week" },
+                { value: "month", label: "Month" },
+                { value: "weekends", label: "Weekends" },
+                { value: "agenda", label: "Agenda" },
+              ]}
+            />
+            <SegmentedControl<AvailabilityFilter>
+              size="sm"
+              value={filter}
+              onChange={setFilter}
+              options={[
+                { value: "all", label: "Show all" },
+                { value: "hide_unavailable", label: "Hide busy" },
+                { value: "available_only", label: "Available" },
+              ]}
+            />
+          </div>
+        ) : null}
 
         {err ? (
           <div className="rounded-xl border border-red-900/50 bg-red-950/30 p-3 text-sm text-red-100">
@@ -291,57 +372,99 @@ export function CalendarClient() {
           </div>
         ) : null}
 
-        {loading ? (
-          <div className="flex items-center justify-center gap-2 py-16 text-emerald-100/60">
-            <Loader2 className="animate-spin" size={18} /> Loading…
-          </div>
-        ) : viewMode === "month" ? (
-          <MonthView
-            anchor={anchor}
-            occurrencesByDay={occurrencesByDay}
-            dayStates={dayStates}
-            filter={filter}
-            showOwnerDots={showOwnerDots}
-            onDayClick={setCreateDay}
-            onOccurrenceClick={handleOccurrenceClick}
-          />
-        ) : viewMode === "agenda" ? (
-          <AgendaView
-            days={viewDays}
-            occurrencesByDay={occurrencesByDay}
-            dayStates={dayStates}
-            filter={filter}
-            showOwnerDots={showOwnerDots}
-            onOccurrenceClick={handleOccurrenceClick}
-          />
-        ) : (
-          <WeekView
-            days={viewDays}
-            occurrencesByDay={occurrencesByDay}
-            dayStates={dayStates}
-            filter={filter}
-            showOwnerDots={showOwnerDots}
-            onDayClick={setCreateDay}
-            onOccurrenceClick={handleOccurrenceClick}
-          />
-        )}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={`${scope.kind}-${viewMode}-${isLooking}`}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+          >
+            {loading ? (
+              <div className="flex items-center justify-center gap-2 py-16 text-emerald-100/60">
+                <Loader2 className="animate-spin" size={18} /> Loading…
+              </div>
+            ) : isLooking ? (
+              <LookingForRoundView
+                days={viewDays}
+                occurrencesByDay={lfgByDay}
+                nameById={nameById}
+                onOpenPerson={(id) => setScope({ kind: "people", ids: [id], includeSelf: false })}
+              />
+            ) : viewMode === "month" ? (
+              <MonthView
+                anchor={anchor}
+                occurrencesByDay={occurrencesByDay}
+                dayStates={dayStates}
+                filter={filter}
+                showOwners={showOwners}
+                nameById={nameById}
+                onDayClick={(day) => setCreateTarget({ day, hour: null })}
+                onOccurrenceClick={handleOccurrenceClick}
+              />
+            ) : viewMode === "agenda" ? (
+              <AgendaView
+                days={viewDays}
+                occurrencesByDay={occurrencesByDay}
+                dayStates={dayStates}
+                filter={filter}
+                showOwners={showOwners}
+                nameById={nameById}
+                onOccurrenceClick={handleOccurrenceClick}
+              />
+            ) : (
+              <TimeGridView
+                days={viewDays}
+                occurrences={occurrences}
+                profileIds={profileIds}
+                filter={filter}
+                nameById={nameById}
+                showOwners={showOwners}
+                onSlotClick={(day, hour) => setCreateTarget({ day, hour })}
+                onOccurrenceClick={handleOccurrenceClick}
+              />
+            )}
+          </motion.div>
+        </AnimatePresence>
       </div>
 
-      {createDay ? (
+      {createTarget ? (
         <CreateEventSheet
-          day={createDay}
-          onClose={() => setCreateDay(null)}
+          day={createTarget.day}
+          hour={createTarget.hour}
+          onClose={() => setCreateTarget(null)}
           onCreated={() => {
-            setCreateDay(null);
-            refreshData();
+            setCreateTarget(null);
+            refreshMain();
           }}
         />
       ) : null}
 
-      {circleManagerOpen ? (
+      {scopePickerOpen ? (
+        <ScopePicker
+          scope={scope}
+          circles={circles}
+          onSelect={(s) => {
+            setScope(s);
+            setScopePickerOpen(false);
+          }}
+          onManageCircle={(id) => {
+            setScopePickerOpen(false);
+            setCircleManager({ open: true, id });
+          }}
+          onNewCircle={() => {
+            setScopePickerOpen(false);
+            setCircleManager({ open: true, id: null });
+          }}
+          onClose={() => setScopePickerOpen(false)}
+        />
+      ) : null}
+
+      {circleManager.open ? (
         <CircleManager
           circles={circles}
-          onClose={() => setCircleManagerOpen(false)}
+          initialExpandedId={circleManager.id}
+          onClose={() => setCircleManager({ open: false })}
           onChanged={async () => {
             try {
               setCircles(await fetchCircles());
@@ -389,21 +512,5 @@ export function CalendarClient() {
         </div>
       ) : null}
     </div>
-  );
-}
-
-function ScopeChip(props: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      onClick={props.onClick}
-      className={cn(
-        "shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-        props.active
-          ? "border-[#f5e6b0] bg-[#f5e6b0] text-[#042713]"
-          : "border-emerald-900/70 bg-[#0b3b21]/50 text-emerald-100/70 hover:bg-emerald-900/30"
-      )}
-    >
-      {props.children}
-    </button>
   );
 }

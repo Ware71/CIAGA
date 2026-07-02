@@ -219,3 +219,96 @@ export function isDayVisible(
   if (filter === "hide_unavailable") return state !== "unavailable";
   return state === "available";
 }
+
+/**
+ * Bucket occurrences onto every local day they intersect (not just their start
+ * day), so multi-day events appear on each covered day.
+ */
+export function groupOccurrencesByDay(
+  occurrences: ResolvedOccurrence[],
+  days: Date[]
+): Map<string, ResolvedOccurrence[]> {
+  const map = new Map<string, ResolvedOccurrence[]>();
+  for (const day of days) map.set(dayKey(day), []);
+  for (const occ of occurrences) {
+    for (const day of days) {
+      const dStart = startOfDay(day);
+      const dEnd = endOfDay(day);
+      if (intervalsOverlap(occ.start, occ.end, dStart, dEnd)) {
+        map.get(dayKey(day))!.push(occ);
+      }
+    }
+  }
+  return map;
+}
+
+// --- Time-grid interval shading ---------------------------------------------
+
+/** A [start, end) interval expressed in minutes from local midnight (0..1440). */
+export type MinuteInterval = { start: number; end: number };
+
+function clipToDayMinutes(occ: ResolvedOccurrence, day: Date): MinuteInterval | null {
+  const dStart = startOfDay(day).getTime();
+  const dEnd = endOfDay(day).getTime();
+  const s = Math.max(occ.start.getTime(), dStart);
+  const e = Math.min(occ.end.getTime(), dEnd);
+  if (e <= s) return null;
+  return { start: (s - dStart) / 60000, end: (e - dStart) / 60000 };
+}
+
+/** Merge overlapping/adjacent intervals into a sorted, non-overlapping set. */
+export function mergeIntervals(intervals: MinuteInterval[]): MinuteInterval[] {
+  if (intervals.length === 0) return [];
+  const sorted = [...intervals].sort((a, b) => a.start - b.start);
+  const out: MinuteInterval[] = [{ ...sorted[0] }];
+  for (let i = 1; i < sorted.length; i++) {
+    const last = out[out.length - 1];
+    const cur = sorted[i];
+    if (cur.start <= last.end) last.end = Math.max(last.end, cur.end);
+    else out.push({ ...cur });
+  }
+  return out;
+}
+
+/** Subtract set B from set A (both assumed merged & sorted). */
+function subtractIntervals(a: MinuteInterval[], b: MinuteInterval[]): MinuteInterval[] {
+  const out: MinuteInterval[] = [];
+  for (const seg of a) {
+    let cursor = seg.start;
+    for (const cut of b) {
+      if (cut.end <= cursor || cut.start >= seg.end) continue;
+      if (cut.start > cursor) out.push({ start: cursor, end: Math.min(cut.start, seg.end) });
+      cursor = Math.max(cursor, cut.end);
+      if (cursor >= seg.end) break;
+    }
+    if (cursor < seg.end) out.push({ start: cursor, end: seg.end });
+  }
+  return out.filter((s) => s.end > s.start);
+}
+
+/**
+ * Merged busy/available minute-intervals for a single day across the displayed
+ * people — used to shade the time grid. `busy` = any person busy; `available` =
+ * a person marked available with nobody busy over that span (busy wins).
+ */
+export function resolveDayIntervals(
+  occurrences: ResolvedOccurrence[],
+  profileIds: string[],
+  day: Date
+): { busy: MinuteInterval[]; available: MinuteInterval[] } {
+  const ids = new Set(profileIds);
+  const busyRaw: MinuteInterval[] = [];
+  const availRaw: MinuteInterval[] = [];
+
+  for (const occ of occurrences) {
+    if (!ids.has(occ.profileId)) continue;
+    const iv = clipToDayMinutes(occ, day);
+    if (!iv) continue;
+    if (occ.busy) busyRaw.push(iv);
+    else if (occ.kind === "available") availRaw.push(iv);
+  }
+
+  const busy = mergeIntervals(busyRaw);
+  const available = subtractIntervals(mergeIntervals(availRaw), busy);
+  return { busy, available };
+}

@@ -13,38 +13,46 @@ import {
   type RecurrenceValue,
 } from "./RecurrenceEditor";
 import { createEvent, createScheduledRound } from "@/lib/calendar/api";
-import { formatDayLabel } from "@/lib/calendar/dateUtils";
+import { dayKey, formatDayLabel } from "@/lib/calendar/dateUtils";
 
 type Tab = "round" | "available" | "unavailable";
 
-/** Combine a local day with an "HH:MM" string into an ISO timestamp. */
-function combine(day: Date, time: string): string {
-  const [h, m] = time.split(":").map((n) => parseInt(n, 10));
-  const d = new Date(day.getFullYear(), day.getMonth(), day.getDate(), h || 0, m || 0, 0);
-  return d.toISOString();
-}
+const pad = (n: number) => String(n).padStart(2, "0");
 
-function dayStartISO(day: Date): string {
-  return new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0, 0).toISOString();
+/** Combine "YYYY-MM-DD" + "HH:MM" (local) into an ISO timestamp. */
+function combine(dateStr: string, timeStr: string): string {
+  const [y, m, d] = dateStr.split("-").map((n) => parseInt(n, 10));
+  const [h, min] = timeStr.split(":").map((n) => parseInt(n, 10));
+  return new Date(y, m - 1, d, h || 0, min || 0, 0).toISOString();
 }
-function nextDayStartISO(day: Date): string {
-  return new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1, 0, 0, 0).toISOString();
+/** Local midnight at the start of the given YYYY-MM-DD. */
+function dayStartISO(dateStr: string, addDays = 0): string {
+  const [y, m, d] = dateStr.split("-").map((n) => parseInt(n, 10));
+  return new Date(y, m - 1, d + addDays, 0, 0, 0).toISOString();
 }
 
 export function CreateEventSheet(props: {
   day: Date;
+  /** Optional prefill hour (from a time-grid slot tap). */
+  hour?: number | null;
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const { day, onClose, onCreated } = props;
+  const { day, hour, onClose, onCreated } = props;
   const router = useRouter();
+
+  const baseDate = dayKey(day);
+  const startHour = hour ?? 9;
+  const endHour = Math.min(23, startHour + 1);
 
   const [tab, setTab] = useState<Tab>("round");
   const [title, setTitle] = useState("");
-  const [allDay, setAllDay] = useState(true);
-  const [startTime, setStartTime] = useState("09:00");
-  const [endTime, setEndTime] = useState("17:00");
-  const [roundTime, setRoundTime] = useState("09:00");
+  const [allDay, setAllDay] = useState(false);
+  const [startDate, setStartDate] = useState(baseDate);
+  const [startTime, setStartTime] = useState(`${pad(startHour)}:00`);
+  const [endDate, setEndDate] = useState(baseDate);
+  const [endTime, setEndTime] = useState(`${pad(endHour)}:00`);
+  const [roundTime, setRoundTime] = useState(`${pad(startHour)}:00`);
   const [recurrence, setRecurrence] = useState<RecurrenceValue>(EMPTY_RECURRENCE);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -53,7 +61,7 @@ export function CreateEventSheet(props: {
     setBusy(true);
     setErr(null);
     try {
-      const roundId = await createScheduledRound(combine(day, roundTime));
+      const roundId = await createScheduledRound(combine(baseDate, roundTime));
       router.push(`/round/${roundId}/setup?new=1`);
     } catch (e: any) {
       setErr(e?.message || "Failed to create round");
@@ -65,10 +73,11 @@ export function CreateEventSheet(props: {
     setBusy(true);
     setErr(null);
     try {
-      const start_at = allDay ? dayStartISO(day) : combine(day, startTime);
-      const end_at = allDay ? nextDayStartISO(day) : combine(day, endTime);
-      if (!allDay && new Date(end_at) <= new Date(start_at)) {
-        throw new Error("End time must be after start time");
+      const start_at = allDay ? dayStartISO(startDate) : combine(startDate, startTime);
+      // All-day end is exclusive next-midnight of the end date (inclusive day span).
+      const end_at = allDay ? dayStartISO(endDate, 1) : combine(endDate, endTime);
+      if (new Date(end_at) <= new Date(start_at)) {
+        throw new Error("End must be after start");
       }
       await createEvent({
         kind: tab === "available" ? "available" : "unavailable",
@@ -84,6 +93,9 @@ export function CreateEventSheet(props: {
       setBusy(false);
     }
   }
+
+  const inputCls =
+    "rounded-md border border-emerald-900/70 bg-[#042713] px-2 py-1 text-emerald-50 [color-scheme:dark]";
 
   return (
     <AnimatePresence>
@@ -103,15 +115,14 @@ export function CreateEventSheet(props: {
           exit={{ y: "100%" }}
           transition={{ type: "spring", damping: 30, stiffness: 300 }}
         >
-          <div className="mx-auto w-full max-w-[520px] rounded-t-3xl border border-emerald-900/70 bg-[#061f12] shadow-2xl overflow-hidden">
-            <div className="p-4 border-b border-emerald-900/60">
+          <div className="mx-auto w-full max-w-[520px] max-h-[88vh] overflow-y-auto rounded-t-3xl border border-emerald-900/70 bg-[#061f12] shadow-2xl">
+            <div className="sticky top-0 border-b border-emerald-900/60 bg-[#061f12] p-4">
               <div className="text-sm font-semibold text-emerald-50">New event</div>
               <div className="text-[11px] text-emerald-100/70 mt-0.5">{formatDayLabel(day)}</div>
             </div>
 
             <div className="p-4 space-y-4">
               <SegmentedControl<Tab>
-                className="w-full justify-between"
                 value={tab}
                 onChange={setTab}
                 options={[
@@ -133,7 +144,7 @@ export function CreateEventSheet(props: {
                       type="time"
                       value={roundTime}
                       onChange={(e) => setRoundTime(e.target.value)}
-                      className="rounded-md border border-emerald-900/70 bg-[#042713] px-2 py-1 text-emerald-50"
+                      className={inputCls}
                     />
                   </label>
                   <Button
@@ -149,9 +160,7 @@ export function CreateEventSheet(props: {
                   <input
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    placeholder={
-                      tab === "available" ? "Title (optional)" : "e.g. Work (optional)"
-                    }
+                    placeholder={tab === "available" ? "Title (optional)" : "e.g. Work (optional)"}
                     className="w-full rounded-xl border border-emerald-900/70 bg-[#042713] px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/40"
                   />
 
@@ -174,23 +183,47 @@ export function CreateEventSheet(props: {
                     </button>
                   </div>
 
-                  {!allDay ? (
+                  {/* Start / end — may span multiple days */}
+                  <div className="space-y-2 rounded-xl border border-emerald-900/60 bg-[#0b3b21]/30 p-3">
                     <div className="flex items-center gap-2 text-xs text-emerald-100/80">
+                      <span className="w-10 shrink-0">Start</span>
                       <input
-                        type="time"
-                        value={startTime}
-                        onChange={(e) => setStartTime(e.target.value)}
-                        className="rounded-md border border-emerald-900/70 bg-[#042713] px-2 py-1 text-emerald-50"
+                        type="date"
+                        value={startDate}
+                        onChange={(e) => {
+                          setStartDate(e.target.value);
+                          if (e.target.value > endDate) setEndDate(e.target.value);
+                        }}
+                        className={cn(inputCls, "flex-1")}
                       />
-                      <span>to</span>
-                      <input
-                        type="time"
-                        value={endTime}
-                        onChange={(e) => setEndTime(e.target.value)}
-                        className="rounded-md border border-emerald-900/70 bg-[#042713] px-2 py-1 text-emerald-50"
-                      />
+                      {!allDay ? (
+                        <input
+                          type="time"
+                          value={startTime}
+                          onChange={(e) => setStartTime(e.target.value)}
+                          className={inputCls}
+                        />
+                      ) : null}
                     </div>
-                  ) : null}
+                    <div className="flex items-center gap-2 text-xs text-emerald-100/80">
+                      <span className="w-10 shrink-0">End</span>
+                      <input
+                        type="date"
+                        value={endDate}
+                        min={startDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        className={cn(inputCls, "flex-1")}
+                      />
+                      {!allDay ? (
+                        <input
+                          type="time"
+                          value={endTime}
+                          onChange={(e) => setEndTime(e.target.value)}
+                          className={inputCls}
+                        />
+                      ) : null}
+                    </div>
+                  </div>
 
                   <div className="rounded-xl border border-emerald-900/60 bg-[#0b3b21]/40 p-3">
                     <RecurrenceEditor value={recurrence} onChange={setRecurrence} />

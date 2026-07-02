@@ -1,7 +1,12 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import type { AvailabilityFilter, BucketState, ResolvedOccurrence } from "@/lib/calendar/types";
+import type {
+  AvailabilityFilter,
+  BucketState,
+  ProfileLite,
+  ResolvedOccurrence,
+} from "@/lib/calendar/types";
 import {
   dayKey,
   getMonthMatrix,
@@ -18,11 +23,12 @@ export function MonthView(props: {
   occurrencesByDay: Map<string, ResolvedOccurrence[]>;
   dayStates: Map<string, BucketState>;
   filter: AvailabilityFilter;
-  showOwnerDots: boolean;
+  showOwners: boolean;
+  nameById: Map<string, ProfileLite>;
   onDayClick: (day: Date) => void;
   onOccurrenceClick: (occ: ResolvedOccurrence) => void;
 }) {
-  const { anchor, occurrencesByDay, dayStates, filter, showOwnerDots, onDayClick, onOccurrenceClick } =
+  const { anchor, occurrencesByDay, dayStates, filter, showOwners, nameById, onDayClick, onOccurrenceClick } =
     props;
   const matrix = getMonthMatrix(anchor);
 
@@ -53,10 +59,12 @@ export function MonthView(props: {
               onClick={() => onDayClick(day)}
               className={cn(
                 "min-h-[64px] rounded-lg border p-1 text-left align-top transition-colors",
-                inMonth ? "bg-[#0b3b21]/40" : "bg-[#0b3b21]/15",
                 state === "available" && visible
-                  ? "border-emerald-400/40"
-                  : "border-emerald-900/50",
+                  ? "border-emerald-400/50 bg-emerald-500/10"
+                  : inMonth
+                    ? "border-emerald-900/50 bg-[#0b3b21]/40"
+                    : "border-emerald-900/40 bg-[#0b3b21]/15",
+                isToday(day) && "ring-1 ring-[#f5e6b0]/60",
                 !visible && "opacity-30",
                 "hover:bg-emerald-900/30"
               )}
@@ -79,7 +87,7 @@ export function MonthView(props: {
                     key={occ.key}
                     occ={occ}
                     compact
-                    showOwnerDot={showOwnerDots}
+                    owner={showOwners ? nameById.get(occ.profileId) : undefined}
                     onClick={onOccurrenceClick}
                   />
                 ))}
