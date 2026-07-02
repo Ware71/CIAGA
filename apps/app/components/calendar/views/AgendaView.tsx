@@ -1,41 +1,28 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import type {
-  AvailabilityFilter,
-  BucketState,
-  ProfileLite,
-  ResolvedOccurrence,
-} from "@/lib/calendar/types";
+import type { ProfileLite, ResolvedOccurrence } from "@/lib/calendar/types";
 import { dayKey, formatDayLabel, isToday } from "@/lib/calendar/dateUtils";
-import { isDayVisible } from "@/lib/calendar/recurrence";
 import { EventChip } from "../EventChip";
 
-/** Agenda: only days that have something to show (empty days removed). */
+/** Agenda: everything upcoming, grouped by day (empty days removed, no filter). */
 export function AgendaView(props: {
   days: Date[];
   occurrencesByDay: Map<string, ResolvedOccurrence[]>;
-  dayStates: Map<string, BucketState>;
-  filter: AvailabilityFilter;
   showOwners: boolean;
   nameById: Map<string, ProfileLite>;
   onOccurrenceClick: (occ: ResolvedOccurrence) => void;
 }) {
-  const { days, occurrencesByDay, dayStates, filter, showOwners, nameById, onOccurrenceClick } = props;
+  const { days, occurrencesByDay, showOwners, nameById, onOccurrenceClick } = props;
 
   const rows = days
-    .map((day) => {
-      const key = dayKey(day);
-      const visible = isDayVisible(day, dayStates, filter);
-      const occs = visible ? occurrencesByDay.get(key) ?? [] : [];
-      return { day, key, occs };
-    })
+    .map((day) => ({ day, key: dayKey(day), occs: occurrencesByDay.get(dayKey(day)) ?? [] }))
     .filter((r) => r.occs.length > 0);
 
   if (rows.length === 0) {
     return (
       <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/40 p-6 text-center text-sm text-emerald-100/60">
-        Nothing scheduled in this range.
+        Nothing coming up.
       </div>
     );
   }

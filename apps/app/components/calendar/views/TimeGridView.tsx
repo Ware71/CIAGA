@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
+import { Flag } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type {
   AvailabilityFilter,
@@ -14,13 +15,12 @@ import {
   formatHourLabel,
   formatTime,
   isToday,
-  playersLabel,
   startOfDay,
 } from "@/lib/calendar/dateUtils";
 import { resolveDayIntervals } from "@/lib/calendar/recurrence";
 import { occChipClasses } from "../eventStyles";
 import { EventChip } from "../EventChip";
-import { InitialsAvatar } from "../Avatar";
+import { InitialsAvatar, AvatarStack } from "../Avatar";
 
 const HOUR_PX = 52;
 const GUTTER = 40;
@@ -89,7 +89,7 @@ export function TimeGridView(props: {
     () =>
       occurrences.filter((o) => {
         if (filter === "available_only") return o.kind === "available";
-        if (filter === "hide_unavailable") return !o.busy;
+        if (filter === "hide_unavailable") return o.kind !== "unavailable";
         return true;
       }),
     [occurrences, filter]
@@ -218,19 +218,19 @@ export function TimeGridView(props: {
                 const widthPct = 100 / lanes;
                 const wPx = (colW * widthPct) / 100;
                 const isRound = occ.kind === "round";
+                const players = isRound ? occ.playerNames ?? [] : [];
+                // Only show the course name when it actually fits — no 1–2 letter stubs.
+                const showName = !isRound || wPx >= 64;
                 const primary = isRound
                   ? occ.courseName ?? occ.title ?? "Round"
                   : occ.title ?? (occ.kind === "available" ? "Available" : "Busy");
-                const players = isRound ? playersLabel(occ.playerNames) : owner?.name?.split(" ")[0] ?? "";
-                // Progressive disclosure from the known block size.
-                const showPlayers = wPx >= 108 && !!players;
                 const showSecondLine = height >= 34;
                 const secondLine = occ.resultLabel
                   ? `Gross ${occ.resultLabel}`
                   : !occ.allDay
                     ? formatTime(occ.start)
                     : "";
-                const inlineResult = occ.resultLabel && !showSecondLine && wPx >= 52;
+                const inlineResult = occ.resultLabel && !showSecondLine;
 
                 return (
                   <button
@@ -252,23 +252,30 @@ export function TimeGridView(props: {
                     }}
                   >
                     <div className="flex min-w-0 items-center gap-1">
-                      {owner ? (
+                      {isRound ? (
+                        players.length >= 2 ? (
+                          <AvatarStack
+                            people={players.map((n) => ({ seed: n, name: n }))}
+                            size={13}
+                            max={3}
+                          />
+                        ) : (
+                          <Flag size={11} className="shrink-0" />
+                        )
+                      ) : owner ? (
                         <InitialsAvatar profileId={occ.profileId} name={owner.name} size={12} />
                       ) : null}
-                      <span className="min-w-0 truncate text-[11px] font-medium leading-tight">
-                        {primary}
-                      </span>
+                      {showName ? (
+                        <span className="min-w-0 truncate text-[11px] font-medium leading-tight">
+                          {primary}
+                        </span>
+                      ) : null}
                       {inlineResult ? (
                         <span className="ml-auto shrink-0 text-[11px] font-bold tabular-nums">
                           {occ.resultLabel}
                         </span>
                       ) : null}
                     </div>
-                    {showPlayers ? (
-                      <span className="min-w-0 truncate text-[9px] opacity-70 leading-tight">
-                        {players}
-                      </span>
-                    ) : null}
                     {showSecondLine && secondLine ? (
                       <span className="mt-auto min-w-0 truncate text-[9px] opacity-60 leading-tight">
                         {secondLine}

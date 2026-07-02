@@ -2,7 +2,6 @@
 
 import { cn } from "@/lib/utils";
 import type {
-  AvailabilityFilter,
   BucketState,
   ProfileLite,
   ResolvedOccurrence,
@@ -13,7 +12,6 @@ import {
   isSameMonth,
   isToday,
 } from "@/lib/calendar/dateUtils";
-import { isDayVisible } from "@/lib/calendar/recurrence";
 import { EventChip } from "../EventChip";
 
 const WEEKDAY_HEADERS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -22,13 +20,12 @@ export function MonthView(props: {
   anchor: Date;
   occurrencesByDay: Map<string, ResolvedOccurrence[]>;
   dayStates: Map<string, BucketState>;
-  filter: AvailabilityFilter;
   showOwners: boolean;
   nameById: Map<string, ProfileLite>;
   onDayClick: (day: Date) => void;
   onOccurrenceClick: (occ: ResolvedOccurrence) => void;
 }) {
-  const { anchor, occurrencesByDay, dayStates, filter, showOwners, nameById, onDayClick, onOccurrenceClick } =
+  const { anchor, occurrencesByDay, dayStates, showOwners, nameById, onDayClick, onOccurrenceClick } =
     props;
   const matrix = getMonthMatrix(anchor);
 
@@ -45,10 +42,9 @@ export function MonthView(props: {
       <div className="grid grid-cols-7 gap-1">
         {matrix.flat().map((day) => {
           const key = dayKey(day);
-          const visible = isDayVisible(day, dayStates, filter);
           const inMonth = isSameMonth(day, anchor);
           const state = dayStates.get(key) ?? "neutral";
-          const occs = visible ? occurrencesByDay.get(key) ?? [] : [];
+          const occs = occurrencesByDay.get(key) ?? [];
           const shown = occs.slice(0, 2);
           const extra = occs.length - shown.length;
 
@@ -59,13 +55,12 @@ export function MonthView(props: {
               onClick={() => onDayClick(day)}
               className={cn(
                 "flex min-h-[72px] flex-col overflow-hidden rounded-lg border p-1 text-left align-top transition-colors",
-                state === "available" && visible
+                state === "available"
                   ? "border-emerald-400/50 bg-emerald-500/10"
                   : inMonth
                     ? "border-emerald-900/50 bg-[#0b3b21]/40"
                     : "border-emerald-900/40 bg-[#0b3b21]/15",
                 isToday(day) && "ring-1 ring-[#f5e6b0]/60",
-                !visible && "opacity-30",
                 "hover:bg-emerald-900/30"
               )}
             >

@@ -24,6 +24,7 @@ import {
   formatWeekCommencing,
   getMonthMatrix,
   getWeekDays,
+  isSameMonth,
   rangeForView,
   startOfDay,
 } from "@/lib/calendar/dateUtils";
@@ -90,6 +91,7 @@ export function CalendarClient() {
   const [roundInfoId, setRoundInfoId] = useState<string | null>(null);
 
   const isLooking = scope.kind === "looking";
+  const isAgenda = viewMode === "agenda";
 
   // People whose calendars are displayed for the main views.
   const profileIds = useMemo(() => {
@@ -106,10 +108,14 @@ export function CalendarClient() {
     return [selfId];
   }, [scope, circles, selfId]);
 
-  const range = useMemo(
-    () => rangeForView(anchor, isLooking ? "agenda" : viewMode),
-    [anchor, viewMode, isLooking]
-  );
+  const range = useMemo(() => {
+    // Agenda shows everything upcoming from today.
+    if (isAgenda && !isLooking) {
+      const start = startOfDay(new Date());
+      return { start, end: addDays(start, 42) };
+    }
+    return rangeForView(anchor, isLooking ? "agenda" : viewMode);
+  }, [anchor, viewMode, isLooking, isAgenda]);
 
   // Resolve session + circles once.
   useEffect(() => {
@@ -215,7 +221,9 @@ export function CalendarClient() {
     if (isLooking || viewMode === "agenda") return enumerateDays(range.start, range.end);
     if (viewMode === "week") return getWeekDays(anchor);
     if (viewMode === "weekends")
-      return getWeekDays(anchor).filter((d) => d.getDay() === 0 || d.getDay() === 6);
+      return getMonthMatrix(anchor)
+        .flat()
+        .filter((d) => isSameMonth(d, anchor) && (d.getDay() === 0 || d.getDay() === 6));
     return getMonthMatrix(anchor).flat();
   }, [viewMode, anchor, range.start, range.end, isLooking]);
 
@@ -225,13 +233,19 @@ export function CalendarClient() {
   );
 
   const filtered = useMemo(
-    () => applyAvailabilityFilter(occurrences, dayStates, filter),
-    [occurrences, dayStates, filter]
+    () => applyAvailabilityFilter(occurrences, filter),
+    [occurrences, filter]
   );
 
   const occurrencesByDay = useMemo(
     () => groupOccurrencesByDay(filtered, viewDays),
     [filtered, viewDays]
+  );
+
+  // Agenda ignores the filter — everything upcoming.
+  const agendaByDay = useMemo(
+    () => groupOccurrencesByDay(occurrences, viewDays),
+    [occurrences, viewDays]
   );
 
   // LFG occurrences (availability only), grouped by day.
@@ -255,7 +269,8 @@ export function CalendarClient() {
   }, [scope, circles, nameById]);
 
   function shift(dir: -1 | 1) {
-    if (isLooking || viewMode === "week" || viewMode === "weekends" || viewMode === "agenda") {
+    // Week/LFG move by week; Month & Weekends (whole-month) move by month.
+    if (isLooking || viewMode === "week") {
       setAnchor((a) => addDays(a, dir * 7));
     } else {
       setAnchor((a) => new Date(a.getFullYear(), a.getMonth() + dir, 1));
@@ -294,10 +309,10 @@ export function CalendarClient() {
 
   const headerSubtitle = isLooking
     ? formatRangeLabel(range.start, range.end)
-    : viewMode === "week" || viewMode === "weekends"
+    : viewMode === "week"
       ? formatWeekCommencing(anchor)
-      : viewMode === "agenda"
-        ? formatRangeLabel(range.start, range.end)
+      : viewMode === "weekends"
+        ? "Weekends"
         : null;
 
   return (
@@ -312,33 +327,41 @@ export function CalendarClient() {
           </div>
         </header>
 
-        {/* Month / week navigation */}
+        {/* Month / week navigation (agenda is a rolling "upcoming" list) */}
         <div className="flex items-center justify-between rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/30 px-2 py-1.5">
-          <button
-            onClick={() => shift(-1)}
-            className="rounded-full p-1.5 text-emerald-100/70 hover:bg-emerald-900/40"
-          >
-            <ChevronLeft size={18} />
-          </button>
-          <button onClick={() => setAnchor(new Date())} className="text-center">
-            <div className="text-sm font-semibold text-emerald-50">
-              {isLooking ? "Looking for a round" : formatMonthLabel(anchor)}
+          {isAgenda && !isLooking ? (
+            <div className="w-full py-0.5 text-center text-sm font-semibold text-emerald-50">
+              Upcoming
             </div>
-            {headerSubtitle ? (
-              <div className="text-[10px] uppercase tracking-[0.16em] text-emerald-200/60">
-                {headerSubtitle}
-              </div>
-            ) : null}
-          </button>
-          <button
-            onClick={() => shift(1)}
-            className="rounded-full p-1.5 text-emerald-100/70 hover:bg-emerald-900/40"
-          >
-            <ChevronRight size={18} />
-          </button>
+          ) : (
+            <>
+              <button
+                onClick={() => shift(-1)}
+                className="rounded-full p-1.5 text-emerald-100/70 hover:bg-emerald-900/40"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <button onClick={() => setAnchor(new Date())} className="text-center">
+                <div className="text-sm font-semibold text-emerald-50">
+                  {isLooking ? "Looking for a round" : formatMonthLabel(anchor)}
+                </div>
+                {headerSubtitle ? (
+                  <div className="text-[10px] uppercase tracking-[0.16em] text-emerald-200/60">
+                    {headerSubtitle}
+                  </div>
+                ) : null}
+              </button>
+              <button
+                onClick={() => shift(1)}
+                className="rounded-full p-1.5 text-emerald-100/70 hover:bg-emerald-900/40"
+              >
+                <ChevronRight size={18} />
+              </button>
+            </>
+          )}
         </div>
 
-        {/* View mode + availability filter (hidden for LFG) */}
+        {/* View mode (+ availability filter, hidden for LFG and Agenda) */}
         {!isLooking ? (
           <div className="space-y-2">
             <SegmentedControl<ViewMode>
@@ -352,16 +375,18 @@ export function CalendarClient() {
                 { value: "agenda", label: "Agenda" },
               ]}
             />
-            <SegmentedControl<AvailabilityFilter>
-              size="sm"
-              value={filter}
-              onChange={setFilter}
-              options={[
-                { value: "all", label: "Show all" },
-                { value: "hide_unavailable", label: "Hide busy" },
-                { value: "available_only", label: "Available" },
-              ]}
-            />
+            {!isAgenda ? (
+              <SegmentedControl<AvailabilityFilter>
+                size="sm"
+                value={filter}
+                onChange={setFilter}
+                options={[
+                  { value: "all", label: "Show all" },
+                  { value: "hide_unavailable", label: "Hide busy" },
+                  { value: "available_only", label: "Available" },
+                ]}
+              />
+            ) : null}
           </div>
         ) : null}
 
@@ -395,7 +420,6 @@ export function CalendarClient() {
                 anchor={anchor}
                 occurrencesByDay={occurrencesByDay}
                 dayStates={dayStates}
-                filter={filter}
                 showOwners={showOwners}
                 nameById={nameById}
                 onDayClick={(day) => setCreateTarget({ day, hour: null })}
@@ -404,9 +428,7 @@ export function CalendarClient() {
             ) : viewMode === "agenda" ? (
               <AgendaView
                 days={viewDays}
-                occurrencesByDay={occurrencesByDay}
-                dayStates={dayStates}
-                filter={filter}
+                occurrencesByDay={agendaByDay}
                 showOwners={showOwners}
                 nameById={nameById}
                 onOccurrenceClick={handleOccurrenceClick}

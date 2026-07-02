@@ -205,36 +205,19 @@ export function resolveDayStates(
 }
 
 /**
- * Filter occurrences for rendering given the aggregate day states.
+ * Filter occurrences for rendering by kind (not aggregate day state):
  * - `all`: everything.
- * - `hide_unavailable`: drop every occurrence on a day flagged `unavailable`.
- * - `available_only`: keep occurrences only on days flagged `available`.
+ * - `hide_unavailable`: hide **unavailability** blocks; keep rounds + availability.
+ * - `available_only`: keep **only availability** (rounds + unavailability hidden).
  */
 export function applyAvailabilityFilter(
   occurrences: ResolvedOccurrence[],
-  dayStates: Map<string, BucketState>,
   filter: AvailabilityFilter
 ): ResolvedOccurrence[] {
   if (filter === "all") return occurrences;
-
-  return occurrences.filter((occ) => {
-    const state = dayStates.get(dayKey(occ.start)) ?? "neutral";
-    if (filter === "hide_unavailable") return state !== "unavailable";
-    // available_only
-    return state === "available";
-  });
-}
-
-/** Whether a given day should be shown at all under the current filter. */
-export function isDayVisible(
-  day: Date,
-  dayStates: Map<string, BucketState>,
-  filter: AvailabilityFilter
-): boolean {
-  if (filter === "all") return true;
-  const state = dayStates.get(dayKey(day)) ?? "neutral";
-  if (filter === "hide_unavailable") return state !== "unavailable";
-  return state === "available";
+  if (filter === "hide_unavailable") return occurrences.filter((o) => o.kind !== "unavailable");
+  // available_only
+  return occurrences.filter((o) => o.kind === "available");
 }
 
 /**
