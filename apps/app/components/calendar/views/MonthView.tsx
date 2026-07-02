@@ -49,7 +49,7 @@ export function MonthView(props: {
           const inMonth = isSameMonth(day, anchor);
           const state = dayStates.get(key) ?? "neutral";
           const occs = visible ? occurrencesByDay.get(key) ?? [] : [];
-          const shown = occs.slice(0, 3);
+          const shown = occs.slice(0, 2);
           const extra = occs.length - shown.length;
 
           return (
@@ -58,7 +58,7 @@ export function MonthView(props: {
               type="button"
               onClick={() => onDayClick(day)}
               className={cn(
-                "min-h-[64px] rounded-lg border p-1 text-left align-top transition-colors",
+                "flex min-h-[72px] flex-col overflow-hidden rounded-lg border p-1 text-left align-top transition-colors",
                 state === "available" && visible
                   ? "border-emerald-400/50 bg-emerald-500/10"
                   : inMonth

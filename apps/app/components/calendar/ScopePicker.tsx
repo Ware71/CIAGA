@@ -279,7 +279,7 @@ export function ScopePicker(props: {
                         className="flex w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-emerald-900/25"
                       >
                         <InitialsAvatar profileId={p.id} name={p.name ?? null} size={26} />
-                        <span className="flex-1 truncate text-sm text-emerald-50">
+                        <span className="min-w-0 flex-1 truncate text-sm text-emerald-50">
                           {p.name ?? "Player"}
                         </span>
                         {on ? <Check size={16} className="text-emerald-300" /> : null}

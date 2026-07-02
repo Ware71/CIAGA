@@ -126,6 +126,14 @@ export function formatHourLabel(hour: number): string {
   return d.toLocaleTimeString(undefined, { hour: "numeric" });
 }
 
+/** First names of players for a round card, e.g. "Ware, Jack +2". */
+export function playersLabel(names: string[] | null | undefined): string {
+  if (!names || names.length === 0) return "";
+  const firsts = names.map((n) => n.split(" ")[0]);
+  if (firsts.length <= 2) return firsts.join(", ");
+  return `${firsts.slice(0, 2).join(", ")} +${firsts.length - 2}`;
+}
+
 /**
  * The visible date range for a view, as [start, end) — used to bound
  * recurrence expansion and round queries.

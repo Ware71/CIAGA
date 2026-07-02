@@ -141,7 +141,7 @@ export function RoundInfoSheet(props: { roundId: string; onClose: () => void }) 
                       return (
                         <div key={p.profile_id} className="flex items-center gap-2.5 px-3 py-2">
                           <InitialsAvatar profileId={p.profile_id} name={p.name} size={26} />
-                          <span className="flex-1 truncate text-sm text-emerald-50">
+                          <span className="min-w-0 flex-1 truncate text-sm text-emerald-50">
                             {p.name ?? "Player"}
                           </span>
                           {finished && p.gross != null ? (
