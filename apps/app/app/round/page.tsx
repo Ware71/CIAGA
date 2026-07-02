@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Calendar } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { getMyProfileIdByAuthUserId } from "@/lib/myProfile";
 import { Button } from "@/components/ui/button";
@@ -419,7 +420,13 @@ export default function RoundHomePage() {
             <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">Live scorecards</div>
           </div>
 
-          <div className="w-[60px]" />
+          <Link
+            href="/calendar"
+            aria-label="Open calendar"
+            className="flex h-9 w-[60px] items-center justify-end text-emerald-200/70 hover:text-emerald-50"
+          >
+            <Calendar size={20} />
+          </Link>
         </header>
 
         <Button
