@@ -4,7 +4,7 @@
 
 import { supabase } from "@/lib/supabaseClient";
 import { getViewerSession } from "@/lib/auth/viewerSession";
-import type { CalendarEvent, CalendarRound, Circle, ProfileLite } from "./types";
+import type { CalendarEvent, CalendarRound, Circle, ProfileLite, RoundInfo } from "./types";
 
 async function authHeaders(): Promise<Record<string, string>> {
   const session = await getViewerSession();
@@ -47,7 +47,29 @@ export async function fetchRounds(
     _to: rangeEnd.toISOString(),
   });
   if (error) throw error;
-  return (data ?? []) as CalendarRound[];
+
+  // The RPC yields one row per (round, displayed participant). Collapse to one
+  // row per round, preferring the earliest-listed profile (self) for the gross.
+  const rank = new Map(profileIds.map((id, i) => [id, i]));
+  const byRound = new Map<string, CalendarRound>();
+  for (const row of (data ?? []) as CalendarRound[]) {
+    const existing = byRound.get(row.round_id);
+    if (!existing) {
+      byRound.set(row.round_id, row);
+      continue;
+    }
+    const better =
+      (rank.get(row.profile_id) ?? Infinity) < (rank.get(existing.profile_id) ?? Infinity);
+    if (better) byRound.set(row.round_id, row);
+  }
+  return Array.from(byRound.values());
+}
+
+/** Full round detail for the info window. */
+export async function fetchRoundInfo(roundId: string): Promise<RoundInfo> {
+  const { data, error } = await supabase.rpc("get_calendar_round_info", { _round_id: roundId });
+  if (error) throw error;
+  return data as RoundInfo;
 }
 
 export async function fetchCircles(): Promise<Circle[]> {

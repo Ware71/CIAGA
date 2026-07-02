@@ -91,8 +91,21 @@ function makeEventOccurrence(
 }
 
 function makeRoundOccurrence(round: CalendarRound): ResolvedOccurrence {
-  const start = new Date(round.scheduled_at);
-  const end = new Date(start.getTime() + ROUND_DURATION_MS);
+  const finished = round.status === "finished";
+  let start: Date;
+  let end: Date;
+  if (finished) {
+    // Place on the day it was played.
+    end = round.finished_at ? new Date(round.finished_at) : new Date();
+    start = round.started_at
+      ? new Date(round.started_at)
+      : new Date(end.getTime() - ROUND_DURATION_MS);
+  } else {
+    const anchor = round.scheduled_at ?? round.started_at ?? new Date().toISOString();
+    start = new Date(anchor);
+    end = new Date(start.getTime() + ROUND_DURATION_MS);
+  }
+
   return {
     key: `round:${round.round_id}:${round.profile_id}`,
     sourceId: round.round_id,
@@ -103,9 +116,13 @@ function makeRoundOccurrence(round: CalendarRound): ResolvedOccurrence {
     end,
     allDay: false,
     recurring: false,
-    // A player who has organised/joined a scheduled round is busy for that slot.
-    busy: true,
+    // A scheduled/live round makes the player busy; a finished round is in the
+    // past and does not gate future availability.
+    busy: !finished,
     roundStatus: round.status,
+    resultLabel: finished && round.gross != null ? String(round.gross) : undefined,
+    courseName: round.course_name,
+    playerNames: round.player_names,
   };
 }
 
@@ -218,6 +235,20 @@ export function isDayVisible(
   const state = dayStates.get(dayKey(day)) ?? "neutral";
   if (filter === "hide_unavailable") return state !== "unavailable";
   return state === "available";
+}
+
+/**
+ * In the past, availability/unavailability is irrelevant — only played rounds
+ * matter. Drops non-round occurrences that end before the start of today.
+ */
+export function hidePastAvailability(
+  occurrences: ResolvedOccurrence[],
+  now: Date = new Date()
+): ResolvedOccurrence[] {
+  const todayStart = startOfDay(now).getTime();
+  return occurrences.filter(
+    (o) => o.kind === "round" || o.end.getTime() >= todayStart
+  );
 }
 
 /**

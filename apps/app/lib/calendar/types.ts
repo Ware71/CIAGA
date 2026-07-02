@@ -17,14 +17,44 @@ export type CalendarEvent = {
   updated_at?: string;
 };
 
-/** A scheduled/live round surfaced from get_calendar_rounds. */
+export type RoundStatus = "draft" | "scheduled" | "starting" | "live" | "finished";
+
+/** A scheduled/live/finished round surfaced from get_calendar_rounds. */
 export type CalendarRound = {
   round_id: string;
   profile_id: string;
+  participant_id: string;
   name: string | null;
   course_name: string | null;
-  scheduled_at: string; // ISO timestamptz
-  status: "scheduled" | "starting" | "live";
+  scheduled_at: string | null; // ISO timestamptz
+  started_at: string | null;
+  finished_at: string | null;
+  status: RoundStatus;
+  format_type: string | null;
+  gross: number | null;
+  course_handicap: number | null;
+  player_names: string[] | null;
+};
+
+/** A participant row inside the round info window. */
+export type RoundInfoParticipant = {
+  profile_id: string;
+  name: string | null;
+  gross: number | null;
+  course_handicap: number | null;
+};
+
+/** Full detail for the round info window (from get_calendar_round_info). */
+export type RoundInfo = {
+  round_id: string;
+  name: string | null;
+  course_name: string | null;
+  status: RoundStatus;
+  format_type: string | null;
+  scheduled_at: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  participants: RoundInfoParticipant[];
 };
 
 /** The kind of a resolved occurrence rendered on the calendar. */
@@ -48,8 +78,14 @@ export type ResolvedOccurrence = {
   recurring: boolean;
   /** Rounds and unavailability events both make a person "busy". */
   busy: boolean;
-  /** Present only for round occurrences — used to route on click. */
+  /** Present only for round occurrences — used to route/open info on click. */
   roundStatus?: CalendarRound["status"];
+  /** Finished-round headline number (gross), pre-formatted for the chip. */
+  resultLabel?: string;
+  /** Round course name, for richer round chips/bars. */
+  courseName?: string | null;
+  /** All players in a round, for the wide day-row bars. */
+  playerNames?: string[] | null;
 };
 
 export type Circle = {

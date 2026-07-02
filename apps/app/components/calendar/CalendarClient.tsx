@@ -30,6 +30,7 @@ import {
 import {
   applyAvailabilityFilter,
   groupOccurrencesByDay,
+  hidePastAvailability,
   resolveDayStates,
   resolveOccurrences,
 } from "@/lib/calendar/recurrence";
@@ -49,6 +50,7 @@ import { LookingForRoundView } from "./views/LookingForRoundView";
 import { CreateEventSheet } from "./CreateEventSheet";
 import { CircleManager } from "./CircleManager";
 import { ScopePicker, ScopePickerButton } from "./ScopePicker";
+import { RoundInfoSheet } from "./RoundInfoSheet";
 
 function enumerateDays(start: Date, end: Date): Date[] {
   const out: Date[] = [];
@@ -85,6 +87,7 @@ export function CalendarClient() {
 
   const [createTarget, setCreateTarget] = useState<{ day: Date; hour?: number | null } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ResolvedOccurrence | null>(null);
+  const [roundInfoId, setRoundInfoId] = useState<string | null>(null);
 
   const isLooking = scope.kind === "looking";
 
@@ -204,7 +207,7 @@ export function CalendarClient() {
   }, [isLooking, selfId, circles, range.start, range.end, mergeNames]);
 
   const occurrences = useMemo(
-    () => resolveOccurrences(events, rounds, range.start, range.end),
+    () => hidePastAvailability(resolveOccurrences(events, rounds, range.start, range.end)),
     [events, rounds, range.start, range.end]
   );
 
@@ -233,7 +236,7 @@ export function CalendarClient() {
 
   // LFG occurrences (availability only), grouped by day.
   const lfgByDay = useMemo(() => {
-    const occ = resolveOccurrences(lfgEvents, [], range.start, range.end).filter(
+    const occ = hidePastAvailability(resolveOccurrences(lfgEvents, [], range.start, range.end)).filter(
       (o) => o.kind === "available"
     );
     return groupOccurrencesByDay(occ, viewDays);
@@ -261,9 +264,7 @@ export function CalendarClient() {
 
   function handleOccurrenceClick(occ: ResolvedOccurrence) {
     if (occ.kind === "round") {
-      const path =
-        occ.roundStatus === "scheduled" ? `/round/${occ.sourceId}/setup` : `/round/${occ.sourceId}`;
-      router.push(path);
+      setRoundInfoId(occ.sourceId);
       return;
     }
     if (occ.profileId === selfId) setDeleteTarget(occ);
@@ -300,18 +301,16 @@ export function CalendarClient() {
         : null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#042713] via-[#04240f] to-[#031a0c] text-slate-100 px-3 pt-8 pb-[env(safe-area-inset-bottom)]">
-      <div className="mx-auto w-full max-w-md space-y-3">
-        <header className="flex items-center justify-between">
+    <div className="min-h-screen bg-gradient-to-b from-[#042713] via-[#04240f] to-[#031a0c] text-slate-100 px-3 pt-6 pb-[env(safe-area-inset-bottom)]">
+      <div className="mx-auto w-full max-w-md space-y-2.5">
+        {/* Title + scope on one row to save vertical space */}
+        <header className="flex items-center gap-2">
           <BackButton onClick={() => router.replace("/round")} />
-          <div className="text-lg font-semibold tracking-wide text-[#f5e6b0]">Calendar</div>
-          <div className="w-[60px]" />
+          <div className="text-base font-semibold tracking-wide text-[#f5e6b0]">Calendar</div>
+          <div className="ml-auto">
+            <ScopePickerButton label={scopeLabel} onClick={() => setScopePickerOpen(true)} />
+          </div>
         </header>
-
-        {/* Scope selector */}
-        <div className="flex justify-center">
-          <ScopePickerButton label={scopeLabel} onClick={() => setScopePickerOpen(true)} />
-        </div>
 
         {/* Month / week navigation */}
         <div className="flex items-center justify-between rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/30 px-2 py-1.5">
@@ -438,6 +437,10 @@ export function CalendarClient() {
             refreshMain();
           }}
         />
+      ) : null}
+
+      {roundInfoId ? (
+        <RoundInfoSheet roundId={roundInfoId} onClose={() => setRoundInfoId(null)} />
       ) : null}
 
       {scopePickerOpen ? (
