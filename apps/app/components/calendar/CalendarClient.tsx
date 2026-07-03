@@ -3,13 +3,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Loader2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Filter, Loader2 } from "lucide-react";
 import { BackButton } from "@/components/ui/BackButton";
 import { Button } from "@/components/ui/button";
 import { getViewerSession } from "@/lib/auth/viewerSession";
+import { useIsLandscape } from "@/lib/useIsLandscape";
 import type {
   AvailabilityFilter,
   CalendarEvent,
+  CalendarGroupEvent,
   CalendarRound,
   Circle,
   ProfileLite,
@@ -39,18 +41,18 @@ import {
   deleteEvent,
   fetchCircles,
   fetchEvents,
+  fetchGroupEvents,
   fetchLookingForRound,
   fetchRounds,
   resolveProfileNames,
 } from "@/lib/calendar/api";
-import { SegmentedControl } from "./SegmentedControl";
 import { MonthView } from "./views/MonthView";
 import { TimeGridView } from "./views/TimeGridView";
 import { AgendaView } from "./views/AgendaView";
 import { LookingForRoundView } from "./views/LookingForRoundView";
 import { CreateEventSheet } from "./CreateEventSheet";
 import { CircleManager } from "./CircleManager";
-import { ScopePicker, ScopePickerButton } from "./ScopePicker";
+import { ScopePicker } from "./ScopePicker";
 import { RoundInfoSheet } from "./RoundInfoSheet";
 import { AvailabilityPopup } from "./AvailabilityPopup";
 
@@ -91,22 +93,8 @@ export function CalendarClient() {
   const [deleteTarget, setDeleteTarget] = useState<ResolvedOccurrence | null>(null);
   const [roundInfoId, setRoundInfoId] = useState<string | null>(null);
   const [availDay, setAvailDay] = useState<Date | null>(null);
-  const [controlsOpen, setControlsOpen] = useState(true);
-
-  // Persist the collapsed/expanded state of the view + filter controls.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (localStorage.getItem("cal.controlsOpen") === "0") setControlsOpen(false);
-  }, []);
-  function toggleControls() {
-    setControlsOpen((v) => {
-      const next = !v;
-      try {
-        localStorage.setItem("cal.controlsOpen", next ? "1" : "0");
-      } catch {}
-      return next;
-    });
-  }
+  const [groupEvents, setGroupEvents] = useState<CalendarGroupEvent[]>([]);
+  const isLandscape = useIsLandscape();
 
   const isLooking = scope.kind === "looking";
   const isAgenda = viewMode === "agenda";
@@ -183,13 +171,15 @@ export function CalendarClient() {
       setLoading(true);
       setErr(null);
       try {
-        const [ev, rd] = await Promise.all([
+        const [ev, rd, ge] = await Promise.all([
           fetchEvents(profileIds, range.start, range.end),
-          fetchRounds(profileIds, range.start, range.end),
+          fetchRounds(profileIds, range.start, range.end, selfId),
+          selfId ? fetchGroupEvents(selfId, range.start, range.end) : Promise.resolve([]),
         ]);
         if (cancelled) return;
         setEvents(ev);
         setRounds(rd);
+        setGroupEvents(ge);
       } catch (e: any) {
         if (!cancelled) setErr(e?.message || "Failed to load calendar");
       } finally {
@@ -199,7 +189,7 @@ export function CalendarClient() {
     return () => {
       cancelled = true;
     };
-  }, [profileIds, range.start, range.end, isLooking]);
+  }, [profileIds, range.start, range.end, isLooking, selfId]);
 
   // "Looking for a round" fetch.
   useEffect(() => {
@@ -231,8 +221,11 @@ export function CalendarClient() {
   }, [isLooking, selfId, circles, range.start, range.end, mergeNames]);
 
   const occurrences = useMemo(
-    () => hidePastAvailability(resolveOccurrences(events, rounds, range.start, range.end)),
-    [events, rounds, range.start, range.end]
+    () =>
+      hidePastAvailability(
+        resolveOccurrences(events, rounds, range.start, range.end, groupEvents, selfId)
+      ),
+    [events, rounds, groupEvents, selfId, range.start, range.end]
   );
 
   const viewDays = useMemo(() => {
@@ -289,6 +282,10 @@ export function CalendarClient() {
       setRoundInfoId(occ.sourceId);
       return;
     }
+    if (occ.kind === "event") {
+      router.push(`/majors/events/${occ.sourceId}`);
+      return;
+    }
     if (occ.profileId === selfId) setDeleteTarget(occ);
   }
 
@@ -306,12 +303,14 @@ export function CalendarClient() {
 
   async function refreshMain() {
     if (profileIds.length === 0) return;
-    const [ev, rd] = await Promise.all([
+    const [ev, rd, ge] = await Promise.all([
       fetchEvents(profileIds, range.start, range.end),
-      fetchRounds(profileIds, range.start, range.end),
+      fetchRounds(profileIds, range.start, range.end, selfId),
+      selfId ? fetchGroupEvents(selfId, range.start, range.end) : Promise.resolve([]),
     ]);
     setEvents(ev);
     setRounds(rd);
+    setGroupEvents(ge);
   }
 
   const headerSubtitle = isLooking
@@ -325,13 +324,20 @@ export function CalendarClient() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#042713] via-[#04240f] to-[#031a0c] text-slate-100 px-3 pt-6 pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto w-full max-w-md space-y-2.5 landscape:max-w-5xl">
-        {/* Title + scope on one row to save vertical space */}
-        <header className="flex items-center gap-2">
+        {/* Centered title; funnel opens the settings sheet (scope + view + filter) */}
+        <header className="relative flex items-center">
           <BackButton onClick={() => router.replace("/round")} />
-          <div className="text-base font-semibold tracking-wide text-[#f5e6b0]">Calendar</div>
-          <div className="ml-auto">
-            <ScopePickerButton label={scopeLabel} onClick={() => setScopePickerOpen(true)} />
+          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+            <div className="text-base font-semibold tracking-wide text-[#f5e6b0]">Calendar</div>
+            <div className="max-w-[60%] truncate text-[10px] text-emerald-200/60">{scopeLabel}</div>
           </div>
+          <button
+            onClick={() => setScopePickerOpen(true)}
+            aria-label="Calendar settings"
+            className="ml-auto rounded-full border border-emerald-900/60 bg-[#0b3b21]/60 p-2 text-emerald-100/80 hover:bg-emerald-900/30"
+          >
+            <Filter size={18} />
+          </button>
         </header>
 
         {/* Month / week navigation (agenda is a rolling "upcoming" list) */}
@@ -367,52 +373,6 @@ export function CalendarClient() {
             </>
           )}
         </div>
-
-        {/* View mode + availability filter (collapsible; hidden for LFG) */}
-        {!isLooking ? (
-          <div className="space-y-2">
-            {controlsOpen ? (
-              <>
-                <SegmentedControl<ViewMode>
-                  size="sm"
-                  value={viewMode}
-                  onChange={setViewMode}
-                  options={[
-                    { value: "week", label: "Week" },
-                    { value: "month", label: "Month" },
-                    { value: "weekends", label: "Weekends" },
-                    { value: "agenda", label: "Agenda" },
-                  ]}
-                />
-                <SegmentedControl<AvailabilityFilter>
-                  size="sm"
-                  value={filter}
-                  onChange={setFilter}
-                  options={[
-                    { value: "all", label: "Show all" },
-                    { value: "hide_unavailable", label: "Hide busy" },
-                    { value: "available_only", label: "Available" },
-                  ]}
-                />
-              </>
-            ) : null}
-            <button
-              onClick={toggleControls}
-              className="mx-auto flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-emerald-200/50 hover:text-emerald-200"
-            >
-              {controlsOpen ? (
-                <>Hide controls <ChevronUp size={12} /></>
-              ) : (
-                <>
-                  {viewMode[0].toUpperCase() + viewMode.slice(1)}
-                  {" · "}
-                  {filter === "all" ? "All" : filter === "hide_unavailable" ? "Hide busy" : "Available"}
-                  <ChevronDown size={12} />
-                </>
-              )}
-            </button>
-          </div>
-        ) : null}
 
         {err ? (
           <div className="rounded-xl border border-red-900/50 bg-red-950/30 p-3 text-sm text-red-100">
@@ -464,6 +424,7 @@ export function CalendarClient() {
                 filter={filter}
                 nameById={nameById}
                 showOwners={showOwners}
+                orientation={isLandscape ? "horizontal" : "vertical"}
                 onSlotClick={(day, hour) => setCreateTarget({ day, hour })}
                 onOccurrenceClick={handleOccurrenceClick}
               />
@@ -505,6 +466,10 @@ export function CalendarClient() {
         <ScopePicker
           scope={scope}
           circles={circles}
+          viewMode={viewMode}
+          onViewMode={setViewMode}
+          filter={filter}
+          onFilter={setFilter}
           onSelect={(s) => {
             setScope(s);
             setScopePickerOpen(false);

@@ -12,7 +12,8 @@ import {
 } from "@/lib/calendar/dateUtils";
 import { dayHeat, resolveDayPlayerStatuses } from "@/lib/calendar/recurrence";
 import { STATUS_COLORS } from "../eventStyles";
-import { EventChip } from "../EventChip";
+import { formatDiff } from "../EventChip";
+import { AvatarStack } from "../Avatar";
 
 const WEEKDAY_HEADERS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MAX_DOTS = 6;
@@ -35,6 +36,7 @@ export function MonthView(props: {
   const { anchor, occurrences, profileIds, onDayClick, onOpenRound } = props;
   const matrix = getMonthMatrix(anchor);
   const todayStart = startOfDay(new Date()).getTime();
+  const singleView = profileIds.length <= 1;
 
   return (
     <div className="select-none">
@@ -96,12 +98,45 @@ export function MonthView(props: {
               </div>
 
               {isPast ? (
-                <div className="space-y-0.5">
-                  {shownRounds.map((occ) => (
-                    <EventChip key={occ.key} occ={occ} compact onClick={onOpenRound} />
-                  ))}
+                <div className="flex min-h-0 flex-1 flex-col gap-0.5">
+                  {shownRounds.map((occ) => {
+                    const showScore = singleView || occ.selfParticipated;
+                    const one = shownRounds.length === 1;
+                    const diffText = formatDiff(occ.scoreDiff);
+                    return (
+                      <button
+                        key={occ.key}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenRound(occ);
+                        }}
+                        className="flex min-h-0 flex-1 items-center justify-center rounded bg-[#f5e6b0]/10"
+                      >
+                        {showScore && occ.resultLabel ? (
+                          <span className="flex items-baseline gap-0.5 text-[#f5e6b0]">
+                            <span className={cn("font-bold tabular-nums", one ? "text-lg" : "text-xs")}>
+                              {occ.resultLabel}
+                            </span>
+                            {diffText ? (
+                              <span className={one ? "text-[10px] opacity-70" : "text-[8px] opacity-70"}>
+                                {diffText}
+                              </span>
+                            ) : null}
+                          </span>
+                        ) : (occ.playerNames?.length ?? 0) > 0 ? (
+                          <AvatarStack
+                            people={(occ.playerNames ?? []).map((n) => ({ seed: n, name: n }))}
+                            size={one ? 22 : 16}
+                            max={3}
+                          />
+                        ) : (
+                          <span className="text-[9px] text-emerald-200/60">Round</span>
+                        )}
+                      </button>
+                    );
+                  })}
                   {extraRounds > 0 ? (
-                    <div className="px-1 text-[9px] text-emerald-200/60">+{extraRounds} more</div>
+                    <div className="text-center text-[8px] text-emerald-200/60">+{extraRounds}</div>
                   ) : null}
                 </div>
               ) : dots.length > 0 ? (

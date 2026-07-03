@@ -8,6 +8,7 @@ import type {
   AvailabilityFilter,
   BucketState,
   CalendarEvent,
+  CalendarGroupEvent,
   CalendarRound,
   PlayerDayStatus,
   ResolvedOccurrence,
@@ -125,6 +126,45 @@ function makeRoundOccurrence(round: CalendarRound): ResolvedOccurrence {
     scoreDiff: finished ? round.score_differential : undefined,
     courseName: round.course_name,
     playerNames: round.player_names,
+    selfParticipated: round.selfParticipated,
+  };
+}
+
+/** A Majors group event → occurrence (self only). Timed at the player's tee
+ *  time, else an all-day "TBC" block on the event date. */
+function makeGroupEventOccurrence(ev: CalendarGroupEvent, selfId: string): ResolvedOccurrence {
+  const confirmed = ev.status === "confirmed";
+  let start: Date;
+  let end: Date;
+  let allDay: boolean;
+  let tbc: boolean;
+  if (ev.tee_time) {
+    start = new Date(ev.tee_time);
+    end = new Date(start.getTime() + ROUND_DURATION_MS);
+    allDay = false;
+    tbc = false;
+  } else {
+    const d = ev.event_date ? new Date(`${ev.event_date}T00:00:00`) : new Date();
+    start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0);
+    end = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 0, 0, 0);
+    allDay = true;
+    tbc = true;
+  }
+  return {
+    key: `event:${ev.event_id}`,
+    sourceId: ev.event_id,
+    profileId: selfId,
+    kind: "event",
+    title: ev.name ?? "Event",
+    start,
+    end,
+    allDay,
+    recurring: false,
+    // Only a confirmed entry is a real commitment that blocks availability.
+    busy: confirmed,
+    eventStatus: ev.status,
+    tbc,
+    groupName: ev.group_name,
   };
 }
 
@@ -138,7 +178,9 @@ export function resolveOccurrences(
   events: CalendarEvent[],
   rounds: CalendarRound[],
   rangeStart: Date,
-  rangeEnd: Date
+  rangeEnd: Date,
+  groupEvents: CalendarGroupEvent[] = [],
+  selfId?: string | null
 ): ResolvedOccurrence[] {
   const oneOff: ResolvedOccurrence[] = [];
   const recurring: ResolvedOccurrence[] = [];
@@ -157,6 +199,7 @@ export function resolveOccurrences(
   }
 
   const roundOccs = rounds.map(makeRoundOccurrence);
+  const eventOccs = selfId ? groupEvents.map((g) => makeGroupEventOccurrence(g, selfId)) : [];
 
   // Standalone occurrences (one-off events + rounds) that can override recurring.
   const standalone = [...oneOff, ...roundOccs];
@@ -168,7 +211,7 @@ export function resolveOccurrences(
     );
   });
 
-  return [...standalone, ...keptRecurring].sort(
+  return [...standalone, ...eventOccs, ...keptRecurring].sort(
     (a, b) => a.start.getTime() - b.start.getTime()
   );
 }
@@ -225,7 +268,9 @@ export function resolveDayPlayerStatuses(
     if (!f) continue;
     if (!intervalsOverlap(occ.start, occ.end, dStart, dEnd)) continue;
     if (occ.kind === "round") f.round = true;
-    else if (occ.kind === "unavailable") f.unavail = true;
+    else if (occ.kind === "event") {
+      if (occ.eventStatus === "confirmed") f.round = true; // confirmed entry = scheduled
+    } else if (occ.kind === "unavailable") f.unavail = true;
     else if (occ.kind === "available") f.avail = true;
   }
 

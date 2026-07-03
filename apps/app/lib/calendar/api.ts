@@ -4,7 +4,14 @@
 
 import { supabase } from "@/lib/supabaseClient";
 import { getViewerSession } from "@/lib/auth/viewerSession";
-import type { CalendarEvent, CalendarRound, Circle, ProfileLite, RoundInfo } from "./types";
+import type {
+  CalendarEvent,
+  CalendarGroupEvent,
+  CalendarRound,
+  Circle,
+  ProfileLite,
+  RoundInfo,
+} from "./types";
 
 async function authHeaders(): Promise<Record<string, string>> {
   const session = await getViewerSession();
@@ -38,7 +45,8 @@ export async function fetchEvents(
 export async function fetchRounds(
   profileIds: string[],
   rangeStart: Date,
-  rangeEnd: Date
+  rangeEnd: Date,
+  selfId?: string | null
 ): Promise<CalendarRound[]> {
   if (profileIds.length === 0) return [];
   const { data, error } = await supabase.rpc("get_calendar_rounds", {
@@ -49,20 +57,39 @@ export async function fetchRounds(
   if (error) throw error;
 
   // The RPC yields one row per (round, displayed participant). Collapse to one
-  // row per round, preferring the earliest-listed profile (self) for the gross.
+  // row per round, preferring the earliest-listed profile (self) for the gross,
+  // and flag whether the viewer participated.
   const rank = new Map(profileIds.map((id, i) => [id, i]));
   const byRound = new Map<string, CalendarRound>();
   for (const row of (data ?? []) as CalendarRound[]) {
+    const selfHere = !!selfId && row.profile_id === selfId;
     const existing = byRound.get(row.round_id);
     if (!existing) {
-      byRound.set(row.round_id, row);
+      byRound.set(row.round_id, { ...row, selfParticipated: selfHere });
       continue;
     }
     const better =
       (rank.get(row.profile_id) ?? Infinity) < (rank.get(existing.profile_id) ?? Infinity);
-    if (better) byRound.set(row.round_id, row);
+    const merged = better ? { ...row } : { ...existing };
+    merged.selfParticipated = existing.selfParticipated || selfHere;
+    byRound.set(row.round_id, merged);
   }
   return Array.from(byRound.values());
+}
+
+/** Competition events from the viewer's Majors groups (draft / confirmed). */
+export async function fetchGroupEvents(
+  profileId: string,
+  rangeStart: Date,
+  rangeEnd: Date
+): Promise<CalendarGroupEvent[]> {
+  const { data, error } = await supabase.rpc("get_calendar_group_events", {
+    _profile_id: profileId,
+    _from: rangeStart.toISOString(),
+    _to: rangeEnd.toISOString(),
+  });
+  if (error) throw error;
+  return (data ?? []) as CalendarGroupEvent[];
 }
 
 /** Full round detail for the info window. */

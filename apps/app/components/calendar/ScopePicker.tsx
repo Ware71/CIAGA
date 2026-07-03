@@ -2,10 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, ChevronDown, Pencil, Plus, Search, User, Users2, X } from "lucide-react";
+import { Check, Pencil, Plus, Search, User, Users2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import type { Circle, ProfileLite, Scope } from "@/lib/calendar/types";
+import type {
+  AvailabilityFilter,
+  Circle,
+  ProfileLite,
+  Scope,
+  ViewMode,
+} from "@/lib/calendar/types";
 import {
   fetchFollowingIds,
   resolveProfileNames,
@@ -14,28 +20,22 @@ import {
 } from "@/lib/calendar/api";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 import { InitialsAvatar } from "./Avatar";
-
-export function ScopePickerButton(props: { label: string; onClick: () => void }) {
-  return (
-    <button
-      onClick={props.onClick}
-      className="flex items-center gap-1.5 rounded-full border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-1.5 text-sm font-medium text-emerald-50 hover:bg-emerald-900/30"
-    >
-      <span className="max-w-[180px] truncate">{props.label}</span>
-      <ChevronDown size={15} className="text-emerald-200/70" />
-    </button>
-  );
-}
+import { SegmentedControl } from "./SegmentedControl";
 
 export function ScopePicker(props: {
   scope: Scope;
   circles: Circle[];
+  viewMode: ViewMode;
+  onViewMode: (v: ViewMode) => void;
+  filter: AvailabilityFilter;
+  onFilter: (f: AvailabilityFilter) => void;
   onSelect: (scope: Scope) => void;
   onManageCircle: (circleId: string) => void;
   onNewCircle: () => void;
   onClose: () => void;
 }) {
-  const { scope, circles, onSelect, onManageCircle, onNewCircle, onClose } = props;
+  const { scope, circles, viewMode, onViewMode, filter, onFilter, onSelect, onManageCircle, onNewCircle, onClose } =
+    props;
 
   const [mode, setMode] = useState<"root" | "people">(
     scope.kind === "people" ? "people" : "root"
@@ -143,7 +143,37 @@ export function ScopePicker(props: {
 
             {mode === "root" ? (
               <div className="p-3 space-y-4">
+                <div className="space-y-1.5">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-emerald-200/50">
+                    View
+                  </div>
+                  <SegmentedControl<ViewMode>
+                    size="sm"
+                    value={viewMode}
+                    onChange={onViewMode}
+                    options={[
+                      { value: "week", label: "Week" },
+                      { value: "month", label: "Month" },
+                      { value: "weekends", label: "Weekends" },
+                      { value: "agenda", label: "Agenda" },
+                    ]}
+                  />
+                  <SegmentedControl<AvailabilityFilter>
+                    size="sm"
+                    value={filter}
+                    onChange={onFilter}
+                    options={[
+                      { value: "all", label: "Show all" },
+                      { value: "hide_unavailable", label: "Hide busy" },
+                      { value: "available_only", label: "Available" },
+                    ]}
+                  />
+                </div>
+
                 <div className="space-y-1">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-emerald-200/50">
+                    Viewing
+                  </div>
                   <Row
                     icon={<User size={16} />}
                     label="Me"

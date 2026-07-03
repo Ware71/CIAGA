@@ -4,6 +4,7 @@ import type { OccurrenceKind, PlayerDayStatus, ResolvedOccurrence } from "@/lib/
 /** Per-kind accent colour for the flat accent-bar chips. */
 export function accentColor(occ: ResolvedOccurrence): string {
   if (occ.kind === "round") return occ.roundStatus === "finished" ? "#b8993f" : "#f5e6b0";
+  if (occ.kind === "event") return occ.eventStatus === "confirmed" ? "#f5e6b0" : "#9ca3af";
   if (occ.kind === "available") return "#34d399";
   return "#ef4444"; // unavailable
 }
@@ -21,6 +22,8 @@ export function chipClasses(kind: OccurrenceKind): string {
   switch (kind) {
     case "round":
       return "bg-[#f5e6b0] text-[#042713] border border-[#e9d79c]";
+    case "event":
+      return "bg-[#f5e6b0]/20 text-[#f5e6b0] border border-[#f5e6b0]/40";
     case "available":
       return "bg-emerald-500/20 text-emerald-100 border border-emerald-400/40";
     case "unavailable":
@@ -28,10 +31,15 @@ export function chipClasses(kind: OccurrenceKind): string {
   }
 }
 
-/** Occurrence-aware styling — finished rounds get a muted "played" look. */
+/** Occurrence-aware styling — finished rounds + draft events get distinct looks. */
 export function occChipClasses(occ: ResolvedOccurrence): string {
   if (occ.kind === "round" && occ.roundStatus === "finished") {
     return "bg-[#f5e6b0]/25 text-[#f5e6b0] border border-[#f5e6b0]/40";
+  }
+  if (occ.kind === "event") {
+    return occ.eventStatus === "confirmed"
+      ? "bg-[#f5e6b0]/20 text-[#f5e6b0] border border-[#f5e6b0]/50"
+      : "bg-[#f5e6b0]/5 text-[#f5e6b0]/80 border border-dashed border-[#f5e6b0]/40";
   }
   return chipClasses(occ.kind);
 }

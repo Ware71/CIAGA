@@ -35,6 +35,19 @@ export type CalendarRound = {
   course_handicap: number | null;
   score_differential: number | null;
   player_names: string[] | null;
+  /** Client-computed: did the viewer participate in this round? */
+  selfParticipated?: boolean;
+};
+
+/** A competition event from a Majors group the viewer belongs to. */
+export type CalendarGroupEvent = {
+  event_id: string;
+  name: string | null;
+  group_name: string | null;
+  event_date: string | null; // date
+  tee_time: string | null; // ISO timestamptz, null = TBC
+  status: "draft" | "confirmed";
+  event_type: string | null;
 };
 
 /** A participant row inside the round info window (finished-round stats). */
@@ -62,7 +75,7 @@ export type RoundInfo = {
 };
 
 /** The kind of a resolved occurrence rendered on the calendar. */
-export type OccurrenceKind = "round" | "available" | "unavailable";
+export type OccurrenceKind = "round" | "available" | "unavailable" | "event";
 
 /**
  * A concrete, dated occurrence ready to render. Recurring events expand into
@@ -92,6 +105,14 @@ export type ResolvedOccurrence = {
   courseName?: string | null;
   /** All players in a round, for the wide day-row bars. */
   playerNames?: string[] | null;
+  /** Did the viewer participate in this round? (past-result rendering) */
+  selfParticipated?: boolean;
+  /** Group-event only: draft (not entered) vs confirmed (entered). */
+  eventStatus?: "draft" | "confirmed";
+  /** Group-event only: no individual tee time set yet. */
+  tbc?: boolean;
+  /** Group-event only: the group name. */
+  groupName?: string | null;
 };
 
 /** A single player's status on a given day, for the month heat-map dots. */
