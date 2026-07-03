@@ -2,6 +2,7 @@
 // Calendar grid / range helpers, extending lib/stats/timeModel.ts.
 
 import { addDays, iso } from "@/lib/stats/timeModel";
+import type { ZoomLevel } from "./types";
 
 export { addDays, iso };
 
@@ -156,4 +157,43 @@ export function rangeForView(
   const start = startOfDay(matrix[0][0]);
   const end = endOfDay(matrix[5][6]);
   return { start, end };
+}
+
+/** The 3-day window centred on `anchor` (yesterday-relative → anchor is middle). */
+export function getThreeDayDays(anchor: Date): Date[] {
+  const start = addDays(startOfDay(anchor), -1);
+  return [start, addDays(start, 1), addDays(start, 2)];
+}
+
+/**
+ * The visible [start, end) range for a zoom level:
+ * 0 = padded month grid, 1 = Mon-start week, 2 = 3-day (centred), 3 = single day.
+ */
+export function rangeForZoom(anchor: Date, zoom: ZoomLevel): { start: Date; end: Date } {
+  if (zoom === 3) {
+    const start = startOfDay(anchor);
+    return { start, end: addDays(start, 1) };
+  }
+  if (zoom === 2) {
+    const start = addDays(startOfDay(anchor), -1);
+    return { start, end: addDays(start, 3) };
+  }
+  if (zoom === 1) return rangeForView(anchor, "week");
+  return rangeForView(anchor, "month");
+}
+
+/** The days rendered for a zoom level (before any weekends-only filtering). */
+export function daysForZoom(anchor: Date, zoom: ZoomLevel): Date[] {
+  if (zoom === 3) return [startOfDay(anchor)];
+  if (zoom === 2) return getThreeDayDays(anchor);
+  if (zoom === 1) return getWeekDays(anchor);
+  return getMonthMatrix(anchor).flat();
+}
+
+/** Advance the anchor by one "page" appropriate to the zoom level. */
+export function shiftAnchorForZoom(anchor: Date, zoom: ZoomLevel, dir: -1 | 1): Date {
+  if (zoom === 0) return new Date(anchor.getFullYear(), anchor.getMonth() + dir, 1);
+  if (zoom === 1) return addDays(anchor, dir * 7);
+  if (zoom === 2) return addDays(anchor, dir * 3);
+  return addDays(anchor, dir); // day
 }

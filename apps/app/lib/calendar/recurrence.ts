@@ -8,13 +8,21 @@ import type {
   AvailabilityFilter,
   BucketState,
   CalendarEvent,
+  CalendarGroupEvent,
   CalendarRound,
+  PlayerDayStatus,
   ResolvedOccurrence,
 } from "./types";
 import { dayKey, startOfDay, endOfDay } from "./dateUtils";
 
 /** A round with no explicit duration is treated as this many hours of "busy". */
 const ROUND_DURATION_MS = 4 * 60 * 60 * 1000;
+
+/** The playable day window, in minutes from local midnight: 6am–10pm. */
+export const DAY_WINDOW_START_MIN = 6 * 60; // 360
+export const DAY_WINDOW_END_MIN = 22 * 60; // 1320
+/** A free gap shorter than this is too short for a round → treated unavailable. */
+export const MIN_USABLE_WINDOW_MIN = 3 * 60; // 180
 
 function intervalsOverlap(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): boolean {
   return aStart.getTime() < bEnd.getTime() && bStart.getTime() < aEnd.getTime();
@@ -121,8 +129,49 @@ function makeRoundOccurrence(round: CalendarRound): ResolvedOccurrence {
     busy: !finished,
     roundStatus: round.status,
     resultLabel: finished && round.gross != null ? String(round.gross) : undefined,
+    scoreDiff: finished ? round.score_differential : undefined,
     courseName: round.course_name,
+    formatType: round.format_type,
     playerNames: round.player_names,
+    selfParticipated: round.selfParticipated,
+  };
+}
+
+/** A Majors group event → occurrence (self only). Timed at the player's tee
+ *  time, else an all-day "TBC" block on the event date. */
+function makeGroupEventOccurrence(ev: CalendarGroupEvent, selfId: string): ResolvedOccurrence {
+  const confirmed = ev.status === "confirmed";
+  let start: Date;
+  let end: Date;
+  let allDay: boolean;
+  let tbc: boolean;
+  if (ev.tee_time) {
+    start = new Date(ev.tee_time);
+    end = new Date(start.getTime() + ROUND_DURATION_MS);
+    allDay = false;
+    tbc = false;
+  } else {
+    const d = ev.event_date ? new Date(`${ev.event_date}T00:00:00`) : new Date();
+    start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0);
+    end = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 0, 0, 0);
+    allDay = true;
+    tbc = true;
+  }
+  return {
+    key: `event:${ev.event_id}`,
+    sourceId: ev.event_id,
+    profileId: selfId,
+    kind: "event",
+    title: ev.name ?? "Event",
+    start,
+    end,
+    allDay,
+    recurring: false,
+    // Only a confirmed entry is a real commitment that blocks availability.
+    busy: confirmed,
+    eventStatus: ev.status,
+    tbc,
+    groupName: ev.group_name,
   };
 }
 
@@ -136,7 +185,9 @@ export function resolveOccurrences(
   events: CalendarEvent[],
   rounds: CalendarRound[],
   rangeStart: Date,
-  rangeEnd: Date
+  rangeEnd: Date,
+  groupEvents: CalendarGroupEvent[] = [],
+  selfId?: string | null
 ): ResolvedOccurrence[] {
   const oneOff: ResolvedOccurrence[] = [];
   const recurring: ResolvedOccurrence[] = [];
@@ -155,6 +206,7 @@ export function resolveOccurrences(
   }
 
   const roundOccs = rounds.map(makeRoundOccurrence);
+  const eventOccs = selfId ? groupEvents.map((g) => makeGroupEventOccurrence(g, selfId)) : [];
 
   // Standalone occurrences (one-off events + rounds) that can override recurring.
   const standalone = [...oneOff, ...roundOccs];
@@ -166,7 +218,7 @@ export function resolveOccurrences(
     );
   });
 
-  return [...standalone, ...keptRecurring].sort(
+  return [...standalone, ...eventOccs, ...keptRecurring].sort(
     (a, b) => a.start.getTime() - b.start.getTime()
   );
 }
@@ -205,19 +257,71 @@ export function resolveDayStates(
 }
 
 /**
+ * Per-player status on a given day for the month heat-map dots.
+ * Precedence: scheduled(round) > unavailable > available > none.
+ */
+export function resolveDayPlayerStatuses(
+  occurrences: ResolvedOccurrence[],
+  profileIds: string[],
+  day: Date
+): Map<string, PlayerDayStatus> {
+  const dStart = startOfDay(day);
+  const dEnd = endOfDay(day);
+  const flags = new Map<string, { round: boolean; unavail: boolean; avail: boolean }>();
+  for (const id of profileIds) flags.set(id, { round: false, unavail: false, avail: false });
+
+  for (const occ of occurrences) {
+    const f = flags.get(occ.profileId);
+    if (!f) continue;
+    if (!intervalsOverlap(occ.start, occ.end, dStart, dEnd)) continue;
+    if (occ.kind === "round") f.round = true;
+    else if (occ.kind === "event") {
+      if (occ.eventStatus === "confirmed") f.round = true; // confirmed entry = scheduled
+    } else if (occ.kind === "unavailable") f.unavail = true;
+    else if (occ.kind === "available") f.avail = true;
+  }
+
+  const out = new Map<string, PlayerDayStatus>();
+  for (const [id, f] of flags) {
+    out.set(id, f.round ? "scheduled" : f.unavail ? "unavailable" : f.avail ? "available" : "none");
+  }
+  return out;
+}
+
+/**
+ * Net free-ness for a day's aggregate status, in [-1, 1] — drives the month
+ * heat-map background (green when the group is free, red when blocked).
+ */
+export function dayHeat(statuses: Map<string, PlayerDayStatus>): number {
+  const total = statuses.size;
+  if (total === 0) return 0;
+  let avail = 0;
+  let unavail = 0;
+  for (const s of statuses.values()) {
+    if (s === "available") avail++;
+    else if (s === "unavailable" || s === "scheduled") unavail++;
+  }
+  return (avail - unavail) / total;
+}
+
+/**
  * Filter occurrences for rendering by kind (not aggregate day state):
  * - `all`: everything.
- * - `hide_unavailable`: hide **unavailability** blocks; keep rounds + availability.
+ * - `dim_busy`: keep everything (busy is *dimmed* at render time, not removed).
  * - `available_only`: keep **only availability** (rounds + unavailability hidden).
  */
 export function applyAvailabilityFilter(
   occurrences: ResolvedOccurrence[],
   filter: AvailabilityFilter
 ): ResolvedOccurrence[] {
-  if (filter === "all") return occurrences;
-  if (filter === "hide_unavailable") return occurrences.filter((o) => o.kind !== "unavailable");
-  // available_only
-  return occurrences.filter((o) => o.kind === "available");
+  if (filter === "available_only") return occurrences.filter((o) => o.kind === "available");
+  // all + dim_busy keep the full set; dim_busy only changes styling.
+  return occurrences;
+}
+
+/** True when an occurrence should render greyed/faded under the `dim_busy` filter. */
+export function isDimmed(occ: ResolvedOccurrence, filter: AvailabilityFilter): boolean {
+  return filter === "dim_busy" && occ.busy;
 }
 
 /**
@@ -300,16 +404,31 @@ function subtractIntervals(a: MinuteInterval[], b: MinuteInterval[]): MinuteInte
   return out.filter((s) => s.end > s.start);
 }
 
+/** Minute-intervals for a day's shading, split into busy / available / unusable. */
+export type DayIntervals = {
+  busy: MinuteInterval[];
+  available: MinuteInterval[];
+  /** Free gaps inside 6am–10pm shorter than 3h — too short for a round. */
+  unusable: MinuteInterval[];
+};
+
+/** The 6am–10pm playable window as a single interval. */
+function dayWindowInterval(): MinuteInterval {
+  return { start: DAY_WINDOW_START_MIN, end: DAY_WINDOW_END_MIN };
+}
+
 /**
- * Merged busy/available minute-intervals for a single day across the displayed
- * people — used to shade the time grid. `busy` = any person busy; `available` =
- * a person marked available with nobody busy over that span (busy wins).
+ * Merged busy/available/unusable minute-intervals for a single day across the
+ * displayed people — used to shade the time grid. `busy` = any person busy;
+ * `available` = a person marked available with nobody busy over that span (busy
+ * wins). `unusable` = the leftover free time inside 6am–10pm that is neither
+ * busy nor explicitly available and is shorter than the 3h round minimum.
  */
 export function resolveDayIntervals(
   occurrences: ResolvedOccurrence[],
   profileIds: string[],
   day: Date
-): { busy: MinuteInterval[]; available: MinuteInterval[] } {
+): DayIntervals {
   const ids = new Set(profileIds);
   const busyRaw: MinuteInterval[] = [];
   const availRaw: MinuteInterval[] = [];
@@ -324,5 +443,31 @@ export function resolveDayIntervals(
 
   const busy = mergeIntervals(busyRaw);
   const available = subtractIntervals(mergeIntervals(availRaw), busy);
-  return { busy, available };
+
+  // Free time inside the window that is neither busy nor explicitly available.
+  const free = subtractIntervals(subtractIntervals([dayWindowInterval()], busy), available);
+  const unusable = free.filter((s) => s.end - s.start < MIN_USABLE_WINDOW_MIN);
+
+  return { busy, available, unusable };
+}
+
+/**
+ * True when the day has at least one contiguous non-busy span of ≥3h inside the
+ * 6am–10pm window — i.e. there's room to actually play a round. Availability is
+ * a subset of "non-busy", so this also covers explicitly-available days.
+ */
+export function hasUsableWindow(
+  occurrences: ResolvedOccurrence[],
+  profileIds: string[],
+  day: Date
+): boolean {
+  const ids = new Set(profileIds);
+  const busyRaw: MinuteInterval[] = [];
+  for (const occ of occurrences) {
+    if (!ids.has(occ.profileId) || !occ.busy) continue;
+    const iv = clipToDayMinutes(occ, day);
+    if (iv) busyRaw.push(iv);
+  }
+  const free = subtractIntervals([dayWindowInterval()], mergeIntervals(busyRaw));
+  return free.some((s) => s.end - s.start >= MIN_USABLE_WINDOW_MIN);
 }

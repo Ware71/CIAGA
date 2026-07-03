@@ -2,10 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, ChevronDown, Pencil, Plus, Search, User, Users2, X } from "lucide-react";
+import { Check, Pencil, Plus, Search, User, Users2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import type { Circle, ProfileLite, Scope } from "@/lib/calendar/types";
+import type {
+  AvailabilityFilter,
+  CalendarMode,
+  Circle,
+  ProfileLite,
+  Scope,
+} from "@/lib/calendar/types";
 import {
   fetchFollowingIds,
   resolveProfileNames,
@@ -14,28 +20,40 @@ import {
 } from "@/lib/calendar/api";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 import { InitialsAvatar } from "./Avatar";
-
-export function ScopePickerButton(props: { label: string; onClick: () => void }) {
-  return (
-    <button
-      onClick={props.onClick}
-      className="flex items-center gap-1.5 rounded-full border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-1.5 text-sm font-medium text-emerald-50 hover:bg-emerald-900/30"
-    >
-      <span className="max-w-[180px] truncate">{props.label}</span>
-      <ChevronDown size={15} className="text-emerald-200/70" />
-    </button>
-  );
-}
+import { SegmentedControl } from "./SegmentedControl";
 
 export function ScopePicker(props: {
   scope: Scope;
   circles: Circle[];
+  mode: CalendarMode;
+  onMode: (m: CalendarMode) => void;
+  filter: AvailabilityFilter;
+  onFilter: (f: AvailabilityFilter) => void;
+  weekendsOnly: boolean;
+  onWeekendsOnly: (v: boolean) => void;
+  threeHourRule: boolean;
+  onThreeHourRule: (v: boolean) => void;
   onSelect: (scope: Scope) => void;
   onManageCircle: (circleId: string) => void;
   onNewCircle: () => void;
   onClose: () => void;
 }) {
-  const { scope, circles, onSelect, onManageCircle, onNewCircle, onClose } = props;
+  const {
+    scope,
+    circles,
+    mode: calMode,
+    onMode,
+    filter,
+    onFilter,
+    weekendsOnly,
+    onWeekendsOnly,
+    threeHourRule,
+    onThreeHourRule,
+    onSelect,
+    onManageCircle,
+    onNewCircle,
+    onClose,
+  } = props;
 
   const [mode, setMode] = useState<"root" | "people">(
     scope.kind === "people" ? "people" : "root"
@@ -143,7 +161,56 @@ export function ScopePicker(props: {
 
             {mode === "root" ? (
               <div className="p-3 space-y-4">
+                <div className="space-y-1.5">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-emerald-200/50">
+                    View
+                  </div>
+                  <SegmentedControl<CalendarMode>
+                    size="sm"
+                    value={calMode}
+                    onChange={onMode}
+                    options={[
+                      { value: "calendar", label: "Calendar" },
+                      { value: "agenda", label: "Agenda" },
+                    ]}
+                  />
+                  <SegmentedControl<AvailabilityFilter>
+                    size="sm"
+                    value={filter}
+                    onChange={onFilter}
+                    options={[
+                      { value: "all", label: "Show all" },
+                      { value: "dim_busy", label: "Dim busy" },
+                      { value: "available_only", label: "Available" },
+                    ]}
+                  />
+                  <label className="flex items-center justify-between rounded-lg border border-emerald-900/60 bg-[#0b3b21]/40 px-3 py-2 text-xs text-emerald-100/80">
+                    Weekends only
+                    <input
+                      type="checkbox"
+                      checked={weekendsOnly}
+                      onChange={(e) => onWeekendsOnly(e.target.checked)}
+                      className="h-4 w-4 accent-[#f5e6b0]"
+                    />
+                  </label>
+                  <label className="flex items-center justify-between rounded-lg border border-emerald-900/60 bg-[#0b3b21]/40 px-3 py-2 text-xs text-emerald-100/80">
+                    Grey out gaps under 3 hours
+                    <input
+                      type="checkbox"
+                      checked={threeHourRule}
+                      onChange={(e) => onThreeHourRule(e.target.checked)}
+                      className="h-4 w-4 accent-[#f5e6b0]"
+                    />
+                  </label>
+                  <div className="px-1 text-[10px] leading-snug text-emerald-200/45">
+                    Pinch or double-tap to zoom · tap a day to zoom in
+                  </div>
+                </div>
+
                 <div className="space-y-1">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-emerald-200/50">
+                    Viewing
+                  </div>
                   <Row
                     icon={<User size={16} />}
                     label="Me"

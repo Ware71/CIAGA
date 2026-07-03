@@ -128,29 +128,46 @@ export function RoundInfoSheet(props: { roundId: string; onClose: () => void }) 
                 </div>
               ) : (
                 <div>
-                  <div className="mb-1.5 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-emerald-200/50">
-                    <span>Players</span>
-                    {finished ? <span>Gross · Net</span> : null}
+                  <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-200/50">
+                    Players
                   </div>
                   <div className="divide-y divide-emerald-900/40 rounded-xl border border-emerald-900/50 bg-[#042713]">
                     {info.participants.map((p) => {
                       const net =
-                        p.gross != null && p.course_handicap != null
-                          ? p.gross - p.course_handicap
+                        p.ags != null && p.course_handicap != null ? p.ags - p.course_handicap : null;
+                      const toPar =
+                        p.raw_strokes != null && p.par_played != null
+                          ? p.raw_strokes - p.par_played
                           : null;
+                      const stats: { label: string; value: string }[] = [];
+                      if (finished) {
+                        if (p.raw_strokes != null) stats.push({ label: "Strokes", value: String(p.raw_strokes) });
+                        if (p.ags != null) stats.push({ label: "AGS", value: String(p.ags) });
+                        if (net != null) stats.push({ label: "Net", value: String(net) });
+                        if (toPar != null)
+                          stats.push({ label: "To par", value: toPar >= 0 ? `+${toPar}` : `${toPar}` });
+                        if (p.score_differential != null)
+                          stats.push({ label: "Diff", value: String(p.score_differential) });
+                      }
                       return (
-                        <div key={p.profile_id} className="flex items-center gap-2.5 px-3 py-2">
-                          <InitialsAvatar profileId={p.profile_id} name={p.name} size={26} />
-                          <span className="min-w-0 flex-1 truncate text-sm text-emerald-50">
-                            {p.name ?? "Player"}
-                          </span>
-                          {finished && p.gross != null ? (
-                            <span className="shrink-0 text-sm tabular-nums text-emerald-50">
-                              <span className="font-bold">{p.gross}</span>
-                              {net != null ? (
-                                <span className="text-emerald-100/50"> · {net}</span>
-                              ) : null}
+                        <div key={p.profile_id} className="px-3 py-2">
+                          <div className="flex items-center gap-2.5">
+                            <InitialsAvatar profileId={p.profile_id} name={p.name} size={26} />
+                            <span className="min-w-0 flex-1 truncate text-sm text-emerald-50">
+                              {p.name ?? "Player"}
                             </span>
+                          </div>
+                          {stats.length > 0 ? (
+                            <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 pl-[38px]">
+                              {stats.map((s) => (
+                                <span key={s.label} className="text-[11px] text-emerald-100/60">
+                                  {s.label}{" "}
+                                  <span className="font-semibold tabular-nums text-emerald-50">
+                                    {s.value}
+                                  </span>
+                                </span>
+                              ))}
+                            </div>
                           ) : null}
                         </div>
                       );

@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import { Flag } from "lucide-react";
+import { ChevronDown, ChevronUp, Flag } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type {
   AvailabilityFilter,
+  Density,
   ProfileLite,
   ResolvedOccurrence,
 } from "@/lib/calendar/types";
@@ -17,29 +18,67 @@ import {
   isToday,
   startOfDay,
 } from "@/lib/calendar/dateUtils";
-import { resolveDayIntervals } from "@/lib/calendar/recurrence";
-import { occChipClasses } from "../eventStyles";
+import { isDimmed, resolveDayIntervals } from "@/lib/calendar/recurrence";
+import {
+  AVAILABLE_SHADE,
+  BUSY_SHADE,
+  DIMMED_CLASSES,
+  UNUSABLE_SHADE,
+  occChipClasses,
+} from "../eventStyles";
 import { EventChip } from "../EventChip";
+import { RoundCard } from "../RoundCard";
 import { InitialsAvatar, AvatarStack } from "../Avatar";
 
-const HOUR_PX = 52;
+// Playable window: 6am–10pm, shared by both orientations.
+const DAY_START_H = 6;
+const DAY_END_H = 22;
+const DAY_START_MIN = DAY_START_H * 60; // 360
+const DAY_END_MIN = DAY_END_H * 60; // 1320
+const VISIBLE_HOURS = DAY_END_H - DAY_START_H; // 16
 const GUTTER = 40;
-const DEFAULT_SCROLL_HOUR = 6;
-const MIN_BLOCK_PX = 20;
+const MIN_BLOCK_PX = 18;
 
-type Positioned = { occ: ResolvedOccurrence; top: number; height: number; lane: number; lanes: number };
+/** Vertical pixels per hour, by zoom density (day is tallest, so cards fit). */
+const HOUR_PX_BY_DENSITY: Record<Density, number> = {
+  pip: 40,
+  compact: 40,
+  medium: 48,
+  full: 64,
+};
+
+// Horizontal (landscape) day-row window uses the same 6am–10pm span.
+const H_WIN_START = DAY_START_MIN;
+const H_WIN_SPAN = DAY_END_MIN - DAY_START_MIN; // 960 min
+const LANE_H = 22;
+const H_LABEL_W = 44;
+const clampMin = (m: number) => Math.max(H_WIN_START, Math.min(H_WIN_START + H_WIN_SPAN, m));
+const pctH = (m: number) => ((clampMin(m) - H_WIN_START) / H_WIN_SPAN) * 100;
+const RULER = [6, 9, 12, 15, 18, 21];
+
+type Positioned = {
+  occ: ResolvedOccurrence;
+  top: number;
+  height: number;
+  lane: number;
+  lanes: number;
+  early: boolean;
+  late: boolean;
+};
 
 /** Greedy lane packing so overlapping blocks sit side by side within a column. */
-function packDay(occs: ResolvedOccurrence[], day: Date): Positioned[] {
+function packDay(occs: ResolvedOccurrence[], day: Date, hourPx: number): Positioned[] {
   const dStart = startOfDay(day).getTime();
-  const dEnd = endOfDay(day).getTime();
   const items = occs
     .map((occ) => {
-      const s = Math.max(occ.start.getTime(), dStart);
-      const e = Math.min(occ.end.getTime(), dEnd);
-      return { occ, startMin: (s - dStart) / 60000, endMin: (e - dStart) / 60000 };
+      const sRaw = (occ.start.getTime() - dStart) / 60000;
+      const eRaw = (occ.end.getTime() - dStart) / 60000;
+      const startMin = Math.max(DAY_START_MIN, Math.min(DAY_END_MIN, sRaw));
+      const endMin = Math.max(DAY_START_MIN, Math.min(DAY_END_MIN, eRaw));
+      return { occ, startMin, endMin, early: sRaw < DAY_START_MIN, late: eRaw > DAY_END_MIN };
     })
-    .filter((it) => it.endMin > it.startMin)
+    // Keep rounds/events even if clamped to a sliver so off-hours ones stay visible.
+    .filter((it) => it.endMin > it.startMin || it.occ.kind === "round" || it.occ.kind === "event")
     .sort((a, b) => a.startMin - b.startMin || b.endMin - a.endMin);
 
   const laneEnds: number[] = [];
@@ -55,45 +94,90 @@ function packDay(occs: ResolvedOccurrence[], day: Date): Positioned[] {
     laneOf.set(it.occ, lane);
   }
   const lanes = Math.max(1, laneEnds.length);
-  return items.map((it) => ({
-    occ: it.occ,
-    top: (it.startMin / 60) * HOUR_PX,
-    height: Math.max(MIN_BLOCK_PX, ((it.endMin - it.startMin) / 60) * HOUR_PX),
-    lane: laneOf.get(it.occ) ?? 0,
-    lanes,
-  }));
+  const gridH = VISIBLE_HOURS * hourPx;
+  return items.map((it) => {
+    const rawTop = ((it.startMin - DAY_START_MIN) / 60) * hourPx;
+    const height = Math.max(MIN_BLOCK_PX, ((it.endMin - it.startMin) / 60) * hourPx);
+    return {
+      occ: it.occ,
+      top: Math.min(rawTop, gridH - MIN_BLOCK_PX),
+      height,
+      lane: laneOf.get(it.occ) ?? 0,
+      lanes,
+      early: it.early,
+      late: it.late,
+    };
+  });
 }
 
-export function TimeGridView(props: {
+type GridProps = {
   days: Date[];
   occurrences: ResolvedOccurrence[];
   profileIds: string[];
   filter: AvailabilityFilter;
+  density: Density;
+  /** When true, grey out free gaps < 3h as unusable (the 3-hour rule toggle). */
+  markUnusable: boolean;
   nameById: Map<string, ProfileLite>;
   showOwners: boolean;
+  orientation?: "vertical" | "horizontal";
   onSlotClick: (day: Date, hour: number) => void;
   onOccurrenceClick: (occ: ResolvedOccurrence) => void;
-}) {
-  const { days, occurrences, profileIds, filter, nameById, showOwners, onSlotClick, onOccurrenceClick } =
-    props;
-  const scrollRef = useRef<HTMLDivElement>(null);
+};
 
-  useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = DEFAULT_SCROLL_HOUR * HOUR_PX;
-  }, []);
-
-  const colW = days.length <= 2 ? 176 : days.length <= 3 ? 140 : 128;
-  const hours = Array.from({ length: 24 }, (_, i) => i);
-
-  const gridOccs = useMemo(
-    () =>
-      occurrences.filter((o) => {
-        if (filter === "available_only") return o.kind === "available";
-        if (filter === "hide_unavailable") return o.kind !== "unavailable";
-        return true;
-      }),
+/** available_only hides everything but explicit availability; all/dim_busy keep the set. */
+function useGridOccs(occurrences: ResolvedOccurrence[], filter: AvailabilityFilter) {
+  return useMemo(
+    () => occurrences.filter((o) => (filter === "available_only" ? o.kind === "available" : true)),
     [occurrences, filter]
   );
+}
+
+export function TimeGridView(props: GridProps) {
+  if (props.orientation === "horizontal") return <HorizontalGrid {...props} />;
+  return <VerticalGrid {...props} />;
+}
+
+function EdgeMarker({ dir }: { dir: "up" | "down" }) {
+  return (
+    <span
+      className={cn(
+        "pointer-events-none absolute right-0.5 opacity-70",
+        dir === "up" ? "top-0" : "bottom-0"
+      )}
+    >
+      {dir === "up" ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+    </span>
+  );
+}
+
+function VerticalGrid(props: GridProps) {
+  const {
+    days,
+    occurrences,
+    profileIds,
+    filter,
+    density,
+    nameById,
+    showOwners,
+    onSlotClick,
+    onOccurrenceClick,
+  } = props;
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const hourPx = HOUR_PX_BY_DENSITY[density];
+
+  useEffect(() => {
+    // Start scrolled near the top of the playable window (6am is row 0 now).
+    const el = scrollRef.current;
+    if (el) el.scrollTop = 0;
+  }, []);
+
+  const colW = days.length === 1 ? 300 : days.length <= 2 ? 176 : days.length <= 3 ? 150 : 128;
+  const hours = Array.from({ length: VISIBLE_HOURS }, (_, i) => DAY_START_H + i);
+  const gridOccs = useGridOccs(occurrences, filter);
+  const showShades = filter !== "available_only";
+  const showUnusable = showShades && props.markUnusable;
+  const isFull = density === "full";
 
   const perDay = useMemo(() => {
     const today = startOfDay(new Date()).getTime();
@@ -104,18 +188,17 @@ export function TimeGridView(props: {
       const allDay = onDay.filter((o) => o.allDay || (o.start.getTime() <= ds && o.end.getTime() >= de));
       const timed = onDay.filter((o) => !allDay.includes(o));
       const intervals =
-        ds < today ? { busy: [], available: [] } : resolveDayIntervals(occurrences, profileIds, day);
-      return { day, allDay, positioned: packDay(timed, day), intervals };
+        ds < today
+          ? { busy: [], available: [], unusable: [] }
+          : resolveDayIntervals(occurrences, profileIds, day);
+      return { day, allDay, positioned: packDay(timed, day, hourPx), intervals };
     });
-  }, [days, gridOccs, occurrences, profileIds]);
-
-  const showBusyShade = filter === "all";
+  }, [days, gridOccs, occurrences, profileIds, hourPx]);
 
   return (
     <div
       ref={scrollRef}
-      className="overflow-auto rounded-2xl border border-emerald-900/60 bg-[#052a17]/40"
-      style={{ maxHeight: "66vh" }}
+      className="max-h-[66vh] overflow-auto rounded-2xl border border-emerald-900/60 bg-[#052a17]/40 landscape:max-h-[86vh]"
     >
       <div style={{ minWidth: GUTTER + days.length * colW }}>
         {/* Sticky day header + all-day chips */}
@@ -166,10 +249,10 @@ export function TimeGridView(props: {
             {hours.map((h) => (
               <div
                 key={h}
-                style={{ height: HOUR_PX }}
+                style={{ height: hourPx }}
                 className="relative -top-1.5 pr-1 text-right text-[10px] text-emerald-200/45"
               >
-                {h === 0 ? "" : formatHourLabel(h)}
+                {formatHourLabel(h)}
               </div>
             ))}
           </div>
@@ -178,7 +261,7 @@ export function TimeGridView(props: {
             <div
               key={dayKey(day)}
               className="relative shrink-0 border-l border-emerald-900/40"
-              style={{ width: colW, height: 24 * HOUR_PX }}
+              style={{ width: colW, height: VISIBLE_HOURS * hourPx }}
             >
               {/* hour rows / tap targets */}
               {hours.map((h) => (
@@ -186,7 +269,7 @@ export function TimeGridView(props: {
                   key={h}
                   onClick={() => onSlotClick(day, h)}
                   className="block w-full border-t border-emerald-900/20 hover:bg-emerald-500/5"
-                  style={{ height: HOUR_PX }}
+                  style={{ height: hourPx }}
                   aria-label={`Add at ${formatHourLabel(h)}`}
                 />
               ))}
@@ -195,42 +278,38 @@ export function TimeGridView(props: {
               {intervals.available.map((iv, i) => (
                 <div
                   key={`a${i}`}
-                  className="pointer-events-none absolute inset-x-0 bg-emerald-400/15"
-                  style={{ top: (iv.start / 60) * HOUR_PX, height: ((iv.end - iv.start) / 60) * HOUR_PX }}
+                  className={cn("pointer-events-none absolute inset-x-0", AVAILABLE_SHADE)}
+                  style={shadeStyle(iv, hourPx)}
                 />
               ))}
-              {showBusyShade
+              {showUnusable
+                ? intervals.unusable.map((iv, i) => (
+                    <div
+                      key={`u${i}`}
+                      className={cn("pointer-events-none absolute inset-x-0", UNUSABLE_SHADE)}
+                      style={shadeStyle(iv, hourPx)}
+                    />
+                  ))
+                : null}
+              {showShades
                 ? intervals.busy.map((iv, i) => (
                     <div
                       key={`b${i}`}
-                      className="pointer-events-none absolute inset-x-0 bg-slate-500/20"
-                      style={{
-                        top: (iv.start / 60) * HOUR_PX,
-                        height: ((iv.end - iv.start) / 60) * HOUR_PX,
-                      }}
+                      className={cn("pointer-events-none absolute inset-x-0", BUSY_SHADE)}
+                      style={shadeStyle(iv, hourPx)}
                     />
                   ))
                 : null}
 
               {/* timed blocks */}
-              {positioned.map(({ occ, top, height, lane, lanes }) => {
+              {positioned.map(({ occ, top, height, lane, lanes, early, late }) => {
                 const owner = showOwners ? nameById.get(occ.profileId) : undefined;
                 const widthPct = 100 / lanes;
                 const wPx = (colW * widthPct) / 100;
                 const isRound = occ.kind === "round";
-                const players = isRound ? occ.playerNames ?? [] : [];
-                // Only show the course name when it actually fits — no 1–2 letter stubs.
-                const showName = !isRound || wPx >= 64;
-                const primary = isRound
-                  ? occ.courseName ?? occ.title ?? "Round"
-                  : occ.title ?? (occ.kind === "available" ? "Available" : "Busy");
-                const showSecondLine = height >= 34;
-                const secondLine = occ.resultLabel
-                  ? `Gross ${occ.resultLabel}`
-                  : !occ.allDay
-                    ? formatTime(occ.start)
-                    : "";
-                const inlineResult = occ.resultLabel && !showSecondLine;
+                const isEvent = occ.kind === "event";
+                const dimmed = isDimmed(occ, filter);
+                const richCard = isFull && (isRound || isEvent) && lanes <= 2;
 
                 return (
                   <button
@@ -242,7 +321,8 @@ export function TimeGridView(props: {
                     className={cn(
                       "absolute flex flex-col overflow-hidden rounded-md px-1 py-0.5 text-left shadow-sm shadow-black/20",
                       occChipClasses(occ),
-                      occ.recurring && "border-dashed"
+                      occ.recurring && "border-dashed",
+                      dimmed && DIMMED_CLASSES
                     )}
                     style={{
                       top,
@@ -251,36 +331,18 @@ export function TimeGridView(props: {
                       width: `calc(${widthPct}% - 2px)`,
                     }}
                   >
-                    <div className="flex min-w-0 items-center gap-1">
-                      {isRound ? (
-                        players.length >= 2 ? (
-                          <AvatarStack
-                            people={players.map((n) => ({ seed: n, name: n }))}
-                            size={13}
-                            max={3}
-                          />
-                        ) : (
-                          <Flag size={11} className="shrink-0" />
-                        )
-                      ) : owner ? (
-                        <InitialsAvatar profileId={occ.profileId} name={owner.name} size={12} />
-                      ) : null}
-                      {showName ? (
-                        <span className="min-w-0 truncate text-[11px] font-medium leading-tight">
-                          {primary}
-                        </span>
-                      ) : null}
-                      {inlineResult ? (
-                        <span className="ml-auto shrink-0 text-[11px] font-bold tabular-nums">
-                          {occ.resultLabel}
-                        </span>
-                      ) : null}
-                    </div>
-                    {showSecondLine && secondLine ? (
-                      <span className="mt-auto min-w-0 truncate text-[9px] opacity-60 leading-tight">
-                        {secondLine}
-                      </span>
-                    ) : null}
+                    {early ? <EdgeMarker dir="up" /> : null}
+                    {late ? <EdgeMarker dir="down" /> : null}
+                    {richCard ? (
+                      <RoundCard occ={occ} owner={owner} tight={height < 44} />
+                    ) : (
+                      <VBlockContent
+                        occ={occ}
+                        owner={owner}
+                        wPx={wPx}
+                        height={height}
+                      />
+                    )}
                   </button>
                 );
               })}
@@ -290,4 +352,277 @@ export function TimeGridView(props: {
       </div>
     </div>
   );
+}
+
+function shadeStyle(iv: { start: number; end: number }, hourPx: number): React.CSSProperties {
+  const top = Math.max(0, ((iv.start - DAY_START_MIN) / 60) * hourPx);
+  const bottom = ((Math.min(iv.end, DAY_END_MIN) - DAY_START_MIN) / 60) * hourPx;
+  return { top, height: Math.max(0, bottom - top) };
+}
+
+/** The compact inline content for a timed block (week / 3-day, or overlapping day). */
+function VBlockContent(props: {
+  occ: ResolvedOccurrence;
+  owner?: ProfileLite;
+  wPx: number;
+  height: number;
+}) {
+  const { occ, owner, wPx, height } = props;
+  const isRound = occ.kind === "round";
+  const players = isRound ? occ.playerNames ?? [] : [];
+  const showName = !isRound || wPx >= 64;
+  const primary = isRound
+    ? occ.title ?? occ.courseName ?? "Round"
+    : occ.title ?? (occ.kind === "available" ? "Available" : occ.kind === "event" ? "Event" : "Busy");
+  const showSecondLine = height >= 34;
+  const secondLine = occ.resultLabel
+    ? `Gross ${occ.resultLabel}`
+    : !occ.allDay
+      ? formatTime(occ.start)
+      : "";
+  const inlineResult = occ.resultLabel && !showSecondLine;
+
+  return (
+    <>
+      <div className="flex min-w-0 items-center gap-1">
+        {isRound ? (
+          players.length >= 2 ? (
+            <AvatarStack people={players.map((n) => ({ seed: n, name: n }))} size={13} max={3} />
+          ) : (
+            <Flag size={11} className="shrink-0" />
+          )
+        ) : owner ? (
+          <InitialsAvatar profileId={occ.profileId} name={owner.name} size={12} />
+        ) : null}
+        {showName ? (
+          <span className="min-w-0 truncate text-[11px] font-medium leading-tight">{primary}</span>
+        ) : null}
+        {inlineResult ? (
+          <span className="ml-auto shrink-0 text-[11px] font-bold tabular-nums">
+            {occ.resultLabel}
+          </span>
+        ) : null}
+      </div>
+      {showSecondLine && secondLine ? (
+        <span className="mt-auto min-w-0 truncate text-[9px] opacity-60 leading-tight">
+          {secondLine}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
+// --- Horizontal (landscape) day-rows: time left→right, days stacked ----------
+
+type PositionedH = {
+  occ: ResolvedOccurrence;
+  left: number;
+  width: number;
+  lane: number;
+  early: boolean;
+  late: boolean;
+};
+
+function packRowH(occs: ResolvedOccurrence[], day: Date): { items: PositionedH[]; lanes: number } {
+  const dStart = startOfDay(day).getTime();
+  const dEnd = endOfDay(day).getTime();
+  const items = occs
+    .map((occ) => {
+      const s = Math.max(occ.start.getTime(), dStart);
+      const e = Math.min(occ.end.getTime(), dEnd);
+      const sRaw = (s - dStart) / 60000;
+      const eRaw = (e - dStart) / 60000;
+      const startMin = occ.allDay ? H_WIN_START : clampMin(sRaw);
+      const endMin = occ.allDay ? H_WIN_START + H_WIN_SPAN : clampMin(eRaw);
+      return { occ, startMin, endMin, early: sRaw < H_WIN_START, late: eRaw > H_WIN_START + H_WIN_SPAN };
+    })
+    .filter((it) => it.endMin > it.startMin || it.occ.kind === "round" || it.occ.kind === "event")
+    .sort((a, b) => a.startMin - b.startMin || b.endMin - a.endMin);
+
+  const laneEnds: number[] = [];
+  const out: PositionedH[] = [];
+  for (const it of items) {
+    let lane = laneEnds.findIndex((end) => end <= it.startMin);
+    if (lane === -1) {
+      lane = laneEnds.length;
+      laneEnds.push(it.endMin);
+    } else {
+      laneEnds[lane] = it.endMin;
+    }
+    const left = pctH(it.startMin);
+    out.push({
+      occ: it.occ,
+      left,
+      width: Math.max(6, pctH(it.endMin) - left),
+      lane,
+      early: it.early,
+      late: it.late,
+    });
+  }
+  return { items: out, lanes: Math.max(1, laneEnds.length) };
+}
+
+function HorizontalGrid(props: GridProps) {
+  const { days, occurrences, profileIds, filter, onSlotClick, onOccurrenceClick } = props;
+  const gridOccs = useGridOccs(occurrences, filter);
+  const showShades = filter !== "available_only";
+  const showUnusable = showShades && props.markUnusable;
+
+  const rows = useMemo(() => {
+    const today = startOfDay(new Date()).getTime();
+    return days.map((day) => {
+      const ds = startOfDay(day).getTime();
+      const de = endOfDay(day).getTime();
+      const onDay = gridOccs.filter((o) => o.end.getTime() > ds && o.start.getTime() < de);
+      const intervals =
+        ds < today
+          ? { busy: [], available: [], unusable: [] }
+          : resolveDayIntervals(occurrences, profileIds, day);
+      return { day, ...packRowH(onDay, day), intervals };
+    });
+  }, [days, gridOccs, occurrences, profileIds]);
+
+  function trackClick(e: React.MouseEvent<HTMLButtonElement>, day: Date) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    onSlotClick(day, Math.round(DAY_START_H + frac * (DAY_END_H - DAY_START_H)));
+  }
+
+  return (
+    <div className="rounded-2xl border border-emerald-900/60 bg-[#052a17]/40 p-2">
+      {/* Ruler */}
+      <div className="mb-1 flex items-center">
+        <div style={{ width: H_LABEL_W }} className="shrink-0" />
+        <div className="relative h-4 flex-1">
+          {RULER.map((h) => (
+            <span
+              key={h}
+              className="absolute -translate-x-1/2 text-[9px] text-emerald-200/45"
+              style={{ left: `${pctH(h * 60)}%` }}
+            >
+              {formatHourLabel(h)}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        {rows.map(({ day, items, lanes, intervals }) => (
+          <div key={dayKey(day)} className="flex items-stretch gap-1">
+            <div
+              style={{ width: H_LABEL_W }}
+              className="flex shrink-0 flex-col items-center justify-center"
+            >
+              <span className="text-[9px] uppercase tracking-wide text-emerald-200/50">
+                {day.toLocaleDateString(undefined, { weekday: "short" })}
+              </span>
+              <span
+                className={cn(
+                  "flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold",
+                  isToday(day) ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-50"
+                )}
+              >
+                {day.getDate()}
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={(e) => trackClick(e, day)}
+              className={cn(
+                "relative flex-1 overflow-hidden rounded-lg border border-emerald-900/40",
+                isToday(day) ? "bg-emerald-900/20" : "bg-[#0b3b21]/25"
+              )}
+              style={{ height: lanes * LANE_H + 4 }}
+              aria-label={`Add on ${day.toDateString()}`}
+            >
+              {RULER.map((h) => (
+                <div
+                  key={h}
+                  className="pointer-events-none absolute inset-y-0 w-px bg-emerald-900/25"
+                  style={{ left: `${pctH(h * 60)}%` }}
+                />
+              ))}
+              {intervals.available.map((iv, i) => (
+                <div
+                  key={`a${i}`}
+                  className={cn("pointer-events-none absolute inset-y-0", AVAILABLE_SHADE)}
+                  style={{ left: `${pctH(iv.start)}%`, width: `${pctH(iv.end) - pctH(iv.start)}%` }}
+                />
+              ))}
+              {showUnusable
+                ? intervals.unusable.map((iv, i) => (
+                    <div
+                      key={`u${i}`}
+                      className={cn("pointer-events-none absolute inset-y-0", UNUSABLE_SHADE)}
+                      style={{ left: `${pctH(iv.start)}%`, width: `${pctH(iv.end) - pctH(iv.start)}%` }}
+                    />
+                  ))
+                : null}
+              {showShades
+                ? intervals.busy.map((iv, i) => (
+                    <div
+                      key={`b${i}`}
+                      className={cn("pointer-events-none absolute inset-y-0", BUSY_SHADE)}
+                      style={{ left: `${pctH(iv.start)}%`, width: `${pctH(iv.end) - pctH(iv.start)}%` }}
+                    />
+                  ))
+                : null}
+
+              {items.map(({ occ, left, width, lane, early, late }) => {
+                const isRound = occ.kind === "round";
+                const players = isRound ? playersLabelH(occ.playerNames) : "";
+                const dimmed = isDimmed(occ, filter);
+                const primary = isRound
+                  ? occ.title ?? occ.courseName ?? "Round"
+                  : occ.title ?? (occ.kind === "available" ? "Available" : occ.kind === "event" ? "Event" : "Busy");
+                return (
+                  <button
+                    key={occ.key}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOccurrenceClick(occ);
+                    }}
+                    className={cn(
+                      "absolute flex items-center gap-1 overflow-hidden rounded px-1 text-left",
+                      occChipClasses(occ),
+                      dimmed && DIMMED_CLASSES
+                    )}
+                    style={{
+                      left: `${left}%`,
+                      width: `${width}%`,
+                      top: lane * LANE_H + 2,
+                      height: LANE_H - 3,
+                    }}
+                  >
+                    {early ? <span className="shrink-0 opacity-70">‹</span> : null}
+                    <span className="min-w-0 truncate text-[10px] font-medium leading-none">
+                      {primary}
+                    </span>
+                    {players ? (
+                      <span className="min-w-0 truncate text-[9px] opacity-70 leading-none">
+                        · {players}
+                      </span>
+                    ) : null}
+                    {occ.resultLabel ? (
+                      <span className="ml-auto shrink-0 text-[10px] font-bold tabular-nums">
+                        {occ.resultLabel}
+                      </span>
+                    ) : null}
+                    {late ? <span className="shrink-0 opacity-70">›</span> : null}
+                  </button>
+                );
+              })}
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function playersLabelH(names: string[] | null | undefined): string {
+  if (!names || names.length === 0) return "";
+  const firsts = names.map((n) => n.split(" ")[0]);
+  return firsts.length <= 2 ? firsts.join(", ") : `${firsts.slice(0, 2).join(", ")} +${firsts.length - 2}`;
 }
