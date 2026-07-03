@@ -1,5 +1,6 @@
 "use client";
 
+import { Flag } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ProfileLite, ResolvedOccurrence } from "@/lib/calendar/types";
 import {
@@ -10,7 +11,7 @@ import {
   isToday,
   startOfDay,
 } from "@/lib/calendar/dateUtils";
-import { dayHeat, resolveDayPlayerStatuses } from "@/lib/calendar/recurrence";
+import { dayHeat, hasUsableWindow, resolveDayPlayerStatuses } from "@/lib/calendar/recurrence";
 import { STATUS_COLORS } from "../eventStyles";
 import { formatDiff } from "../EventChip";
 import { AvatarStack } from "../Avatar";
@@ -30,10 +31,12 @@ export function MonthView(props: {
   occurrences: ResolvedOccurrence[];
   profileIds: string[];
   nameById: Map<string, ProfileLite>;
+  /** When true, days with no ≥3h free window read as blocked (red tint). */
+  applyThreeHour: boolean;
   onDayClick: (day: Date) => void;
   onOpenRound: (occ: ResolvedOccurrence) => void;
 }) {
-  const { anchor, occurrences, profileIds, onDayClick, onOpenRound } = props;
+  const { anchor, occurrences, profileIds, applyThreeHour, onDayClick, onOpenRound } = props;
   const matrix = getMonthMatrix(anchor);
   const todayStart = startOfDay(new Date()).getTime();
   const singleView = profileIds.length <= 1;
@@ -63,7 +66,24 @@ export function MonthView(props: {
               )
             : [];
           const statuses = isPast ? null : resolveDayPlayerStatuses(occurrences, profileIds, day);
-          const cellStyle = statuses ? heatStyle(dayHeat(statuses)) : undefined;
+          // A day with no ≥3h free window in 6am–10pm reads as effectively blocked.
+          const usable =
+            isPast || !applyThreeHour ? true : hasUsableWindow(occurrences, profileIds, day);
+          const cellStyle = statuses
+            ? usable
+              ? heatStyle(dayHeat(statuses))
+              : { backgroundColor: "rgba(239,68,68,0.14)" }
+            : undefined;
+          // Any scheduled/live round or confirmed event upcoming that day → flag marker.
+          const hasUpcomingRound =
+            !isPast &&
+            occurrences.some(
+              (o) =>
+                o.end.getTime() > ds &&
+                o.start.getTime() < de &&
+                profileIds.includes(o.profileId) &&
+                (o.kind === "round" || (o.kind === "event" && o.eventStatus === "confirmed"))
+            );
 
           const dots = statuses ? profileIds.map((id) => statuses.get(id) ?? "none") : [];
           const shownDots = dots.slice(0, MAX_DOTS);
@@ -75,26 +95,30 @@ export function MonthView(props: {
             <button
               key={key}
               type="button"
-              onClick={() => (isPast ? undefined : onDayClick(day))}
+              onClick={() => onDayClick(day)}
               style={cellStyle}
               className={cn(
-                "flex min-h-[72px] flex-col overflow-hidden rounded-lg border p-1 text-left transition-colors landscape:min-h-[92px]",
+                "flex min-h-[72px] flex-col overflow-hidden rounded-lg border p-1 text-left transition-colors hover:bg-emerald-900/20 landscape:min-h-[92px]",
                 inMonth ? "border-emerald-900/50" : "border-emerald-900/40 bg-[#0b3b21]/10",
-                isToday(day) && "ring-1 ring-[#f5e6b0]/60",
-                !isPast && "hover:bg-emerald-900/20"
+                isToday(day) && "ring-1 ring-[#f5e6b0]/60"
               )}
             >
-              <div
-                className={cn(
-                  "mb-0.5 flex h-5 w-5 items-center justify-center rounded-full text-[10px]",
-                  isToday(day)
-                    ? "bg-[#f5e6b0] font-bold text-[#042713]"
-                    : inMonth
-                      ? "text-emerald-100/80"
-                      : "text-emerald-100/40"
-                )}
-              >
-                {day.getDate()}
+              <div className="mb-0.5 flex items-center justify-between">
+                <div
+                  className={cn(
+                    "flex h-5 w-5 items-center justify-center rounded-full text-[10px]",
+                    isToday(day)
+                      ? "bg-[#f5e6b0] font-bold text-[#042713]"
+                      : inMonth
+                        ? "text-emerald-100/80"
+                        : "text-emerald-100/40"
+                  )}
+                >
+                  {day.getDate()}
+                </div>
+                {hasUpcomingRound ? (
+                  <Flag size={10} className="text-[#f5e6b0]" aria-label="Round scheduled" />
+                ) : null}
               </div>
 
               {isPast ? (
@@ -113,16 +137,25 @@ export function MonthView(props: {
                         className="flex min-h-0 flex-1 items-center justify-center rounded bg-[#f5e6b0]/10"
                       >
                         {showScore && occ.resultLabel ? (
-                          <span className="flex items-baseline gap-0.5 text-[#f5e6b0]">
-                            <span className={cn("font-bold tabular-nums", one ? "text-lg" : "text-xs")}>
-                              {occ.resultLabel}
+                          one ? (
+                            // One round: room to stack the gross over the diff.
+                            <span className="flex flex-col items-center leading-none text-[#f5e6b0]">
+                              <span className="text-lg font-bold tabular-nums">{occ.resultLabel}</span>
+                              {diffText ? (
+                                <span className="mt-0.5 text-[10px] tabular-nums opacity-70">
+                                  {diffText}
+                                </span>
+                              ) : null}
                             </span>
-                            {diffText ? (
-                              <span className={one ? "text-[10px] opacity-70" : "text-[8px] opacity-70"}>
-                                {diffText}
-                              </span>
-                            ) : null}
-                          </span>
+                          ) : (
+                            // Multiple rounds stack as rows: keep each row inline & small.
+                            <span className="flex items-baseline gap-0.5 text-[#f5e6b0]">
+                              <span className="text-xs font-bold tabular-nums">{occ.resultLabel}</span>
+                              {diffText ? (
+                                <span className="text-[8px] tabular-nums opacity-70">{diffText}</span>
+                              ) : null}
+                            </span>
+                          )
                         ) : (occ.playerNames?.length ?? 0) > 0 ? (
                           <AvatarStack
                             people={(occ.playerNames ?? []).map((n) => ({ seed: n, name: n }))}

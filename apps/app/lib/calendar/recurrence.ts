@@ -18,6 +18,12 @@ import { dayKey, startOfDay, endOfDay } from "./dateUtils";
 /** A round with no explicit duration is treated as this many hours of "busy". */
 const ROUND_DURATION_MS = 4 * 60 * 60 * 1000;
 
+/** The playable day window, in minutes from local midnight: 6am–10pm. */
+export const DAY_WINDOW_START_MIN = 6 * 60; // 360
+export const DAY_WINDOW_END_MIN = 22 * 60; // 1320
+/** A free gap shorter than this is too short for a round → treated unavailable. */
+export const MIN_USABLE_WINDOW_MIN = 3 * 60; // 180
+
 function intervalsOverlap(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): boolean {
   return aStart.getTime() < bEnd.getTime() && bStart.getTime() < aEnd.getTime();
 }
@@ -125,6 +131,7 @@ function makeRoundOccurrence(round: CalendarRound): ResolvedOccurrence {
     resultLabel: finished && round.gross != null ? String(round.gross) : undefined,
     scoreDiff: finished ? round.score_differential : undefined,
     courseName: round.course_name,
+    formatType: round.format_type,
     playerNames: round.player_names,
     selfParticipated: round.selfParticipated,
   };
@@ -300,17 +307,21 @@ export function dayHeat(statuses: Map<string, PlayerDayStatus>): number {
 /**
  * Filter occurrences for rendering by kind (not aggregate day state):
  * - `all`: everything.
- * - `hide_unavailable`: hide **unavailability** blocks; keep rounds + availability.
+ * - `dim_busy`: keep everything (busy is *dimmed* at render time, not removed).
  * - `available_only`: keep **only availability** (rounds + unavailability hidden).
  */
 export function applyAvailabilityFilter(
   occurrences: ResolvedOccurrence[],
   filter: AvailabilityFilter
 ): ResolvedOccurrence[] {
-  if (filter === "all") return occurrences;
-  if (filter === "hide_unavailable") return occurrences.filter((o) => o.kind !== "unavailable");
-  // available_only
-  return occurrences.filter((o) => o.kind === "available");
+  if (filter === "available_only") return occurrences.filter((o) => o.kind === "available");
+  // all + dim_busy keep the full set; dim_busy only changes styling.
+  return occurrences;
+}
+
+/** True when an occurrence should render greyed/faded under the `dim_busy` filter. */
+export function isDimmed(occ: ResolvedOccurrence, filter: AvailabilityFilter): boolean {
+  return filter === "dim_busy" && occ.busy;
 }
 
 /**
@@ -393,16 +404,31 @@ function subtractIntervals(a: MinuteInterval[], b: MinuteInterval[]): MinuteInte
   return out.filter((s) => s.end > s.start);
 }
 
+/** Minute-intervals for a day's shading, split into busy / available / unusable. */
+export type DayIntervals = {
+  busy: MinuteInterval[];
+  available: MinuteInterval[];
+  /** Free gaps inside 6am–10pm shorter than 3h — too short for a round. */
+  unusable: MinuteInterval[];
+};
+
+/** The 6am–10pm playable window as a single interval. */
+function dayWindowInterval(): MinuteInterval {
+  return { start: DAY_WINDOW_START_MIN, end: DAY_WINDOW_END_MIN };
+}
+
 /**
- * Merged busy/available minute-intervals for a single day across the displayed
- * people — used to shade the time grid. `busy` = any person busy; `available` =
- * a person marked available with nobody busy over that span (busy wins).
+ * Merged busy/available/unusable minute-intervals for a single day across the
+ * displayed people — used to shade the time grid. `busy` = any person busy;
+ * `available` = a person marked available with nobody busy over that span (busy
+ * wins). `unusable` = the leftover free time inside 6am–10pm that is neither
+ * busy nor explicitly available and is shorter than the 3h round minimum.
  */
 export function resolveDayIntervals(
   occurrences: ResolvedOccurrence[],
   profileIds: string[],
   day: Date
-): { busy: MinuteInterval[]; available: MinuteInterval[] } {
+): DayIntervals {
   const ids = new Set(profileIds);
   const busyRaw: MinuteInterval[] = [];
   const availRaw: MinuteInterval[] = [];
@@ -417,5 +443,31 @@ export function resolveDayIntervals(
 
   const busy = mergeIntervals(busyRaw);
   const available = subtractIntervals(mergeIntervals(availRaw), busy);
-  return { busy, available };
+
+  // Free time inside the window that is neither busy nor explicitly available.
+  const free = subtractIntervals(subtractIntervals([dayWindowInterval()], busy), available);
+  const unusable = free.filter((s) => s.end - s.start < MIN_USABLE_WINDOW_MIN);
+
+  return { busy, available, unusable };
+}
+
+/**
+ * True when the day has at least one contiguous non-busy span of ≥3h inside the
+ * 6am–10pm window — i.e. there's room to actually play a round. Availability is
+ * a subset of "non-busy", so this also covers explicitly-available days.
+ */
+export function hasUsableWindow(
+  occurrences: ResolvedOccurrence[],
+  profileIds: string[],
+  day: Date
+): boolean {
+  const ids = new Set(profileIds);
+  const busyRaw: MinuteInterval[] = [];
+  for (const occ of occurrences) {
+    if (!ids.has(occ.profileId) || !occ.busy) continue;
+    const iv = clipToDayMinutes(occ, day);
+    if (iv) busyRaw.push(iv);
+  }
+  const free = subtractIntervals([dayWindowInterval()], mergeIntervals(busyRaw));
+  return free.some((s) => s.end - s.start >= MIN_USABLE_WINDOW_MIN);
 }

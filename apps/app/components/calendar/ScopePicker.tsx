@@ -7,10 +7,10 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import type {
   AvailabilityFilter,
+  CalendarMode,
   Circle,
   ProfileLite,
   Scope,
-  ViewMode,
 } from "@/lib/calendar/types";
 import {
   fetchFollowingIds,
@@ -25,17 +25,35 @@ import { SegmentedControl } from "./SegmentedControl";
 export function ScopePicker(props: {
   scope: Scope;
   circles: Circle[];
-  viewMode: ViewMode;
-  onViewMode: (v: ViewMode) => void;
+  mode: CalendarMode;
+  onMode: (m: CalendarMode) => void;
   filter: AvailabilityFilter;
   onFilter: (f: AvailabilityFilter) => void;
+  weekendsOnly: boolean;
+  onWeekendsOnly: (v: boolean) => void;
+  threeHourRule: boolean;
+  onThreeHourRule: (v: boolean) => void;
   onSelect: (scope: Scope) => void;
   onManageCircle: (circleId: string) => void;
   onNewCircle: () => void;
   onClose: () => void;
 }) {
-  const { scope, circles, viewMode, onViewMode, filter, onFilter, onSelect, onManageCircle, onNewCircle, onClose } =
-    props;
+  const {
+    scope,
+    circles,
+    mode: calMode,
+    onMode,
+    filter,
+    onFilter,
+    weekendsOnly,
+    onWeekendsOnly,
+    threeHourRule,
+    onThreeHourRule,
+    onSelect,
+    onManageCircle,
+    onNewCircle,
+    onClose,
+  } = props;
 
   const [mode, setMode] = useState<"root" | "people">(
     scope.kind === "people" ? "people" : "root"
@@ -147,14 +165,12 @@ export function ScopePicker(props: {
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-emerald-200/50">
                     View
                   </div>
-                  <SegmentedControl<ViewMode>
+                  <SegmentedControl<CalendarMode>
                     size="sm"
-                    value={viewMode}
-                    onChange={onViewMode}
+                    value={calMode}
+                    onChange={onMode}
                     options={[
-                      { value: "week", label: "Week" },
-                      { value: "month", label: "Month" },
-                      { value: "weekends", label: "Weekends" },
+                      { value: "calendar", label: "Calendar" },
                       { value: "agenda", label: "Agenda" },
                     ]}
                   />
@@ -164,10 +180,31 @@ export function ScopePicker(props: {
                     onChange={onFilter}
                     options={[
                       { value: "all", label: "Show all" },
-                      { value: "hide_unavailable", label: "Hide busy" },
+                      { value: "dim_busy", label: "Dim busy" },
                       { value: "available_only", label: "Available" },
                     ]}
                   />
+                  <label className="flex items-center justify-between rounded-lg border border-emerald-900/60 bg-[#0b3b21]/40 px-3 py-2 text-xs text-emerald-100/80">
+                    Weekends only
+                    <input
+                      type="checkbox"
+                      checked={weekendsOnly}
+                      onChange={(e) => onWeekendsOnly(e.target.checked)}
+                      className="h-4 w-4 accent-[#f5e6b0]"
+                    />
+                  </label>
+                  <label className="flex items-center justify-between rounded-lg border border-emerald-900/60 bg-[#0b3b21]/40 px-3 py-2 text-xs text-emerald-100/80">
+                    Grey out gaps under 3 hours
+                    <input
+                      type="checkbox"
+                      checked={threeHourRule}
+                      onChange={(e) => onThreeHourRule(e.target.checked)}
+                      className="h-4 w-4 accent-[#f5e6b0]"
+                    />
+                  </label>
+                  <div className="px-1 text-[10px] leading-snug text-emerald-200/45">
+                    Pinch or double-tap to zoom · tap a day to zoom in
+                  </div>
                 </div>
 
                 <div className="space-y-1">

@@ -103,6 +103,8 @@ export type ResolvedOccurrence = {
   scoreDiff?: number | null;
   /** Round course name, for richer round chips/bars. */
   courseName?: string | null;
+  /** Round format (strokeplay/stableford/…), for the full-detail round card. */
+  formatType?: string | null;
   /** All players in a round, for the wide day-row bars. */
   playerNames?: string[] | null;
   /** Did the viewer participate in this round? (past-result rendering) */
@@ -133,6 +135,19 @@ export type CircleMember = {
 
 export type ViewMode = "week" | "month" | "weekends" | "agenda";
 
+/**
+ * Zoom ladder for the interactive calendar: the level drives both the time span
+ * and how much detail each occurrence shows (the "hierarchy").
+ * 0 = Month, 1 = Week, 2 = 3-Day, 3 = Day.
+ */
+export type ZoomLevel = 0 | 1 | 2 | 3;
+
+/** Top-level calendar mode. "looking" is driven by `Scope`, not this. */
+export type CalendarMode = "calendar" | "agenda";
+
+/** How richly a round/event renders — scales with zoom. */
+export type Density = "pip" | "compact" | "medium" | "full";
+
 export type ProfileLite = {
   id: string;
   name: string | null;
@@ -146,7 +161,13 @@ export type Scope =
   | { kind: "circle"; id: string }
   | { kind: "looking" };
 
-export type AvailabilityFilter = "all" | "hide_unavailable" | "available_only";
+/**
+ * Availability emphasis:
+ * - `all`: everything at full colour.
+ * - `dim_busy`: busy/unavailable kept but greyed/faded (not removed).
+ * - `available_only`: only explicit availability windows; rounds + events hidden.
+ */
+export type AvailabilityFilter = "all" | "dim_busy" | "available_only";
 
 /** Aggregate availability state for a day (or slot) across displayed people. */
 export type BucketState = "unavailable" | "available" | "neutral";

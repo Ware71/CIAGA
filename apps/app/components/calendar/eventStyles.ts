@@ -44,6 +44,16 @@ export function occChipClasses(occ: ResolvedOccurrence): string {
   return chipClasses(occ.kind);
 }
 
+/** Extra classes applied to an occurrence rendered under the `dim_busy` filter. */
+export const DIMMED_CLASSES = "opacity-40 grayscale saturate-50";
+
+/** Shade for free gaps < 3h inside 6am–10pm — greyed like busy, a touch lighter. */
+export const UNUSABLE_SHADE = "bg-slate-500/12";
+/** Shade for busy time in the time grid. */
+export const BUSY_SHADE = "bg-slate-500/20";
+/** Shade for explicitly-available time in the time grid. */
+export const AVAILABLE_SHADE = "bg-emerald-400/15";
+
 /** A subtle owner tint (dot colour) so layered calendars are distinguishable. */
 const OWNER_PALETTE = [
   "#f5e6b0", // gold
