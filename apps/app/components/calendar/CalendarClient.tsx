@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Loader2 } from "lucide-react";
 import { BackButton } from "@/components/ui/BackButton";
 import { Button } from "@/components/ui/button";
 import { getViewerSession } from "@/lib/auth/viewerSession";
@@ -32,7 +32,7 @@ import {
   applyAvailabilityFilter,
   groupOccurrencesByDay,
   hidePastAvailability,
-  resolveDayStates,
+  resolveDayPlayerStatuses,
   resolveOccurrences,
 } from "@/lib/calendar/recurrence";
 import {
@@ -52,6 +52,7 @@ import { CreateEventSheet } from "./CreateEventSheet";
 import { CircleManager } from "./CircleManager";
 import { ScopePicker, ScopePickerButton } from "./ScopePicker";
 import { RoundInfoSheet } from "./RoundInfoSheet";
+import { AvailabilityPopup } from "./AvailabilityPopup";
 
 function enumerateDays(start: Date, end: Date): Date[] {
   const out: Date[] = [];
@@ -89,6 +90,23 @@ export function CalendarClient() {
   const [createTarget, setCreateTarget] = useState<{ day: Date; hour?: number | null } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ResolvedOccurrence | null>(null);
   const [roundInfoId, setRoundInfoId] = useState<string | null>(null);
+  const [availDay, setAvailDay] = useState<Date | null>(null);
+  const [controlsOpen, setControlsOpen] = useState(true);
+
+  // Persist the collapsed/expanded state of the view + filter controls.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (localStorage.getItem("cal.controlsOpen") === "0") setControlsOpen(false);
+  }, []);
+  function toggleControls() {
+    setControlsOpen((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem("cal.controlsOpen", next ? "1" : "0");
+      } catch {}
+      return next;
+    });
+  }
 
   const isLooking = scope.kind === "looking";
   const isAgenda = viewMode === "agenda";
@@ -227,11 +245,6 @@ export function CalendarClient() {
     return getMonthMatrix(anchor).flat();
   }, [viewMode, anchor, range.start, range.end, isLooking]);
 
-  const dayStates = useMemo(
-    () => resolveDayStates(occurrences, profileIds, viewDays),
-    [occurrences, profileIds, viewDays]
-  );
-
   const filtered = useMemo(
     () => applyAvailabilityFilter(occurrences, filter),
     [occurrences, filter]
@@ -311,7 +324,7 @@ export function CalendarClient() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#042713] via-[#04240f] to-[#031a0c] text-slate-100 px-3 pt-6 pb-[env(safe-area-inset-bottom)]">
-      <div className="mx-auto w-full max-w-md space-y-2.5">
+      <div className="mx-auto w-full max-w-md space-y-2.5 landscape:max-w-5xl">
         {/* Title + scope on one row to save vertical space */}
         <header className="flex items-center gap-2">
           <BackButton onClick={() => router.replace("/round")} />
@@ -355,30 +368,49 @@ export function CalendarClient() {
           )}
         </div>
 
-        {/* View mode (+ availability filter, hidden for LFG and Agenda) */}
+        {/* View mode + availability filter (collapsible; hidden for LFG) */}
         {!isLooking ? (
           <div className="space-y-2">
-            <SegmentedControl<ViewMode>
-              size="sm"
-              value={viewMode}
-              onChange={setViewMode}
-              options={[
-                { value: "week", label: "Week" },
-                { value: "month", label: "Month" },
-                { value: "weekends", label: "Weekends" },
-                { value: "agenda", label: "Agenda" },
-              ]}
-            />
-            <SegmentedControl<AvailabilityFilter>
-              size="sm"
-              value={filter}
-              onChange={setFilter}
-              options={[
-                { value: "all", label: "Show all" },
-                { value: "hide_unavailable", label: "Hide busy" },
-                { value: "available_only", label: "Available" },
-              ]}
-            />
+            {controlsOpen ? (
+              <>
+                <SegmentedControl<ViewMode>
+                  size="sm"
+                  value={viewMode}
+                  onChange={setViewMode}
+                  options={[
+                    { value: "week", label: "Week" },
+                    { value: "month", label: "Month" },
+                    { value: "weekends", label: "Weekends" },
+                    { value: "agenda", label: "Agenda" },
+                  ]}
+                />
+                <SegmentedControl<AvailabilityFilter>
+                  size="sm"
+                  value={filter}
+                  onChange={setFilter}
+                  options={[
+                    { value: "all", label: "Show all" },
+                    { value: "hide_unavailable", label: "Hide busy" },
+                    { value: "available_only", label: "Available" },
+                  ]}
+                />
+              </>
+            ) : null}
+            <button
+              onClick={toggleControls}
+              className="mx-auto flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-emerald-200/50 hover:text-emerald-200"
+            >
+              {controlsOpen ? (
+                <>Hide controls <ChevronUp size={12} /></>
+              ) : (
+                <>
+                  {viewMode[0].toUpperCase() + viewMode.slice(1)}
+                  {" · "}
+                  {filter === "all" ? "All" : filter === "hide_unavailable" ? "Hide busy" : "Available"}
+                  <ChevronDown size={12} />
+                </>
+              )}
+            </button>
           </div>
         ) : null}
 
@@ -410,12 +442,11 @@ export function CalendarClient() {
             ) : viewMode === "month" ? (
               <MonthView
                 anchor={anchor}
-                occurrencesByDay={occurrencesByDay}
-                dayStates={dayStates}
-                showOwners={showOwners}
+                occurrences={occurrences}
+                profileIds={profileIds}
                 nameById={nameById}
-                onDayClick={(day) => setCreateTarget({ day, hour: null })}
-                onOccurrenceClick={handleOccurrenceClick}
+                onDayClick={(day) => setAvailDay(day)}
+                onOpenRound={(occ) => setRoundInfoId(occ.sourceId)}
               />
             ) : viewMode === "agenda" ? (
               <AgendaView
@@ -455,6 +486,19 @@ export function CalendarClient() {
 
       {roundInfoId ? (
         <RoundInfoSheet roundId={roundInfoId} onClose={() => setRoundInfoId(null)} />
+      ) : null}
+
+      {availDay ? (
+        <AvailabilityPopup
+          day={availDay}
+          statuses={resolveDayPlayerStatuses(occurrences, profileIds, availDay)}
+          nameById={nameById}
+          onAddEvent={(day) => {
+            setAvailDay(null);
+            setCreateTarget({ day, hour: null });
+          }}
+          onClose={() => setAvailDay(null)}
+        />
       ) : null}
 
       {scopePickerOpen ? (

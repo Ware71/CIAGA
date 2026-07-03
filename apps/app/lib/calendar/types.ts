@@ -31,17 +31,21 @@ export type CalendarRound = {
   finished_at: string | null;
   status: RoundStatus;
   format_type: string | null;
-  gross: number | null;
+  gross: number | null; // AGS when available, else raw total
   course_handicap: number | null;
+  score_differential: number | null;
   player_names: string[] | null;
 };
 
-/** A participant row inside the round info window. */
+/** A participant row inside the round info window (finished-round stats). */
 export type RoundInfoParticipant = {
   profile_id: string;
   name: string | null;
-  gross: number | null;
+  raw_strokes: number | null; // actual total strokes (= gross)
+  par_played: number | null; // par of holes actually scored
+  ags: number | null; // adjusted gross score
   course_handicap: number | null;
+  score_differential: number | null;
 };
 
 /** Full detail for the round info window (from get_calendar_round_info). */
@@ -80,13 +84,18 @@ export type ResolvedOccurrence = {
   busy: boolean;
   /** Present only for round occurrences — used to route/open info on click. */
   roundStatus?: CalendarRound["status"];
-  /** Finished-round headline number (gross), pre-formatted for the chip. */
+  /** Finished-round headline number (AGS), pre-formatted for the chip. */
   resultLabel?: string;
+  /** Finished-round score differential (e.g. +9.4). */
+  scoreDiff?: number | null;
   /** Round course name, for richer round chips/bars. */
   courseName?: string | null;
   /** All players in a round, for the wide day-row bars. */
   playerNames?: string[] | null;
 };
+
+/** A single player's status on a given day, for the month heat-map dots. */
+export type PlayerDayStatus = "available" | "scheduled" | "unavailable" | "none";
 
 export type Circle = {
   id: string;

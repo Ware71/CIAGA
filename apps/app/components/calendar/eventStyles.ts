@@ -1,5 +1,20 @@
 // components/calendar/eventStyles.ts
-import type { OccurrenceKind, ResolvedOccurrence } from "@/lib/calendar/types";
+import type { OccurrenceKind, PlayerDayStatus, ResolvedOccurrence } from "@/lib/calendar/types";
+
+/** Per-kind accent colour for the flat accent-bar chips. */
+export function accentColor(occ: ResolvedOccurrence): string {
+  if (occ.kind === "round") return occ.roundStatus === "finished" ? "#b8993f" : "#f5e6b0";
+  if (occ.kind === "available") return "#34d399";
+  return "#ef4444"; // unavailable
+}
+
+/** Month availability dot colours. */
+export const STATUS_COLORS: Record<PlayerDayStatus, string> = {
+  available: "#34d399", // green
+  scheduled: "#b8993f", // dull gold
+  unavailable: "#ef4444", // red
+  none: "#6b7280", // grey
+};
 
 /** Chip styling per occurrence kind (matches the app's emerald/gold theme). */
 export function chipClasses(kind: OccurrenceKind): string {

@@ -24,7 +24,7 @@ import { InitialsAvatar, AvatarStack } from "../Avatar";
 
 const HOUR_PX = 52;
 const GUTTER = 40;
-const DEFAULT_SCROLL_HOUR = 6;
+const CENTER_HOUR = 13; // midday-ish, centred on open
 const MIN_BLOCK_PX = 20;
 
 type Positioned = { occ: ResolvedOccurrence; top: number; height: number; lane: number; lanes: number };
@@ -79,7 +79,8 @@ export function TimeGridView(props: {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = DEFAULT_SCROLL_HOUR * HOUR_PX;
+    const el = scrollRef.current;
+    if (el) el.scrollTop = Math.max(0, CENTER_HOUR * HOUR_PX - el.clientHeight / 2);
   }, []);
 
   const colW = days.length <= 2 ? 176 : days.length <= 3 ? 140 : 128;
@@ -114,8 +115,7 @@ export function TimeGridView(props: {
   return (
     <div
       ref={scrollRef}
-      className="overflow-auto rounded-2xl border border-emerald-900/60 bg-[#052a17]/40"
-      style={{ maxHeight: "66vh" }}
+      className="max-h-[66vh] overflow-auto rounded-2xl border border-emerald-900/60 bg-[#052a17]/40 landscape:max-h-[86vh]"
     >
       <div style={{ minWidth: GUTTER + days.length * colW }}>
         {/* Sticky day header + all-day chips */}

@@ -9,6 +9,7 @@ import type {
   BucketState,
   CalendarEvent,
   CalendarRound,
+  PlayerDayStatus,
   ResolvedOccurrence,
 } from "./types";
 import { dayKey, startOfDay, endOfDay } from "./dateUtils";
@@ -121,6 +122,7 @@ function makeRoundOccurrence(round: CalendarRound): ResolvedOccurrence {
     busy: !finished,
     roundStatus: round.status,
     resultLabel: finished && round.gross != null ? String(round.gross) : undefined,
+    scoreDiff: finished ? round.score_differential : undefined,
     courseName: round.course_name,
     playerNames: round.player_names,
   };
@@ -202,6 +204,52 @@ export function resolveDayStates(
   }
 
   return states;
+}
+
+/**
+ * Per-player status on a given day for the month heat-map dots.
+ * Precedence: scheduled(round) > unavailable > available > none.
+ */
+export function resolveDayPlayerStatuses(
+  occurrences: ResolvedOccurrence[],
+  profileIds: string[],
+  day: Date
+): Map<string, PlayerDayStatus> {
+  const dStart = startOfDay(day);
+  const dEnd = endOfDay(day);
+  const flags = new Map<string, { round: boolean; unavail: boolean; avail: boolean }>();
+  for (const id of profileIds) flags.set(id, { round: false, unavail: false, avail: false });
+
+  for (const occ of occurrences) {
+    const f = flags.get(occ.profileId);
+    if (!f) continue;
+    if (!intervalsOverlap(occ.start, occ.end, dStart, dEnd)) continue;
+    if (occ.kind === "round") f.round = true;
+    else if (occ.kind === "unavailable") f.unavail = true;
+    else if (occ.kind === "available") f.avail = true;
+  }
+
+  const out = new Map<string, PlayerDayStatus>();
+  for (const [id, f] of flags) {
+    out.set(id, f.round ? "scheduled" : f.unavail ? "unavailable" : f.avail ? "available" : "none");
+  }
+  return out;
+}
+
+/**
+ * Net free-ness for a day's aggregate status, in [-1, 1] — drives the month
+ * heat-map background (green when the group is free, red when blocked).
+ */
+export function dayHeat(statuses: Map<string, PlayerDayStatus>): number {
+  const total = statuses.size;
+  if (total === 0) return 0;
+  let avail = 0;
+  let unavail = 0;
+  for (const s of statuses.values()) {
+    if (s === "available") avail++;
+    else if (s === "unavailable" || s === "scheduled") unavail++;
+  }
+  return (avail - unavail) / total;
 }
 
 /**
