@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 import { getEventById } from "@/lib/majors/queries";
+import { parseMoneyAmount } from "@/lib/validation/money";
 
 export const runtime = "nodejs";
 
@@ -46,7 +47,11 @@ export async function POST(
       return NextResponse.json({ error: "profile_ids must be a non-empty array." }, { status: 400 });
     }
 
-    const chargeAmount: number = amount_override != null ? amount_override : (charge as any).amount;
+    const safeOverride = amount_override == null ? null : parseMoneyAmount(amount_override);
+    if (amount_override != null && safeOverride == null) {
+      return NextResponse.json({ error: "amount_override must be a positive number up to 100,000." }, { status: 400 });
+    }
+    const chargeAmount: number = safeOverride != null ? safeOverride : (charge as any).amount;
     const txType = (charge as any).category === "green_fee" ? "green_fee" : "extra_charge";
 
     const results: { profile_id: string; status: "assigned" | "skipped" }[] = [];

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 import { getEventById } from "@/lib/majors/queries";
+import { parseMoneyAmount } from "@/lib/validation/money";
 
 export const runtime = "nodejs";
 
@@ -61,12 +62,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: "name and amount are required." }, { status: 400 });
     }
 
+    const safeAmount = parseMoneyAmount(amount);
+    if (safeAmount == null) {
+      return NextResponse.json({ error: "amount must be a positive number up to 100,000." }, { status: 400 });
+    }
+
     const { data, error } = await supabaseAdmin
       .from("event_extras")
       .insert({
         event_id: id,
         name,
-        amount,
+        amount: safeAmount,
         description: description ?? null,
         created_by: profileId,
       })

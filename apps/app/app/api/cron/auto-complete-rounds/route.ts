@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { finishRound } from "@/lib/rounds/finishRound";
 import { reconcileEventStatus } from "@/lib/majors/reconcileStatus";
 import { runEntryOpenNotifications } from "@/lib/notifications/entryOpenSweep";
+import { safeCompare } from "@/lib/auth/safeCompare";
 
 export const runtime = "nodejs";
 
@@ -27,7 +28,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Not configured" }, { status: 500 });
   }
 
-  if (req.headers.get("authorization") !== `Bearer ${cronSecret}`) {
+  if (!safeCompare(req.headers.get("authorization"), `Bearer ${cronSecret}`)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 import { getEventById } from "@/lib/majors/queries";
+import { parseMoneyAmount } from "@/lib/validation/money";
 
 export const runtime = "nodejs";
 
@@ -114,6 +115,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: "Invalid distribution_type." }, { status: 400 });
     }
 
+    const safeEntryFee = entry_fee_amount == null ? null : parseMoneyAmount(entry_fee_amount);
+    if (entry_fee_amount != null && safeEntryFee == null) {
+      return NextResponse.json({ error: "entry_fee_amount must be a positive number up to 100,000." }, { status: 400 });
+    }
+
     const { data, error } = await supabaseAdmin
       .from("prize_pots")
       .insert({
@@ -122,7 +128,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         name: name.trim(),
         description: description ?? null,
         distribution_type,
-        entry_fee_amount: entry_fee_amount ?? null,
+        entry_fee_amount: safeEntryFee,
         entry_fee_currency,
         entry_fee_notes: entry_fee_notes ?? null,
         prize_table: prize_table ?? null,
