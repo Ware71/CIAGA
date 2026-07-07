@@ -4,7 +4,7 @@ import { Flag, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ProfileLite, ResolvedOccurrence } from "@/lib/calendar/types";
 import { formatTime, playersLabel } from "@/lib/calendar/dateUtils";
-import { accentColor } from "./eventStyles";
+import { accentColor, entryTag } from "./eventStyles";
 import { formatDiff } from "./EventChip";
 import { AvatarStack, InitialsAvatar } from "./Avatar";
 
@@ -16,7 +16,7 @@ function formatLabel(fmt: string | null | undefined): string | null {
 }
 
 function statusLabel(occ: ResolvedOccurrence): string | null {
-  if (occ.kind === "event") return occ.eventStatus === "confirmed" ? "Confirmed" : "Draft";
+  if (occ.kind === "event") return entryTag(occ)?.label ?? null;
   switch (occ.roundStatus) {
     case "live":
     case "starting":

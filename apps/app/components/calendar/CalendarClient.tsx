@@ -21,6 +21,7 @@ import type {
   Scope,
   ZoomLevel,
 } from "@/lib/calendar/types";
+import { WEEKENDS_MAX_ZOOM } from "@/lib/calendar/types";
 import {
   addDays,
   daysForZoom,
@@ -47,7 +48,8 @@ import {
   fetchRounds,
   resolveProfileNames,
 } from "@/lib/calendar/api";
-import { MonthView } from "./views/MonthView";
+import { WeekGridView } from "./views/WeekGridView";
+import { WeekendsGridView } from "./views/WeekendsGridView";
 import { TimeGridView } from "./views/TimeGridView";
 import { AgendaView } from "./views/AgendaView";
 import { LookingForRoundView } from "./views/LookingForRoundView";
@@ -56,7 +58,17 @@ import { CircleManager } from "./CircleManager";
 import { ScopePicker } from "./ScopePicker";
 import { RoundInfoSheet } from "./RoundInfoSheet";
 
-const ZOOM_LABELS = ["Month", "Week", "3-Day", "Day"] as const;
+const ZOOM_LABELS = ["Month", "4 Weeks", "3 Weeks", "2 Weeks", "Week", "3-Day", "Day"] as const;
+
+/** How richly cells render at a given zoom — weekends cells are wider, so bump. */
+function densityForView(zoom: ZoomLevel, weekends: boolean): Density {
+  const base: Density =
+    zoom >= 6 ? "full" : zoom === 5 || zoom === 4 ? "medium" : zoom >= 2 ? "compact" : "pip";
+  if (!weekends) return base;
+  if (base === "pip") return "compact";
+  if (base === "compact") return "medium";
+  return base;
+}
 
 function enumerateDays(start: Date, end: Date): Date[] {
   const out: Date[] = [];
@@ -102,31 +114,33 @@ export function CalendarClient() {
 
   const isLooking = scope.kind === "looking";
   const isAgenda = mode === "agenda";
-  const density: Density = zoom === 3 ? "full" : zoom === 2 ? "medium" : "compact";
+  const gesturesActive = !isLooking && !isAgenda;
+  const density = densityForView(zoom, weekendsOnly);
 
-  // Zoom is gesture-driven; a short cooldown collapses overlapping pinch/tap/
-  // double-tap events into a single level step.
-  const lastZoom = useRef(0);
-  const zoomIn = useCallback(() => {
-    const now = Date.now();
-    if (now - lastZoom.current < 350) return;
-    lastZoom.current = now;
-    setZoom((z) => (z < 3 ? ((z + 1) as ZoomLevel) : z));
-  }, []);
-  const zoomOut = useCallback(() => {
-    const now = Date.now();
-    if (now - lastZoom.current < 350) return;
-    lastZoom.current = now;
-    setZoom((z) => (z > 0 ? ((z - 1) as ZoomLevel) : z));
-  }, []);
-  const drillInto = useCallback((day: Date) => {
-    const now = Date.now();
-    if (now - lastZoom.current < 350) return;
-    lastZoom.current = now;
-    setAnchor(day);
-    setZoom((z) => (z < 3 ? ((z + 1) as ZoomLevel) : z));
-  }, []);
+  // Zoom is pinch-driven; the ladder auto-fits the screen so there's no scroll
+  // to fight. Weekends caps at the 1-week grid (no time-grid levels).
+  const maxZoom: ZoomLevel = weekendsOnly ? WEEKENDS_MAX_ZOOM : 6;
+  const zoomIn = useCallback(
+    () => setZoom((z) => (z < maxZoom ? ((z + 1) as ZoomLevel) : z)),
+    [maxZoom]
+  );
+  const zoomOut = useCallback(() => setZoom((z) => (z > 0 ? ((z - 1) as ZoomLevel) : z)), []);
   const zoomGestures = useZoomGestures({ onZoomIn: zoomIn, onZoomOut: zoomOut });
+
+  // Keep zoom within the weekends ladder when the view is toggled on.
+  useEffect(() => {
+    if (weekendsOnly && zoom > WEEKENDS_MAX_ZOOM) setZoom(WEEKENDS_MAX_ZOOM as ZoomLevel);
+  }, [weekendsOnly, zoom]);
+
+  // A shared calendar (circle / several players) defaults to the Month grid,
+  // which surfaces everyone's rounds/events + joint-availability heat.
+  useEffect(() => {
+    if (scope.kind === "circle" || scope.kind === "people") {
+      setMode("calendar");
+      setZoom(0);
+      setWeekendsOnly(false);
+    }
+  }, [scope]);
 
   // People whose calendars are displayed for the main views.
   const profileIds = useMemo(() => {
@@ -260,16 +274,14 @@ export function CalendarClient() {
 
   const viewDays = useMemo(() => {
     if (isLooking || isAgenda) return enumerateDays(range.start, range.end);
-    let ds = daysForZoom(anchor, zoom);
-    if (weekendsOnly) ds = ds.filter((d) => d.getDay() === 0 || d.getDay() === 6);
-    return ds;
-  }, [isLooking, isAgenda, anchor, zoom, weekendsOnly, range.start, range.end]);
+    return daysForZoom(anchor, zoom);
+  }, [isLooking, isAgenda, anchor, zoom, range.start, range.end]);
 
+  // Agenda routes through the availability filter (rounds & events always kept).
   const filtered = useMemo(
     () => applyAvailabilityFilter(occurrences, filter),
     [occurrences, filter]
   );
-
   const occurrencesByDay = useMemo(
     () => groupOccurrencesByDay(filtered, viewDays),
     [filtered, viewDays]
@@ -339,19 +351,36 @@ export function CalendarClient() {
     setGroupEvents(ge);
   }
 
+  const rangeLabel = formatRangeLabel(range.start, range.end);
   const headerSubtitle = isLooking
-    ? formatRangeLabel(range.start, range.end)
-    : zoom === 0
-      ? weekendsOnly
+    ? rangeLabel
+    : weekendsOnly
+      ? zoom === 0
         ? "Weekends"
-        : null
-      : `${weekendsOnly ? "Weekends · " : ""}${formatRangeLabel(range.start, range.end)}`;
+        : `Weekends · ${rangeLabel}`
+      : zoom === 0
+        ? null
+        : rangeLabel;
+
+  const gridProps = {
+    anchor,
+    zoom,
+    occurrences,
+    profileIds,
+    filter,
+    applyThreeHour: threeHourRule,
+    density,
+    nameById,
+    showOwners,
+    onOccurrenceClick: handleOccurrenceClick,
+    onEmptyDayClick: (day: Date) => setCreateTarget({ day }),
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#042713] via-[#04240f] to-[#031a0c] text-slate-100 px-3 pt-6 pb-[env(safe-area-inset-bottom)]">
-      <div className="mx-auto w-full max-w-md space-y-2.5 landscape:max-w-5xl">
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-gradient-to-b from-[#042713] via-[#04240f] to-[#031a0c] px-3 pt-6 pb-[env(safe-area-inset-bottom)] text-slate-100">
+      <div className="mx-auto flex w-full min-h-0 max-w-md flex-1 flex-col gap-2.5 landscape:max-w-5xl">
         {/* Centered title; funnel opens the settings sheet (scope + view + filter) */}
-        <header className="relative flex items-center">
+        <header className="relative flex shrink-0 items-center">
           <BackButton onClick={() => router.replace("/round")} />
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
             <div className="text-base font-semibold tracking-wide text-[#f5e6b0]">Calendar</div>
@@ -367,7 +396,7 @@ export function CalendarClient() {
         </header>
 
         {/* Month / week navigation (agenda is a rolling "upcoming" list) */}
-        <div className="flex items-center justify-between rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/30 px-2 py-1.5">
+        <div className="flex shrink-0 items-center justify-between rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/30 px-2 py-1.5">
           {isAgenda && !isLooking ? (
             <div className="w-full py-0.5 text-center text-sm font-semibold text-emerald-50">
               Upcoming
@@ -408,55 +437,60 @@ export function CalendarClient() {
         </div>
 
         {err ? (
-          <div className="rounded-xl border border-red-900/50 bg-red-950/30 p-3 text-sm text-red-100">
+          <div className="shrink-0 rounded-xl border border-red-900/50 bg-red-950/30 p-3 text-sm text-red-100">
             {err}
           </div>
         ) : null}
 
         <div
-          onPointerDown={!isLooking && !isAgenda ? zoomGestures.onPointerDown : undefined}
-          onPointerMove={!isLooking && !isAgenda ? zoomGestures.onPointerMove : undefined}
-          onPointerUp={!isLooking && !isAgenda ? zoomGestures.onPointerUp : undefined}
-          onPointerCancel={!isLooking && !isAgenda ? zoomGestures.onPointerCancel : undefined}
-          onDoubleClick={!isLooking && !isAgenda ? zoomGestures.onDoubleClick : undefined}
+          className="relative min-h-0 flex-1"
+          style={{ touchAction: gesturesActive ? "none" : undefined }}
+          onPointerDown={gesturesActive ? zoomGestures.onPointerDown : undefined}
+          onPointerMove={gesturesActive ? zoomGestures.onPointerMove : undefined}
+          onPointerUp={gesturesActive ? zoomGestures.onPointerUp : undefined}
+          onPointerCancel={gesturesActive ? zoomGestures.onPointerCancel : undefined}
+          onWheel={gesturesActive ? zoomGestures.onWheel : undefined}
         >
           <AnimatePresence mode="wait">
             <motion.div
-              key={`${scope.kind}-${mode}-${zoom}-${isLooking}`}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
+              key={`${scope.kind}-${mode}-${zoom}-${weekendsOnly}-${isLooking}`}
+              className="h-full min-h-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }}
+              transition={{ duration: 0.14 }}
             >
               {loading ? (
-                <div className="flex items-center justify-center gap-2 py-16 text-emerald-100/60">
+                <div className="flex h-full items-center justify-center gap-2 text-emerald-100/60">
                   <Loader2 className="animate-spin" size={18} /> Loading…
                 </div>
               ) : isLooking ? (
-                <LookingForRoundView
-                  days={viewDays}
-                  occurrencesByDay={lfgByDay}
-                  nameById={nameById}
-                  onOpenPerson={(id) => setScope({ kind: "people", ids: [id], includeSelf: false })}
-                />
+                <div className="h-full overflow-y-auto">
+                  <LookingForRoundView
+                    days={viewDays}
+                    occurrencesByDay={lfgByDay}
+                    nameById={nameById}
+                    onOpenPerson={(id) =>
+                      setScope({ kind: "people", ids: [id], includeSelf: false })
+                    }
+                  />
+                </div>
               ) : isAgenda ? (
-                <AgendaView
-                  days={viewDays}
-                  occurrencesByDay={occurrencesByDay}
-                  showOwners={showOwners}
-                  nameById={nameById}
-                  onOccurrenceClick={handleOccurrenceClick}
-                />
-              ) : zoom === 0 ? (
-                <MonthView
-                  anchor={anchor}
-                  occurrences={occurrences}
-                  profileIds={profileIds}
-                  nameById={nameById}
-                  applyThreeHour={threeHourRule}
-                  onDayClick={(day) => drillInto(day)}
-                  onOpenRound={(occ) => setRoundInfoId(occ.sourceId)}
-                />
+                <div className="h-full overflow-y-auto">
+                  <AgendaView
+                    days={viewDays}
+                    occurrencesByDay={occurrencesByDay}
+                    showOwners={showOwners}
+                    nameById={nameById}
+                    onOccurrenceClick={handleOccurrenceClick}
+                  />
+                </div>
+              ) : zoom <= WEEKENDS_MAX_ZOOM ? (
+                weekendsOnly ? (
+                  <WeekendsGridView {...gridProps} />
+                ) : (
+                  <WeekGridView {...gridProps} />
+                )
               ) : (
                 <TimeGridView
                   days={viewDays}
@@ -468,9 +502,7 @@ export function CalendarClient() {
                   nameById={nameById}
                   showOwners={showOwners}
                   orientation={isLandscape ? "horizontal" : "vertical"}
-                  onSlotClick={(day, hour) =>
-                    zoom === 3 ? setCreateTarget({ day, hour }) : drillInto(day)
-                  }
+                  onSlotClick={(day, hour) => setCreateTarget({ day, hour })}
                   onOccurrenceClick={handleOccurrenceClick}
                 />
               )}
