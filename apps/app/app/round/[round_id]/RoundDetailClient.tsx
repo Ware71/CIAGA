@@ -1060,10 +1060,11 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
             round_id: roundId, participant_id: participantId, hole_number: holeNumber, strokes, entered_by: meId,
           });
           if (error) throw error;
-          await supabase.from("round_hole_states").upsert(
+          const { error: stateErr } = await supabase.from("round_hole_states").upsert(
             { round_id: roundId, participant_id: participantId, hole_number: holeNumber, status: "completed" },
             { onConflict: "participant_id,hole_number" }
           );
+          if (stateErr) throw stateErr;
           removeQueueOp(key);
           setPendingKeys((prev) => { const next = new Set(prev); next.delete(key); return next; });
           // Score is safely persisted — now start the round (best-effort).
@@ -1089,12 +1090,13 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
       if (error) throw error;
 
       // Always persist the hole state (completed or not_started)
-      await supabase
+      const { error: stateErr } = await supabase
         .from("round_hole_states")
         .upsert(
           { round_id: roundId, participant_id: participantId, hole_number: holeNumber, status: typeof strokes === "number" ? "completed" : "not_started" },
           { onConflict: "participant_id,hole_number" }
         );
+      if (stateErr) throw stateErr;
 
       // Clear from pending queue if it was there
       removeQueueOp(key);
