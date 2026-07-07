@@ -46,9 +46,20 @@ export type CalendarGroupEvent = {
   group_name: string | null;
   event_date: string | null; // date
   tee_time: string | null; // ISO timestamptz, null = TBC
-  status: "draft" | "confirmed";
+  status: "draft" | "confirmed"; // confirmed = the viewer has entered
   event_type: string | null;
+  entry_window_start: string | null; // ISO timestamptz — when entry opens
+  entry_window_end: string | null; // ISO timestamptz — when entry closes
 };
+
+/**
+ * Entry state of a Majors event for the viewer, driving the calendar tag:
+ * - `entered`: the viewer has an entry (a real commitment).
+ * - `enter_now`: entry is open (and the viewer hasn't entered) — act now.
+ * - `entry_soon`: entry opens in the future.
+ * - `entry_closed`: the entry window has passed and the viewer never entered.
+ */
+export type EntryState = "entered" | "enter_now" | "entry_soon" | "entry_closed";
 
 /** A participant row inside the round info window (finished-round stats). */
 export type RoundInfoParticipant = {
@@ -109,8 +120,10 @@ export type ResolvedOccurrence = {
   playerNames?: string[] | null;
   /** Did the viewer participate in this round? (past-result rendering) */
   selfParticipated?: boolean;
-  /** Group-event only: draft (not entered) vs confirmed (entered). */
+  /** Group-event only: draft (not entered) vs confirmed (entered). Drives `busy`. */
   eventStatus?: "draft" | "confirmed";
+  /** Group-event only: the entry-window state, drives the calendar tag. */
+  entryState?: EntryState;
   /** Group-event only: no individual tee time set yet. */
   tbc?: boolean;
   /** Group-event only: the group name. */
@@ -137,10 +150,18 @@ export type ViewMode = "week" | "month" | "weekends" | "agenda";
 
 /**
  * Zoom ladder for the interactive calendar: the level drives both the time span
- * and how much detail each occurrence shows (the "hierarchy").
- * 0 = Month, 1 = Week, 2 = 3-Day, 3 = Day.
+ * and how much detail each occurrence shows (the "hierarchy"). Each level
+ * auto-fits the screen (no scroll); pinching steps up/down the ladder.
+ *   0 = Month · 1 = 4 Weeks · 2 = 3 Weeks · 3 = 2 Weeks · 4 = Week
+ *   5 = 3-Day (time grid) · 6 = Day (time grid)
+ * In the Weekends view the ladder is capped at 4 (no time-grid levels).
  */
-export type ZoomLevel = 0 | 1 | 2 | 3;
+export type ZoomLevel = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
+/** The deepest zoom levels render a per-hour time grid rather than a day grid. */
+export const TIME_GRID_MIN_ZOOM = 5;
+/** Weekends view has no time-grid levels — it stops at the 1-week grid. */
+export const WEEKENDS_MAX_ZOOM = 4;
 
 /** Top-level calendar mode. "looking" is driven by `Scope`, not this. */
 export type CalendarMode = "calendar" | "agenda";
@@ -162,12 +183,24 @@ export type Scope =
   | { kind: "looking" };
 
 /**
- * Availability emphasis:
- * - `all`: everything at full colour.
- * - `dim_busy`: busy/unavailable kept but greyed/faded (not removed).
- * - `available_only`: only explicit availability windows; rounds + events hidden.
+ * Availability filter — rounds & events ALWAYS survive both filters; only
+ * unavailability ("busy") blocks are ever dropped.
+ * - `all`: show everything.
+ * - `hide_busy`: drop unavailability blocks. Days that were *only* busy blank
+ *   out as "removed"; empty days stay as normal empty cells.
+ * - `available_only`: additionally blank out days with no explicit availability
+ *   (and no round/event) — only "available" days keep their normal cell.
  */
-export type AvailabilityFilter = "all" | "dim_busy" | "available_only";
+export type AvailabilityFilter = "all" | "hide_busy" | "available_only";
+
+/**
+ * Per-day render state under the active filter, so a day emptied *by the
+ * filter* looks distinct from a genuinely empty day.
+ * - `shown`: the day has content to render.
+ * - `removed`: the filter hid this day's content (draw the "removed" hatch).
+ * - `empty`: nothing here either way (plain empty cell).
+ */
+export type DayFilterState = "shown" | "removed" | "empty";
 
 /** Aggregate availability state for a day (or slot) across displayed people. */
 export type BucketState = "unavailable" | "available" | "neutral";

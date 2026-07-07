@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Flag } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type {
@@ -18,11 +18,10 @@ import {
   isToday,
   startOfDay,
 } from "@/lib/calendar/dateUtils";
-import { isDimmed, resolveDayIntervals } from "@/lib/calendar/recurrence";
+import { applyAvailabilityFilter, resolveDayIntervals } from "@/lib/calendar/recurrence";
 import {
   AVAILABLE_SHADE,
   BUSY_SHADE,
-  DIMMED_CLASSES,
   UNUSABLE_SHADE,
   occChipClasses,
 } from "../eventStyles";
@@ -39,13 +38,26 @@ const VISIBLE_HOURS = DAY_END_H - DAY_START_H; // 16
 const GUTTER = 40;
 const MIN_BLOCK_PX = 18;
 
-/** Vertical pixels per hour, by zoom density (day is tallest, so cards fit). */
-const HOUR_PX_BY_DENSITY: Record<Density, number> = {
-  pip: 40,
-  compact: 40,
-  medium: 48,
-  full: 64,
-};
+/** Fallback pixels per hour before the container is measured. */
+const FALLBACK_HOUR_PX = 44;
+/** Never shrink an hour row below this, even to fit (keeps blocks legible). */
+const MIN_HOUR_PX = 26;
+
+/** Measure a DOM element's content box, re-measuring on resize. */
+function useElementSize<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => setSize({ width: el.clientWidth, height: el.clientHeight });
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, size] as const;
+}
 
 // Horizontal (landscape) day-row window uses the same 6am–10pm span.
 const H_WIN_START = DAY_START_MIN;
@@ -125,12 +137,9 @@ type GridProps = {
   onOccurrenceClick: (occ: ResolvedOccurrence) => void;
 };
 
-/** available_only hides everything but explicit availability; all/dim_busy keep the set. */
+/** Rounds & events always survive; both filters drop only unavailability blocks. */
 function useGridOccs(occurrences: ResolvedOccurrence[], filter: AvailabilityFilter) {
-  return useMemo(
-    () => occurrences.filter((o) => (filter === "available_only" ? o.kind === "available" : true)),
-    [occurrences, filter]
-  );
+  return useMemo(() => applyAvailabilityFilter(occurrences, filter), [occurrences, filter]);
 }
 
 export function TimeGridView(props: GridProps) {
@@ -163,20 +172,19 @@ function VerticalGrid(props: GridProps) {
     onSlotClick,
     onOccurrenceClick,
   } = props;
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const hourPx = HOUR_PX_BY_DENSITY[density];
 
-  useEffect(() => {
-    // Start scrolled near the top of the playable window (6am is row 0 now).
-    const el = scrollRef.current;
-    if (el) el.scrollTop = 0;
-  }, []);
+  // Auto-fit: measure the body area and size hour rows to fill it (no scroll).
+  const [bodyRef, bodySize] = useElementSize<HTMLDivElement>();
+  const hourPx =
+    bodySize.height > 0
+      ? Math.max(MIN_HOUR_PX, bodySize.height / VISIBLE_HOURS)
+      : FALLBACK_HOUR_PX;
+  const colW =
+    bodySize.width > 0 ? Math.max(80, (bodySize.width - GUTTER) / days.length) : 160;
 
-  const colW = days.length === 1 ? 300 : days.length <= 2 ? 176 : days.length <= 3 ? 150 : 128;
   const hours = Array.from({ length: VISIBLE_HOURS }, (_, i) => DAY_START_H + i);
   const gridOccs = useGridOccs(occurrences, filter);
-  const showShades = filter !== "available_only";
-  const showUnusable = showShades && props.markUnusable;
+  const showUnusable = props.markUnusable;
   const isFull = density === "full";
 
   const perDay = useMemo(() => {
@@ -190,165 +198,150 @@ function VerticalGrid(props: GridProps) {
       const intervals =
         ds < today
           ? { busy: [], available: [], unusable: [] }
-          : resolveDayIntervals(occurrences, profileIds, day);
+          : resolveDayIntervals(gridOccs, profileIds, day);
       return { day, allDay, positioned: packDay(timed, day, hourPx), intervals };
     });
-  }, [days, gridOccs, occurrences, profileIds, hourPx]);
+  }, [days, gridOccs, profileIds, hourPx]);
 
   return (
-    <div
-      ref={scrollRef}
-      className="max-h-[66vh] overflow-auto rounded-2xl border border-emerald-900/60 bg-[#052a17]/40 landscape:max-h-[86vh]"
-    >
-      <div style={{ minWidth: GUTTER + days.length * colW }}>
-        {/* Sticky day header + all-day chips */}
-        <div className="sticky top-0 z-20 flex border-b border-emerald-900/60 bg-[#04240f]/95 backdrop-blur">
-          <div className="sticky left-0 z-10 shrink-0 bg-[#04240f]/95" style={{ width: GUTTER }} />
-          {perDay.map(({ day, allDay }) => {
-            const { weekday, day: dnum } = formatColumnHeader(day);
-            return (
-              <div
-                key={dayKey(day)}
-                className="shrink-0 border-l border-emerald-900/40 px-1 py-1.5"
-                style={{ width: colW }}
-              >
-                <div className="flex flex-col items-center">
-                  <span className="text-[10px] uppercase tracking-wide text-emerald-200/50">
-                    {weekday}
-                  </span>
-                  <span
-                    className={cn(
-                      "mt-0.5 flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold",
-                      isToday(day) ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-50"
-                    )}
-                  >
-                    {dnum}
-                  </span>
-                </div>
-                {allDay.length > 0 ? (
-                  <div className="mt-1 space-y-0.5">
-                    {allDay.map((occ) => (
-                      <EventChip
-                        key={occ.key}
-                        occ={occ}
-                        compact
-                        owner={showOwners ? nameById.get(occ.profileId) : undefined}
-                        onClick={onOccurrenceClick}
-                      />
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Body: hour gutter + day columns */}
-        <div className="flex">
-          <div className="sticky left-0 z-10 shrink-0 bg-[#052a17]/80" style={{ width: GUTTER }}>
-            {hours.map((h) => (
-              <div
-                key={h}
-                style={{ height: hourPx }}
-                className="relative -top-1.5 pr-1 text-right text-[10px] text-emerald-200/45"
-              >
-                {formatHourLabel(h)}
-              </div>
-            ))}
-          </div>
-
-          {perDay.map(({ day, positioned, intervals }) => (
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-emerald-900/60 bg-[#052a17]/40">
+      {/* Day header + all-day chips (natural height) */}
+      <div className="flex shrink-0 border-b border-emerald-900/60 bg-[#04240f]/95">
+        <div className="shrink-0" style={{ width: GUTTER }} />
+        {perDay.map(({ day, allDay }) => {
+          const { weekday, day: dnum } = formatColumnHeader(day);
+          return (
             <div
               key={dayKey(day)}
-              className="relative shrink-0 border-l border-emerald-900/40"
-              style={{ width: colW, height: VISIBLE_HOURS * hourPx }}
+              className="min-w-0 flex-1 border-l border-emerald-900/40 px-1 py-1.5"
             >
-              {/* hour rows / tap targets */}
-              {hours.map((h) => (
-                <button
-                  key={h}
-                  onClick={() => onSlotClick(day, h)}
-                  className="block w-full border-t border-emerald-900/20 hover:bg-emerald-500/5"
-                  style={{ height: hourPx }}
-                  aria-label={`Add at ${formatHourLabel(h)}`}
-                />
-              ))}
-
-              {/* availability shading */}
-              {intervals.available.map((iv, i) => (
-                <div
-                  key={`a${i}`}
-                  className={cn("pointer-events-none absolute inset-x-0", AVAILABLE_SHADE)}
-                  style={shadeStyle(iv, hourPx)}
-                />
-              ))}
-              {showUnusable
-                ? intervals.unusable.map((iv, i) => (
-                    <div
-                      key={`u${i}`}
-                      className={cn("pointer-events-none absolute inset-x-0", UNUSABLE_SHADE)}
-                      style={shadeStyle(iv, hourPx)}
+              <div className="flex flex-col items-center">
+                <span className="text-[10px] uppercase tracking-wide text-emerald-200/50">
+                  {weekday}
+                </span>
+                <span
+                  className={cn(
+                    "mt-0.5 flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold",
+                    isToday(day) ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-50"
+                  )}
+                >
+                  {dnum}
+                </span>
+              </div>
+              {allDay.length > 0 ? (
+                <div className="mt-1 space-y-0.5">
+                  {allDay.map((occ) => (
+                    <EventChip
+                      key={occ.key}
+                      occ={occ}
+                      compact
+                      owner={showOwners ? nameById.get(occ.profileId) : undefined}
+                      onClick={onOccurrenceClick}
                     />
-                  ))
-                : null}
-              {showShades
-                ? intervals.busy.map((iv, i) => (
-                    <div
-                      key={`b${i}`}
-                      className={cn("pointer-events-none absolute inset-x-0", BUSY_SHADE)}
-                      style={shadeStyle(iv, hourPx)}
-                    />
-                  ))
-                : null}
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
 
-              {/* timed blocks */}
-              {positioned.map(({ occ, top, height, lane, lanes, early, late }) => {
-                const owner = showOwners ? nameById.get(occ.profileId) : undefined;
-                const widthPct = 100 / lanes;
-                const wPx = (colW * widthPct) / 100;
-                const isRound = occ.kind === "round";
-                const isEvent = occ.kind === "event";
-                const dimmed = isDimmed(occ, filter);
-                const richCard = isFull && (isRound || isEvent) && lanes <= 2;
-
-                return (
-                  <button
-                    key={occ.key}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOccurrenceClick(occ);
-                    }}
-                    className={cn(
-                      "absolute flex flex-col overflow-hidden rounded-md px-1 py-0.5 text-left shadow-sm shadow-black/20",
-                      occChipClasses(occ),
-                      occ.recurring && "border-dashed",
-                      dimmed && DIMMED_CLASSES
-                    )}
-                    style={{
-                      top,
-                      height,
-                      left: `calc(${lane * widthPct}% + 1px)`,
-                      width: `calc(${widthPct}% - 2px)`,
-                    }}
-                  >
-                    {early ? <EdgeMarker dir="up" /> : null}
-                    {late ? <EdgeMarker dir="down" /> : null}
-                    {richCard ? (
-                      <RoundCard occ={occ} owner={owner} tight={height < 44} />
-                    ) : (
-                      <VBlockContent
-                        occ={occ}
-                        owner={owner}
-                        wPx={wPx}
-                        height={height}
-                      />
-                    )}
-                  </button>
-                );
-              })}
+      {/* Body fills the remaining height; hour rows sized to fit (no scroll). */}
+      <div ref={bodyRef} className="flex min-h-0 flex-1 overflow-hidden">
+        <div className="shrink-0" style={{ width: GUTTER }}>
+          {hours.map((h) => (
+            <div
+              key={h}
+              style={{ height: hourPx }}
+              className="relative -top-1.5 pr-1 text-right text-[10px] text-emerald-200/45"
+            >
+              {formatHourLabel(h)}
             </div>
           ))}
         </div>
+
+        {perDay.map(({ day, positioned, intervals }) => (
+          <div
+            key={dayKey(day)}
+            className="relative min-w-0 flex-1 border-l border-emerald-900/40"
+            style={{ height: VISIBLE_HOURS * hourPx }}
+          >
+            {/* hour rows / tap targets */}
+            {hours.map((h) => (
+              <button
+                key={h}
+                onClick={() => onSlotClick(day, h)}
+                className="block w-full border-t border-emerald-900/20 hover:bg-emerald-500/5"
+                style={{ height: hourPx }}
+                aria-label={`Add at ${formatHourLabel(h)}`}
+              />
+            ))}
+
+            {/* availability shading */}
+            {intervals.available.map((iv, i) => (
+              <div
+                key={`a${i}`}
+                className={cn("pointer-events-none absolute inset-x-0", AVAILABLE_SHADE)}
+                style={shadeStyle(iv, hourPx)}
+              />
+            ))}
+            {showUnusable
+              ? intervals.unusable.map((iv, i) => (
+                  <div
+                    key={`u${i}`}
+                    className={cn("pointer-events-none absolute inset-x-0", UNUSABLE_SHADE)}
+                    style={shadeStyle(iv, hourPx)}
+                  />
+                ))
+              : null}
+            {intervals.busy.map((iv, i) => (
+              <div
+                key={`b${i}`}
+                className={cn("pointer-events-none absolute inset-x-0", BUSY_SHADE)}
+                style={shadeStyle(iv, hourPx)}
+              />
+            ))}
+
+            {/* timed blocks */}
+            {positioned.map(({ occ, top, height, lane, lanes, early, late }) => {
+              const owner = showOwners ? nameById.get(occ.profileId) : undefined;
+              const widthPct = 100 / lanes;
+              const wPx = (colW * widthPct) / 100;
+              const isRound = occ.kind === "round";
+              const isEvent = occ.kind === "event";
+              const richCard = isFull && (isRound || isEvent) && lanes <= 2;
+
+              return (
+                <button
+                  key={occ.key}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOccurrenceClick(occ);
+                  }}
+                  className={cn(
+                    "absolute flex flex-col overflow-hidden rounded-md px-1 py-0.5 text-left shadow-sm shadow-black/20",
+                    occChipClasses(occ),
+                    occ.recurring && "border-dashed"
+                  )}
+                  style={{
+                    top,
+                    height,
+                    left: `calc(${lane * widthPct}% + 1px)`,
+                    width: `calc(${widthPct}% - 2px)`,
+                  }}
+                >
+                  {early ? <EdgeMarker dir="up" /> : null}
+                  {late ? <EdgeMarker dir="down" /> : null}
+                  {richCard ? (
+                    <RoundCard occ={occ} owner={owner} tight={height < 44} />
+                  ) : (
+                    <VBlockContent occ={occ} owner={owner} wPx={wPx} height={height} />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -465,8 +458,7 @@ function packRowH(occs: ResolvedOccurrence[], day: Date): { items: PositionedH[]
 function HorizontalGrid(props: GridProps) {
   const { days, occurrences, profileIds, filter, onSlotClick, onOccurrenceClick } = props;
   const gridOccs = useGridOccs(occurrences, filter);
-  const showShades = filter !== "available_only";
-  const showUnusable = showShades && props.markUnusable;
+  const showUnusable = props.markUnusable;
 
   const rows = useMemo(() => {
     const today = startOfDay(new Date()).getTime();
@@ -477,10 +469,10 @@ function HorizontalGrid(props: GridProps) {
       const intervals =
         ds < today
           ? { busy: [], available: [], unusable: [] }
-          : resolveDayIntervals(occurrences, profileIds, day);
+          : resolveDayIntervals(gridOccs, profileIds, day);
       return { day, ...packRowH(onDay, day), intervals };
     });
-  }, [days, gridOccs, occurrences, profileIds]);
+  }, [days, gridOccs, profileIds]);
 
   function trackClick(e: React.MouseEvent<HTMLButtonElement>, day: Date) {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -559,20 +551,17 @@ function HorizontalGrid(props: GridProps) {
                     />
                   ))
                 : null}
-              {showShades
-                ? intervals.busy.map((iv, i) => (
-                    <div
-                      key={`b${i}`}
-                      className={cn("pointer-events-none absolute inset-y-0", BUSY_SHADE)}
-                      style={{ left: `${pctH(iv.start)}%`, width: `${pctH(iv.end) - pctH(iv.start)}%` }}
-                    />
-                  ))
-                : null}
+              {intervals.busy.map((iv, i) => (
+                <div
+                  key={`b${i}`}
+                  className={cn("pointer-events-none absolute inset-y-0", BUSY_SHADE)}
+                  style={{ left: `${pctH(iv.start)}%`, width: `${pctH(iv.end) - pctH(iv.start)}%` }}
+                />
+              ))}
 
               {items.map(({ occ, left, width, lane, early, late }) => {
                 const isRound = occ.kind === "round";
                 const players = isRound ? playersLabelH(occ.playerNames) : "";
-                const dimmed = isDimmed(occ, filter);
                 const primary = isRound
                   ? occ.title ?? occ.courseName ?? "Round"
                   : occ.title ?? (occ.kind === "available" ? "Available" : occ.kind === "event" ? "Event" : "Busy");
@@ -585,8 +574,7 @@ function HorizontalGrid(props: GridProps) {
                     }}
                     className={cn(
                       "absolute flex items-center gap-1 overflow-hidden rounded px-1 text-left",
-                      occChipClasses(occ),
-                      dimmed && DIMMED_CLASSES
+                      occChipClasses(occ)
                     )}
                     style={{
                       left: `${left}%`,

@@ -180,12 +180,12 @@ export function ScopePicker(props: {
                     onChange={onFilter}
                     options={[
                       { value: "all", label: "Show all" },
-                      { value: "dim_busy", label: "Dim busy" },
+                      { value: "hide_busy", label: "Hide busy" },
                       { value: "available_only", label: "Available" },
                     ]}
                   />
                   <label className="flex items-center justify-between rounded-lg border border-emerald-900/60 bg-[#0b3b21]/40 px-3 py-2 text-xs text-emerald-100/80">
-                    Weekends only
+                    Weekends view
                     <input
                       type="checkbox"
                       checked={weekendsOnly}
@@ -203,7 +203,7 @@ export function ScopePicker(props: {
                     />
                   </label>
                   <div className="px-1 text-[10px] leading-snug text-emerald-200/45">
-                    Pinch or double-tap to zoom · tap a day to zoom in
+                    Pinch to zoom (Month → Week → Day) · tap a round or event to open it
                   </div>
                 </div>
 

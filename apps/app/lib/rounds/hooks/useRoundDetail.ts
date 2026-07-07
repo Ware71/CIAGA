@@ -1,10 +1,54 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabaseClient";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 import { resolvePlayingHandicapPreview } from "@/lib/rounds/playingHandicapPreview";
 import type { PlayingHandicapMode } from "@/components/rounds/PlayingHandicapSettings";
+
+// Subscribes a realtime channel with automatic reconnect on drop (mobile tabs
+// suspend websockets without warning) and reconciles via `onReconciled` on every
+// successful (re)subscribe, so events missed while disconnected aren't lost.
+// Returns a dispose function to call from the effect's cleanup.
+function subscribeWithChannelRetry(opts: {
+  makeChannel: () => RealtimeChannel;
+  onReconciled: () => void;
+}): () => void {
+  let disposed = false;
+  let current: RealtimeChannel | null = null;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  let retryCount = 0;
+
+  const start = () => {
+    if (disposed) return;
+    current = opts.makeChannel().subscribe((status) => {
+      if (disposed) return;
+      if (status === "SUBSCRIBED") {
+        retryCount = 0;
+        opts.onReconciled();
+      } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+        if (current) supabase.removeChannel(current);
+        current = null;
+        if (disposed) return;
+        const delay = Math.min(1000 * 2 ** retryCount, 30000);
+        retryCount += 1;
+        retryTimer = setTimeout(() => {
+          retryTimer = null;
+          start();
+        }, delay);
+      }
+    });
+  };
+
+  start();
+
+  return () => {
+    disposed = true;
+    if (retryTimer) clearTimeout(retryTimer);
+    if (current) supabase.removeChannel(current);
+  };
+}
 
 type ProfileEmbed = { name: string | null; email: string | null; avatar_url: string | null };
 
@@ -228,6 +272,14 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
     hydrateFromSnapshot(snap);
   }, [roundId, hydrateFromSnapshot]);
 
+  // Debounced wrapper around fetchAll — used both for meta-change refetches and
+  // as the reconciliation call after a realtime channel (re)subscribes.
+  const metaDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debouncedFetchAll = useCallback(() => {
+    if (metaDebounceRef.current) clearTimeout(metaDebounceRef.current);
+    metaDebounceRef.current = setTimeout(() => fetchAll(), 300);
+  }, [fetchAll]);
+
   // initial load — use server-provided snapshot when available
   useEffect(() => {
     if (initialSnapshot) {
@@ -257,68 +309,70 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
   useEffect(() => {
     if (!roundId) return;
 
-    const channel = supabase
-      .channel(`round:${roundId}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "round_score_events", filter: `round_id=eq.${roundId}` },
-        (payload) => {
-          const row = payload.new as any;
-          const key = `${row.participant_id}:${row.hole_number}`;
-          setScoresByKey((prev) => ({
-            ...prev,
-            [key]: {
-              participant_id: row.participant_id,
-              hole_number: row.hole_number,
-              strokes: row.strokes,
-              created_at: row.created_at,
-            },
-          }));
-        }
-      )
-      .subscribe();
+    const dispose = subscribeWithChannelRetry({
+      makeChannel: () =>
+        supabase
+          .channel(`round:${roundId}`)
+          .on(
+            "postgres_changes",
+            { event: "INSERT", schema: "public", table: "round_score_events", filter: `round_id=eq.${roundId}` },
+            (payload) => {
+              const row = payload.new as any;
+              const key = `${row.participant_id}:${row.hole_number}`;
+              setScoresByKey((prev) => ({
+                ...prev,
+                [key]: {
+                  participant_id: row.participant_id,
+                  hole_number: row.hole_number,
+                  strokes: row.strokes,
+                  created_at: row.created_at,
+                },
+              }));
+            }
+          ),
+      onReconciled: () => debouncedFetchAll(),
+    });
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [roundId]);
+    return dispose;
+  }, [roundId, debouncedFetchAll]);
 
   // B: realtime hole state changes
   useEffect(() => {
     if (!roundId) return;
 
-    const channel = supabase
-      .channel(`round-hole-states:${roundId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "round_hole_states", filter: `round_id=eq.${roundId}` },
-        (payload) => {
-          const row: any = (payload.new ?? payload.old) as any;
-          if (!row?.participant_id || !row?.hole_number) return;
+    const dispose = subscribeWithChannelRetry({
+      makeChannel: () =>
+        supabase
+          .channel(`round-hole-states:${roundId}`)
+          .on(
+            "postgres_changes",
+            { event: "*", schema: "public", table: "round_hole_states", filter: `round_id=eq.${roundId}` },
+            (payload) => {
+              const row: any = (payload.new ?? payload.old) as any;
+              if (!row?.participant_id || !row?.hole_number) return;
 
-          const key = `${row.participant_id}:${row.hole_number}`;
+              const key = `${row.participant_id}:${row.hole_number}`;
 
-          if (payload.eventType === "DELETE") {
-            setHoleStatesByKey((prev) => {
-              const next = { ...prev };
-              delete next[key];
-              return next;
-            });
-            return;
-          }
+              if (payload.eventType === "DELETE") {
+                setHoleStatesByKey((prev) => {
+                  const next = { ...prev };
+                  delete next[key];
+                  return next;
+                });
+                return;
+              }
 
-          setHoleStatesByKey((prev) => ({
-            ...prev,
-            [key]: row.status as HoleState,
-          }));
-        }
-      )
-      .subscribe();
+              setHoleStatesByKey((prev) => ({
+                ...prev,
+                [key]: row.status as HoleState,
+              }));
+            }
+          ),
+      onReconciled: () => debouncedFetchAll(),
+    });
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [roundId]);
+    return dispose;
+  }, [roundId, debouncedFetchAll]);
 
   // Wolf picks: initial load + realtime. Not part of the snapshot RPC, so fetched directly.
   useEffect(() => {
@@ -352,64 +406,79 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
       setWolfPicksByHole(map);
     })();
 
-    const channel = supabase
-      .channel(`round-wolf-picks:${roundId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "round_wolf_picks", filter: `round_id=eq.${roundId}` },
-        (payload) => {
-          if (payload.eventType === "DELETE") {
-            const old: any = payload.old;
-            if (old?.hole_number == null) return;
-            setWolfPicksByHole((prev) => {
-              const next = { ...prev };
-              delete next[old.hole_number];
-              return next;
-            });
-            return;
-          }
-          const row: any = payload.new;
-          if (row?.hole_number == null) return;
-          applyRow(row);
-        }
-      )
-      .subscribe();
+    // Note: `cancelled` guards the async initial fetch's setState above; it's
+    // intentionally separate from subscribeWithChannelRetry's own dispose/retry
+    // lifecycle below, since the two guard different concerns.
+    const dispose = subscribeWithChannelRetry({
+      makeChannel: () =>
+        supabase
+          .channel(`round-wolf-picks:${roundId}`)
+          .on(
+            "postgres_changes",
+            { event: "*", schema: "public", table: "round_wolf_picks", filter: `round_id=eq.${roundId}` },
+            (payload) => {
+              if (payload.eventType === "DELETE") {
+                const old: any = payload.old;
+                if (old?.hole_number == null) return;
+                setWolfPicksByHole((prev) => {
+                  const next = { ...prev };
+                  delete next[old.hole_number];
+                  return next;
+                });
+                return;
+              }
+              const row: any = payload.new;
+              if (row?.hole_number == null) return;
+              applyRow(row);
+            }
+          ),
+      onReconciled: () => debouncedFetchAll(),
+    });
 
     return () => {
       cancelled = true;
-      supabase.removeChannel(channel);
+      dispose();
     };
-  }, [roundId]);
+  }, [roundId, debouncedFetchAll]);
 
   // realtime: meta changes (refetch all, debounced to prevent burst reloads)
-  const metaDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const debouncedFetchAll = useCallback(() => {
-    if (metaDebounceRef.current) clearTimeout(metaDebounceRef.current);
-    metaDebounceRef.current = setTimeout(() => fetchAll(), 300);
-  }, [fetchAll]);
-
   useEffect(() => {
     if (!roundId) return;
-    const chan = supabase
-      .channel(`round-meta:${roundId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "round_participants", filter: `round_id=eq.${roundId}` },
-        () => debouncedFetchAll()
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "rounds", filter: `id=eq.${roundId}` },
-        () => debouncedFetchAll()
-      )
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "round_hole_snapshots" }, () => debouncedFetchAll())
-      .subscribe();
+
+    const dispose = subscribeWithChannelRetry({
+      makeChannel: () =>
+        supabase
+          .channel(`round-meta:${roundId}`)
+          .on(
+            "postgres_changes",
+            { event: "*", schema: "public", table: "round_participants", filter: `round_id=eq.${roundId}` },
+            () => debouncedFetchAll()
+          )
+          .on(
+            "postgres_changes",
+            { event: "UPDATE", schema: "public", table: "rounds", filter: `id=eq.${roundId}` },
+            () => debouncedFetchAll()
+          )
+          .on("postgres_changes", { event: "INSERT", schema: "public", table: "round_hole_snapshots" }, () => debouncedFetchAll()),
+      onReconciled: () => debouncedFetchAll(),
+    });
 
     return () => {
       if (metaDebounceRef.current) clearTimeout(metaDebounceRef.current);
-      supabase.removeChannel(chan);
+      dispose();
     };
   }, [roundId, debouncedFetchAll]);
+
+  // Tab-visibility resync: mobile/backgrounded tabs can suspend websockets
+  // without the channel ever cleanly reporting an error, so re-sync on resume
+  // as a belt-and-suspenders in addition to the per-channel reconnect above.
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") debouncedFetchAll();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [debouncedFetchAll]);
 
   // Round settings + live preview. For not-yet-live rounds there are no snapshots,
   // so we build the scorecard from the *current* pending tee and compute CH/PH

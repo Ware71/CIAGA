@@ -4,6 +4,8 @@ import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
 type Row = Record<string, string>;
 
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
 type TeeHole = {
   hole_number: number;
   par: number | null;
@@ -60,6 +62,7 @@ export async function POST(req: Request) {
     const form = await req.formData();
     const file = form.get("file") as File | null;
     if (!file) return NextResponse.json({ error: "Missing file" }, { status: 400 });
+    if (file.size > MAX_UPLOAD_BYTES) return NextResponse.json({ error: "File too large (max 10MB)" }, { status: 413 });
 
     const isPreview = form.get("preview") === "true";
 

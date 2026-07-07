@@ -68,6 +68,7 @@ export async function POST(req: Request) {
     const file    = form.get("file")     as File | null;
     const groupId = form.get("group_id") as string | null;
     const phase   = ((form.get("phase") as string | null) || "all") as "all" | "events" | "finalize";
+    if (file && file.size > 10 * 1024 * 1024) return NextResponse.json({ error: "File too large (max 10MB)" }, { status: 413 });
 
     let seasonFilter: Set<string> | null = null;
     const seasonNamesRaw = form.get("season_names") as string | null;

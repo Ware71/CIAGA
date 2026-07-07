@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { safeCompare } from "@/lib/auth/safeCompare";
 
 function requireAdmin(req: NextRequest) {
   const key = req.headers.get("x-admin-key");
   if (!process.env.ADMIN_API_KEY) throw new Error("ADMIN_API_KEY not set");
-  if (key !== process.env.ADMIN_API_KEY) {
+  if (!safeCompare(key, process.env.ADMIN_API_KEY)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   return null;
@@ -327,6 +328,9 @@ export async function POST(req: NextRequest) {
   }
 
   const csvText = await req.text();
+  if (csvText.length > 10 * 1024 * 1024) {
+    return NextResponse.json({ error: "CSV too large (max 10MB)" }, { status: 413 });
+  }
   const table = parseCsv(csvText);
 
   if (table.length < 2) {

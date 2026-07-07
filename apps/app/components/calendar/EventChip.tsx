@@ -4,7 +4,7 @@ import { Flag, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ProfileLite, ResolvedOccurrence } from "@/lib/calendar/types";
 import { formatTime } from "@/lib/calendar/dateUtils";
-import { accentColor } from "./eventStyles";
+import { accentColor, entryTag, ENTRY_TAG_CLASSES } from "./eventStyles";
 import { InitialsAvatar, AvatarStack } from "./Avatar";
 
 export function formatDiff(diff: number | null | undefined): string | null {
@@ -33,6 +33,7 @@ export function EventChip(props: {
       : occ.title ?? (occ.kind === "available" ? "Available" : "Busy");
 
   const players = isRound ? occ.playerNames ?? [] : [];
+  const tag = entryTag(occ);
   const timeLabel = isEvent
     ? occ.tbc
       ? "TBC"
@@ -51,7 +52,9 @@ export function EventChip(props: {
       className={cn(
         // @container drives progressive disclosure by the chip's own width.
         "@container flex w-full items-center gap-1.5 overflow-hidden rounded-r-md border-l-[3px] bg-white/[0.04] pr-1 pl-1.5 text-left text-emerald-50/90 transition-colors hover:bg-white/[0.08]",
-        occ.kind === "event" && occ.eventStatus === "draft" && "border-dashed opacity-80",
+        occ.kind === "event" &&
+          (occ.entryState === "entry_soon" || occ.entryState === "entry_closed") &&
+          "opacity-80",
         compact ? "py-[1px] text-[9px]" : "py-0.5 text-[10px]"
       )}
     >
@@ -74,9 +77,14 @@ export function EventChip(props: {
       {/* Round course name only when there's room — never show a 1–2 letter stub. */}
       <span className={cn("min-w-0 truncate", isRound && "hidden @min-[72px]:inline")}>{label}</span>
 
-      {isEvent && occ.eventStatus === "draft" ? (
-        <span className="ml-auto hidden shrink-0 rounded bg-white/10 px-1 text-[8px] uppercase tracking-wide opacity-80 @min-[120px]:inline">
-          Draft
+      {isEvent && tag ? (
+        <span
+          className={cn(
+            "ml-auto hidden shrink-0 rounded px-1 text-[8px] uppercase tracking-wide @min-[120px]:inline",
+            ENTRY_TAG_CLASSES[tag.tone]
+          )}
+        >
+          {tag.label}
         </span>
       ) : occ.resultLabel ? (
         <span className="ml-auto flex shrink-0 items-baseline gap-1 pl-1">

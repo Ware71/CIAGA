@@ -10,6 +10,8 @@ import type {
   CalendarEvent,
   CalendarGroupEvent,
   CalendarRound,
+  DayFilterState,
+  EntryState,
   PlayerDayStatus,
   ResolvedOccurrence,
 } from "./types";
@@ -137,6 +139,20 @@ function makeRoundOccurrence(round: CalendarRound): ResolvedOccurrence {
   };
 }
 
+/**
+ * Entry-window state for a Majors event, mirroring the canonical `entryOpen`
+ * logic in EventDetailClient. Entered wins; otherwise it's soon / open / closed
+ * relative to the entry window (an absent window is treated as open now).
+ */
+function resolveEntryState(ev: CalendarGroupEvent, now: number = Date.now()): EntryState {
+  if (ev.status === "confirmed") return "entered";
+  const start = ev.entry_window_start ? Date.parse(ev.entry_window_start) : null;
+  const end = ev.entry_window_end ? Date.parse(ev.entry_window_end) : null;
+  if (start != null && now < start) return "entry_soon";
+  if (end != null && now > end) return "entry_closed";
+  return "enter_now";
+}
+
 /** A Majors group event → occurrence (self only). Timed at the player's tee
  *  time, else an all-day "TBC" block on the event date. */
 function makeGroupEventOccurrence(ev: CalendarGroupEvent, selfId: string): ResolvedOccurrence {
@@ -170,6 +186,7 @@ function makeGroupEventOccurrence(ev: CalendarGroupEvent, selfId: string): Resol
     // Only a confirmed entry is a real commitment that blocks availability.
     busy: confirmed,
     eventStatus: ev.status,
+    entryState: resolveEntryState(ev),
     tbc,
     groupName: ev.group_name,
   };
@@ -305,23 +322,47 @@ export function dayHeat(statuses: Map<string, PlayerDayStatus>): number {
 }
 
 /**
- * Filter occurrences for rendering by kind (not aggregate day state):
- * - `all`: everything.
- * - `dim_busy`: keep everything (busy is *dimmed* at render time, not removed).
- * - `available_only`: keep **only availability** (rounds + unavailability hidden).
+ * Filter which occurrences render. Rounds & events ALWAYS survive; only
+ * unavailability ("busy") blocks are dropped by both filters. The difference
+ * between `hide_busy` and `available_only` is a *day-level* one — see
+ * `dayFilterState` (available_only also blanks days with no availability).
  */
 export function applyAvailabilityFilter(
   occurrences: ResolvedOccurrence[],
   filter: AvailabilityFilter
 ): ResolvedOccurrence[] {
-  if (filter === "available_only") return occurrences.filter((o) => o.kind === "available");
-  // all + dim_busy keep the full set; dim_busy only changes styling.
-  return occurrences;
+  if (filter === "all") return occurrences;
+  // hide_busy + available_only both drop only explicit unavailability blocks;
+  // scheduled rounds and Majors events are kept.
+  return occurrences.filter((o) => o.kind !== "unavailable");
 }
 
-/** True when an occurrence should render greyed/faded under the `dim_busy` filter. */
-export function isDimmed(occ: ResolvedOccurrence, filter: AvailabilityFilter): boolean {
-  return filter === "dim_busy" && occ.busy;
+/**
+ * Whether a day should render normally, blank out as filter-`removed`, or is
+ * genuinely `empty`. Given the day's *unfiltered* occurrences so we can tell a
+ * day the filter emptied from one that never had anything.
+ * - `all`: any content → shown, else empty.
+ * - `hide_busy`: any non-busy content → shown; only-busy → removed; else empty.
+ * - `available_only`: any availability/round/event → shown; everything else
+ *   (only-busy *and* truly empty days) → removed.
+ */
+export function dayFilterState(
+  dayOccs: ResolvedOccurrence[],
+  filter: AvailabilityFilter
+): DayFilterState {
+  if (filter === "all") return dayOccs.length > 0 ? "shown" : "empty";
+
+  if (filter === "available_only") {
+    const shown = dayOccs.some(
+      (o) => o.kind === "available" || o.kind === "round" || o.kind === "event"
+    );
+    return shown ? "shown" : "removed";
+  }
+
+  // hide_busy
+  const shown = dayOccs.some((o) => o.kind !== "unavailable");
+  if (shown) return "shown";
+  return dayOccs.length > 0 ? "removed" : "empty";
 }
 
 /**

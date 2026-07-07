@@ -143,6 +143,7 @@ export async function POST(req: Request) {
     const groupId = form.get("group_id") as string | null;
 
     if (!file)    return NextResponse.json({ error: "Missing file" },     { status: 400 });
+    if (file.size > 10 * 1024 * 1024) return NextResponse.json({ error: "File too large (max 10MB)" }, { status: 413 });
     if (!groupId) return NextResponse.json({ error: "Missing group_id" }, { status: 400 });
 
     const { parsed, errors: parseErrors } = await parseXlsx(file);
