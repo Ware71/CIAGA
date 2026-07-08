@@ -189,12 +189,23 @@ export type LiveRoundData = {
 
 /** Live in-event rounds: per-player round status + latest score per hole. */
 async function loadLiveRoundData(eventId: string, fallbackHoleCount: number): Promise<LiveRoundData> {
+  // rounds ↔ event_tee_times are related in both directions, which makes a
+  // PostgREST embed ambiguous — resolve the tee times first, then the rounds.
+  const { data: teeTimes, error: ttErr } = await supabaseAdmin
+    .from("event_tee_times")
+    .select("id")
+    .eq("event_id", eventId);
+  if (ttErr) throw ttErr;
+  const teeTimeIds = ((teeTimes ?? []) as { id: string }[]).map((t) => t.id);
+
+  if (teeTimeIds.length === 0) {
+    return { profileRoundStatus: new Map(), completedByProfile: new Map() };
+  }
+
   const { data: liveRounds, error: liveErr } = await supabaseAdmin
     .from("rounds")
-    .select(
-      "id, status, number_of_holes, event_tee_time_id, event_tee_times!inner(event_id), round_participants(id, profile_id)"
-    )
-    .eq("event_tee_times.event_id", eventId);
+    .select("id, status, number_of_holes, event_tee_time_id, round_participants(id, profile_id)")
+    .in("event_tee_time_id", teeTimeIds);
   if (liveErr) throw liveErr;
 
   const participantToProfile = new Map<string, string>();
