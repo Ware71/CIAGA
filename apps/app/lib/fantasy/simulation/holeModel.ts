@@ -25,6 +25,20 @@ const SI_SENSITIVITY = 0.12; // strokes: SI 1 ≈ +0.11 harder, SI 18 ≈ −0.1
 const SPLIT_MIN_SAMPLE = 4;
 const SPLIT_WEIGHT = 0.6;
 
+/**
+ * Handicap anchor — a PRIOR for thin/no-history players, never a driver.
+ * Gross history defines the model; the anchor's influence decays linearly to
+ * zero by ANCHOR_FULL_SAMPLE rounds. Amateurs average ~ANCHOR_BUFFER strokes
+ * over their index, so a no-history HI 20 anchors at ~95 gross, not the old
+ * flat ~88 that made high-handicap newcomers runaway net favourites.
+ */
+const ANCHOR_BUFFER = 3;
+const ANCHOR_FULL_SAMPLE = 10;
+
+/** Recent form nudges the gross mean; it must never replace it. */
+const FORM_WEIGHT = 0.4;
+const FORM_CLAMP = 4; // strokes/round before weighting
+
 const CONFIDENCE_SIGMA_FACTOR: Record<SimPlayerProfile["confidence"], number> = {
   high: 1.0,
   medium: 1.1,
@@ -78,17 +92,36 @@ function siAdjustment(splits: HoleSplits | null, hole: SimHole): number {
   return bucket.avgVsPar;
 }
 
+/** Per-hole expectation implied by handicap alone; null when no HI. */
+function anchorAvgVsPar(profile: SimPlayerProfile): number | null {
+  if (profile.handicapIndex == null) return null;
+  return (profile.handicapIndex + ANCHOR_BUFFER) / 18;
+}
+
 export function holeMu(profile: SimPlayerProfile, hole: SimHole): number {
-  const base = parTypeAvgVsPar(profile, hole.par);
+  const observed = parTypeAvgVsPar(profile, hole.par);
+  const anchor = anchorAvgVsPar(profile);
+  // Blend observed history with the handicap prior by sample weight: a full
+  // sample is pure history, an empty one pure anchor (uniform generic shape —
+  // par-type shape only enters through the observed component).
+  const w = Math.min(1, profile.sampleSize / ANCHOR_FULL_SAMPLE);
+  const base = anchor == null ? observed : w * observed + (1 - w) * anchor;
   const bucketAvg = splitBucketAvg(profile.holeSplits, hole);
   const blended =
     bucketAvg != null ? SPLIT_WEIGHT * bucketAvg + (1 - SPLIT_WEIGHT) * base : base;
-  const drift = (profile.recentForm ?? 0) / 18;
+  const form = Math.max(-FORM_CLAMP, Math.min(FORM_CLAMP, profile.recentForm ?? 0));
+  const drift = (FORM_WEIGHT * form) / 18;
   return blended + siAdjustment(profile.holeSplits, hole) + drift;
 }
 
 export function holeSigma(profile: SimPlayerProfile): number {
-  const sigmaRound = profile.scoreStddev ?? DEFAULT_SIGMA_ROUND;
+  // Observed round variability always wins; the handicap-based default only
+  // covers players with no stddev yet (higher handicap → wider spread).
+  const sigmaRound =
+    profile.scoreStddev ??
+    (profile.handicapIndex != null
+      ? Math.min(9, Math.max(3, 2.6 + 0.13 * Math.max(profile.handicapIndex, 0)))
+      : DEFAULT_SIGMA_ROUND);
   const perHole = sigmaRound / Math.sqrt(18);
   const widened = perHole * CONFIDENCE_SIGMA_FACTOR[profile.confidence];
   return Math.min(1.8, Math.max(0.7, widened));

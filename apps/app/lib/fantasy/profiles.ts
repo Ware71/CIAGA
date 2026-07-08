@@ -24,6 +24,23 @@ const CANDIDATE_ROUNDS = 30;
 const MIN_HOLES = 9;
 const GROUP_SAMPLE_TARGET = 8;
 const RECENT_FORM_WINDOW = 5;
+/** Stored rounds powering info popups + the narrative engine. */
+const RECENT_ROUNDS_STORED = 10;
+/** Profiles older than this are rebuilt on the next ensureProfiles call. */
+export const PROFILE_TTL_HOURS = 24;
+
+/** One sampled round, kept on the profile for popups/narrative. */
+export type RecentRound = {
+  playedAt: string;
+  roundId: string;
+  courseId: string | null;
+  holes: number;
+  /** 18-hole-equivalent gross (par-72 normalized, matches avg_gross). */
+  gross18: number;
+  /** Raw counts for the holes actually played. */
+  birdies: number;
+  eagles: number;
+};
 
 export type StoredFantasyProfile = {
   id: string;
@@ -35,9 +52,11 @@ export type StoredFantasyProfile = {
   score_stddev: number | null;
   recent_form: number | null;
   birdies_per_round: number | null;
+  eagles_per_round: number | null;
   pars_per_round: number | null;
   bogeys_per_round: number | null;
   doubles_plus_per_round: number | null;
+  recent_rounds: RecentRound[] | null;
   par3_avg_vs_par: number | null;
   par4_avg_vs_par: number | null;
   par5_avg_vs_par: number | null;
@@ -88,18 +107,21 @@ export async function buildPlayerProfile(
 
   // Finished rounds for those participations, chunked to keep URLs bounded.
   const playedAtByRound = new Map<string, string>();
+  const courseByRound = new Map<string, string | null>();
   for (let i = 0; i < parts.length; i += 100) {
     const chunk = [...new Set(parts.slice(i, i + 100).map((p) => p.round_id))];
     const { data: roundRows, error: roundErr } = await supabaseAdmin
       .from("rounds")
-      .select("id, finished_at, started_at, created_at")
+      .select("id, finished_at, started_at, created_at, course_id")
       .in("id", chunk)
       .eq("status", "finished");
     if (roundErr) throw roundErr;
     for (const r of (roundRows ?? []) as {
       id: string; finished_at: string | null; started_at: string | null; created_at: string;
+      course_id: string | null;
     }[]) {
       playedAtByRound.set(r.id, r.finished_at ?? r.started_at ?? r.created_at);
+      courseByRound.set(r.id, r.course_id);
     }
   }
 
@@ -286,9 +308,11 @@ export async function buildPlayerProfile(
       score_stddev: null,
       recent_form: null,
       birdies_per_round: null,
+      eagles_per_round: null,
       pars_per_round: null,
       bogeys_per_round: null,
       doubles_plus_per_round: null,
+      recent_rounds: null,
       par3_avg_vs_par: null,
       par4_avg_vs_par: null,
       par5_avg_vs_par: null,
@@ -301,7 +325,14 @@ export async function buildPlayerProfile(
   // Round-level aggregates (scaled to 18-hole equivalents).
   const gross18: number[] = [];
   const net18: number[] = [];
-  const perRound = { birdies: [] as number[], pars: [] as number[], bogeys: [] as number[], doubles: [] as number[] };
+  const perRound = {
+    birdies: [] as number[],
+    eagles: [] as number[],
+    pars: [] as number[],
+    bogeys: [] as number[],
+    doubles: [] as number[],
+  };
+  const recentRounds: RecentRound[] = [];
 
   // Hole-level aggregates.
   const byParType: Record<number, { sum: number; n: number }> = {
@@ -321,6 +352,7 @@ export async function buildPlayerProfile(
     let netHoles = 0;
     let parSum = 0;
     let birdies = 0;
+    let eagles = 0;
     let pars = 0;
     let bogeys = 0;
     let doubles = 0;
@@ -334,6 +366,7 @@ export async function buildPlayerProfile(
         netToParSum += hole.net_to_par;
         netHoles += 1;
       }
+      if (toPar <= -2) eagles += 1;
       if (toPar <= -1) birdies += 1;
       else if (toPar === 0) pars += 1;
       else if (toPar === 1) bogeys += 1;
@@ -362,12 +395,27 @@ export async function buildPlayerProfile(
     }
 
     // 18-hole-equivalent gross assuming par-72 shape for partial rounds.
-    gross18.push((grossSum - parSum) * scale + 72);
+    const roundGross18 = (grossSum - parSum) * scale + 72;
+    gross18.push(roundGross18);
     if (netHoles >= MIN_HOLES) net18.push((netToParSum / netHoles) * 18 + 72);
     perRound.birdies.push(birdies * scale);
+    perRound.eagles.push(eagles * scale);
     perRound.pars.push(pars * scale);
     perRound.bogeys.push(bogeys * scale);
     perRound.doubles.push(doubles * scale);
+
+    // Sample is newest-first, so the first N rounds are the recent ones.
+    if (recentRounds.length < RECENT_ROUNDS_STORED) {
+      recentRounds.push({
+        playedAt: round.playedAt,
+        roundId: round.roundId,
+        courseId: courseByRound.get(round.roundId) ?? null,
+        holes: holes.length,
+        gross18: round2(roundGross18),
+        birdies,
+        eagles,
+      });
+    }
   }
 
   const overallPerHole = overallHoleCount > 0 ? overallToParSum / overallHoleCount : 0;
@@ -398,9 +446,11 @@ export async function buildPlayerProfile(
     recent_form:
       gross18.length > RECENT_FORM_WINDOW ? round2(mean(recentSlice) - mean(gross18)) : null,
     birdies_per_round: round2(mean(perRound.birdies)),
+    eagles_per_round: round2(mean(perRound.eagles)),
     pars_per_round: round2(mean(perRound.pars)),
     bogeys_per_round: round2(mean(perRound.bogeys)),
     doubles_plus_per_round: round2(mean(perRound.doubles)),
+    recent_rounds: recentRounds.length > 0 ? recentRounds : null,
     par3_avg_vs_par: byParType[3].n > 0 ? round3(byParType[3].sum / byParType[3].n) : null,
     par4_avg_vs_par: byParType[4].n > 0 ? round3(byParType[4].sum / byParType[4].n) : null,
     par5_avg_vs_par: byParType[5].n > 0 ? round3(byParType[5].sum / byParType[5].n) : null,
@@ -441,9 +491,14 @@ export async function ensureProfiles(
   if (error) throw error;
   for (const row of (data ?? []) as StoredFantasyProfile[]) out.set(row.profile_id, row);
 
-  // Build missing profiles a few at a time — first generation for a full
-  // field would otherwise pay every build sequentially.
-  const missing = profileIds.filter((id) => !out.has(id));
+  // Build missing profiles and rebuild stale ones a few at a time — staleness
+  // triggers bump the event version, but the profile INPUTS only follow when
+  // rebuilt, so without a TTL form data freezes at first generation.
+  const cutoff = Date.now() - PROFILE_TTL_HOURS * 60 * 60 * 1000;
+  const missing = profileIds.filter((id) => {
+    const row = out.get(id);
+    return !row || new Date(row.computed_at).getTime() < cutoff;
+  });
   const CONCURRENCY = 5;
   for (let i = 0; i < missing.length; i += CONCURRENCY) {
     const chunk = missing.slice(i, i + CONCURRENCY);
@@ -465,6 +520,7 @@ export function toSimProfile(row: StoredFantasyProfile): SimPlayerProfile {
     scoreStddev: numOrNull(merged.score_stddev),
     recentForm: numOrNull(merged.recent_form),
     birdiesPerRound: numOrNull(merged.birdies_per_round),
+    eaglesPerRound: numOrNull(merged.eagles_per_round),
     parsPerRound: numOrNull(merged.pars_per_round),
     bogeysPerRound: numOrNull(merged.bogeys_per_round),
     doublesPlusPerRound: numOrNull(merged.doubles_plus_per_round),

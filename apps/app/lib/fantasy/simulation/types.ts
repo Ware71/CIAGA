@@ -32,6 +32,8 @@ export type SimPlayerProfile = {
   /** Recent-form drift in strokes/round (negative = trending better). */
   recentForm: number | null;
   birdiesPerRound: number | null;
+  /** Eagle-or-better holes per round (calibrates rare-outcome markets). */
+  eaglesPerRound: number | null;
   parsPerRound: number | null;
   bogeysPerRound: number | null;
   doublesPlusPerRound: number | null;

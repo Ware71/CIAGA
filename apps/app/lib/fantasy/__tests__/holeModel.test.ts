@@ -3,6 +3,7 @@ import {
   buildHoleDistributions,
   discretizedDistribution,
   holeMu,
+  holeSigma,
   strokesReceived,
 } from "@/lib/fantasy/simulation/holeModel";
 import type { SimHole, SimPlayerProfile } from "@/lib/fantasy/simulation/types";
@@ -15,6 +16,7 @@ function profile(overrides: Partial<SimPlayerProfile> = {}): SimPlayerProfile {
     scoreStddev: 4,
     recentForm: 0,
     birdiesPerRound: 1,
+    eaglesPerRound: 0.05,
     parsPerRound: 7,
     bogeysPerRound: 7,
     doublesPlusPerRound: 3,
@@ -53,9 +55,73 @@ describe("holeMu", () => {
     expect(short).toBeCloseTo(holeMu(profile(), hole({ yardage: 340, strokeIndex: 9 })), 6);
   });
 
-  it("recent form drifts the mean", () => {
+  it("recent form nudges the mean at 40% weight — never replaces it", () => {
     const improving = profile({ recentForm: -3.6 }); // 3.6 strokes better lately
-    expect(holeMu(improving, hole())).toBeCloseTo(holeMu(profile(), hole()) - 0.2, 6);
+    // drift = 0.4 × −3.6 / 18 = −0.08 per hole (was the full −0.2 pre-V2)
+    expect(holeMu(improving, hole())).toBeCloseTo(holeMu(profile(), hole()) - 0.08, 6);
+  });
+
+  it("clamps extreme form swings to ±4 strokes before weighting", () => {
+    const hot = profile({ recentForm: -12 });
+    const clamped = profile({ recentForm: -4 });
+    expect(holeMu(hot, hole())).toBeCloseTo(holeMu(clamped, hole()), 9);
+  });
+});
+
+describe("handicap anchor (prior for thin profiles)", () => {
+  const noHistory: Partial<SimPlayerProfile> = {
+    avgGross: null,
+    scoreStddev: null,
+    recentForm: null,
+    par3AvgVsPar: null,
+    par4AvgVsPar: null,
+    par5AvgVsPar: null,
+    holeSplits: null,
+    sampleSize: 0,
+    confidence: "low",
+  };
+
+  it("with no history, expected gross tracks the handicap (HI + 3 over par)", () => {
+    const holes: SimHole[] = Array.from({ length: 18 }, (_, i) =>
+      hole({ holeNumber: i + 1, strokeIndex: i + 1 })
+    );
+    const total = (hi: number) =>
+      holes.reduce((s, h) => s + holeMu(profile({ ...noHistory, handicapIndex: hi }), h), 0);
+    // SI tilts cancel over 18 holes → total-vs-par ≈ HI + 3.
+    expect(total(20)).toBeCloseTo(23, 1);
+    expect(total(5)).toBeCloseTo(8, 1);
+    // Ordering: high handicappers must NOT price like 88-shooters anymore.
+    expect(total(25)).toBeGreaterThan(total(5) + 15);
+  });
+
+  it("a full sample silences the anchor entirely", () => {
+    const lowHi = profile({ handicapIndex: 2, sampleSize: 12 });
+    const highHi = profile({ handicapIndex: 28, sampleSize: 12 });
+    expect(holeMu(lowHi, hole())).toBeCloseTo(holeMu(highHi, hole()), 9);
+  });
+
+  it("anchor influence decays monotonically as the sample grows", () => {
+    // HI 25 anchor sits far above this player's observed scoring, so more
+    // history → lower mu, monotonically.
+    const mus = [0, 2, 5, 8, 10].map((n) =>
+      holeMu(profile({ handicapIndex: 25, sampleSize: n }), hole())
+    );
+    for (let i = 1; i < mus.length; i++) expect(mus[i]).toBeLessThan(mus[i - 1]);
+  });
+
+  it("no history and no HI keeps the legacy flat fallback", () => {
+    const p = profile({ ...noHistory, handicapIndex: null });
+    // 0.9 base + SI tilt at SI 9 ≈ 0.9066
+    expect(holeMu(p, hole())).toBeCloseTo(0.9 + ((9.5 - 9) / 9.5) * 0.12, 6);
+  });
+
+  it("sigma defaults follow handicap when no observed stddev exists", () => {
+    const lowHi = profile({ ...noHistory, handicapIndex: 3 });
+    const highHi = profile({ ...noHistory, handicapIndex: 28 });
+    expect(holeSigma(highHi)).toBeGreaterThan(holeSigma(lowHi));
+    // Observed stddev always wins over the default.
+    const observed = profile({ ...noHistory, handicapIndex: 28, scoreStddev: 4 });
+    expect(holeSigma(observed)).toBeLessThan(holeSigma(highHi));
   });
 });
 

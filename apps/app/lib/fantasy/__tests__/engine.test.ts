@@ -26,6 +26,7 @@ function makeProfile(overrides: Partial<SimPlayerProfile> = {}): SimPlayerProfil
     scoreStddev: 4,
     recentForm: 0,
     birdiesPerRound: 1,
+    eaglesPerRound: 0.05,
     parsPerRound: 7,
     bogeysPerRound: 7,
     doublesPlusPerRound: 3,

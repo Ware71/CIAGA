@@ -218,6 +218,15 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
             Updating odds…
           </span>
         )}
+        {process.env.NEXT_PUBLIC_APP_ENV === "sandbox" && (
+          <button
+            type="button"
+            onClick={() => router.push(`/majors/fantasy/events/${eventId}/inspector`)}
+            className="ml-auto text-[10px] text-amber-200/80 border border-amber-800/40 rounded-full px-2 py-0.5 hover:text-amber-100"
+          >
+            🔬 Inspector
+          </button>
+        )}
       </div>
       <div className="px-4 mb-5">
         <h1 className="text-lg font-bold text-[#f5e6b0] leading-tight">

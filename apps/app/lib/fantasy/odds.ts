@@ -26,7 +26,7 @@ import type { FantasyEventState } from "@/lib/fantasy/types";
  * fantasy_event_state UPDATE tells clients when to refetch.
  */
 
-type EventRow = {
+export type EventRow = {
   id: string;
   name: string;
   group_id: string | null;
@@ -39,7 +39,7 @@ type EventRow = {
   num_rounds: number | null;
 };
 
-type EntryRow = {
+export type EntryRow = {
   profile_id: string;
   entry_status: string;
   assigned_handicap_index: number | null;
@@ -57,9 +57,9 @@ export type EventSimContext = {
   live: LiveMarketCtx;
 };
 
-const ACTIVE_ENTRY_STATUSES = ["entered", "approved"];
+export const ACTIVE_ENTRY_STATUSES = ["entered", "approved"];
 
-async function loadEvent(eventId: string): Promise<EventRow> {
+export async function loadEvent(eventId: string): Promise<EventRow> {
   const { data, error } = await supabaseAdmin
     .from("events")
     .select(
@@ -71,7 +71,7 @@ async function loadEvent(eventId: string): Promise<EventRow> {
   return data as EventRow;
 }
 
-function allowancePct(event: EventRow): number {
+export function allowancePct(event: EventRow): number {
   const rules = event.handicap_rules as { mode?: string; allowance_pct?: number | string | null } | null;
   if (!rules || rules.mode === "none") return 0;
   const pct = Number(rules.allowance_pct);
@@ -79,48 +79,88 @@ function allowancePct(event: EventRow): number {
   return pct;
 }
 
+export type PlayingHandicapDetail = {
+  value: number;
+  /** Which input produced the value — surfaced by the odds inspector. */
+  source:
+    | "handicap_mode_none"
+    | "assigned_playing_handicap"
+    | "assigned_course_handicap_x_pct"
+    | "assigned_handicap_index_x_pct"
+    | "profile_handicap_index_x_pct"
+    | "compare_against_lowest"
+    | "no_data";
+};
+
 /**
  * Event playing handicap per player. Uses the same source as the leaderboard
  * (event_entries assigned values), so net market pricing matches settlement:
  * assigned_playing_handicap → CH × allowance → HI × allowance → profile HI.
  * compare_against_lowest mode nets everyone against the field's lowest.
  */
-function resolvePlayingHandicaps(
+export function resolvePlayingHandicapDetails(
   event: EventRow,
   entries: EntryRow[],
   profileHi: Map<string, number | null>
-): Map<string, number> {
+): Map<string, PlayingHandicapDetail> {
   const rules = event.handicap_rules as { mode?: string } | null;
   const pct = allowancePct(event);
-  const out = new Map<string, number>();
+  const out = new Map<string, PlayingHandicapDetail>();
 
-  const courseHandicap = (e: EntryRow): number | null => {
-    if (e.assigned_course_handicap != null) return Number(e.assigned_course_handicap);
-    if (e.assigned_handicap_index != null) return Number(e.assigned_handicap_index);
-    return profileHi.get(e.profile_id) ?? null;
+  const courseHandicap = (
+    e: EntryRow
+  ): { value: number; src: "assigned_course_handicap" | "assigned_handicap_index" | "profile_handicap_index" } | null => {
+    if (e.assigned_course_handicap != null)
+      return { value: Number(e.assigned_course_handicap), src: "assigned_course_handicap" };
+    if (e.assigned_handicap_index != null)
+      return { value: Number(e.assigned_handicap_index), src: "assigned_handicap_index" };
+    const hi = profileHi.get(e.profile_id);
+    if (hi != null) return { value: hi, src: "profile_handicap_index" };
+    return null;
   };
 
   if (rules?.mode === "none") {
-    for (const e of entries) out.set(e.profile_id, 0);
+    for (const e of entries) out.set(e.profile_id, { value: 0, source: "handicap_mode_none" });
     return out;
   }
 
   if (rules?.mode === "compare_against_lowest") {
-    const chs = entries.map((e) => courseHandicap(e) ?? 0);
+    const chs = entries.map((e) => courseHandicap(e)?.value ?? 0);
     const lowest = chs.length > 0 ? Math.min(...chs) : 0;
     entries.forEach((e, i) => {
-      out.set(e.profile_id, Math.round((chs[i] - lowest) * (pct / 100)));
+      out.set(e.profile_id, {
+        value: Math.round((chs[i] - lowest) * (pct / 100)),
+        source: "compare_against_lowest",
+      });
     });
     return out;
   }
 
   for (const e of entries) {
     if (e.assigned_playing_handicap != null) {
-      out.set(e.profile_id, Number(e.assigned_playing_handicap));
+      out.set(e.profile_id, {
+        value: Number(e.assigned_playing_handicap),
+        source: "assigned_playing_handicap",
+      });
     } else {
-      const ch = courseHandicap(e) ?? 0;
-      out.set(e.profile_id, Math.round(ch * (pct / 100)));
+      const ch = courseHandicap(e);
+      out.set(e.profile_id, {
+        value: Math.round((ch?.value ?? 0) * (pct / 100)),
+        source: ch == null ? "no_data" : (`${ch.src}_x_pct` as PlayingHandicapDetail["source"]),
+      });
     }
+  }
+  return out;
+}
+
+function resolvePlayingHandicaps(
+  event: EventRow,
+  entries: EntryRow[],
+  profileHi: Map<string, number | null>
+): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const [pid, d] of resolvePlayingHandicapDetails(event, entries, profileHi)) {
+    out.set(pid, d.value);
   }
   return out;
 }
@@ -435,6 +475,67 @@ async function writeSnapshots(
 }
 
 /**
+ * Materialize registry markets for the event, inserting any shapes not yet
+ * present (new entrants, newly shipped market types). Never deletes or
+ * duplicates — existing markets (and any picks on them) are untouched.
+ * Runs on generation AND on every refresh, so a player entering after the
+ * initial generation still gets their H2H/O-U/birdie markets.
+ */
+async function ensureMarkets(
+  ctx: EventSimContext,
+  sim: SimulationResult
+): Promise<number> {
+  const projections: Record<string, { meanGross: number; meanNet: number }> = {};
+  for (const p of sim.players) {
+    projections[p.profileId] = { meanGross: p.meanGross, meanNet: p.meanNet };
+  }
+  const generateCtx = {
+    players: ctx.players.map((p) => ({ profileId: p.profileId })),
+    projections,
+  };
+  const specs: MarketSpec[] = Object.values(MARKET_REGISTRY).flatMap((def) =>
+    def.generateMarkets(generateCtx)
+  );
+
+  // The shape uniqueness index uses COALESCE expressions, which PostgREST
+  // upserts can't target — diff against existing markets in TS and bulk-insert
+  // only the missing shapes. A concurrent-generate race can still 23505; fall
+  // back to per-row inserts for that case only.
+  const { data: existingData, error: existingErr } = await supabaseAdmin
+    .from("fantasy_markets")
+    .select("market_type, subject_profile_id, opponent_profile_id, params")
+    .eq("event_id", ctx.event.id);
+  if (existingErr) throw existingErr;
+  const existingKeys = new Set(
+    ((existingData ?? []) as FantasyMarket[]).map((m) => marketShapeKey(m))
+  );
+  const missingRows = specs
+    .filter((s) => !existingKeys.has(marketShapeKey(s)))
+    .map((s) => ({
+      event_id: ctx.event.id,
+      group_id: ctx.groupId,
+      market_type: s.market_type,
+      subject_profile_id: s.subject_profile_id ?? null,
+      opponent_profile_id: s.opponent_profile_id ?? null,
+      params: s.params,
+      status: "open",
+    }));
+
+  if (missingRows.length > 0) {
+    const { error: bulkErr } = await supabaseAdmin.from("fantasy_markets").insert(missingRows);
+    if (bulkErr && bulkErr.code === "23505") {
+      for (const row of missingRows) {
+        const { error: insErr } = await supabaseAdmin.from("fantasy_markets").insert(row);
+        if (insErr && insErr.code !== "23505") throw insErr;
+      }
+    } else if (bulkErr) {
+      throw bulkErr;
+    }
+  }
+  return missingRows.length;
+}
+
+/**
  * Run one refresh for a claimed job. The "mark fresh" update is guarded on
  * the version we simulated — if a change bumped it mid-run, odds stay stale
  * and the (re-pended) job re-runs on the next request.
@@ -447,6 +548,9 @@ async function executeRefresh(eventId: string, jobId: string): Promise<void> {
 
     const ctx = await loadSimInputs(eventId);
     const sim = simulateEvent(ctx, version);
+
+    // New entrants since generation get their per-player markets here.
+    await ensureMarkets(ctx, sim);
 
     const { data: marketData, error: marketErr } = await supabaseAdmin
       .from("fantasy_markets")
@@ -582,56 +686,8 @@ export async function generateEventFantasy(eventId: string): Promise<{ markets: 
   const sim = simulateEvent(ctx, version);
   logPhase("simulation");
 
-  const projections: Record<string, { meanGross: number; meanNet: number }> = {};
-  for (const p of sim.players) {
-    projections[p.profileId] = { meanGross: p.meanGross, meanNet: p.meanNet };
-  }
-
-  const generateCtx = {
-    players: ctx.players.map((p) => ({ profileId: p.profileId })),
-    projections,
-  };
-  const specs: MarketSpec[] = Object.values(MARKET_REGISTRY).flatMap((def) =>
-    def.generateMarkets(generateCtx)
-  );
-
-  // The shape uniqueness index uses COALESCE expressions, which PostgREST
-  // upserts can't target — diff against existing markets in TS and bulk-insert
-  // only the missing shapes (re-generation adds new entrants' markets without
-  // duplicating). A concurrent-generate race can still 23505; fall back to
-  // per-row inserts for that case only.
-  const { data: existingData, error: existingErr } = await supabaseAdmin
-    .from("fantasy_markets")
-    .select("market_type, subject_profile_id, opponent_profile_id, params")
-    .eq("event_id", eventId);
-  if (existingErr) throw existingErr;
-  const existingKeys = new Set(
-    ((existingData ?? []) as FantasyMarket[]).map((m) => marketShapeKey(m))
-  );
-  const missingRows = specs
-    .filter((s) => !existingKeys.has(marketShapeKey(s)))
-    .map((s) => ({
-      event_id: eventId,
-      group_id: event.group_id,
-      market_type: s.market_type,
-      subject_profile_id: s.subject_profile_id ?? null,
-      opponent_profile_id: s.opponent_profile_id ?? null,
-      params: s.params,
-      status: "open",
-    }));
-
-  if (missingRows.length > 0) {
-    const { error: bulkErr } = await supabaseAdmin.from("fantasy_markets").insert(missingRows);
-    if (bulkErr && bulkErr.code === "23505") {
-      for (const row of missingRows) {
-        const { error: insErr } = await supabaseAdmin.from("fantasy_markets").insert(row);
-        if (insErr && insErr.code !== "23505") throw insErr;
-      }
-    } else if (bulkErr) {
-      throw bulkErr;
-    }
-  }
-  logPhase(`markets (${missingRows.length} new)`);
+  const newMarkets = await ensureMarkets(ctx, sim);
+  logPhase(`markets (${newMarkets} new)`);
 
   const { data: marketData, error: marketSelErr } = await supabaseAdmin
     .from("fantasy_markets")

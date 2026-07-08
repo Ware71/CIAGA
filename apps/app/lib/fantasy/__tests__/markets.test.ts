@@ -84,6 +84,7 @@ function simFor(profiles: Array<Partial<SimPlayerProfile> & { profileId: string;
       scoreStddev: 4,
       recentForm: 0,
       birdiesPerRound: p.birdiesPerRound ?? 1,
+      eaglesPerRound: 0.05,
       parsPerRound: 7,
       bogeysPerRound: 7,
       doublesPlusPerRound: 3,
