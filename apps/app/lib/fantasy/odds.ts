@@ -506,12 +506,34 @@ export async function refreshIfStale(
   return { refreshed: true, refreshing: false };
 }
 
+/** Shape identity for market dedupe (params entries sorted for stability). */
+function marketShapeKey(m: {
+  market_type: string;
+  subject_profile_id?: string | null;
+  opponent_profile_id?: string | null;
+  params: Record<string, unknown>;
+}): string {
+  return [
+    m.market_type,
+    m.subject_profile_id ?? "",
+    m.opponent_profile_id ?? "",
+    JSON.stringify(Object.entries(m.params ?? {}).sort(([a], [b]) => (a < b ? -1 : 1))),
+  ].join("|");
+}
+
 /**
  * Generate (or re-generate) fantasy for an event: activate state, rebuild the
  * field's performance profiles, materialize markets from the registry, and
  * price the initial snapshots. Idempotent — safe to call repeatedly.
  */
 export async function generateEventFantasy(eventId: string): Promise<{ markets: number }> {
+  const t0 = Date.now();
+  let tPhase = t0;
+  const logPhase = (label: string) => {
+    console.log(`[fantasy-generate] ${eventId} ${label}: ${Date.now() - tPhase}ms`);
+    tPhase = Date.now();
+  };
+
   const event = await loadEvent(eventId);
   if (!event.group_id) throw new Error("Event has no group");
   if ((event.num_rounds ?? 1) > 1) {
@@ -536,13 +558,16 @@ export async function generateEventFantasy(eventId: string): Promise<{ markets: 
     .from("fantasy_event_state")
     .insert({ event_id: eventId, group_id: event.group_id, changed_reason: "generated" });
   if (stateErr && stateErr.code !== "23505") throw stateErr;
+  logPhase("checks+state");
 
   const ctx = await loadSimInputs(eventId);
   if (ctx.players.length < 2) throw new Error("Need at least 2 entered players");
+  logPhase(`inputs+profiles (${ctx.players.length} players)`);
 
   const state = await readState(eventId);
   const version = state?.version ?? 1;
   const sim = simulateEvent(ctx, version);
+  logPhase("simulation");
 
   const projections: Record<string, { meanGross: number; meanNet: number }> = {};
   for (const p of sim.players) {
@@ -558,11 +583,21 @@ export async function generateEventFantasy(eventId: string): Promise<{ markets: 
   );
 
   // The shape uniqueness index uses COALESCE expressions, which PostgREST
-  // upserts can't target — insert one by one and ignore duplicates (23505).
-  // Re-generation therefore adds only genuinely new markets (e.g. new
-  // entrants) and never duplicates existing ones.
-  for (const s of specs) {
-    const { error: insErr } = await supabaseAdmin.from("fantasy_markets").insert({
+  // upserts can't target — diff against existing markets in TS and bulk-insert
+  // only the missing shapes (re-generation adds new entrants' markets without
+  // duplicating). A concurrent-generate race can still 23505; fall back to
+  // per-row inserts for that case only.
+  const { data: existingData, error: existingErr } = await supabaseAdmin
+    .from("fantasy_markets")
+    .select("market_type, subject_profile_id, opponent_profile_id, params")
+    .eq("event_id", eventId);
+  if (existingErr) throw existingErr;
+  const existingKeys = new Set(
+    ((existingData ?? []) as FantasyMarket[]).map((m) => marketShapeKey(m))
+  );
+  const missingRows = specs
+    .filter((s) => !existingKeys.has(marketShapeKey(s)))
+    .map((s) => ({
       event_id: eventId,
       group_id: event.group_id,
       market_type: s.market_type,
@@ -570,9 +605,20 @@ export async function generateEventFantasy(eventId: string): Promise<{ markets: 
       opponent_profile_id: s.opponent_profile_id ?? null,
       params: s.params,
       status: "open",
-    });
-    if (insErr && insErr.code !== "23505") throw insErr;
+    }));
+
+  if (missingRows.length > 0) {
+    const { error: bulkErr } = await supabaseAdmin.from("fantasy_markets").insert(missingRows);
+    if (bulkErr && bulkErr.code === "23505") {
+      for (const row of missingRows) {
+        const { error: insErr } = await supabaseAdmin.from("fantasy_markets").insert(row);
+        if (insErr && insErr.code !== "23505") throw insErr;
+      }
+    } else if (bulkErr) {
+      throw bulkErr;
+    }
   }
+  logPhase(`markets (${missingRows.length} new)`);
 
   const { data: marketData, error: marketSelErr } = await supabaseAdmin
     .from("fantasy_markets")
@@ -591,6 +637,8 @@ export async function generateEventFantasy(eventId: string): Promise<{ markets: 
     })
     .eq("event_id", eventId)
     .eq("version", version);
+  logPhase("snapshots");
+  console.log(`[fantasy-generate] ${eventId} total: ${Date.now() - t0}ms`);
 
   return { markets: markets.length };
 }

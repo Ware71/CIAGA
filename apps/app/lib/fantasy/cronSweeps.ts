@@ -16,12 +16,28 @@ import { settleFantasyEvent } from "@/lib/fantasy/settlement";
  *  3. Hygiene — fail refresh jobs wedged in 'running' for over 10 minutes
  *     and expire stale cash-out offers (expiry is otherwise enforced by
  *     query filters + the accept RPC; this just tidies the rows).
+ *  4. Retention — free-tier disk control (Supabase Free: 500 MB). Superseded
+ *     odds snapshots are the only unbounded growth in the feature; dead jobs
+ *     and dead offers are pruned alongside. Snapshots referenced by a pick
+ *     and accepted offers are kept for the audit trail.
  */
+
+const SNAPSHOT_RETENTION_DAYS = 7;
+const JOB_RETENTION_DAYS = 7;
+const OFFER_RETENTION_DAYS = 30;
+
+function daysAgoIso(days: number): string {
+  return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+}
+
 export async function runFantasySweeps(): Promise<{
   generated: number;
   settled: number;
   failedJobs: number;
   expiredOffers: number;
+  purgedSnapshots: number;
+  purgedJobs: number;
+  purgedOffers: number;
   errors: string[];
 }> {
   const errors: string[] = [];
@@ -94,11 +110,62 @@ export async function runFantasySweeps(): Promise<{
     .select("id");
   if (expiredErr) errors.push(`offer expiry: ${expiredErr.message}`);
 
+  // Retention: purge superseded snapshots older than the window, keeping any
+  // a pick still references (fantasy_picks.odds_snapshot_id is ON DELETE SET
+  // NULL, so even a miss is safe — the exclusion just preserves audit links).
+  let purgedSnapshots = 0;
+  try {
+    const { data: refRows } = await supabaseAdmin
+      .from("fantasy_picks")
+      .select("odds_snapshot_id")
+      .not("odds_snapshot_id", "is", null);
+    const referenced = [
+      ...new Set(
+        ((refRows ?? []) as { odds_snapshot_id: string }[]).map((r) => r.odds_snapshot_id)
+      ),
+    ];
+
+    let query = supabaseAdmin
+      .from("fantasy_odds_snapshots")
+      .delete()
+      .eq("status", "superseded")
+      .lt("computed_at", daysAgoIso(SNAPSHOT_RETENTION_DAYS));
+    // PostgREST `not in` has URL-length limits; picks are human-scale but cap
+    // defensively and fall back to keeping everything referenced recently.
+    if (referenced.length > 0 && referenced.length <= 500) {
+      query = query.not("id", "in", `(${referenced.join(",")})`);
+    }
+    const { data: purged, error: purgeErr } = await query.select("id");
+    if (purgeErr) errors.push(`snapshot retention: ${purgeErr.message}`);
+    purgedSnapshots = purged?.length ?? 0;
+  } catch (e: any) {
+    errors.push(`snapshot retention: ${e?.message}`);
+  }
+
+  const { data: purgedJobRows, error: purgeJobsErr } = await supabaseAdmin
+    .from("fantasy_refresh_jobs")
+    .delete()
+    .in("status", ["done", "failed"])
+    .lt("updated_at", daysAgoIso(JOB_RETENTION_DAYS))
+    .select("id");
+  if (purgeJobsErr) errors.push(`job retention: ${purgeJobsErr.message}`);
+
+  const { data: purgedOfferRows, error: purgeOffersErr } = await supabaseAdmin
+    .from("fantasy_cashout_offers")
+    .delete()
+    .in("status", ["expired", "invalidated", "rejected"])
+    .lt("created_at", daysAgoIso(OFFER_RETENTION_DAYS))
+    .select("id");
+  if (purgeOffersErr) errors.push(`offer retention: ${purgeOffersErr.message}`);
+
   return {
     generated,
     settled,
     failedJobs: wedged?.length ?? 0,
     expiredOffers: expired?.length ?? 0,
+    purgedSnapshots,
+    purgedJobs: purgedJobRows?.length ?? 0,
+    purgedOffers: purgedOfferRows?.length ?? 0,
     errors,
   };
 }

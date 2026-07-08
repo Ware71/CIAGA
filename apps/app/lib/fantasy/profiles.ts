@@ -1,11 +1,16 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { lengthBand, siBand, splitKey } from "@/lib/fantasy/simulation/holeModel";
+import { lengthBand, siBand, splitKey, strokesReceived } from "@/lib/fantasy/simulation/holeModel";
 import type { HoleSplits, SimPlayerProfile } from "@/lib/fantasy/simulation/types";
 
 /**
- * Player performance profiles — built from historical per-hole scoring
- * (the hole_scoring_source view: latest score event per hole, joined to
- * hole snapshots for par/yardage/stroke index) and stored per (group, player).
+ * Player performance profiles — built from historical per-hole scoring and
+ * stored per (group, player).
+ *
+ * Data comes from direct, indexed table queries (round_participants →
+ * rounds → round_score_events + round_hole_snapshots + handicap_round_results)
+ * rather than the hole_scoring_source view: the view's DISTINCT ON spans the
+ * entire score-event table and its computed played_at ordering defeats every
+ * index, which made first-time market generation take minutes per player.
  *
  * Sampling: the most recent MAX_ROUNDS finished rounds with ≥ MIN_HOLES holes
  * scored, rounds submitted to this group's events first, padded with the
@@ -14,6 +19,8 @@ import type { HoleSplits, SimPlayerProfile } from "@/lib/fantasy/simulation/type
  */
 
 const MAX_ROUNDS = 20;
+/** Recent finished rounds fetched before sampling (headroom over MAX_ROUNDS). */
+const CANDIDATE_ROUNDS = 30;
 const MIN_HOLES = 9;
 const GROUP_SAMPLE_TARGET = 8;
 const RECENT_FORM_WINDOW = 5;
@@ -64,36 +71,138 @@ export async function buildPlayerProfile(
   groupId: string,
   profileId: string
 ): Promise<Omit<StoredFantasyProfile, "id" | "overrides">> {
-  // Recent per-hole history (newest first; ~40 rounds of headroom).
-  const { data: holeData, error: holeErr } = await supabaseAdmin
-    .from("hole_scoring_source")
-    .select("round_id, played_at, hole_number, par, yardage, stroke_index, strokes, to_par, net_to_par")
+  // My participations in finished rounds — one indexed query
+  // (idx_round_participants_profile; embed via the single round_id FK).
+  const { data: partData, error: partErr } = await supabaseAdmin
+    .from("round_participants")
+    .select(
+      "id, round_id, tee_snapshot_id, rounds!inner(id, status, finished_at, started_at, created_at)"
+    )
     .eq("profile_id", profileId)
-    .order("played_at", { ascending: false })
-    .limit(800);
-  if (holeErr) throw holeErr;
+    .eq("rounds.status", "finished");
+  if (partErr) throw partErr;
 
-  const rows = (holeData ?? []) as HoleRow[];
+  type PartRow = {
+    id: string;
+    round_id: string;
+    tee_snapshot_id: string | null;
+    rounds: { finished_at: string | null; started_at: string | null; created_at: string };
+  };
+  const participations = ((partData ?? []) as unknown as PartRow[])
+    .map((p) => ({
+      participantId: p.id,
+      roundId: p.round_id,
+      teeSnapshotId: p.tee_snapshot_id,
+      playedAt: p.rounds.finished_at ?? p.rounds.started_at ?? p.rounds.created_at,
+    }))
+    .sort((a, b) => (a.playedAt < b.playedAt ? 1 : -1))
+    .slice(0, CANDIDATE_ROUNDS);
+
+  const roundIds = participations.map((p) => p.roundId);
+  const participantIds = participations.map((p) => p.participantId);
+  const teeSnapshotIds = participations
+    .map((p) => p.teeSnapshotId)
+    .filter((id): id is string => !!id);
+  const partByRound = new Map(participations.map((p) => [p.roundId, p]));
+
   const byRound = new Map<string, HoleRow[]>();
-  for (const row of rows) {
-    if (row.par == null || row.strokes == null) continue;
-    const list = byRound.get(row.round_id);
-    if (list) list.push(row);
-    else byRound.set(row.round_id, [row]);
-  }
 
-  const roundIds = [...byRound.keys()];
-
-  // Only finished rounds count toward the profile.
-  const finishedIds = new Set<string>();
   if (roundIds.length > 0) {
-    const { data: roundRows, error: roundErr } = await supabaseAdmin
-      .from("rounds")
-      .select("id")
-      .in("id", roundIds)
-      .eq("status", "finished");
-    if (roundErr) throw roundErr;
-    for (const r of (roundRows ?? []) as { id: string }[]) finishedIds.add(r.id);
+    const [scoreRes, snapRes, hrrRes] = await Promise.all([
+      supabaseAdmin
+        .from("round_score_events")
+        .select("round_id, participant_id, hole_number, strokes, created_at, id")
+        .in("round_id", roundIds)
+        .in("participant_id", participantIds)
+        .not("strokes", "is", null)
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true }),
+      teeSnapshotIds.length > 0
+        ? supabaseAdmin
+            .from("round_hole_snapshots")
+            .select("round_tee_snapshot_id, hole_number, par, yardage, stroke_index")
+            .in("round_tee_snapshot_id", teeSnapshotIds)
+        : Promise.resolve({ data: [] as any[], error: null }),
+      supabaseAdmin
+        .from("handicap_round_results")
+        .select("round_id, participant_id, course_handicap_used, is_9_hole")
+        .in("round_id", roundIds)
+        .in("participant_id", participantIds),
+    ]);
+    if (scoreRes.error) throw scoreRes.error;
+    if (snapRes.error) throw snapRes.error;
+    if (hrrRes.error) throw hrrRes.error;
+
+    // Latest score per (round, hole) — score events are append-only and
+    // fetched ascending, so the last write wins.
+    const latest = new Map<string, number>();
+    for (const ev of (scoreRes.data ?? []) as {
+      round_id: string; hole_number: number; strokes: number;
+    }[]) {
+      latest.set(`${ev.round_id}|${ev.hole_number}`, ev.strokes);
+    }
+
+    // Hole setup (par / yardage / SI) per tee snapshot.
+    const holeSetup = new Map<
+      string,
+      { par: number | null; yardage: number | null; stroke_index: number | null }
+    >();
+    for (const s of (snapRes.data ?? []) as {
+      round_tee_snapshot_id: string; hole_number: number;
+      par: number | null; yardage: number | null; stroke_index: number | null;
+    }[]) {
+      holeSetup.set(`${s.round_tee_snapshot_id}|${s.hole_number}`, {
+        par: s.par,
+        yardage: s.yardage,
+        stroke_index: s.stroke_index,
+      });
+    }
+
+    const hrrByRound = new Map<string, { ch: number; holes: number }>();
+    for (const h of (hrrRes.data ?? []) as {
+      round_id: string; course_handicap_used: number | null; is_9_hole: boolean | null;
+    }[]) {
+      if (h.course_handicap_used == null) continue;
+      hrrByRound.set(h.round_id, {
+        ch: Math.round(Number(h.course_handicap_used)),
+        holes: h.is_9_hole ? 9 : 18,
+      });
+    }
+
+    for (const [key, strokes] of latest) {
+      const sep = key.lastIndexOf("|");
+      const roundId = key.slice(0, sep);
+      const holeNumber = Number(key.slice(sep + 1));
+      const part = partByRound.get(roundId);
+      if (!part) continue;
+      const setup = part.teeSnapshotId
+        ? holeSetup.get(`${part.teeSnapshotId}|${holeNumber}`)
+        : undefined;
+      const par = setup?.par ?? null;
+      if (par == null) continue;
+      const toPar = strokes - par;
+      const hrr = hrrByRound.get(roundId);
+      // Same net formula the leaderboard uses: course handicap allocated by
+      // stroke index (ciaga_strokes_received_on_hole ≡ strokesReceived).
+      const netToPar =
+        hrr && setup?.stroke_index != null
+          ? toPar - strokesReceived(hrr.ch, setup.stroke_index, hrr.holes)
+          : null;
+      const row: HoleRow = {
+        round_id: roundId,
+        played_at: part.playedAt,
+        hole_number: holeNumber,
+        par,
+        yardage: setup?.yardage ?? null,
+        stroke_index: setup?.stroke_index ?? null,
+        strokes,
+        to_par: toPar,
+        net_to_par: netToPar,
+      };
+      const list = byRound.get(roundId);
+      if (list) list.push(row);
+      else byRound.set(roundId, [row]);
+    }
   }
 
   // Rounds submitted to this group's events get priority in the sample.
@@ -111,7 +220,7 @@ export async function buildPlayerProfile(
 
   const candidates: RoundSample[] = [];
   for (const [roundId, holes] of byRound) {
-    if (!finishedIds.has(roundId)) continue;
+    // All loaded rounds are already status = 'finished'.
     if (holes.length < MIN_HOLES) continue;
     candidates.push({
       roundId,
@@ -316,10 +425,16 @@ export async function ensureProfiles(
   if (error) throw error;
   for (const row of (data ?? []) as StoredFantasyProfile[]) out.set(row.profile_id, row);
 
-  for (const profileId of profileIds) {
-    if (!out.has(profileId)) {
-      out.set(profileId, await refreshPlayerProfile(groupId, profileId));
-    }
+  // Build missing profiles a few at a time — first generation for a full
+  // field would otherwise pay every build sequentially.
+  const missing = profileIds.filter((id) => !out.has(id));
+  const CONCURRENCY = 5;
+  for (let i = 0; i < missing.length; i += CONCURRENCY) {
+    const chunk = missing.slice(i, i + CONCURRENCY);
+    const built = await Promise.all(
+      chunk.map((profileId) => refreshPlayerProfile(groupId, profileId))
+    );
+    built.forEach((row) => out.set(row.profile_id, row));
   }
   return out;
 }

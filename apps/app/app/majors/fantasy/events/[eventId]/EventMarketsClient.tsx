@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 import { supabase } from "@/lib/supabaseClient";
+import { safeJson } from "@/lib/fantasy/safeJson";
 
 type Selection = {
   key: string;
@@ -85,7 +86,7 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
     const res = await fetch(`/api/fantasy/events/${eventId}/odds`, {
       headers: { Authorization: `Bearer ${session.accessToken}` },
     });
-    const j = (await res.json()) as BoardResponse;
+    const j = (await safeJson(res)) as BoardResponse;
     if (res.ok) setBoard(j);
     else setBoard((prev) => prev ?? ({ generated: false, error: j.error } as BoardResponse));
   }, [eventId]);
@@ -142,7 +143,7 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
         method: "POST",
         headers: { Authorization: `Bearer ${session.accessToken}` },
       });
-      const j = await res.json();
+      const j = await safeJson(res);
       if (!res.ok) {
         setGenerateError(j.error ?? "Failed to generate markets");
         return;
@@ -177,7 +178,7 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
           stake,
         }),
       });
-      const j = await res.json();
+      const j = await safeJson(res);
       if (!res.ok) {
         setSlipError(j.error ?? "Failed to place pick");
         // Stale-odds rejection → refetch so the user sees current prices.

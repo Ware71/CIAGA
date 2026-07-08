@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { getViewerSession } from "@/lib/auth/viewerSession";
+import { safeJson } from "@/lib/fantasy/safeJson";
 
 type Pick = {
   id: string;
@@ -113,7 +114,7 @@ export default function MyPicksClient() {
         method: "POST",
         headers: { Authorization: `Bearer ${session.accessToken}` },
       });
-      const j = await res.json();
+      const j = await safeJson(res);
       if (!res.ok) {
         setCashoutError(j.error ?? "Cash-out unavailable");
         return;
@@ -150,7 +151,7 @@ export default function MyPicksClient() {
         method: "POST",
         headers: { Authorization: `Bearer ${session.accessToken}` },
       });
-      const j = await res.json();
+      const j = await safeJson(res);
       if (!res.ok) {
         setCashoutError(j.error ?? "Failed to accept offer");
         setOffer(null);
