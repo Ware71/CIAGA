@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { getViewerSession } from "@/lib/auth/viewerSession";
+import { NumberField } from "@/components/ui/NumberField";
 import type {
   EventTypeV2,
   EventScoringModel,
@@ -260,9 +261,11 @@ function PointsTableEditor({
   // position_based or custom_table — editable
   const rows = Array.from({ length: 20 }, (_, i) => i + 1);
 
-  function handleChange(pos: number, raw: string) {
-    const val = raw === "" ? 0 : parseInt(raw, 10);
-    onChange({ ...pointsTable, [String(pos)]: isNaN(val) ? 0 : val });
+  function handleChange(pos: number, v: number | null) {
+    const next = { ...pointsTable };
+    if (v === null) delete next[String(pos)];
+    else next[String(pos)] = v;
+    onChange(next);
   }
 
   return (
@@ -274,11 +277,10 @@ function PointsTableEditor({
             <span className="text-[11px] text-emerald-200/60 w-8 shrink-0">
               {pos}{pos === 1 ? "st" : pos === 2 ? "nd" : pos === 3 ? "rd" : "th"}
             </span>
-            <input
-              type="number"
+            <NumberField
               min={0}
-              value={pointsTable[String(pos)] ?? ""}
-              onChange={(e) => handleChange(pos, e.target.value)}
+              value={pointsTable[String(pos)]}
+              onValueChange={(v) => handleChange(pos, v)}
               placeholder="0"
               className="w-16 rounded-lg border border-emerald-900/60 bg-[#042713] px-2 py-1 text-[11px] text-emerald-50 placeholder:text-emerald-100/30 focus:outline-none focus:border-emerald-600 text-right"
             />

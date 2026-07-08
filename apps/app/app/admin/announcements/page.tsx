@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { BackButton } from "@/components/ui/BackButton";
+import { NumberField } from "@/components/ui/NumberField";
 
 type Announcement = {
   id: string;
@@ -176,12 +177,14 @@ export default function AdminAnnouncementsPage() {
               <option value="promo">Promo</option>
               <option value="info">Info</option>
             </select>
-            <input
+            <NumberField
               className={input}
-              type="number"
+              allowNegative
+              nullable={false}
+              fallback={0}
               placeholder="Priority (higher first)"
               value={form.priority}
-              onChange={(e) => setForm({ ...form, priority: parseInt(e.target.value || "0", 10) })}
+              onValueChange={(v) => setForm({ ...form, priority: v ?? 0 })}
             />
           </div>
           <input

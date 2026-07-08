@@ -1,6 +1,8 @@
 // components/rounds/WolfConfig.tsx
 "use client";
 
+import { NumberField } from "@/components/ui/NumberField";
+
 export type WolfScoring = "net" | "gross";
 export type WolfTieMode = "push" | "carryover";
 
@@ -51,11 +53,12 @@ export function WolfConfig({ value, onChange, disabled }: WolfConfigProps) {
   ) => (
     <div>
       <label className="text-xs text-emerald-100/80 block mb-1">{label}</label>
-      <input
-        type="number"
+      <NumberField
         min={1}
+        nullable={false}
+        fallback={1}
         value={cfg[key]}
-        onChange={(e) => emit({ [key]: Math.max(1, parseInt(e.target.value) || 1) } as Partial<WolfConfigValue>)}
+        onValueChange={(v) => emit({ [key]: v ?? 1 } as Partial<WolfConfigValue>)}
         disabled={disabled}
         className="w-24 px-2 py-1 rounded border border-emerald-900/70 bg-[#0b3b21]/70 text-xs text-emerald-50 focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-50"
       />

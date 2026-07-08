@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getViewerSession } from "@/lib/auth/viewerSession";
+import { NumberField } from "@/components/ui/NumberField";
 import { InvitePlayerSheet } from "@/app/majors/groups/InvitePlayerSheet";
 import type {
   EventWithGroup,
@@ -4416,15 +4417,16 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                                 <span className="text-[11px] text-emerald-200/60 w-8 shrink-0">
                                   {i === 0 ? "1st" : i === 1 ? "2nd" : i === 2 ? "3rd" : `${i + 1}th`}
                                 </span>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  max="100"
-                                  step="1"
+                                <NumberField
+                                  allowDecimal
+                                  min={0}
+                                  max={100}
+                                  nullable={false}
+                                  fallback={0}
                                   value={row.pct}
-                                  onChange={(e) => {
+                                  onValueChange={(v) => {
                                     const updated = editPotForm.prize_table.map((r, j) =>
-                                      j === i ? { ...r, pct: parseFloat(e.target.value) || 0 } : r
+                                      j === i ? { ...r, pct: v ?? 0 } : r
                                     );
                                     setEditPotForm((f) => f && { ...f, prize_table: updated });
                                   }}
@@ -4671,15 +4673,16 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                           <span className="text-[11px] text-emerald-200/60 w-8 shrink-0">
                             {i === 0 ? "1st" : i === 1 ? "2nd" : i === 2 ? "3rd" : `${i + 1}th`}
                           </span>
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            step="1"
+                          <NumberField
+                            allowDecimal
+                            min={0}
+                            max={100}
+                            nullable={false}
+                            fallback={0}
                             value={row.pct}
-                            onChange={(e) => {
+                            onValueChange={(v) => {
                               const updated = addPotForm.prize_table.map((r, j) =>
-                                j === i ? { ...r, pct: parseFloat(e.target.value) || 0 } : r
+                                j === i ? { ...r, pct: v ?? 0 } : r
                               );
                               setAddPotForm((f) => f && { ...f, prize_table: updated });
                             }}

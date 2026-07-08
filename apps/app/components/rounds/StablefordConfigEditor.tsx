@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { NumberField } from "@/components/ui/NumberField";
 
 type StablefordPoints = {
   albatross?: number; // -3
@@ -152,13 +153,14 @@ export function StablefordConfigEditor({ value, onChange, disabled }: Stableford
               <span className="font-medium">{relative}</span>
               <span className="text-emerald-100/60 ml-2">{label.split("(")[0]}</span>
             </div>
-            <input
-              type="number"
+            <NumberField
+              allowNegative
               min={-10}
               max={10}
-              step={1}
+              nullable={false}
+              fallback={0}
               value={points[key] ?? 0}
-              onChange={(e) => handlePointChange(key, parseInt(e.target.value, 10) || 0)}
+              onValueChange={(v) => handlePointChange(key, v ?? 0)}
               disabled={disabled}
               className="w-16 px-2 py-1 rounded border border-emerald-900/70 bg-[#0b3b21]/70 text-xs text-emerald-50 text-right tabular-nums focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-50"
             />
