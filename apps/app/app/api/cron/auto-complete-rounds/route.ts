@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { finishRound } from "@/lib/rounds/finishRound";
 import { reconcileEventStatus } from "@/lib/majors/reconcileStatus";
 import { runEntryOpenNotifications } from "@/lib/notifications/entryOpenSweep";
+import { runFantasySweeps } from "@/lib/fantasy/cronSweeps";
 import { safeCompare } from "@/lib/auth/safeCompare";
 
 export const runtime = "nodejs";
@@ -101,6 +102,17 @@ export async function GET(req: Request) {
     console.error("[auto-complete-rounds] entry-open sweep failed:", e?.message);
   }
 
+  // Fantasy picks sweeps (pre-event market generation + job hygiene). Best-effort.
+  let fantasy: Awaited<ReturnType<typeof runFantasySweeps>> | null = null;
+  try {
+    fantasy = await runFantasySweeps();
+    if (fantasy.errors.length > 0) {
+      console.error("[auto-complete-rounds] fantasy sweep errors:", fantasy.errors);
+    }
+  } catch (e: any) {
+    console.error("[auto-complete-rounds] fantasy sweep failed:", e?.message);
+  }
+
   const completed = results.filter((r) => r.status === "ok").length;
-  return NextResponse.json({ ok: true, completed, results, entryOpen });
+  return NextResponse.json({ ok: true, completed, results, entryOpen, fantasy });
 }

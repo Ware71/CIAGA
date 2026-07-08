@@ -16,7 +16,10 @@ export type NotificationType =
   | "follow_round_completed"
   | "round_scheduled"
   | "round_schedule_changed"
-  | "round_cancelled";
+  | "round_cancelled"
+  | "fantasy_pick_won"
+  | "fantasy_pick_lost"
+  | "fantasy_pick_void";
 
 export type NotificationActor = {
   profile_id: string;
@@ -93,6 +96,36 @@ export function renderNotification(
         body: `Entry is now open for ${p.event_name ?? "an event"}`,
         url: p.event_id ? `/majors/events/${p.event_id}` : "/majors",
         icon: "door-open",
+      };
+
+    case "fantasy_pick_won":
+      return {
+        title: "Pick won! 🎉",
+        body: `${p.market_label ?? "Your pick"} came in — +${p.payout ?? "?"} pts${
+          p.event_name ? ` (${p.event_name})` : ""
+        }`,
+        url: "/majors/fantasy/picks",
+        icon: "trophy",
+      };
+
+    case "fantasy_pick_lost":
+      return {
+        title: "Pick settled",
+        body: `${p.market_label ?? "Your pick"} didn't come in${
+          p.event_name ? ` (${p.event_name})` : ""
+        }`,
+        url: "/majors/fantasy/picks",
+        icon: "flag",
+      };
+
+    case "fantasy_pick_void":
+      return {
+        title: "Pick voided",
+        body: `${p.market_label ?? "Your pick"} was voided — ${p.stake ?? "your"} pts returned${
+          p.event_name ? ` (${p.event_name})` : ""
+        }`,
+        url: "/majors/fantasy/picks",
+        icon: "rotate-ccw",
       };
 
     case "mention_post":
