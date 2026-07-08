@@ -23,6 +23,7 @@ function marketCount(market: FantasyMarket): number {
  */
 export const birdies: MarketDefinition = {
   type: "birdies",
+  group: "birdies",
   eligibleForCashout: true,
 
   displayName(market, names) {

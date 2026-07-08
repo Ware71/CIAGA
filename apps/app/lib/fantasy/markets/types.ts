@@ -10,6 +10,26 @@ export type FantasyMarketType =
 
 export type FantasyMarketStatus = "open" | "suspended" | "settled" | "void";
 
+/** Board sections, in display order. Every market type belongs to one. */
+export type MarketGroup =
+  | "winner"
+  | "position"
+  | "match"
+  | "scoring"
+  | "birdies"
+  | "holes"
+  | "specials";
+
+export const MARKET_GROUPS: { id: MarketGroup; label: string }[] = [
+  { id: "winner", label: "Winner" },
+  { id: "position", label: "Finishing Position" },
+  { id: "match", label: "Match Bets" },
+  { id: "scoring", label: "Player Scoring" },
+  { id: "birdies", label: "Birdies & Eagles" },
+  { id: "holes", label: "Hole Specials" },
+  { id: "specials", label: "Event Specials" },
+];
+
 /** Row shape of public.fantasy_markets. */
 export type FantasyMarket = {
   id: string;
@@ -73,6 +93,8 @@ export type CashoutCutoff = { eligible: true } | { eligible: false; reason: stri
  */
 export interface MarketDefinition {
   type: FantasyMarketType;
+  /** Which board section this market renders under. */
+  group: MarketGroup;
   eligibleForCashout: boolean;
   displayName(market: FantasyMarket, names: Record<string, string>): string;
   selectionLabel(

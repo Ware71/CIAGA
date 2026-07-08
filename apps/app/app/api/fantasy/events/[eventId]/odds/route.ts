@@ -24,7 +24,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ eventId:
 
     const { data: eventRow, error: eventErr } = await supabaseAdmin
       .from("events")
-      .select("id, name, group_id, majors_status, event_date")
+      .select("id, name, group_id, majors_status, event_date, course_id")
       .eq("id", eventId)
       .maybeSingle();
     if (eventErr) throw eventErr;
@@ -32,6 +32,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ eventId:
 
     const event = eventRow as {
       id: string; name: string; group_id: string | null; majors_status: string; event_date: string | null;
+      course_id: string | null;
     };
     if (!event.group_id) {
       return NextResponse.json({ error: "Event has no group" }, { status: 400 });
@@ -94,13 +95,24 @@ export async function GET(req: Request, { params }: { params: Promise<{ eventId:
       if (UUID_RE.test(s.selection_key)) nameIds.add(s.selection_key);
     }
     const names: Record<string, string> = {};
+    // Stats for the info popups (PlayerStatsSheet) — one query, keyed by player.
+    const playerStats: Record<string, unknown> = {};
     if (nameIds.size > 0) {
-      const { data: profs } = await supabaseAdmin
-        .from("profiles")
-        .select("id, name")
-        .in("id", [...nameIds]);
+      const [{ data: profs }, { data: statRows }] = await Promise.all([
+        supabaseAdmin.from("profiles").select("id, name").in("id", [...nameIds]),
+        supabaseAdmin
+          .from("fantasy_player_profiles")
+          .select(
+            "profile_id, handicap_index, avg_gross, score_stddev, recent_form, birdies_per_round, eagles_per_round, sample_size, confidence, recent_rounds"
+          )
+          .eq("group_id", event.group_id)
+          .in("profile_id", [...nameIds]),
+      ]);
       for (const p of (profs ?? []) as { id: string; name: string | null }[]) {
         names[p.id] = p.name ?? "Player";
+      }
+      for (const s of (statRows ?? []) as { profile_id: string }[]) {
+        playerStats[s.profile_id] = s;
       }
     }
 
@@ -128,6 +140,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ eventId:
         return {
           id: m.id,
           market_type: m.market_type,
+          group: def.group,
           display_name: def.displayName(m, names),
           status: m.status,
           params: m.params,
@@ -145,11 +158,18 @@ export async function GET(req: Request, { params }: { params: Promise<{ eventId:
     return NextResponse.json(
       {
         generated: true,
-        event: { id: event.id, name: event.name, status: event.majors_status, group_id: event.group_id },
+        event: {
+          id: event.id,
+          name: event.name,
+          status: event.majors_status,
+          group_id: event.group_id,
+          course_id: event.course_id,
+        },
         state: freshState,
         refreshing,
         markets: boardMarkets,
         names,
+        players: playerStats,
       },
       { headers: { "Cache-Control": "no-store" } }
     );

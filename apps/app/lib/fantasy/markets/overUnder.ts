@@ -26,6 +26,7 @@ function makeOverUnder(type: Extract<FantasyMarketType, "gross_ou" | "net_ou">):
 
   return {
     type,
+    group: "scoring",
     eligibleForCashout: true,
 
     displayName(market, names) {

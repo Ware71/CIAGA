@@ -23,6 +23,7 @@ function marketBasis(market: FantasyMarket): "gross" | "net" {
  */
 export const headToHead: MarketDefinition = {
   type: "h2h",
+  group: "match",
   eligibleForCashout: true,
 
   displayName(market, names) {

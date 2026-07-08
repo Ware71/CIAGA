@@ -6,6 +6,7 @@ import { getMarketDefinition, MARKET_REGISTRY } from "@/lib/fantasy/markets/regi
 import type { FantasyMarket, LiveMarketCtx, MarketSpec } from "@/lib/fantasy/markets/types";
 import { runSimulation, pickSimulationCount } from "@/lib/fantasy/simulation/engine";
 import { hashSeed } from "@/lib/fantasy/simulation/rng";
+import { generateNarrative } from "@/lib/fantasy/narrative";
 import {
   clampProbability,
   probabilityToDecimalOdds,
@@ -560,12 +561,18 @@ async function executeRefresh(eventId: string, jobId: string): Promise<void> {
 
     await writeSnapshots(ctx, sim, (marketData ?? []) as FantasyMarket[], version);
 
+    // Best-effort — a narrative failure must never fail the reprice.
+    const narrative = await generateNarrative(ctx, sim, version, allowancePct(ctx.event)).catch(
+      () => null
+    );
+
     await supabaseAdmin
       .from("fantasy_event_state")
       .update({
         odds_stale: false,
         last_refreshed_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
+        ...(narrative ? { narrative } : {}),
       })
       .eq("event_id", eventId)
       .eq("version", version);
@@ -697,12 +704,16 @@ export async function generateEventFantasy(eventId: string): Promise<{ markets: 
   const markets = (marketData ?? []) as FantasyMarket[];
 
   await writeSnapshots(ctx, sim, markets, version);
+  const narrative = await generateNarrative(ctx, sim, version, allowancePct(ctx.event)).catch(
+    () => null
+  );
   await supabaseAdmin
     .from("fantasy_event_state")
     .update({
       odds_stale: false,
       last_refreshed_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
+      ...(narrative ? { narrative } : {}),
     })
     .eq("event_id", eventId)
     .eq("version", version);

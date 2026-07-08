@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 import { safeJson } from "@/lib/fantasy/safeJson";
+import { OddsValue } from "@/components/fantasy/OddsValue";
 
 type Pick = {
   id: string;
@@ -230,7 +231,7 @@ export default function MyPicksClient() {
                   </div>
                   <div className="flex items-center justify-between mt-1.5">
                     <span className="text-[11px] text-emerald-200/60">
-                      {p.stake} pts @ {Number(p.decimal_odds).toFixed(2)}
+                      {p.stake} pts @ <OddsValue odds={Number(p.decimal_odds)} />
                     </span>
                     <span className="text-[11px] font-bold text-[#f5e6b0]">
                       {p.status === "won"

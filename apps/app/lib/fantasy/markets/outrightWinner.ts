@@ -13,6 +13,7 @@ import type { SimulationResult } from "@/lib/fantasy/simulation/types";
 /** Outright winner — one market per event, selections are the field. */
 export const outrightWinner: MarketDefinition = {
   type: "outright_winner",
+  group: "winner",
   eligibleForCashout: true,
 
   displayName() {

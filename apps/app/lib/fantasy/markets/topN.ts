@@ -21,6 +21,7 @@ const MIN_FIELD: Record<number, number> = { 3: 5, 5: 8, 10: 14 };
 /** Top-N finish — one market per N, selections are the field. */
 export const topN: MarketDefinition = {
   type: "top_n",
+  group: "position",
   eligibleForCashout: true,
 
   displayName(market) {
