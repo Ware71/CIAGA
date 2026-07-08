@@ -71,29 +71,45 @@ export async function buildPlayerProfile(
   groupId: string,
   profileId: string
 ): Promise<Omit<StoredFantasyProfile, "id" | "overrides">> {
-  // My participations in finished rounds — one indexed query
-  // (idx_round_participants_profile; embed via the single round_id FK).
+  // My participations, then their finished rounds. Kept as two plain queries:
+  // rounds ↔ round_participants embeds are ambiguous to PostgREST because
+  // tables like round_hole_states reference both and get treated as
+  // many-to-many junctions ("more than one relationship was found").
   const { data: partData, error: partErr } = await supabaseAdmin
     .from("round_participants")
-    .select(
-      "id, round_id, tee_snapshot_id, rounds!inner(id, status, finished_at, started_at, created_at)"
-    )
-    .eq("profile_id", profileId)
-    .eq("rounds.status", "finished");
+    .select("id, round_id, tee_snapshot_id")
+    .eq("profile_id", profileId);
   if (partErr) throw partErr;
-
-  type PartRow = {
+  const parts = (partData ?? []) as {
     id: string;
     round_id: string;
     tee_snapshot_id: string | null;
-    rounds: { finished_at: string | null; started_at: string | null; created_at: string };
-  };
-  const participations = ((partData ?? []) as unknown as PartRow[])
+  }[];
+
+  // Finished rounds for those participations, chunked to keep URLs bounded.
+  const playedAtByRound = new Map<string, string>();
+  for (let i = 0; i < parts.length; i += 100) {
+    const chunk = [...new Set(parts.slice(i, i + 100).map((p) => p.round_id))];
+    const { data: roundRows, error: roundErr } = await supabaseAdmin
+      .from("rounds")
+      .select("id, finished_at, started_at, created_at")
+      .in("id", chunk)
+      .eq("status", "finished");
+    if (roundErr) throw roundErr;
+    for (const r of (roundRows ?? []) as {
+      id: string; finished_at: string | null; started_at: string | null; created_at: string;
+    }[]) {
+      playedAtByRound.set(r.id, r.finished_at ?? r.started_at ?? r.created_at);
+    }
+  }
+
+  const participations = parts
+    .filter((p) => playedAtByRound.has(p.round_id))
     .map((p) => ({
       participantId: p.id,
       roundId: p.round_id,
       teeSnapshotId: p.tee_snapshot_id,
-      playedAt: p.rounds.finished_at ?? p.rounds.started_at ?? p.rounds.created_at,
+      playedAt: playedAtByRound.get(p.round_id)!,
     }))
     .sort((a, b) => (a.playedAt < b.playedAt ? 1 : -1))
     .slice(0, CANDIDATE_ROUNDS);

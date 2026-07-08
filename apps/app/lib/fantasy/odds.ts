@@ -202,23 +202,36 @@ async function loadLiveRoundData(eventId: string, fallbackHoleCount: number): Pr
     return { profileRoundStatus: new Map(), completedByProfile: new Map() };
   }
 
+  // Plain queries, no embed: rounds ↔ round_participants embeds are ambiguous
+  // to PostgREST (junction-table inference via round_hole_states et al).
   const { data: liveRounds, error: liveErr } = await supabaseAdmin
     .from("rounds")
-    .select("id, status, number_of_holes, event_tee_time_id, round_participants(id, profile_id)")
+    .select("id, status, number_of_holes, event_tee_time_id")
     .in("event_tee_time_id", teeTimeIds);
   if (liveErr) throw liveErr;
 
+  const rounds = (liveRounds ?? []) as {
+    id: string; status: string; number_of_holes: number | null;
+  }[];
+  const roundIds = rounds.map((r) => r.id);
+  const roundById = new Map(rounds.map((r) => [r.id, r]));
+
   const participantToProfile = new Map<string, string>();
   const profileRoundStatus = new Map<string, { finished: boolean; holesInRound: number }>();
-  const roundIds: string[] = [];
-  for (const r of (liveRounds ?? []) as any[]) {
-    roundIds.push(r.id);
-    for (const p of r.round_participants ?? []) {
+  if (roundIds.length > 0) {
+    const { data: partData, error: partErr } = await supabaseAdmin
+      .from("round_participants")
+      .select("id, round_id, profile_id")
+      .in("round_id", roundIds);
+    if (partErr) throw partErr;
+    for (const p of (partData ?? []) as { id: string; round_id: string; profile_id: string | null }[]) {
       if (!p.profile_id) continue;
+      const round = roundById.get(p.round_id);
+      if (!round) continue;
       participantToProfile.set(p.id, p.profile_id);
       profileRoundStatus.set(p.profile_id, {
-        finished: r.status === "finished",
-        holesInRound: r.number_of_holes ?? fallbackHoleCount,
+        finished: round.status === "finished",
+        holesInRound: round.number_of_holes ?? fallbackHoleCount,
       });
     }
   }
