@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { BackButton } from "@/components/ui/BackButton";
+import { NumberField } from "@/components/ui/NumberField";
 
 type Hole = {
   id?: string;
@@ -296,13 +297,6 @@ export default function CourseDetailPage() {
     setAddErr(null);
     setAddingTee(false);
     setNewTee({ name: "", gender: "unisex", par: "", yards: "", rating: "", slope: "" });
-  }
-
-  function parseNumOrNull(v: string) {
-    const t = v.trim();
-    if (!t) return null;
-    const n = Number(t);
-    return Number.isFinite(n) ? n : null;
   }
 
   function updateDraftTee(teeId: string, patch: Partial<TeeBox>) {
@@ -777,47 +771,36 @@ export default function CourseDetailPage() {
                                     <option value="female">Women</option>
                                   </select>
 
-                                  <input
+                                  <NumberField
                                     className="rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm text-emerald-50 outline-none focus:border-emerald-200/40"
-                                    value={t.par ?? ""}
-                                    onChange={(e) =>
-                                      updateDraftTee(t.id, { par: parseNumOrNull(e.target.value) })
-                                    }
+                                    value={t.par}
+                                    onValueChange={(v) => updateDraftTee(t.id, { par: v })}
                                     placeholder="Par"
-                                    inputMode="numeric"
                                     onClick={(e) => e.stopPropagation()}
                                   />
 
-                                  <input
+                                  <NumberField
                                     className="rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm text-emerald-50 outline-none focus:border-emerald-200/40"
-                                    value={t.yards ?? ""}
-                                    onChange={(e) =>
-                                      updateDraftTee(t.id, { yards: parseNumOrNull(e.target.value) })
-                                    }
+                                    value={t.yards}
+                                    onValueChange={(v) => updateDraftTee(t.id, { yards: v })}
                                     placeholder="Yards"
-                                    inputMode="numeric"
                                     onClick={(e) => e.stopPropagation()}
                                   />
 
-                                  <input
+                                  <NumberField
                                     className="rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm text-emerald-50 outline-none focus:border-emerald-200/40"
-                                    value={t.rating ?? ""}
-                                    onChange={(e) =>
-                                      updateDraftTee(t.id, { rating: parseNumOrNull(e.target.value) })
-                                    }
+                                    value={t.rating}
+                                    onValueChange={(v) => updateDraftTee(t.id, { rating: v })}
                                     placeholder="Rating"
-                                    inputMode="decimal"
+                                    allowDecimal
                                     onClick={(e) => e.stopPropagation()}
                                   />
 
-                                  <input
+                                  <NumberField
                                     className="rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm text-emerald-50 outline-none focus:border-emerald-200/40"
-                                    value={t.slope ?? ""}
-                                    onChange={(e) =>
-                                      updateDraftTee(t.id, { slope: parseNumOrNull(e.target.value) })
-                                    }
+                                    value={t.slope}
+                                    onValueChange={(v) => updateDraftTee(t.id, { slope: v })}
                                     placeholder="Slope"
-                                    inputMode="numeric"
                                     onClick={(e) => e.stopPropagation()}
                                   />
                                 </div>
@@ -909,39 +892,30 @@ export default function CourseDetailPage() {
                                     >
                                       <div className="font-medium text-emerald-50">{h.hole_number}</div>
 
-                                      <input
+                                      <NumberField
                                         className="rounded-lg border border-emerald-900/60 bg-[#082b16]/40 px-2 py-1 text-center text-emerald-50 outline-none focus:border-emerald-200/40"
-                                        value={h.par ?? ""}
-                                        inputMode="numeric"
+                                        value={h.par}
                                         placeholder="—"
-                                        onChange={(e) =>
-                                          updateDraftHole(t.id, h.hole_number, {
-                                            par: parseNumOrNull(e.target.value),
-                                          })
+                                        onValueChange={(v) =>
+                                          updateDraftHole(t.id, h.hole_number, { par: v })
                                         }
                                       />
 
-                                      <input
+                                      <NumberField
                                         className="rounded-lg border border-emerald-900/60 bg-[#082b16]/40 px-2 py-1 text-center text-emerald-50 outline-none focus:border-emerald-200/40"
-                                        value={h.yardage ?? ""}
-                                        inputMode="numeric"
+                                        value={h.yardage}
                                         placeholder="—"
-                                        onChange={(e) =>
-                                          updateDraftHole(t.id, h.hole_number, {
-                                            yardage: parseNumOrNull(e.target.value),
-                                          })
+                                        onValueChange={(v) =>
+                                          updateDraftHole(t.id, h.hole_number, { yardage: v })
                                         }
                                       />
 
-                                      <input
+                                      <NumberField
                                         className="rounded-lg border border-emerald-900/60 bg-[#082b16]/40 px-2 py-1 text-center text-emerald-50 outline-none focus:border-emerald-200/40"
-                                        value={h.handicap ?? ""}
-                                        inputMode="numeric"
+                                        value={h.handicap}
                                         placeholder="—"
-                                        onChange={(e) =>
-                                          updateDraftHole(t.id, h.hole_number, {
-                                            handicap: parseNumOrNull(e.target.value),
-                                          })
+                                        onValueChange={(v) =>
+                                          updateDraftHole(t.id, h.hole_number, { handicap: v })
                                         }
                                       />
                                     </div>

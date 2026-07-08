@@ -1,6 +1,8 @@
 // components/rounds/PairsStablefordConfig.tsx
 "use client";
 
+import { NumberField } from "@/components/ui/NumberField";
+
 export type PairsScoringMode = "best" | "worst" | "combined";
 
 type PairsStablefordConfigProps = {
@@ -53,15 +55,16 @@ export function PairsStablefordConfig({
           <label className="text-xs text-emerald-100/80 block mb-1">
             How many scores count per hole? (out of {teamSize})
           </label>
-          <input
-            type="number"
+          <NumberField
             min={1}
             max={teamSize - 1}
+            nullable={false}
+            fallback={1}
             value={countPerHole ?? 1}
-            onChange={(e) =>
+            onValueChange={(v) =>
               onChange({
                 scoring_mode: scoringMode,
-                count_per_hole: Math.max(1, Math.min(teamSize - 1, parseInt(e.target.value) || 1)),
+                count_per_hole: v ?? 1,
               })
             }
             disabled={disabled}

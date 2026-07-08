@@ -1,6 +1,8 @@
 // components/rounds/BestBallConfig.tsx
 "use client";
 
+import { NumberField } from "@/components/ui/NumberField";
+
 export type BestBallScoringType = "net_strokes" | "stableford";
 
 type BestBallConfigProps = {
@@ -49,15 +51,16 @@ export function BestBallConfig({
           <label className="text-xs text-emerald-100/80 block mb-1">
             Best X of {teamSize} per hole
           </label>
-          <input
-            type="number"
+          <NumberField
             min={1}
             max={teamSize}
+            nullable={false}
+            fallback={1}
             value={countPerHole ?? 1}
-            onChange={(e) =>
+            onValueChange={(v) =>
               onChange({
                 scoring_type: scoringType,
-                count_per_hole: Math.max(1, Math.min(teamSize, parseInt(e.target.value) || 1)),
+                count_per_hole: v ?? 1,
               })
             }
             disabled={disabled}

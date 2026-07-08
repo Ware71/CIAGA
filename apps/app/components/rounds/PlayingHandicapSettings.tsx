@@ -1,6 +1,8 @@
 // components/rounds/PlayingHandicapSettings.tsx
 "use client";
 
+import { NumberField } from "@/components/ui/NumberField";
+
 export type PlayingHandicapMode = "none" | "allowance_pct" | "fixed" | "compare_against_lowest";
 
 const MODE_LABELS: Record<PlayingHandicapMode, string> = {
@@ -92,14 +94,15 @@ export function PlayingHandicapSettings({
             {mode === "allowance_pct" ? "Allowance Percentage" : mode === "compare_against_lowest" ? "Allowance % (applied to handicap difference)" : "Fixed Handicap Value"}
           </label>
           <div className="flex items-center gap-2">
-            <input
+            <NumberField
               id="handicap-value"
-              type="number"
+              allowDecimal
+              nullable={false}
               min={0}
               max={mode === "fixed" ? 54 : 100}
-              step={mode === "fixed" ? 1 : 5}
+              fallback={mode === "fixed" ? 0 : 100}
               value={value}
-              onChange={(e) => onValueChange(parseFloat(e.target.value) || 0)}
+              onValueChange={(v) => onValueChange(v ?? (mode === "fixed" ? 0 : 100))}
               disabled={disabled}
               className="flex-1 rounded-lg border border-emerald-900/70 bg-[#0b3b21]/70 px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
             />

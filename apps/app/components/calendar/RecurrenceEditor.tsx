@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { RRule, Weekday } from "rrule";
 import { cn } from "@/lib/utils";
+import { NumberField } from "@/components/ui/NumberField";
 import { SegmentedControl } from "./SegmentedControl";
 
 type Freq = "none" | "daily" | "weekly" | "monthly";
@@ -112,11 +113,12 @@ export function RecurrenceEditor(props: {
       {value.freq !== "none" ? (
         <div className="flex items-center gap-2 text-xs text-emerald-100/80">
           <span>Every</span>
-          <input
-            type="number"
+          <NumberField
             min={1}
+            nullable={false}
+            fallback={1}
             value={value.interval}
-            onChange={(e) => onChange({ ...value, interval: Math.max(1, Number(e.target.value) || 1) })}
+            onValueChange={(v) => onChange({ ...value, interval: v ?? 1 })}
             className="w-14 rounded-md border border-emerald-900/70 bg-[#042713] px-2 py-1 text-emerald-50"
           />
           <span>

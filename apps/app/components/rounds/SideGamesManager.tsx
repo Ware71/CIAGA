@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import type { RoundFormatType } from "./FormatSelector";
 import { isTeamFormat } from "./FormatSelector";
 import { WolfConfig, WOLF_CONFIG_DEFAULTS } from "./WolfConfig";
+import { NumberField } from "@/components/ui/NumberField";
 
 type GameDef = {
   id: "skins" | "wolf" | "nassau";
@@ -193,14 +194,15 @@ export function SideGamesManager({
                     </div>
                     <div className="flex items-center gap-2">
                       <label className="text-xs text-emerald-100">Value per skin:</label>
-                      <input
-                        type="number"
+                      <NumberField
+                        allowDecimal
                         min={0}
-                        step={0.5}
+                        nullable={false}
+                        fallback={1}
                         value={gameData?.config?.value_per_skin ?? 1}
-                        onChange={(e) =>
+                        onValueChange={(v) =>
                           updateGameConfig(game.id, {
-                            value_per_skin: parseFloat(e.target.value),
+                            value_per_skin: v ?? 1,
                           })
                         }
                         disabled={disabled}
@@ -235,13 +237,13 @@ export function SideGamesManager({
                 {game.id === "nassau" && (
                   <div className="flex items-center gap-2">
                     <label className="text-xs text-emerald-100">Points per section:</label>
-                    <input
-                      type="number"
+                    <NumberField
                       min={1}
-                      step={1}
+                      nullable={false}
+                      fallback={2}
                       value={gameData?.config?.points ?? 2}
-                      onChange={(e) =>
-                        updateGameConfig(game.id, { points: parseInt(e.target.value) })
+                      onValueChange={(v) =>
+                        updateGameConfig(game.id, { points: v ?? 2 })
                       }
                       disabled={disabled}
                       className="w-20 px-2 py-1 rounded border border-emerald-900/70 bg-[#0b3b21]/70 text-xs text-emerald-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
