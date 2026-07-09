@@ -598,7 +598,14 @@ export async function loadSimInputs(eventId: string): Promise<EventSimContext> {
     };
   });
 
-  const rankingBasis: RankingBasis = event.scoring_model === "gross" ? "gross" : "net";
+  // Rank the sim on the event's scoring format so pricing matches settlement:
+  // stableford ranks on points, gross on gross strokes, everything else on net.
+  const rankingBasis: RankingBasis =
+    event.scoring_model === "stableford_points"
+      ? "stableford"
+      : event.scoring_model === "gross"
+      ? "gross"
+      : "net";
 
   return {
     event,

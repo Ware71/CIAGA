@@ -68,7 +68,7 @@ describe("holeMu", () => {
   });
 });
 
-describe("handicap anchor (prior for thin profiles)", () => {
+describe("net-consistent anchor (thin/no-history profiles)", () => {
   const noHistory: Partial<SimPlayerProfile> = {
     avgGross: null,
     scoreStddev: null,
@@ -80,39 +80,31 @@ describe("handicap anchor (prior for thin profiles)", () => {
     sampleSize: 0,
     confidence: "low",
   };
+  const holes: SimHole[] = Array.from({ length: 18 }, (_, i) =>
+    hole({ holeNumber: i + 1, strokeIndex: i + 1 })
+  );
+  // Σ holeMu over 18 holes = expected gross strokes over par; net-over-par = − PH.
+  const grossOverPar = (ph: number, overrides: Partial<SimPlayerProfile> = {}) =>
+    holes.reduce((s, h) => s + holeMu(profile({ ...noHistory, ...overrides }), h, ph), 0);
 
-  it("with no history, expected gross tracks the handicap (HI + 3 over par)", () => {
-    const holes: SimHole[] = Array.from({ length: 18 }, (_, i) =>
-      hole({ holeNumber: i + 1, strokeIndex: i + 1 })
-    );
-    const total = (hi: number) =>
-      holes.reduce((s, h) => s + holeMu(profile({ ...noHistory, handicapIndex: hi }), h), 0);
-    // SI tilts cancel over 18 holes → total-vs-par ≈ HI + 3.
-    expect(total(20)).toBeCloseTo(23, 1);
-    expect(total(5)).toBeCloseTo(8, 1);
-    // Ordering: high handicappers must NOT price like 88-shooters anymore.
-    expect(total(25)).toBeGreaterThan(total(5) + 15);
+  it("a no-history player nets ~par + POPULATION_GAP regardless of handicap", () => {
+    // SI tilts cancel over 18 holes → gross-over-par ≈ PH + gap → net ≈ gap (~4).
+    expect(grossOverPar(0) - 0).toBeCloseTo(4, 0);
+    expect(grossOverPar(18) - 18).toBeCloseTo(4, 0);
+    expect(grossOverPar(54) - 54).toBeCloseTo(4, 0);
   });
 
-  it("a full sample silences the anchor entirely", () => {
-    const lowHi = profile({ handicapIndex: 2, sampleSize: 12 });
-    const highHi = profile({ handicapIndex: 28, sampleSize: 12 });
-    expect(holeMu(lowHi, hole())).toBeCloseTo(holeMu(highHi, hole()), 9);
+  it("a big handicap is NOT a net favourite — same expected net as a low one", () => {
+    const highNet = grossOverPar(54) - 54;
+    const lowNet = grossOverPar(6) - 6;
+    expect(Math.abs(highNet - lowNet)).toBeLessThan(0.5);
+    // …and never modeled below par on net.
+    expect(highNet).toBeGreaterThanOrEqual(0);
   });
 
-  it("anchor influence decays monotonically as the sample grows", () => {
-    // HI 25 anchor sits far above this player's observed scoring, so more
-    // history → lower mu, monotonically.
-    const mus = [0, 2, 5, 8, 10].map((n) =>
-      holeMu(profile({ handicapIndex: 25, sampleSize: n }), hole())
-    );
-    for (let i = 1; i < mus.length; i++) expect(mus[i]).toBeLessThan(mus[i - 1]);
-  });
-
-  it("no history and no HI keeps the legacy flat fallback", () => {
-    const p = profile({ ...noHistory, handicapIndex: null });
-    // 0.9 base + SI tilt at SI 9 ≈ 0.9066
-    expect(holeMu(p, hole())).toBeCloseTo(0.9 + ((9.5 - 9) / 9.5) * 0.12, 6);
+  it("a full gross sample overrides the anchor (history drives the level, PH doesn't)", () => {
+    const withHistory = profile({ avgGross: 92, par4AvgVsPar: 1.1, par3AvgVsPar: 1.0, par5AvgVsPar: 1.1, sampleSize: 12 });
+    expect(holeMu(withHistory, hole(), 0)).toBeCloseTo(holeMu(withHistory, hole(), 54), 9);
   });
 
   it("sigma defaults follow handicap when no observed stddev exists", () => {

@@ -3,6 +3,7 @@ import {
   buildHoleDistributions,
   toCumulative,
   sampleOutcome,
+  strokesReceived,
   OUTCOME_OFFSET,
   OUTCOME_BINS,
 } from "@/lib/fantasy/simulation/holeModel";
@@ -50,6 +51,14 @@ export function runSimulation(inputs: SimulationInputs): SimulationResult {
   const roundIdxByNumber = new Map(roundNumbers.map((r, i) => [r, i]));
   const roundOfHole = holes.map((h) => roundIdxByNumber.get(h.round ?? 1)!);
 
+  // Stableford events rank on POINTS (per hole max(0, 2 − netStrokesOverPar)),
+  // which caps blow-up holes at 0 — so volatile players do relatively better
+  // than under net stroke. holesPerRound drives per-hole stroke allocation.
+  const isStableford = rankingBasis === "stableford";
+  const holesPerRound = roundNumbers.map((rn) =>
+    holes.reduce((n, h) => n + ((h.round ?? 1) === rn ? 1 : 0), 0)
+  );
+
   const results: SimPlayerResult[] = players.map((p) => ({
     profileId: p.profileId,
     grossTotals: new Int16Array(simulationCount),
@@ -79,6 +88,7 @@ export function runSimulation(inputs: SimulationInputs): SimulationResult {
     const remainingIdx: number[] = [];
     const fixedRoundGross = new Array<number>(roundNumbers.length).fill(0);
     let fixedBirdies = 0;
+    let fixedStableford = 0;
     holes.forEach((hole, hi) => {
       const round = hole.round ?? 1;
       const played = player.completedHoles[holeKey(round, hole.holeNumber)];
@@ -89,6 +99,10 @@ export function runSimulation(inputs: SimulationInputs): SimulationResult {
           Math.max(0, played - hole.par + OUTCOME_OFFSET)
         );
         if (isBirdieOutcome(k)) fixedBirdies += 1;
+        if (isStableford) {
+          const sr = strokesReceived(player.playingHandicap, hole.strokeIndex, holesPerRound[roundOfHole[hi]]);
+          fixedStableford += Math.max(0, 2 - (played - hole.par - sr));
+        }
         // Real outcome fills the hole histogram deterministically.
         results[pi].holeOutcomes[hi][k] = simulationCount;
       } else if (!player.roundComplete && !completedRoundSet.has(round)) {
@@ -97,15 +111,23 @@ export function runSimulation(inputs: SimulationInputs): SimulationResult {
     });
     const dists = buildHoleDistributions(
       player.profile,
-      remainingIdx.map((hi) => holes[hi])
+      remainingIdx.map((hi) => holes[hi]),
+      player.playingHandicap
     );
     return {
       remainingIdx,
       fixedRoundGross,
       fixedBirdies,
+      fixedStableford,
       cumulative: toCumulative(dists),
       pars: remainingIdx.map((hi) => holes[hi].par),
       rounds: remainingIdx.map((hi) => roundOfHole[hi]),
+      // Handicap strokes each remaining hole receives (stableford only).
+      srPerHole: isStableford
+        ? remainingIdx.map((hi) =>
+            strokesReceived(player.playingHandicap, holes[hi].strokeIndex, holesPerRound[roundOfHole[hi]])
+          )
+        : [],
     };
   });
 
@@ -129,12 +151,16 @@ export function runSimulation(inputs: SimulationInputs): SimulationResult {
         roundGrossScratch[r] = prep.fixedRoundGross[r];
       }
       let birdies = prep.fixedBirdies;
+      let stableford = prep.fixedStableford;
 
       for (let r = 0; r < prep.remainingIdx.length; r++) {
         const k = sampleOutcome(prep.cumulative[r], rand());
         roundGrossScratch[prep.rounds[r]] += prep.pars[r] + k - OUTCOME_OFFSET;
         if (isBirdieOutcome(k)) birdies += 1;
         res.holeOutcomes[prep.remainingIdx[r]][k] += 1;
+        if (isStableford) {
+          stableford += Math.max(0, 2 - (k - OUTCOME_OFFSET - prep.srPerHole[r]));
+        }
       }
 
       const ph = players[pi].playingHandicap;
@@ -149,7 +175,9 @@ export function runSimulation(inputs: SimulationInputs): SimulationResult {
       res.grossTotals[iter] = gross;
       res.netTotals[iter] = net;
       res.birdieHistogram[Math.min(birdies, holes.length)] += 1;
-      basisTotals[pi] = rankingBasis === "gross" ? gross : net;
+      // Stableford ranks on POINTS (higher = better) → negate so the min-based
+      // ranking below still selects the winner.
+      basisTotals[pi] = isStableford ? -stableford : rankingBasis === "gross" ? gross : net;
     }
 
     // Sample attendance (confirmed players always present; provisional players

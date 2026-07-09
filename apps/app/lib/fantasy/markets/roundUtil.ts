@@ -1,5 +1,5 @@
 import type { FantasyMarket } from "@/lib/fantasy/markets/types";
-import type { SimulationResult } from "@/lib/fantasy/simulation/types";
+import type { RankingBasis, SimulationResult } from "@/lib/fantasy/simulation/types";
 
 /**
  * Shared helpers for round-scoped market variants. A market with
@@ -22,7 +22,9 @@ export function roundPrefix(market: FantasyMarket): string {
 export function totalsFor(
   sim: SimulationResult,
   playerIdx: number,
-  basis: "gross" | "net",
+  // Round winners price on gross/net stroke totals; stableford collapses to net
+  // (there's no per-round stableford total array, and round winners are rare).
+  basis: RankingBasis,
   round: number | null
 ): Int16Array {
   const p = sim.players[playerIdx];

@@ -320,7 +320,8 @@ export async function generateNarrative(
     eventName: ctx.event.name,
     courseName,
     scoringModel: ctx.event.scoring_model,
-    rankingBasis: ctx.rankingBasis,
+    // Narrative phrasing only distinguishes gross vs net; stableford → net.
+    rankingBasis: ctx.rankingBasis === "gross" ? "gross" : "net",
     allowance,
     numRounds: ctx.event.num_rounds ?? 1,
     players: ctx.players.map((p) => {

@@ -35,6 +35,13 @@ const RECENT_FORM_WINDOW = 5;
 const RECENT_ROUNDS_STORED = 10;
 /** Profiles older than this are rebuilt on the next ensureProfiles call. */
 export const PROFILE_TTL_HOURS = 24;
+/**
+ * Bump whenever the profile computation changes (new inputs, formula tweaks).
+ * ensureProfiles rebuilds any stored profile with a lower model_version, so a
+ * model change takes effect immediately instead of waiting out the 24h TTL.
+ *   v1: gross-average model. v2: WHS score-differential inputs.
+ */
+export const PROFILE_MODEL_VERSION = 2;
 
 /** One sampled round, kept on the profile for popups/narrative. */
 export type RecentRound = {
@@ -75,6 +82,7 @@ export type StoredFantasyProfile = {
   hole_splits: HoleSplits | null;
   sample_size: number;
   confidence: "low" | "medium" | "high";
+  model_version: number;
   overrides: Partial<StoredFantasyProfile> | null;
   computed_at: string;
 };
@@ -330,6 +338,7 @@ export async function buildPlayerProfile(
     differential_stddev: diffStats?.stddev != null ? round2(diffStats.stddev) : null,
     differential_sample_size: diffStats?.sampleSize ?? 0,
     differential_effective_n: diffStats ? round2(diffStats.effectiveN) : null,
+    model_version: PROFILE_MODEL_VERSION,
     computed_at: new Date().toISOString(),
   };
 
@@ -526,11 +535,17 @@ export async function ensureProfiles(
 
   // Build missing profiles and rebuild stale ones a few at a time — staleness
   // triggers bump the event version, but the profile INPUTS only follow when
-  // rebuilt, so without a TTL form data freezes at first generation.
+  // rebuilt, so without a TTL form data freezes at first generation. A profile
+  // built under an older model_version is also rebuilt, so a model change takes
+  // effect immediately rather than waiting out the 24h TTL.
   const cutoff = Date.now() - PROFILE_TTL_HOURS * 60 * 60 * 1000;
   const missing = profileIds.filter((id) => {
     const row = out.get(id);
-    return !row || new Date(row.computed_at).getTime() < cutoff;
+    return (
+      !row ||
+      (row.model_version ?? 0) < PROFILE_MODEL_VERSION ||
+      new Date(row.computed_at).getTime() < cutoff
+    );
   });
   const CONCURRENCY = 5;
   for (let i = 0; i < missing.length; i += CONCURRENCY) {

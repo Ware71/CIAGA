@@ -106,7 +106,7 @@ export type SimPlayer = {
   completedRounds?: number[];
 };
 
-export type RankingBasis = "gross" | "net";
+export type RankingBasis = "gross" | "net" | "stableford";
 
 export type SimulationInputs = {
   players: SimPlayer[];

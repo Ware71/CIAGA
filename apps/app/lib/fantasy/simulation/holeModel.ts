@@ -18,7 +18,11 @@ import type { HoleSplits, SimHole, SimPlayerProfile } from "@/lib/fantasy/simula
  */
 
 export const OUTCOME_OFFSET = 2; // k index 2 = par
-export const OUTCOME_BINS = 7; // par-2 .. par+4
+// par-2 .. par+8. The old +4 ceiling truncated high-handicap blow-up holes:
+// a 40+ handicapper averages > +2/hole, so +4 sat barely above their mean and
+// collapsed ~40% of the upper tail — understating their gross and (net) making
+// them a false favourite. +8 covers even max handicaps with negligible loss.
+export const OUTCOME_BINS = 11;
 
 const DEFAULT_SIGMA_ROUND = 5;
 const SI_SENSITIVITY = 0.12; // strokes: SI 1 ≈ +0.11 harder, SI 18 ≈ −0.11 easier
@@ -26,22 +30,18 @@ const SPLIT_MIN_SAMPLE = 4;
 const SPLIT_WEIGHT = 0.6;
 
 /**
- * Handicap anchor — a PRIOR for thin/no-history players, never a driver.
- * Gross history defines the model; the anchor's influence decays linearly to
- * zero by ANCHOR_FULL_SAMPLE rounds. Amateurs average ~ANCHOR_BUFFER strokes
- * over their index, so a no-history HI 20 anchors at ~95 gross, not the old
- * flat ~88 that made high-handicap newcomers runaway net favourites.
+ * Net-consistency anchor for thin/no-history players. With no ability signal we
+ * model the player to shoot (playingHandicap + POPULATION_GAP) over par on gross
+ * → net ≈ par + POPULATION_GAP, whatever their handicap. This is what stops a
+ * big handicap from making a player a net favourite: the old anchor set gross
+ * from the handicap INDEX while net deducted the (larger, course-scaled) playing
+ * handicap, so high handicappers were modelled below par on net. POPULATION_GAP
+ * is the typical amateur gap between average and best-8 rounds (μ_D − HI).
  */
-const ANCHOR_BUFFER = 3;
+const POPULATION_GAP = 4;
+/** Gross-sample weight reaches 1 (pure observed history) by this many rounds. */
 const ANCHOR_FULL_SAMPLE = 10;
-
-/**
- * Differential-path anchor. A player's mean score differential sits ABOVE their
- * handicap index (the index is best-8-of-20, the mean is all rounds), so a thin
- * history anchors at HI + ~3.5. The anchor's pull decays to zero by
- * ANCHOR_FULL_SAMPLE_DIFF effective differentials.
- */
-const ANCHOR_BUFFER_DIFF = 3.5;
+/** Differential-sample weight reaches 1 (pure μ_D) by this effective count. */
 const ANCHOR_FULL_SAMPLE_DIFF = 12;
 
 /** Recent form nudges the mean; it must never replace it. */
@@ -106,12 +106,6 @@ function siAdjustment(splits: HoleSplits | null, hole: SimHole): number {
   return bucket.avgVsPar;
 }
 
-/** Per-hole expectation implied by handicap alone; null when no HI. */
-function anchorAvgVsPar(profile: SimPlayerProfile): number | null {
-  if (profile.handicapIndex == null) return null;
-  return (profile.handicapIndex + ANCHOR_BUFFER) / 18;
-}
-
 /** Clamped, weighted recent-form drift per hole. */
 function formDrift(profile: SimPlayerProfile, weight: number): number {
   const form = Math.max(-FORM_CLAMP, Math.min(FORM_CLAMP, profile.recentForm ?? 0));
@@ -119,34 +113,18 @@ function formDrift(profile: SimPlayerProfile, weight: number): number {
 }
 
 /**
- * Effective mean differential — blends the observed recency-weighted mean with
- * the handicap anchor for thin histories. Null when the player has no
- * differential history at all (→ gross-average fallback).
+ * Expected 18-hole gross for this hole's tee, worked straight back from the
+ * player's RAW recency-weighted differential (no internal handicap anchor — the
+ * anchor is applied at the level blend in holeMu): AGS ≈ μ_D·slope/113 + rating.
+ * Null when the differential or the tee's rating/slope is missing, or the round
+ * isn't a full ~18 (a differential is an 18-hole quantity).
  */
-function effectiveDifferential(profile: SimPlayerProfile): number | null {
+function grossFromDifferential(profile: SimPlayerProfile, hole: SimHole): number | null {
   const mu = profile.avgDifferential;
   if (mu == null) return null;
-  if (profile.handicapIndex == null) return mu;
-  const anchor = profile.handicapIndex + ANCHOR_BUFFER_DIFF;
-  const w = Math.min(1, (profile.differentialEffectiveN ?? 0) / ANCHOR_FULL_SAMPLE_DIFF);
-  return w * mu + (1 - w) * anchor;
-}
-
-/**
- * Expected 18-hole-equivalent gross for this hole's tee, worked back from the
- * player's differential via the inverse WHS relation: AGS ≈ D·slope/113 +
- * rating. Null when the differential or the tee's rating/slope is missing, or
- * the round isn't a full ~18 (a differential is an 18-hole quantity).
- */
-function expectedRoundGrossFromDifferential(
-  profile: SimPlayerProfile,
-  hole: SimHole
-): number | null {
-  const muD = effectiveDifferential(profile);
-  if (muD == null) return null;
   if (hole.rating == null || hole.slope == null || hole.slope <= 0) return null;
   if (hole.parTotal == null || hole.holesInRound == null || hole.holesInRound < 14) return null;
-  return muD * (hole.slope / 113) + hole.rating;
+  return mu * (hole.slope / 113) + hole.rating;
 }
 
 /**
@@ -164,25 +142,31 @@ function observedShapeTilt(profile: SimPlayerProfile, hole: SimHole): number {
   return tilt;
 }
 
-export function holeMu(profile: SimPlayerProfile, hole: SimHole): number {
+export function holeMu(profile: SimPlayerProfile, hole: SimHole, playingHandicap = 0): number {
   const si = siAdjustment(profile.holeSplits, hole);
+  const holesInRound = hole.holesInRound != null && hole.holesInRound >= 14 ? hole.holesInRound : 18;
+  // Net-consistent anchor (per-hole over par) for thin data: a player with no
+  // signal is modelled to shoot PH + POPULATION_GAP over par → net ≈ par +
+  // POPULATION_GAP, independent of handicap (so a big handicap can't make you a
+  // net favourite). PH is threaded from the engine's per-player playing handicap.
+  const anchorLevel = (playingHandicap + POPULATION_GAP) / holesInRound;
 
-  // Differential path: LEVEL from the course-normalised differential, SHAPE from
-  // the observed sample, form drift at half weight (recency already in μ_D).
-  const expectedGross = expectedRoundGrossFromDifferential(profile, hole);
-  if (expectedGross != null && hole.parTotal != null && hole.holesInRound != null) {
-    const level = (expectedGross - hole.parTotal) / hole.holesInRound;
+  // Differential path: LEVEL from the raw course-normalised differential, blended
+  // toward the anchor for thin differential samples; SHAPE from the observed
+  // sample; form drift at half weight (recency already in μ_D).
+  const diffGross = grossFromDifferential(profile, hole);
+  if (diffGross != null && hole.parTotal != null && hole.holesInRound != null) {
+    const diffLevel = (diffGross - hole.parTotal) / hole.holesInRound;
+    const w = Math.min(1, (profile.differentialEffectiveN ?? 0) / ANCHOR_FULL_SAMPLE_DIFF);
+    const level = w * diffLevel + (1 - w) * anchorLevel;
     return level + observedShapeTilt(profile, hole) + si + formDrift(profile, FORM_WEIGHT_DIFFERENTIAL);
   }
 
-  // Gross-average fallback (no differential / no tee rating) — unchanged.
+  // Gross-average fallback (no differential / no tee rating): the observed gross
+  // sample when we have one, else the net-consistent PH anchor.
   const observed = parTypeAvgVsPar(profile, hole.par);
-  const anchor = anchorAvgVsPar(profile);
-  // Blend observed history with the handicap prior by sample weight: a full
-  // sample is pure history, an empty one pure anchor (uniform generic shape —
-  // par-type shape only enters through the observed component).
   const w = Math.min(1, profile.sampleSize / ANCHOR_FULL_SAMPLE);
-  const base = anchor == null ? observed : w * observed + (1 - w) * anchor;
+  const base = w * observed + (1 - w) * anchorLevel;
   const bucketAvg = splitBucketAvg(profile.holeSplits, hole);
   const blended =
     bucketAvg != null ? SPLIT_WEIGHT * bucketAvg + (1 - SPLIT_WEIGHT) * base : base;
@@ -209,20 +193,33 @@ export function holeSigma(profile: SimPlayerProfile, hole?: SimHole): number {
   const holesInRound = hole?.holesInRound && hole.holesInRound >= 14 ? hole.holesInRound : 18;
   const perHole = sigmaRound / Math.sqrt(holesInRound);
   const widened = perHole * CONFIDENCE_SIGMA_FACTOR[profile.confidence];
-  return Math.min(1.8, Math.max(0.7, widened));
+  // Wider than V3's [0.7,1.8]: that flattened round σ to ~3–7.6 for everyone, so
+  // a volatile player and a steady one simulated almost identically. [0.5,2.6]
+  // (round σ ≈ 2.1–11) lets σ_D actually separate them; the top of the range is
+  // about all the par−2…par+4 outcome grid can express.
+  return Math.min(2.6, Math.max(0.5, widened));
 }
 
-/** Discretize N(mu, sigma) over k = par−2 .. par+4 with collapsed tails. */
+/** Discretize N(mu, sigma) over k = par−2 .. par+8 with collapsed tails. */
 export function discretizedDistribution(mu: number, sigma: number): number[] {
-  const dist = new Array<number>(OUTCOME_BINS).fill(0);
-  let prevCdf = 0;
-  for (let k = 0; k < OUTCOME_BINS; k++) {
-    const upper = k - OUTCOME_OFFSET + 0.5;
-    const cdf = k === OUTCOME_BINS - 1 ? 1 : normalCdf((upper - mu) / sigma);
-    dist[k] = Math.max(0, cdf - prevCdf);
-    prevCdf = cdf;
-  }
-  return normalize(dist);
+  const build = (m: number): number[] => {
+    const dist = new Array<number>(OUTCOME_BINS).fill(0);
+    let prevCdf = 0;
+    for (let k = 0; k < OUTCOME_BINS; k++) {
+      const upper = k - OUTCOME_OFFSET + 0.5;
+      const cdf = k === OUTCOME_BINS - 1 ? 1 : normalCdf((upper - m) / sigma);
+      dist[k] = Math.max(0, cdf - prevCdf);
+      prevCdf = cdf;
+    }
+    return normalize(dist);
+  };
+  // Collapsing the tails into the end bins biases the discrete mean toward the
+  // nearer bound (badly for volatile players, whose mass reaches a bound). One
+  // Newton step on the target keeps the discrete mean ≈ mu — mean-preserving, so
+  // a player's simulated gross matches their modelled level.
+  const raw = build(mu);
+  const discreteMean = raw.reduce((s, p, k) => s + (k - OUTCOME_OFFSET) * p, 0);
+  return build(mu + (mu - discreteMean));
 }
 
 function normalize(dist: number[]): number[] {
@@ -244,10 +241,11 @@ function normalize(dist: number[]): number[] {
  */
 export function buildHoleDistributions(
   profile: SimPlayerProfile,
-  holes: SimHole[]
+  holes: SimHole[],
+  playingHandicap = 0
 ): number[][] {
   const dists = holes.map((hole) =>
-    discretizedDistribution(holeMu(profile, hole), holeSigma(profile, hole))
+    discretizedDistribution(holeMu(profile, hole, playingHandicap), holeSigma(profile, hole))
   );
 
   const observed = profile.birdiesPerRound;

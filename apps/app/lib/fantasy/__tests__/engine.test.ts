@@ -211,3 +211,74 @@ describe("runSimulation", () => {
     expect(oneOrMore).toBeGreaterThan(0.6);
   });
 });
+
+describe("net-consistency, variance & format (model fixes)", () => {
+  const teeHoles = (): SimHole[] =>
+    makeHoles().map((h) => ({ ...h, rating: 72, slope: 113, parTotal: 72, holesInRound: 18 }));
+
+  it("a player averaging +11 over their handicap is a net longshot, not the favourite", () => {
+    const diff = (mu: number) => ({ avgDifferential: mu, differentialStddev: 4, differentialEffectiveN: 20 });
+    // Same playing handicap (20); 'steady' plays to it, 'inconsistent' is +11 worse.
+    const steady = makePlayer("steady", { playingHandicap: 20 }, diff(20));
+    const inconsistent = makePlayer("inconsistent", { playingHandicap: 20 }, diff(31));
+    const r = runSimulation(baseInputs([steady, inconsistent], { holes: teeHoles() }));
+    const s = r.players[r.playerIndex["steady"]];
+    const i = r.players[r.playerIndex["inconsistent"]];
+    expect(s.winProb).toBeGreaterThan(i.winProb);
+    expect(i.meanNet).toBeGreaterThan(s.meanNet);
+    // The +11 player nets ~+11 over par; neither is priced below par.
+    expect(i.meanNet).toBeGreaterThan(72);
+    expect(s.meanNet).toBeGreaterThan(71);
+  });
+
+  it("on the no-data fallback a big handicap is never modelled below par on net", () => {
+    const noData = (ph: number) =>
+      makePlayer(`h${ph}`, { playingHandicap: ph }, {
+        avgGross: null,
+        scoreStddev: null,
+        recentForm: null,
+        // A no-data profile has no birdie/eagle rate either (else the calibration
+        // forces low-score mass on, understating a high handicapper's gross).
+        birdiesPerRound: null,
+        eaglesPerRound: null,
+        par3AvgVsPar: null,
+        par4AvgVsPar: null,
+        par5AvgVsPar: null,
+        sampleSize: 0,
+        handicapIndex: ph,
+        confidence: "low",
+      });
+    const r = runSimulation(baseInputs([noData(6), noData(40)]));
+    const lo = r.players[r.playerIndex["h6"]];
+    const hi = r.players[r.playerIndex["h40"]];
+    expect(lo.meanNet).toBeGreaterThan(71);
+    expect(hi.meanNet).toBeGreaterThan(71);
+    // A big handicap doesn't buy a lower net — both sit ~par + population gap.
+    expect(Math.abs(hi.meanNet - lo.meanNet)).toBeLessThan(2);
+  });
+
+  it("higher differential variance widens the net distribution (variance is used)", () => {
+    const diff = (sd: number) => ({ avgDifferential: 10, differentialStddev: sd, differentialEffectiveN: 20 });
+    const tight = makePlayer("tight", { playingHandicap: 10 }, diff(2));
+    const wild = makePlayer("wild", { playingHandicap: 10 }, diff(9));
+    const r = runSimulation(baseInputs([tight, wild], { holes: teeHoles() }));
+    const spread = (res: (typeof r.players)[number]) => {
+      const sorted = Array.from(res.netTotals).sort((a, b) => a - b);
+      return sorted[Math.round(sorted.length * 0.95)] - sorted[Math.round(sorted.length * 0.05)];
+    };
+    expect(spread(r.players[r.playerIndex["wild"]])).toBeGreaterThan(
+      spread(r.players[r.playerIndex["tight"]])
+    );
+  });
+
+  it("stableford ranking rewards a volatile player more than net-stroke ranking", () => {
+    const shape = { par4AvgVsPar: 1, par3AvgVsPar: 1, par5AvgVsPar: 1, handicapIndex: 18 };
+    const steady = makePlayer("steady", { playingHandicap: 18 }, { avgGross: 90, scoreStddev: 2, ...shape });
+    const volatile = makePlayer("volatile", { playingHandicap: 18 }, { avgGross: 90, scoreStddev: 12, ...shape });
+    const net = runSimulation(baseInputs([steady, volatile], { rankingBasis: "net", simulationCount: 8000 }));
+    const stab = runSimulation(baseInputs([steady, volatile], { rankingBasis: "stableford", simulationCount: 8000 }));
+    const wNet = net.players[net.playerIndex["volatile"]].winProb;
+    const wStab = stab.players[stab.playerIndex["volatile"]].winProb;
+    expect(wStab).toBeGreaterThan(wNet);
+  });
+});

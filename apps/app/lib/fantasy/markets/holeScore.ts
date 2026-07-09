@@ -81,7 +81,8 @@ export const holeScore: MarketDefinition = {
       const p =
         outcome === "birdie_or_better"
           ? (bins[0] + bins[1]) / sim.simulationCount
-          : (bins[3] + bins[4] + bins[5] + bins[6]) / sim.simulationCount;
+          : // bogey or worse = par+1 and up (k ≥ OUTCOME_OFFSET+1), range-agnostic.
+            bins.slice(3).reduce((s, b) => s + b, 0) / sim.simulationCount;
       out.set(holeSelectionKey(hole.round ?? 1, hole.holeNumber), p);
     });
     return out;

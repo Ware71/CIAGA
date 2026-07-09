@@ -33,9 +33,12 @@ type InspectPayload = {
   players: {
     profileId: string; name: string; playingHandicap: number;
     playingHandicapSource: string; completedHoles: number; roundComplete: boolean;
+    modelPath: string;
     profile: {
       handicap_index: number | null; avg_gross: number | null; avg_net: number | null;
       score_stddev: number | null; recent_form: number | null;
+      avg_differential: number | null; differential_stddev: number | null;
+      differential_sample_size: number | null; differential_effective_n: number | null;
       birdies_per_round: number | null; eagles_per_round: number | null;
       sample_size: number; confidence: string; computed_at: string;
       recent_rounds: { playedAt: string; gross18: number; birdies: number; holes: number }[] | null;
@@ -223,8 +226,13 @@ export default function InspectorClient({ eventId }: { eventId: string }) {
                     <th className={th}>Player</th>
                     <th className={th}>PH</th>
                     <th className={th}>PH source</th>
+                    <th className={th}>Path</th>
                     <th className={th}>HI</th>
-                    <th className={th}>Sample</th>
+                    <th className={th}>Diffs</th>
+                    <th className={th}>Avg diff</th>
+                    <th className={th}>σ diff</th>
+                    <th className={th}>Neff</th>
+                    <th className={th}>Shape</th>
                     <th className={th}>Avg gross</th>
                     <th className={th}>σ round</th>
                     <th className={th}>Form</th>
@@ -369,7 +377,14 @@ function PlayerRows({
         <td className={`${td} font-medium`}>{p.name}</td>
         <td className={td}>{p.playingHandicap}</td>
         <td className={td}>{p.playingHandicapSource.replaceAll("_", " ")}</td>
+        <td className={`${td} ${p.modelPath === "differential" ? "text-emerald-300" : "text-amber-300"}`}>
+          {p.modelPath}
+        </td>
         <td className={td}>{num(prof?.handicap_index)}</td>
+        <td className={td}>{prof?.differential_sample_size ?? 0}</td>
+        <td className={td}>{num(prof?.avg_differential)}</td>
+        <td className={td}>{num(prof?.differential_stddev)}</td>
+        <td className={td}>{num(prof?.differential_effective_n)}</td>
         <td className={td}>{prof?.sample_size ?? 0} ({prof?.confidence ?? "—"})</td>
         <td className={td}>{num(prof?.avg_gross)}</td>
         <td className={td}>{num(prof?.score_stddev)}</td>
@@ -384,7 +399,7 @@ function PlayerRows({
       </tr>
       {open && (
         <tr>
-          <td colSpan={15} className="bg-emerald-950/40 px-3 py-2">
+          <td colSpan={20} className="bg-emerald-950/40 px-3 py-2">
             <div className="space-y-2">
               <div className="flex flex-wrap gap-1">
                 {holes.map((h, i) => (

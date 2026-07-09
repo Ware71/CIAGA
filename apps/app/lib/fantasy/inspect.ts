@@ -73,9 +73,17 @@ export async function inspectEvent(eventId: string) {
   // Same seed the live refresh used for this version → identical numbers.
   const sim = simulateEvent(ctx, version);
 
+  // The tee carries rating/slope only when a real course is resolved; the
+  // differential path is live only then AND when the player has differentials.
+  const teeHasRating = ctx.holes.some(
+    (h) => h.rating != null && h.slope != null && h.slope > 0 && h.parTotal != null && (h.holesInRound ?? 0) >= 14
+  );
+  const repHole = ctx.holes[0];
+
   const players = ctx.players.map((p) => {
     const res = sim.players[sim.playerIndex[p.profileId]];
     const detail = phDetails.get(p.profileId);
+    const modelPath = p.profile.avgDifferential != null && teeHasRating ? "differential" : "gross";
     return {
       profileId: p.profileId,
       name: p.displayName,
@@ -83,10 +91,13 @@ export async function inspectEvent(eventId: string) {
       playingHandicapSource: detail?.source ?? "no_data",
       completedHoles: Object.keys(p.completedHoles).length,
       roundComplete: p.roundComplete,
+      modelPath,
       profile: storedByProfile.get(p.profileId) ?? null,
       model: {
-        sigmaPerHole: Math.round(holeSigma(p.profile) * 1000) / 1000,
-        muByHole: ctx.holes.map((h) => Math.round(holeMu(p.profile, h) * 1000) / 1000),
+        // Pass a real hole + PH so μ/σ reflect the LIVE model (differential path
+        // needs the tee rating/slope; the anchor needs the playing handicap).
+        sigmaPerHole: Math.round(holeSigma(p.profile, repHole) * 1000) / 1000,
+        muByHole: ctx.holes.map((h) => Math.round(holeMu(p.profile, h, p.playingHandicap) * 1000) / 1000),
       },
       sim: {
         meanGross: Math.round(res.meanGross * 100) / 100,
