@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createPortal } from "react-dom";
 import { ChevronDown, Info } from "lucide-react";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 import { supabase } from "@/lib/supabaseClient";
 import { safeJson } from "@/lib/fantasy/safeJson";
 import { MARKET_GROUPS } from "@/lib/fantasy/markets/types";
+import { subjectKeysFor } from "@/lib/fantasy/parlayRules";
+import { useSlip } from "@/lib/fantasy/slipStore";
+import { BetSlip } from "@/components/fantasy/BetSlip";
 import { OddsFormatToggle, OddsValue } from "@/components/fantasy/OddsValue";
 import { PlayerStatsSheet, type PlayerStats } from "@/components/fantasy/PlayerStatsSheet";
 
@@ -68,12 +70,8 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Player stats sheet
   const [statsFor, setStatsFor] = useState<{ profileId: string; name: string } | null>(null);
-  // Pick slip
-  const [slip, setSlip] = useState<{ market: BoardMarket; selection: Selection } | null>(null);
-  const [stake, setStake] = useState(10);
-  const [placing, setPlacing] = useState(false);
-  const [slipError, setSlipError] = useState<string | null>(null);
-  const [slipSuccess, setSlipSuccess] = useState<string | null>(null);
+  // Bet slip (multi-selection, shared across event pages)
+  const slip = useSlip();
   const [balance, setBalance] = useState<number | null>(null);
 
   const fetchBalance = useCallback(async (groupId: string) => {
@@ -183,42 +181,27 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
     }
   };
 
-  const openSlip = (market: BoardMarket, selection: Selection) => {
-    setSlip({ market, selection });
-    setStake(10);
-    setSlipError(null);
-    setSlipSuccess(null);
-  };
-
-  const handlePlacePick = async () => {
-    if (!slip) return;
-    setPlacing(true);
-    setSlipError(null);
-    try {
-      const session = await getViewerSession();
-      if (!session) return;
-      const res = await fetch("/api/fantasy/picks", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          marketId: slip.market.id,
-          selectionKey: slip.selection.key,
-          snapshotId: slip.selection.snapshot_id,
-          stake,
-        }),
-      });
-      const j = await safeJson(res);
-      if (!res.ok) {
-        setSlipError(j.error ?? "Failed to place pick");
-        // Stale-odds rejection → refetch so the user sees current prices.
-        if (String(j.error ?? "").toLowerCase().includes("stale")) fetchBoard();
-        return;
-      }
-      setSlipSuccess(`Pick placed — ${stake} pts on ${slip.selection.label}`);
-      if (board?.event?.group_id) fetchBalance(board.event.group_id);
-    } finally {
-      setPlacing(false);
-    }
+  const toggleSelection = (market: BoardMarket, selection: Selection) => {
+    if (!board?.event) return;
+    slip.toggle({
+      marketId: market.id,
+      selectionKey: selection.key,
+      snapshotId: selection.snapshot_id,
+      decimalOdds: selection.decimal_odds,
+      eventId: board.event.id,
+      eventName: board.event.name,
+      groupId: board.event.group_id,
+      marketLabel: market.display_name,
+      selectionLabel: selection.label,
+      subjectKeys: subjectKeysFor(
+        {
+          market_type: market.market_type,
+          subject_profile_id: market.subject_profile_id,
+          opponent_profile_id: market.opponent_profile_id,
+        },
+        selection.key
+      ),
+    });
   };
 
   const openStats = (profileId: string) => {
@@ -284,6 +267,7 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
           <div className="text-[10px] text-emerald-200/45 mt-0.5">
             Odds updated {new Date(board.state.last_refreshed_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
             {" · "}fair odds, simulated
+            {balance !== null && <>{" · "}balance {balance} pts</>}
           </div>
         )}
       </div>
@@ -392,6 +376,7 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
                           {market.selections.map((sel) => {
                             const canBack = !stale && !boardLocked && market.status === "open";
                             const flash = flashes.get(`${market.id}|${sel.key}`);
+                            const inSlip = slip.has(market.id, sel.key);
                             const isPlayerKey = UUID_RE.test(sel.key);
                             return (
                               <div
@@ -416,10 +401,12 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
                                 </span>
                                 <button
                                   type="button"
-                                  disabled={!canBack}
-                                  onClick={() => openSlip(market, sel)}
+                                  disabled={!canBack && !inSlip}
+                                  onClick={() => toggleSelection(market, sel)}
                                   className={`shrink-0 min-w-[58px] text-center rounded-lg border px-2 py-1 text-[11px] font-bold transition-colors disabled:cursor-default ${
-                                    stale
+                                    inSlip
+                                      ? "border-[#f5e6b0] bg-[#f5e6b0] text-[#042713]"
+                                      : stale
                                       ? "border-emerald-900/50 text-emerald-200/40 animate-pulse"
                                       : flash === "up"
                                       ? "border-emerald-400/60 bg-emerald-500/15 text-emerald-300"
@@ -456,114 +443,13 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
         />
       )}
 
-      {/* Pick slip drawer */}
-      {slip && typeof document !== "undefined" &&
-        createPortal(
-          <div className="fixed inset-0 z-50 flex items-end">
-            <button
-              type="button"
-              aria-label="Close"
-              onClick={() => setSlip(null)}
-              className="absolute inset-0 bg-black/60"
-            />
-            <div className="relative w-full max-w-sm mx-auto rounded-t-3xl border border-emerald-900/70 bg-[#07301a] px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+20px)]">
-              {slipSuccess ? (
-                <div className="text-center space-y-3 py-2">
-                  <div className="text-sm font-bold text-emerald-300">{slipSuccess}</div>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setSlip(null)}
-                      className="flex-1 py-2 rounded-full border border-emerald-900/60 text-[12px] text-emerald-200/70"
-                    >
-                      Back to markets
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => router.push("/majors/fantasy/picks")}
-                      className="flex-1 py-2 rounded-full bg-emerald-700 text-[12px] font-semibold text-white"
-                    >
-                      My picks →
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="flex items-start justify-between mb-1">
-                    <div className="min-w-0">
-                      <div className="text-sm font-bold text-[#f5e6b0] truncate">{slip.selection.label}</div>
-                      <div className="text-[11px] text-emerald-200/60">{slip.market.display_name}</div>
-                    </div>
-                    <span className="shrink-0 rounded-full border border-emerald-700/50 px-2.5 py-1 text-[12px] font-bold text-[#f5e6b0]">
-                      <OddsValue odds={slip.selection.decimal_odds} />
-                    </span>
-                  </div>
-                  {balance !== null && (
-                    <div className="text-[10px] text-emerald-200/50 mb-3">Balance: {balance} pts</div>
-                  )}
-
-                  <div className="flex items-center justify-center gap-4 mb-2">
-                    <button
-                      type="button"
-                      onClick={() => setStake((s) => Math.max(1, s - 5))}
-                      className="h-10 w-10 rounded-full border border-emerald-900/60 text-emerald-200 text-lg"
-                    >
-                      −
-                    </button>
-                    <div className="text-center min-w-[90px]">
-                      <div className="text-2xl font-bold text-emerald-50">{stake}</div>
-                      <div className="text-[10px] text-emerald-200/50">points stake</div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setStake((s) => s + 5)}
-                      className="h-10 w-10 rounded-full border border-emerald-900/60 text-emerald-200 text-lg"
-                    >
-                      +
-                    </button>
-                  </div>
-                  <div className="flex justify-center gap-1.5 mb-3">
-                    {[5, 10, 25, 50].map((q) => (
-                      <button
-                        key={q}
-                        type="button"
-                        onClick={() => setStake(q)}
-                        className={`px-3 py-1 rounded-full text-[10px] font-semibold border ${stake === q ? "bg-emerald-700 text-white border-emerald-600" : "border-emerald-900/60 text-emerald-200/60"}`}
-                      >
-                        {q}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="text-center text-[11px] text-emerald-200/60 mb-3">
-                    Potential return:{" "}
-                    <span className="font-bold text-[#f5e6b0]">
-                      {(stake * slip.selection.decimal_odds).toFixed(2)} pts
-                    </span>
-                  </div>
-
-                  {slipError && (
-                    <div className="text-[11px] text-red-300 text-center mb-3">{slipError}</div>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={handlePlacePick}
-                    disabled={placing || (balance !== null && stake > balance)}
-                    className="w-full py-2.5 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
-                  >
-                    {placing
-                      ? "Placing…"
-                      : balance !== null && stake > balance
-                      ? "Insufficient balance"
-                      : `Place pick — ${stake} pts`}
-                  </button>
-                </>
-              )}
-            </div>
-          </div>,
-          document.body
-        )}
+      {/* Bet slip (singles + acca) — persists across event pages */}
+      <BetSlip
+        onPlaced={() => {
+          if (board?.event?.group_id) fetchBalance(board.event.group_id);
+          fetchBoard();
+        }}
+      />
     </div>
   );
 }

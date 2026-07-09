@@ -180,7 +180,10 @@ function computeOutcomes(
   markets: FantasyMarket[],
   final: FinalScoringData,
   picks: { id: string; market_id: string; selection_key: string }[]
-): { pick_id: string; outcome: SettlementOutcome }[] {
+): {
+  pickOutcomes: { pick_id: string; outcome: SettlementOutcome }[];
+  outcomesByMarket: Map<string, Map<string, SettlementOutcome>>;
+} {
   const outcomesByMarket = new Map<string, Map<string, SettlementOutcome>>();
   for (const market of markets) {
     const def = getMarketDefinition(market.market_type);
@@ -191,12 +194,69 @@ function computeOutcomes(
       outcomesByMarket.set(market.id, new Map());
     }
   }
-  return picks.map((pick) => ({
+  const pickOutcomes = picks.map((pick) => ({
     pick_id: pick.id,
     // A selection the settler can't resolve (e.g. player missing from final
     // data) voids rather than loses — spec: void invalid picks.
     outcome: outcomesByMarket.get(pick.market_id)?.get(pick.selection_key) ?? "void",
   }));
+  return { pickOutcomes, outcomesByMarket };
+}
+
+/**
+ * Resolve accumulator legs riding on the just-settled markets, finalize any
+ * parlays with no open legs left (payout math in the RPC), and notify owners.
+ */
+async function settleParlayLegs(
+  eventId: string,
+  marketIds: string[],
+  outcomesByMarket: Map<string, Map<string, SettlementOutcome>>
+): Promise<void> {
+  if (marketIds.length === 0) return;
+  const { data: legData, error: legErr } = await supabaseAdmin
+    .from("fantasy_parlay_legs")
+    .select("id, market_id, selection_key")
+    .eq("event_id", eventId)
+    .eq("status", "open")
+    .in("market_id", marketIds);
+  if (legErr) throw legErr;
+  const legs = (legData ?? []) as { id: string; market_id: string; selection_key: string }[];
+  if (legs.length === 0) return;
+
+  const legOutcomes = legs.map((leg) => ({
+    leg_id: leg.id,
+    outcome: outcomesByMarket.get(leg.market_id)?.get(leg.selection_key) ?? "void",
+  }));
+
+  const { data: result, error: rpcErr } = await supabaseAdmin.rpc(
+    "ciaga_fantasy_settle_parlay_legs",
+    { p_leg_outcomes: legOutcomes }
+  );
+  if (rpcErr) throw rpcErr;
+
+  const finalizedIds = ((result as { parlay_ids?: string[] } | null)?.parlay_ids ?? []) as string[];
+  if (finalizedIds.length === 0) return;
+
+  const { data: parlayData } = await supabaseAdmin
+    .from("fantasy_parlays")
+    .select("id, profile_id, status, stake, potential_return")
+    .in("id", finalizedIds)
+    .in("status", ["won", "lost", "void"]);
+  await Promise.allSettled(
+    ((parlayData ?? []) as {
+      id: string; profile_id: string; status: string; stake: number; potential_return: number;
+    }[]).map((p) =>
+      createNotification({
+        recipientProfileId: p.profile_id,
+        type: `fantasy_parlay_${p.status}`,
+        payload: {
+          parlay_id: p.id,
+          stake: Number(p.stake),
+          payout: p.status === "won" ? Number(p.potential_return) : undefined,
+        },
+      })
+    )
+  );
 }
 
 export async function settleFantasyEvent(
@@ -239,7 +299,7 @@ export async function settleFantasyEvent(
   }[];
 
   const final = await loadFinalScoringData(eventId);
-  const pickOutcomes = computeOutcomes(markets, final, picks);
+  const { pickOutcomes, outcomesByMarket } = computeOutcomes(markets, final, picks);
 
   const { data: counts, error: applyErr } = await supabaseAdmin.rpc(
     "ciaga_fantasy_apply_settlement",
@@ -252,6 +312,7 @@ export async function settleFantasyEvent(
   );
   if (applyErr) throw applyErr;
 
+  await settleParlayLegs(eventId, markets.map((m) => m.id), outcomesByMarket).catch(() => {});
   await notifySettledPicks(eventId, event.name, picks.map((p) => p.id));
 
   const c = (counts ?? {}) as { won?: number; lost?: number; void?: number };
@@ -321,7 +382,7 @@ export async function settleFantasyRoundMarkets(
   }[];
 
   const final = await loadFinalScoringData(eventId);
-  const pickOutcomes = computeOutcomes(roundMarkets, final, picks);
+  const { pickOutcomes, outcomesByMarket } = computeOutcomes(roundMarkets, final, picks);
 
   const { error: applyErr } = await supabaseAdmin.rpc("ciaga_fantasy_apply_settlement", {
     p_event_id: eventId,
@@ -331,6 +392,7 @@ export async function settleFantasyRoundMarkets(
   });
   if (applyErr) throw applyErr;
 
+  await settleParlayLegs(eventId, marketIds, outcomesByMarket).catch(() => {});
   await notifySettledPicks(eventId, event.name, picks.map((p) => p.id));
   return { settled: roundMarkets.length };
 }

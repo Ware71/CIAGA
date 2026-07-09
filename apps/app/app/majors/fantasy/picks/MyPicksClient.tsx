@@ -40,11 +40,41 @@ type Offer = {
   expires_at: string;
 };
 
+type ParlayLeg = {
+  id: string;
+  event_id: string;
+  selection_key: string;
+  decimal_odds: number;
+  status: "open" | "won" | "lost" | "void";
+  market_label: string;
+  selection_label: string;
+  event_name: string;
+};
+
+type Parlay = {
+  id: string;
+  stake: number;
+  combined_decimal_odds: number;
+  potential_return: number;
+  status: "open" | "won" | "lost" | "void";
+  placed_at: string;
+  group_name: string;
+  legs: ParlayLeg[];
+};
+
+const LEG_DOT: Record<ParlayLeg["status"], string> = {
+  open: "bg-emerald-200/30",
+  won: "bg-emerald-400",
+  lost: "bg-red-400",
+  void: "bg-amber-300/60",
+};
+
 export default function MyPicksClient() {
   const router = useRouter();
   const [picks, setPicks] = useState<Pick[]>([]);
+  const [parlays, setParlays] = useState<Parlay[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"open" | "settled">("open");
+  const [tab, setTab] = useState<"open" | "settled" | "accas">("open");
   // Cash-out drawer
   const [cashoutPick, setCashoutPick] = useState<Pick | null>(null);
   const [offer, setOffer] = useState<Offer | null>(null);
@@ -58,12 +88,21 @@ export default function MyPicksClient() {
   const fetchPicks = useCallback(async () => {
     const session = await getViewerSession();
     if (!session) return;
-    const res = await fetch("/api/fantasy/picks", {
-      headers: { Authorization: `Bearer ${session.accessToken}` },
-    });
-    if (res.ok) {
-      const j = await res.json();
+    const [picksRes, parlaysRes] = await Promise.all([
+      fetch("/api/fantasy/picks", {
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+      }),
+      fetch("/api/fantasy/parlays", {
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+      }),
+    ]);
+    if (picksRes.ok) {
+      const j = await picksRes.json();
       setPicks(j.picks ?? []);
+    }
+    if (parlaysRes.ok) {
+      const j = await parlaysRes.json();
+      setParlays(j.parlays ?? []);
     }
   }, []);
 
@@ -182,7 +221,7 @@ export default function MyPicksClient() {
       </div>
 
       <div className="px-4 mb-4 flex gap-2">
-        {(["open", "settled"] as const).map((t) => (
+        {(["open", "settled", "accas"] as const).map((t) => (
           <button
             key={t}
             type="button"
@@ -191,13 +230,72 @@ export default function MyPicksClient() {
               tab === t ? "bg-emerald-700 text-white" : "border border-emerald-900/60 text-emerald-200/70"
             }`}
           >
-            {t === "open" ? `Open (${openPicks.length})` : `Settled (${settledPicks.length})`}
+            {t === "open"
+              ? `Open (${openPicks.length})`
+              : t === "settled"
+              ? `Settled (${settledPicks.length})`
+              : `Accas (${parlays.length})`}
           </button>
         ))}
       </div>
 
       {loading ? (
         <div className="text-sm text-emerald-100/60 text-center py-20">Loading…</div>
+      ) : tab === "accas" ? (
+        <div className="px-4 space-y-2 pb-12">
+          {parlays.length === 0 && (
+            <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 px-4 py-6 text-center text-sm text-emerald-100/70">
+              No accumulators yet — add two or more selections to the bet slip.
+            </div>
+          )}
+          {parlays.map((parlay) => {
+            const badge = STATUS_STYLES[parlay.status === "open" ? "open" : parlay.status];
+            return (
+              <div
+                key={parlay.id}
+                className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/70 px-3 py-2.5"
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="text-[12px] font-semibold text-emerald-50">
+                    {parlay.legs.length}-leg Acca @{" "}
+                    <OddsValue odds={parlay.combined_decimal_odds} />
+                  </div>
+                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${badge.cls}`}>
+                    {badge.label}
+                  </span>
+                </div>
+                <div className="space-y-1 mb-1.5">
+                  {parlay.legs.map((leg) => (
+                    <button
+                      key={leg.id}
+                      type="button"
+                      onClick={() => router.push(`/majors/fantasy/events/${leg.event_id}`)}
+                      className="w-full flex items-center gap-2 text-left"
+                    >
+                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${LEG_DOT[leg.status]}`} />
+                      <span className="min-w-0 flex-1 truncate text-[11px] text-emerald-100/85">
+                        {leg.selection_label}
+                        <span className="text-emerald-200/50"> · {leg.market_label}</span>
+                      </span>
+                      <span className="shrink-0 text-[10px] text-emerald-200/60">
+                        <OddsValue odds={leg.decimal_odds} />
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <div className="text-[10px] text-emerald-200/55">
+                  {parlay.stake} pts stake ·{" "}
+                  {parlay.status === "won"
+                    ? `returned ${parlay.potential_return} pts`
+                    : parlay.status === "void"
+                    ? "stake returned"
+                    : `returns ${parlay.potential_return} pts`}
+                  {parlay.group_name ? ` · ${parlay.group_name}` : ""}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       ) : shown.length === 0 ? (
         <div className="px-4">
           <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 px-4 py-6 text-center text-sm text-emerald-100/70">

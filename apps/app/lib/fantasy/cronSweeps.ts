@@ -134,13 +134,22 @@ export async function runFantasySweeps(): Promise<{
   // NULL, so even a miss is safe — the exclusion just preserves audit links).
   let purgedSnapshots = 0;
   try {
-    const { data: refRows } = await supabaseAdmin
-      .from("fantasy_picks")
-      .select("odds_snapshot_id")
-      .not("odds_snapshot_id", "is", null);
+    const [{ data: refRows }, { data: legRefRows }] = await Promise.all([
+      supabaseAdmin
+        .from("fantasy_picks")
+        .select("odds_snapshot_id")
+        .not("odds_snapshot_id", "is", null),
+      supabaseAdmin
+        .from("fantasy_parlay_legs")
+        .select("odds_snapshot_id")
+        .not("odds_snapshot_id", "is", null),
+    ]);
     const referenced = [
       ...new Set(
-        ((refRows ?? []) as { odds_snapshot_id: string }[]).map((r) => r.odds_snapshot_id)
+        [...((refRows ?? []) as { odds_snapshot_id: string }[]),
+         ...((legRefRows ?? []) as { odds_snapshot_id: string }[])].map(
+          (r) => r.odds_snapshot_id
+        )
       ),
     ];
 

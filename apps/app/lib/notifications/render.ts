@@ -19,7 +19,10 @@ export type NotificationType =
   | "round_cancelled"
   | "fantasy_pick_won"
   | "fantasy_pick_lost"
-  | "fantasy_pick_void";
+  | "fantasy_pick_void"
+  | "fantasy_parlay_won"
+  | "fantasy_parlay_lost"
+  | "fantasy_parlay_void";
 
 export type NotificationActor = {
   profile_id: string;
@@ -124,6 +127,30 @@ export function renderNotification(
         body: `${p.market_label ?? "Your pick"} was voided — ${p.stake ?? "your"} pts returned${
           p.event_name ? ` (${p.event_name})` : ""
         }`,
+        url: "/majors/fantasy/picks",
+        icon: "rotate-ccw",
+      };
+
+    case "fantasy_parlay_won":
+      return {
+        title: "Acca landed! 🎉",
+        body: `Your accumulator came in — +${p.payout ?? "?"} pts`,
+        url: "/majors/fantasy/picks",
+        icon: "trophy",
+      };
+
+    case "fantasy_parlay_lost":
+      return {
+        title: "Acca settled",
+        body: "Your accumulator didn't come in",
+        url: "/majors/fantasy/picks",
+        icon: "flag",
+      };
+
+    case "fantasy_parlay_void":
+      return {
+        title: "Acca voided",
+        body: `Your accumulator was voided — ${p.stake ?? "your"} pts returned`,
         url: "/majors/fantasy/picks",
         icon: "rotate-ccw",
       };
