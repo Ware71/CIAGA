@@ -33,10 +33,12 @@ client). The engine is pure TypeScript: `apps/app/lib/fantasy/simulation/`.
 Generation (`generateEventFantasy` in `lib/fantasy/odds.ts`) is what turns an
 ordinary event into a fantasy event. It:
 
-1. Verifies the group has `fantasy_config` set, the event is single-round and
-   not completed, and ≥ 2 players are entered.
-2. Rebuilds performance profiles for the entered field (from
-   `hole_scoring_source` history).
+1. Verifies the group has `fantasy_config` set, the event is not completed,
+   and ≥ 2 players are entered. (Multi-round events are supported since V2 —
+   each round contributes its own course/tee hole set.)
+2. Builds performance profiles for any entered player missing one, and
+   rebuilds any older than 24 h (direct indexed queries on
+   `round_participants` → `rounds` → `round_score_events`).
 3. Inserts the `fantasy_event_state` row (**this activates the staleness
    triggers** for the event).
 4. Runs one simulation to get projected means per player.
@@ -235,7 +237,80 @@ The `event_version` on every snapshot is what makes cached odds *safe*:
 | Orchestration (inputs, claim, refresh, generation) | `apps/app/lib/fantasy/odds.ts` |
 | Profiles | `apps/app/lib/fantasy/profiles.ts` |
 | Market pricing/settlement rules | `apps/app/lib/fantasy/markets/*` |
+| Narrative engine (event preview text) | `apps/app/lib/fantasy/narrative.ts` |
+| Accumulators (rules, placement, queries) | `apps/app/lib/fantasy/{parlayRules,parlays}.ts` |
+| Odds display formats | `apps/app/lib/fantasy/oddsFormat.ts` |
 | Staleness triggers + `mark_stale` | `supabase/migrations/20260708000001_fantasy_odds.sql` |
 | Atomic job claim | `supabase/migrations/20260708000002_fantasy_claim_job.sql` |
+| Partial (round) settlement RPC | `supabase/migrations/20260709000001_fantasy_partial_settlement.sql` |
+| Parlay tables + RPCs | `supabase/migrations/20260709000002_fantasy_parlays.sql` |
 | Board API (lazy refresh entry point) | `apps/app/app/api/fantasy/events/[eventId]/odds/route.ts` |
+| Odds inspector (sandbox dev tool) | `apps/app/app/api/fantasy/events/[eventId]/inspect/` + `/majors/fantasy/events/[eventId]/inspector/` |
 | Cron sweeps | `apps/app/lib/fantasy/cronSweeps.ts` |
+
+---
+
+## 9. V2 changes (2026-07-09)
+
+### The model contract
+
+1. **Gross from history.** A player's gross distribution comes from their
+   observed per-hole scoring (par-type + length/SI splits), observed round
+   stddev, and observed birdie/eagle rates. With ≥ 10 sampled rounds, history
+   is the entire model.
+2. **Net from event setup.** Scoring model, allowance % and per-round playing
+   handicaps are applied on top of simulated gross (net = gross − PH × rounds,
+   mirroring the leaderboard) to produce net totals and positions.
+3. **Handicap is a prior, not a driver.** Thin profiles blend toward
+   `HI + 3 over par` by sample weight (`w = sampleSize/10`); no-history
+   players price entirely off it. Sigma defaults follow handicap when no
+   observed stddev exists.
+4. **Recent form is damped**: 40% weight, clamped ±4 strokes — it nudges the
+   mean, never replaces it.
+5. **Rare outcomes are calibrated**: birdie bins against `birdies_per_round`
+   (clip 0.5–2), eagle bins against `eagles_per_round` (clip 0.1–3);
+   hole-in-one/albatross specials price off amateur base rates (1/3500 per
+   par-3 player-hole, 1/50000), never the normal tail.
+6. **Profiles have a 24 h TTL** — `ensureProfiles` rebuilds stale rows, so
+   form inputs follow new rounds.
+
+### Refresh also generates
+
+`executeRefresh` runs the same market-materialization diff as generation
+(`ensureMarkets`), so a player entering after first generation gets their
+per-player markets (H2H/O-U/birdies/…) on the next refresh, not never.
+
+### Multi-round events
+
+Hole sets are round-tagged (per-round course/tee); completed rounds are fixed
+from recorded scores, the live round plays out, future rounds fully simulate.
+The engine keeps per-round joint samples, so event-wide AND per-round markets
+("Round 2 Winner", round O/U, round birdies, round H2H) price from one run.
+Round-scoped markets settle as their round completes
+(`settleFantasyRoundMarkets`, apply RPC `p_final=false`) — hooked into
+`executeRefresh` with the daily cron as safety net.
+
+### Market catalogue
+
+`outright_winner`, `top_n`, `finish_position` (exact, from the position
+histogram), `finish_range` (wooden spoon / bottom-3 / mid-pack), `h2h`,
+`gross_ou`/`net_ou`, `score_band` (4-stroke bands, gross+net), `score_exact`
+(gross longshots), `birdies`, `eagle_count`, `hole_score` (birdie-or-better /
+bogey-or-worse per hole; played holes lock), `field_special` (HIO / albatross /
+any eagle).
+
+### Accumulators
+
+2–8 legs, odds multiply, one stake. Correlation guard: distinct markets AND
+one subject per event (h2h claims both players; field specials share one
+identity). Cross-event accas draw on season/lifetime wallets; event-scoped
+budgets only fund single-event accas. Legs resolve with their market's
+settlement; void legs drop to odds 1.0; all-void refunds. Acca cash-out is
+deferred. UI copy: "Accumulator/Acca" via `lib/fantasy/terminology.ts`.
+
+### Odds inspector
+
+Sandbox-only dev tool (`NEXT_PUBLIC_APP_ENV === "sandbox"`): resolved playing
+handicaps with source path, stored profile inputs, per-hole μ/σ, sim
+percentiles, market prices with probability-sum checks, refresh-job log, plus
+"rebuild profiles" and "regenerate + reprice" actions.
