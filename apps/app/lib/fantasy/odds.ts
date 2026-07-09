@@ -3,12 +3,13 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { readFantasyConfig } from "@/lib/fantasy/config";
 import { ensureProfiles, toSimProfile } from "@/lib/fantasy/profiles";
 import { getMarketDefinition, MARKET_REGISTRY } from "@/lib/fantasy/markets/registry";
-import type { FantasyMarket, LiveMarketCtx, MarketSpec } from "@/lib/fantasy/markets/types";
+import type { FantasyMarket, GenerateCtx, LiveMarketCtx, MarketSpec } from "@/lib/fantasy/markets/types";
 import { runSimulation, pickSimulationCount } from "@/lib/fantasy/simulation/engine";
 import { hashSeed } from "@/lib/fantasy/simulation/rng";
 import { generateNarrative } from "@/lib/fantasy/narrative";
 import {
   clampProbability,
+  holeKey,
   probabilityToDecimalOdds,
   type RankingBasis,
   type SimHole,
@@ -166,27 +167,17 @@ function resolvePlayingHandicaps(
   return out;
 }
 
-async function loadHoles(event: EventRow): Promise<SimHole[]> {
-  if (!event.course_id) return [];
-
-  // Prefer the round-1 default tee; otherwise the first tee with 18 holes.
-  const { data: eventRounds } = await supabaseAdmin
-    .from("event_rounds")
-    .select("round_number, default_tee_box_id_male, default_tee_box_id_female")
-    .eq("event_id", event.id)
-    .order("round_number", { ascending: true })
-    .limit(1);
-  const preferredTee =
-    (eventRounds?.[0] as { default_tee_box_id_male?: string | null } | undefined)
-      ?.default_tee_box_id_male ??
-    (eventRounds?.[0] as { default_tee_box_id_female?: string | null } | undefined)
-      ?.default_tee_box_id_female ??
-    null;
+/** One tee's holes for a course; empty when unresolvable. */
+async function loadCourseHoles(
+  courseId: string | null,
+  preferredTee: string | null
+): Promise<Omit<SimHole, "round">[]> {
+  if (!courseId) return [];
 
   const { data: tees, error: teeErr } = await supabaseAdmin
     .from("course_tee_boxes")
     .select("id, holes_count, gender, name")
-    .eq("course_id", event.course_id);
+    .eq("course_id", courseId);
   if (teeErr) throw teeErr;
   const teeRows = (tees ?? []) as { id: string; holes_count: number | null }[];
   const teeId =
@@ -213,31 +204,92 @@ async function loadHoles(event: EventRow): Promise<SimHole[]> {
 }
 
 /** Standard-par fallback so pre-course events can still be simulated. */
-function fallbackHoles(): SimHole[] {
+function fallbackHoles(round = 1): SimHole[] {
   const pars = [4, 4, 3, 5, 4, 4, 3, 4, 5, 4, 4, 3, 5, 4, 4, 3, 4, 5];
   return pars.map((par, i) => ({
     holeNumber: i + 1,
     par,
     yardage: null,
     strokeIndex: i + 1,
+    round,
   }));
 }
 
+/**
+ * Round-tagged hole set for the whole event. Each event round contributes its
+ * own course/tee (falling back to the event course, then to a standard-par
+ * layout), so a 2-round event across two courses simulates both correctly.
+ */
+async function loadHoles(event: EventRow): Promise<SimHole[]> {
+  const numRounds = Math.max(1, event.num_rounds ?? 1);
+
+  const { data: roundRows } = await supabaseAdmin
+    .from("event_rounds")
+    .select("round_number, status, course_id, default_tee_box_id_male, default_tee_box_id_female")
+    .eq("event_id", event.id)
+    .order("round_number", { ascending: true });
+  const eventRounds = (roundRows ?? []) as {
+    round_number: number;
+    status: string;
+    course_id: string | null;
+    default_tee_box_id_male: string | null;
+    default_tee_box_id_female: string | null;
+  }[];
+
+  const defs: { round: number; courseId: string | null; preferredTee: string | null }[] = [];
+  for (let r = 1; r <= numRounds; r++) {
+    const row = eventRounds.find((x) => x.round_number === r);
+    if (row?.status === "cancelled") continue;
+    defs.push({
+      round: r,
+      courseId: row?.course_id ?? event.course_id,
+      preferredTee: row?.default_tee_box_id_male ?? row?.default_tee_box_id_female ?? null,
+    });
+  }
+  if (defs.length === 0) defs.push({ round: 1, courseId: event.course_id, preferredTee: null });
+
+  const cache = new Map<string, Omit<SimHole, "round">[]>();
+  const out: SimHole[] = [];
+  for (const def of defs) {
+    const key = `${def.courseId ?? ""}|${def.preferredTee ?? ""}`;
+    let base = cache.get(key);
+    if (!base) {
+      base = await loadCourseHoles(def.courseId, def.preferredTee);
+      cache.set(key, base);
+    }
+    const holes = base.length > 0 ? base.map((h) => ({ ...h, round: def.round })) : fallbackHoles(def.round);
+    out.push(...holes);
+  }
+  return out;
+}
+
 export type LiveRoundData = {
-  profileRoundStatus: Map<string, { finished: boolean; holesInRound: number }>;
+  /** profile → event round number → live status of that round. */
+  profileRoundStatus: Map<string, Map<number, { finished: boolean; holesInRound: number }>>;
+  /** profile → holeKey(round, hole) → latest strokes. */
   completedByProfile: Map<string, Record<number, number>>;
 };
 
-/** Live in-event rounds: per-player round status + latest score per hole. */
+/** Live in-event rounds: per-player per-event-round status + latest scores. */
 async function loadLiveRoundData(eventId: string, fallbackHoleCount: number): Promise<LiveRoundData> {
   // rounds ↔ event_tee_times are related in both directions, which makes a
   // PostgREST embed ambiguous — resolve the tee times first, then the rounds.
-  const { data: teeTimes, error: ttErr } = await supabaseAdmin
-    .from("event_tee_times")
-    .select("id")
-    .eq("event_id", eventId);
+  const [{ data: teeTimes, error: ttErr }, { data: erRows }] = await Promise.all([
+    supabaseAdmin.from("event_tee_times").select("id, event_round_id").eq("event_id", eventId),
+    supabaseAdmin.from("event_rounds").select("id, round_number").eq("event_id", eventId),
+  ]);
   if (ttErr) throw ttErr;
-  const teeTimeIds = ((teeTimes ?? []) as { id: string }[]).map((t) => t.id);
+  const roundNumberByEventRoundId = new Map(
+    ((erRows ?? []) as { id: string; round_number: number }[]).map((r) => [r.id, r.round_number])
+  );
+  const slots = (teeTimes ?? []) as { id: string; event_round_id: string | null }[];
+  const teeTimeIds = slots.map((t) => t.id);
+  const eventRoundOfTeeTime = new Map(
+    slots.map((t) => [
+      t.id,
+      (t.event_round_id ? roundNumberByEventRoundId.get(t.event_round_id) : null) ?? 1,
+    ])
+  );
 
   if (teeTimeIds.length === 0) {
     return { profileRoundStatus: new Map(), completedByProfile: new Map() };
@@ -252,13 +304,14 @@ async function loadLiveRoundData(eventId: string, fallbackHoleCount: number): Pr
   if (liveErr) throw liveErr;
 
   const rounds = (liveRounds ?? []) as {
-    id: string; status: string; number_of_holes: number | null;
+    id: string; status: string; number_of_holes: number | null; event_tee_time_id: string | null;
   }[];
   const roundIds = rounds.map((r) => r.id);
   const roundById = new Map(rounds.map((r) => [r.id, r]));
 
   const participantToProfile = new Map<string, string>();
-  const profileRoundStatus = new Map<string, { finished: boolean; holesInRound: number }>();
+  const participantEventRound = new Map<string, number>();
+  const profileRoundStatus = new Map<string, Map<number, { finished: boolean; holesInRound: number }>>();
   if (roundIds.length > 0) {
     const { data: partData, error: partErr } = await supabaseAdmin
       .from("round_participants")
@@ -269,11 +322,17 @@ async function loadLiveRoundData(eventId: string, fallbackHoleCount: number): Pr
       if (!p.profile_id) continue;
       const round = roundById.get(p.round_id);
       if (!round) continue;
+      const eventRound = round.event_tee_time_id
+        ? eventRoundOfTeeTime.get(round.event_tee_time_id) ?? 1
+        : 1;
       participantToProfile.set(p.id, p.profile_id);
-      profileRoundStatus.set(p.profile_id, {
+      participantEventRound.set(p.id, eventRound);
+      const perRound = profileRoundStatus.get(p.profile_id) ?? new Map();
+      perRound.set(eventRound, {
         finished: round.status === "finished",
         holesInRound: round.number_of_holes ?? fallbackHoleCount,
       });
+      profileRoundStatus.set(p.profile_id, perRound);
     }
   }
 
@@ -290,8 +349,9 @@ async function loadLiveRoundData(eventId: string, fallbackHoleCount: number): Pr
     for (const ev of (scoreData ?? []) as any[]) {
       const profileId = participantToProfile.get(ev.participant_id);
       if (!profileId) continue;
+      const eventRound = participantEventRound.get(ev.participant_id) ?? 1;
       const map = completedByProfile.get(profileId) ?? {};
-      map[ev.hole_number] = ev.strokes; // ascending order → last write wins
+      map[holeKey(eventRound, ev.hole_number)] = ev.strokes; // ascending → last write wins
       completedByProfile.set(profileId, map);
     }
   }
@@ -301,26 +361,68 @@ async function loadLiveRoundData(eventId: string, fallbackHoleCount: number): Pr
 
 function makeLiveCtx(event: EventRow, holes: SimHole[], liveData: LiveRoundData): LiveMarketCtx {
   const { profileRoundStatus, completedByProfile } = liveData;
-  const parByHole = new Map<number, number>(holes.map((h) => [h.holeNumber, h.par]));
+  const parByKey = new Map<number, number>(
+    holes.map((h) => [holeKey(h.round ?? 1, h.holeNumber), h.par])
+  );
+  const roundNumbers = [...new Set(holes.map((h) => h.round ?? 1))].sort((a, b) => a - b);
+  const holesPerRound = new Map<number, number>();
+  for (const h of holes) {
+    const r = h.round ?? 1;
+    holesPerRound.set(r, (holesPerRound.get(r) ?? 0) + 1);
+  }
+
+  const scoredInRound = (profileId: string, round: number): number => {
+    const completed = completedByProfile.get(profileId) ?? {};
+    let n = 0;
+    for (const key of Object.keys(completed)) {
+      if (Math.floor(Number(key) / 100) === round) n += 1;
+    }
+    return n;
+  };
+
+  const remainingInRound = (profileId: string, round: number): number => {
+    const status = profileRoundStatus.get(profileId)?.get(round);
+    if (status?.finished) return 0;
+    const total = status?.holesInRound ?? holesPerRound.get(round) ?? 18;
+    return Math.max(0, total - scoredInRound(profileId, round));
+  };
+
   return {
     eventCompleted: ["completed", "cancelled"].includes(event.majors_status),
-    roundComplete: (profileId) => profileRoundStatus.get(profileId)?.finished ?? false,
-    holesRemaining: (profileId) => {
-      const status = profileRoundStatus.get(profileId);
-      if (!status) return Infinity; // round not started
-      if (status.finished) return 0;
-      const scored = Object.keys(completedByProfile.get(profileId) ?? {}).length;
-      return Math.max(0, status.holesInRound - scored);
+    roundComplete: (profileId, round) => {
+      if (round != null) return profileRoundStatus.get(profileId)?.get(round)?.finished ?? false;
+      const perRound = profileRoundStatus.get(profileId);
+      if (!perRound) return false;
+      return roundNumbers.every((r) => perRound.get(r)?.finished ?? false);
     },
-    currentBirdies: (profileId) => {
+    holesRemaining: (profileId, round) => {
+      if (round != null) return remainingInRound(profileId, round);
+      const perRound = profileRoundStatus.get(profileId);
+      if (!perRound || perRound.size === 0) return Infinity; // nothing started
+      return roundNumbers.reduce((s, r) => s + remainingInRound(profileId, r), 0);
+    },
+    currentBirdies: (profileId, round) => {
       const completed = completedByProfile.get(profileId) ?? {};
       let birdies = 0;
-      for (const [holeNumber, strokes] of Object.entries(completed)) {
-        const par = parByHole.get(Number(holeNumber));
+      for (const [key, strokes] of Object.entries(completed)) {
+        if (round != null && Math.floor(Number(key) / 100) !== round) continue;
+        const par = parByKey.get(Number(key));
         if (par != null && strokes <= par - 1) birdies += 1;
       }
       return birdies;
     },
+    currentEagles: (profileId, round) => {
+      const completed = completedByProfile.get(profileId) ?? {};
+      let eagles = 0;
+      for (const [key, strokes] of Object.entries(completed)) {
+        if (round != null && Math.floor(Number(key) / 100) !== round) continue;
+        const par = parByKey.get(Number(key));
+        if (par != null && strokes <= par - 2) eagles += 1;
+      }
+      return eagles;
+    },
+    holeScore: (profileId, round, holeNumber) =>
+      completedByProfile.get(profileId)?.[holeKey(round, holeNumber)] ?? null,
   };
 }
 
@@ -372,16 +474,19 @@ export async function loadSimInputs(eventId: string): Promise<EventSimContext> {
   const liveData = await loadLiveRoundData(eventId, holes.length);
   const { profileRoundStatus, completedByProfile } = liveData;
 
+  const roundNumbers = [...new Set(holes.map((h) => h.round ?? 1))].sort((a, b) => a - b);
   const players: SimPlayer[] = entries.map((e) => {
     const stored = profiles.get(e.profile_id)!;
-    const status = profileRoundStatus.get(e.profile_id);
+    const perRound = profileRoundStatus.get(e.profile_id);
+    const completedRounds = roundNumbers.filter((r) => perRound?.get(r)?.finished ?? false);
     return {
       profileId: e.profile_id,
       displayName: names[e.profile_id] ?? "Player",
       profile: toSimProfile(stored),
       playingHandicap: playingHandicaps.get(e.profile_id) ?? 0,
       completedHoles: completedByProfile.get(e.profile_id) ?? {},
-      roundComplete: status?.finished ?? false,
+      roundComplete: roundNumbers.length > 0 && completedRounds.length === roundNumbers.length,
+      completedRounds,
     };
   });
 
@@ -482,17 +587,32 @@ async function writeSnapshots(
  * Runs on generation AND on every refresh, so a player entering after the
  * initial generation still gets their H2H/O-U/birdie markets.
  */
+function meanOf(totals: Int16Array): number {
+  let s = 0;
+  for (let i = 0; i < totals.length; i++) s += totals[i];
+  return totals.length > 0 ? s / totals.length : 0;
+}
+
 async function ensureMarkets(
   ctx: EventSimContext,
   sim: SimulationResult
 ): Promise<number> {
-  const projections: Record<string, { meanGross: number; meanNet: number }> = {};
+  const projections: GenerateCtx["projections"] = {};
   for (const p of sim.players) {
-    projections[p.profileId] = { meanGross: p.meanGross, meanNet: p.meanNet };
+    const rounds: Record<number, { meanGross: number; meanNet: number }> = {};
+    for (const [r, totals] of Object.entries(p.roundGrossTotals)) {
+      rounds[Number(r)] = {
+        meanGross: meanOf(totals),
+        meanNet: meanOf(p.roundNetTotals[Number(r)]),
+      };
+    }
+    projections[p.profileId] = { meanGross: p.meanGross, meanNet: p.meanNet, rounds };
   }
-  const generateCtx = {
+  const generateCtx: GenerateCtx = {
     players: ctx.players.map((p) => ({ profileId: p.profileId })),
     projections,
+    rounds: [...new Set(ctx.holes.map((h) => h.round ?? 1))].sort((a, b) => a - b),
+    holes: ctx.holes.map((h) => ({ holeNumber: h.holeNumber, par: h.par, round: h.round ?? 1 })),
   };
   const specs: MarketSpec[] = Object.values(MARKET_REGISTRY).flatMap((def) =>
     def.generateMarkets(generateCtx)
@@ -582,6 +702,15 @@ async function executeRefresh(eventId: string, jobId: string): Promise<void> {
       .update({ status: "done", updated_at: new Date().toISOString() })
       .eq("id", jobId)
       .eq("status", "running");
+
+    // Multi-round: settle any round-scoped markets whose round just finished.
+    // Best-effort (cron is the safety net); dynamic import avoids the
+    // odds ↔ settlement module cycle.
+    if ((ctx.event.num_rounds ?? 1) > 1) {
+      import("@/lib/fantasy/settlement")
+        .then(({ settleFantasyRoundMarkets }) => settleFantasyRoundMarkets(eventId))
+        .catch(() => {});
+    }
   } catch (e: any) {
     await supabaseAdmin
       .from("fantasy_refresh_jobs")
@@ -660,9 +789,6 @@ export async function generateEventFantasy(eventId: string): Promise<{ markets: 
 
   const event = await loadEvent(eventId);
   if (!event.group_id) throw new Error("Event has no group");
-  if ((event.num_rounds ?? 1) > 1) {
-    throw new Error("Fantasy picks support single-round events only (V1)");
-  }
   if (["completed", "cancelled"].includes(event.majors_status)) {
     throw new Error("Event is already finished");
   }

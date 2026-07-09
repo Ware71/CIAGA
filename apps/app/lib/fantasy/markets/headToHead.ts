@@ -8,6 +8,7 @@ import type {
   SettlementOutcome,
 } from "@/lib/fantasy/markets/types";
 import { playerName } from "@/lib/fantasy/markets/types";
+import { marketRound, roundPrefix, totalsFor } from "@/lib/fantasy/markets/roundUtil";
 import type { SimulationResult } from "@/lib/fantasy/simulation/types";
 
 function marketBasis(market: FantasyMarket): "gross" | "net" {
@@ -29,7 +30,7 @@ export const headToHead: MarketDefinition = {
   displayName(market, names) {
     const a = playerName(names, market.subject_profile_id);
     const b = playerName(names, market.opponent_profile_id);
-    return `${a} v ${b} (${marketBasis(market)})`;
+    return `${roundPrefix(market)}${a} v ${b} (${marketBasis(market)})`;
   },
 
   selectionLabel(market, selectionKey, names) {
@@ -57,6 +58,17 @@ export const headToHead: MarketDefinition = {
           opponent_profile_id: sorted[i + 1].profileId,
           params: { basis },
         });
+        // Same nearest-rival pairing per round for multi-round events.
+        if (ctx.rounds.length > 1) {
+          for (const round of ctx.rounds) {
+            specs.push({
+              market_type: "h2h",
+              subject_profile_id: sorted[i].profileId,
+              opponent_profile_id: sorted[i + 1].profileId,
+              params: { basis, round },
+            });
+          }
+        }
       }
     }
     return specs;
@@ -72,8 +84,9 @@ export const headToHead: MarketDefinition = {
     const ib = market.opponent_profile_id ? sim.playerIndex[market.opponent_profile_id] : undefined;
     if (ia === undefined || ib === undefined) return out;
     const basis = marketBasis(market);
-    const totalsA = basis === "gross" ? sim.players[ia].grossTotals : sim.players[ia].netTotals;
-    const totalsB = basis === "gross" ? sim.players[ib].grossTotals : sim.players[ib].netTotals;
+    const round = marketRound(market);
+    const totalsA = totalsFor(sim, ia, basis, round);
+    const totalsB = totalsFor(sim, ib, basis, round);
     let winsA = 0;
     let ties = 0;
     for (let i = 0; i < totalsA.length; i++) {
@@ -89,10 +102,19 @@ export const headToHead: MarketDefinition = {
   settle(final: FinalScoringData, market): Map<string, SettlementOutcome> {
     const out = new Map<string, SettlementOutcome>();
     const basis = marketBasis(market);
+    const round = marketRound(market);
     const a = market.subject_profile_id ? final.players[market.subject_profile_id] : undefined;
     const b = market.opponent_profile_id ? final.players[market.opponent_profile_id] : undefined;
-    const scoreA = basis === "gross" ? a?.grossScore : a?.netScore;
-    const scoreB = basis === "gross" ? b?.grossScore : b?.netScore;
+    const scoreOf = (p: typeof a): number | null | undefined =>
+      round != null
+        ? basis === "gross"
+          ? p?.roundScores[round]?.gross
+          : p?.roundScores[round]?.net
+        : basis === "gross"
+        ? p?.grossScore
+        : p?.netScore;
+    const scoreA = scoreOf(a);
+    const scoreB = scoreOf(b);
     if (!a || !b || a.withdrawn || b.withdrawn || scoreA == null || scoreB == null || scoreA === scoreB) {
       out.set("a", "void");
       out.set("b", "void");
@@ -107,7 +129,8 @@ export const headToHead: MarketDefinition = {
     if (ctx.eventCompleted) return false;
     const a = market.subject_profile_id;
     const b = market.opponent_profile_id;
-    return !!a && !!b && !(ctx.roundComplete(a) && ctx.roundComplete(b));
+    const round = marketRound(market) ?? undefined;
+    return !!a && !!b && !(ctx.roundComplete(a, round) && ctx.roundComplete(b, round));
   },
 
   isSelfDependent(market, _selectionKey, bettorProfileId, ctx): boolean {
@@ -119,14 +142,16 @@ export const headToHead: MarketDefinition = {
     if (bettorProfileId !== a && bettorProfileId !== b) return false;
     const other = bettorProfileId === a ? b : a;
     if (!other) return false;
-    return ctx.roundComplete(other) && ctx.holesRemaining(bettorProfileId) <= 1;
+    const round = marketRound(market) ?? undefined;
+    return ctx.roundComplete(other, round) && ctx.holesRemaining(bettorProfileId, round) <= 1;
   },
 
   cashoutCutoff(market, _selectionKey, ctx: LiveMarketCtx) {
     if (ctx.eventCompleted) return { eligible: false, reason: "Event is complete" };
     const a = market.subject_profile_id;
     const b = market.opponent_profile_id;
-    if (!a || !b || (ctx.roundComplete(a) && ctx.roundComplete(b))) {
+    const round = marketRound(market) ?? undefined;
+    if (!a || !b || (ctx.roundComplete(a, round) && ctx.roundComplete(b, round))) {
       return { eligible: false, reason: "Both rounds are complete" };
     }
     return { eligible: true };

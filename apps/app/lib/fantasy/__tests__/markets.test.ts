@@ -58,13 +58,24 @@ function liveCtx(overrides: Partial<LiveMarketCtx> = {}): LiveMarketCtx {
   };
 }
 
-function makeGenerateCtx(n: number): GenerateCtx {
+function makeGenerateCtx(n: number, rounds: number[] = [1]): GenerateCtx {
   const players = Array.from({ length: n }, (_, i) => ({ profileId: `p${i}` }));
   const projections: GenerateCtx["projections"] = {};
   players.forEach((p, i) => {
-    projections[p.profileId] = { meanGross: 78 + i * 1.7, meanNet: 70 + i * 0.9 };
+    const base = { meanGross: 78 + i * 1.7, meanNet: 70 + i * 0.9 };
+    projections[p.profileId] = {
+      ...base,
+      rounds: Object.fromEntries(rounds.map((r) => [r, base])),
+    };
   });
-  return { players, projections };
+  const holes = rounds.flatMap((round) =>
+    Array.from({ length: 18 }, (_, i) => ({
+      holeNumber: i + 1,
+      par: [4, 4, 3, 5][i % 4],
+      round,
+    }))
+  );
+  return { players, projections, rounds, holes };
 }
 
 function simFor(profiles: Array<Partial<SimPlayerProfile> & { profileId: string; ph?: number }>) {

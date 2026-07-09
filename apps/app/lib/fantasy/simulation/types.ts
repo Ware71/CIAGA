@@ -7,7 +7,17 @@ export type SimHole = {
   yardage: number | null;
   /** Stroke index 1–18 (course "handicap" column). */
   strokeIndex: number;
+  /** Event round this hole belongs to (1-based). Absent = round 1. */
+  round?: number;
 };
+
+/**
+ * Canonical key for a (round, hole) pair — hole numbers repeat across the
+ * rounds of a multi-round event, so completed-hole maps use this key.
+ */
+export function holeKey(round: number, holeNumber: number): number {
+  return round * 100 + holeNumber;
+}
 
 export type HoleSplitBucket = {
   /** Average strokes over par in this bucket. */
@@ -49,11 +59,22 @@ export type SimPlayer = {
   profileId: string;
   displayName: string;
   profile: SimPlayerProfile;
-  /** Event playing handicap (allowance % applied) — drives net scores. */
+  /**
+   * Event playing handicap (allowance % applied) — drives net scores.
+   * Applied per round: event net = gross − PH × rounds, same as the
+   * leaderboard's per-submission handicap sum.
+   */
   playingHandicap: number;
-  /** Gross strokes for holes already played in-event: holeNumber → strokes. */
+  /** Gross strokes for holes already played: holeKey(round, hole) → strokes. */
   completedHoles: Record<number, number>;
+  /** True when the player has finished EVERY round of the event. */
   roundComplete: boolean;
+  /**
+   * Rounds the player has finished — their unscored holes in these rounds are
+   * skipped (played but not recorded), not simulated. Absent = derive from
+   * roundComplete alone (single-round behaviour).
+   */
+  completedRounds?: number[];
 };
 
 export type RankingBasis = "gross" | "net";
@@ -72,12 +93,19 @@ export type SimPlayerResult = {
   /** Joint samples: index i across players = same simulated event. */
   grossTotals: Int16Array;
   netTotals: Int16Array;
+  /** Per-round joint samples, keyed by round number (prices round markets). */
+  roundGrossTotals: Record<number, Int16Array>;
+  roundNetTotals: Record<number, Int16Array>;
   /** birdieHistogram[c] = iterations with exactly c simulated birdies. */
   birdieHistogram: number[];
   /** P(win) on the ranking basis; ties split evenly. */
   winProb: number;
   /** P(position ≤ N), ties count as in. Keys 3, 5, 10. */
   topNProb: Record<number, number>;
+  /** P(finishing exactly position i+1) under "1224" ranking; ties share the tied position. */
+  positionHistogram: number[];
+  /** P(finishing last); ties at the bottom split evenly (mirrors winProb). */
+  lastProb: number;
   meanGross: number;
   meanNet: number;
   /**
@@ -94,6 +122,8 @@ export type SimulationResult = {
   players: SimPlayerResult[];
   /** profileId → index into players (and into every totals array). */
   playerIndex: Record<string, number>;
+  /** The simulated hole set — holeOutcomes[i] corresponds to holes[i]. */
+  holes: SimHole[];
 };
 
 /** Engine-wide probability clamp: no impossible or infinite odds. */

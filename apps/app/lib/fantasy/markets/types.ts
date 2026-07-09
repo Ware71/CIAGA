@@ -6,7 +6,14 @@ export type FantasyMarketType =
   | "gross_ou"
   | "net_ou"
   | "birdies"
-  | "h2h";
+  | "h2h"
+  | "finish_position"
+  | "finish_range"
+  | "score_band"
+  | "score_exact"
+  | "eagle_count"
+  | "hole_score"
+  | "field_special";
 
 export type FantasyMarketStatus = "open" | "suspended" | "settled" | "void";
 
@@ -51,10 +58,19 @@ export type MarketSpec = {
   params: Record<string, unknown>;
 };
 
+export type RoundProjection = { meanGross: number; meanNet: number };
+
 export type GenerateCtx = {
   players: { profileId: string }[];
   /** From a preliminary sim run — used to set O/U lines and pair matchups. */
-  projections: Record<string, { meanGross: number; meanNet: number }>;
+  projections: Record<
+    string,
+    RoundProjection & { rounds?: Record<number, RoundProjection> }
+  >;
+  /** Event round numbers (length 1 for single-round events). */
+  rounds: number[];
+  /** Round-tagged hole set — feeds hole-specific and field-special markets. */
+  holes: { holeNumber: number; par: number; round: number }[];
 };
 
 export type FinalPlayerScore = {
@@ -65,21 +81,41 @@ export type FinalPlayerScore = {
   netScore: number | null;
   /** Birdie-or-better holes; null = unknown. */
   birdieCount: number | null;
+  /** Eagle-or-better holes; null = unknown. */
+  eagleCount: number | null;
+  /** Per-event-round scoring, for round-scoped markets. */
+  roundScores: Record<
+    number,
+    { gross: number | null; net: number | null; birdies: number | null }
+  >;
+  /** Latest strokes per hole, keyed holeKey(round, hole); null = no hole data. */
+  holeStrokes: Record<number, number> | null;
   withdrawn: boolean;
 };
 
 export type FinalScoringData = {
   players: Record<string, FinalPlayerScore>;
   fieldSize: number;
+  /** Round-tagged hole set (par lookups for hole-level settlement). */
+  holes: { holeNumber: number; par: number; round: number }[];
+  /** Field-wide rare events, from hole-level scores; null = no hole data. */
+  field: { ace: boolean | null; albatross: boolean | null; eagle: boolean | null };
 };
 
-/** Live event context for placement and cash-out checks. */
+/**
+ * Live event context for placement and cash-out checks. The optional `round`
+ * argument scopes the answer to one event round; omitted = event-wide.
+ */
 export type LiveMarketCtx = {
   eventCompleted: boolean;
-  roundComplete: (profileId: string) => boolean;
-  /** Holes left to play in the player's current round; Infinity if not started. */
-  holesRemaining: (profileId: string) => number;
-  currentBirdies: (profileId: string) => number;
+  /** All the player's rounds finished (or the given round finished). */
+  roundComplete: (profileId: string, round?: number) => boolean;
+  /** Holes left to play (event-wide or within the round); Infinity if not started. */
+  holesRemaining: (profileId: string, round?: number) => number;
+  currentBirdies: (profileId: string, round?: number) => number;
+  currentEagles: (profileId: string, round?: number) => number;
+  /** Latest recorded strokes for a specific hole; null = not played yet. */
+  holeScore: (profileId: string, round: number, holeNumber: number) => number | null;
 };
 
 export type SettlementOutcome = "won" | "lost" | "void";

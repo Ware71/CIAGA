@@ -152,7 +152,10 @@ function normalize(dist: number[]): number[] {
 /**
  * Build the outcome distribution for every hole, then calibrate the
  * birdie-or-better mass so Σ P(birdie) over the holes matches the player's
- * observed birdies/round (factor clipped to [0.5, 2] to stay sane on thin data).
+ * observed birdies/round (factor clipped to [0.5, 2] to stay sane on thin
+ * data), and the eagle-or-better bin against observed eagles/round — the
+ * normal tail wildly overstates rare outcomes, so without this a mid
+ * handicapper "eagles" several times a season in the model.
  */
 export function buildHoleDistributions(
   profile: SimPlayerProfile,
@@ -170,6 +173,22 @@ export function buildHoleDistributions(
       for (const d of dists) {
         d[0] *= factor;
         d[1] *= factor;
+        const scaled = normalize(d);
+        for (let k = 0; k < OUTCOME_BINS; k++) d[k] = scaled[k];
+      }
+    }
+  }
+
+  const observedEagles = profile.eaglesPerRound;
+  if (observedEagles != null && observedEagles >= 0 && holes.length > 0) {
+    const perRoundScale = holes.length / 18;
+    const modelEagles = dists.reduce((s, d) => s + d[0], 0);
+    if (modelEagles > 0.001) {
+      // Wider clip than birdies (rarer event, thinner data); floor keeps a
+      // small tail alive even for players who have never recorded an eagle.
+      const factor = Math.min(3, Math.max(0.1, (observedEagles * perRoundScale) / modelEagles));
+      for (const d of dists) {
+        d[0] *= factor;
         const scaled = normalize(d);
         for (let k = 0; k < OUTCOME_BINS; k++) d[k] = scaled[k];
       }

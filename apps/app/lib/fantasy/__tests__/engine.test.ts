@@ -118,7 +118,8 @@ describe("runSimulation", () => {
   it("fixes completed holes: finished round has zero variance", () => {
     const holes = makeHoles();
     const completed: Record<number, number> = {};
-    for (const h of holes) completed[h.holeNumber] = h.par + 1;
+    // completedHoles are keyed by holeKey(round, hole) — round 1 here.
+    for (const h of holes) completed[100 + h.holeNumber] = h.par + 1;
     const done = makePlayer("done", { completedHoles: completed, roundComplete: true });
     const playing = makePlayer("playing");
     const result = runSimulation(baseInputs([done, playing]));

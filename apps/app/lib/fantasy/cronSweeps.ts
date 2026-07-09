@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { generateEventFantasy } from "@/lib/fantasy/odds";
-import { settleFantasyEvent } from "@/lib/fantasy/settlement";
+import { settleFantasyEvent, settleFantasyRoundMarkets } from "@/lib/fantasy/settlement";
 
 /**
  * Fantasy sweeps run from the single daily cron (Vercel Hobby limit — see
@@ -86,6 +86,25 @@ export async function runFantasySweeps(): Promise<{
         if (result.settled) settled += 1;
       } catch (e: any) {
         errors.push(`settle ${row.event_id}: ${e?.message}`);
+      }
+    }
+  }
+
+  // Round-market safety net: live multi-round events with completed rounds.
+  const { data: liveMulti, error: liveMultiErr } = await supabaseAdmin
+    .from("fantasy_event_state")
+    .select("event_id, events!inner(majors_status, num_rounds)")
+    .eq("is_final", false)
+    .eq("events.majors_status", "live")
+    .gt("events.num_rounds", 1);
+  if (liveMultiErr) {
+    errors.push(`round settlement: ${liveMultiErr.message}`);
+  } else {
+    for (const row of (liveMulti ?? []) as { event_id: string }[]) {
+      try {
+        await settleFantasyRoundMarkets(row.event_id);
+      } catch (e: any) {
+        errors.push(`settle rounds ${row.event_id}: ${e?.message}`);
       }
     }
   }
