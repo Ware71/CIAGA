@@ -125,6 +125,74 @@ describe("handicap anchor (prior for thin profiles)", () => {
   });
 });
 
+describe("differential-driven holeMu / holeSigma", () => {
+  const diffProfile = (overrides: Partial<SimPlayerProfile> = {}): SimPlayerProfile =>
+    profile({
+      avgDifferential: 10,
+      differentialStddev: 3,
+      differentialEffectiveN: 20,
+      handicapIndex: 10,
+      avgGross: 82,
+      ...overrides,
+    });
+  const teeHole = (overrides: Partial<SimHole> = {}): SimHole =>
+    hole({ rating: 72, slope: 113, parTotal: 72, holesInRound: 18, ...overrides });
+
+  it("prices a harder-slope course higher for the same differential", () => {
+    const p = diffProfile();
+    expect(holeMu(p, teeHole({ slope: 145 }))).toBeGreaterThan(holeMu(p, teeHole({ slope: 113 })));
+  });
+
+  it("level tracks the differential — a lower differential prices lower", () => {
+    const good = diffProfile({ avgDifferential: 2 });
+    const poor = diffProfile({ avgDifferential: 18 });
+    expect(holeMu(poor, teeHole())).toBeGreaterThan(holeMu(good, teeHole()));
+  });
+
+  it("works the differential back to gross on the event tee", () => {
+    // Neutral shape (par-type avgs = overall) so the round total is just the
+    // worked-back level: differential 0 on a rating-72/slope-113 tee ≈ par.
+    const scratch = diffProfile({
+      avgDifferential: 0,
+      handicapIndex: 0,
+      differentialEffectiveN: 30,
+      avgGross: 72,
+      par3AvgVsPar: 0,
+      par4AvgVsPar: 0,
+      par5AvgVsPar: 0,
+      recentForm: 0,
+    });
+    const holes: SimHole[] = Array.from({ length: 18 }, (_, i) =>
+      teeHole({ holeNumber: i + 1, strokeIndex: i + 1 })
+    );
+    const total = 72 + holes.reduce((s, h) => s + holeMu(scratch, h), 0);
+    expect(total).toBeCloseTo(72, 1);
+    // A +4 course rating raises the worked-back gross by ~4 at slope 113.
+    const harderHoles = holes.map((h) => ({ ...h, rating: 76 }));
+    const harderTotal = 72 + harderHoles.reduce((s, h) => s + holeMu(scratch, h), 0);
+    expect(harderTotal - total).toBeCloseTo(4, 0);
+  });
+
+  it("falls back to the gross path when the tee has no rating/slope", () => {
+    const withDiff = diffProfile();
+    const noDiff = profile({ avgGross: 82, handicapIndex: 10 });
+    // hole() carries no rating/slope → differential path is skipped, so a profile
+    // with differential fields must price identically to one without.
+    expect(holeMu(withDiff, hole())).toBeCloseTo(holeMu(noDiff, hole()), 9);
+  });
+
+  it("sigma scales with slope on the differential path", () => {
+    const p = diffProfile();
+    expect(holeSigma(p, teeHole({ slope: 145 }))).toBeGreaterThan(holeSigma(p, teeHole({ slope: 113 })));
+  });
+
+  it("sigma with no hole (legacy) still uses the observed round stddev", () => {
+    const p = diffProfile({ scoreStddev: 4 });
+    // No hole passed → legacy sigma path, unaffected by the differential fields.
+    expect(holeSigma(p)).toBeCloseTo(holeSigma(profile({ scoreStddev: 4 })), 9);
+  });
+});
+
 describe("discretizedDistribution", () => {
   it("sums to 1 and shifts mass with mu", () => {
     const easy = discretizedDistribution(0.2, 1);

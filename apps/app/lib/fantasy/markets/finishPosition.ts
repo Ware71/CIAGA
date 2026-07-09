@@ -49,12 +49,16 @@ export const finishPosition: MarketDefinition = {
 
   generateMarkets(ctx: GenerateCtx): MarketSpec[] {
     if (ctx.players.length < MIN_FIELD) return [];
+    // Positions offered span the FULL field; per-player markets are confirmed
+    // players only (provisional members appear in field markets, not per-player).
     const positions = Math.min(ctx.players.length, MAX_POSITIONS);
-    return ctx.players.map((p) => ({
-      market_type: "finish_position" as const,
-      subject_profile_id: p.profileId,
-      params: { maxPos: positions },
-    }));
+    return ctx.players
+      .filter((p) => !p.provisional)
+      .map((p) => ({
+        market_type: "finish_position" as const,
+        subject_profile_id: p.profileId,
+        params: { maxPos: positions },
+      }));
   },
 
   selections(market): string[] {

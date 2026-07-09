@@ -150,6 +150,56 @@ describe("runSimulation", () => {
     expect(hiReduced.winProb).toBeLessThan(hiFull.winProb);
   });
 
+  it("retains a positions matrix aligned with the marginals", () => {
+    const players = ["a", "b", "c", "d", "e"].map((id, i) =>
+      makePlayer(id, {}, { avgGross: 80 + i * 2 })
+    );
+    const result = runSimulation(baseInputs(players));
+    const positions = result.positions!;
+    expect(positions).toBeDefined();
+    expect(positions.length).toBe(players.length * result.simulationCount);
+    for (let pi = 0; pi < players.length; pi++) {
+      let wins = 0;
+      let top3 = 0;
+      for (let iter = 0; iter < result.simulationCount; iter++) {
+        const pos = positions[pi * result.simulationCount + iter];
+        if (pos === 1) wins += 1;
+        if (pos >= 1 && pos <= 3) top3 += 1;
+      }
+      const p = result.players[pi];
+      // top-N counts the same `position` as the matrix → exact agreement.
+      expect(top3 / result.simulationCount).toBeCloseTo(p.topNProb[3], 6);
+      // Ties split winProb but the matrix marks every tied leader position 1.
+      expect(wins / result.simulationCount).toBeGreaterThanOrEqual(p.winProb - 1e-9);
+    }
+  });
+
+  it("a provisional player scales their own odds by attendance, absent iters are 0", () => {
+    // A strong provisional player present only half the time.
+    const players = [
+      makePlayer("a"),
+      makePlayer("b"),
+      makePlayer(
+        "prov",
+        { attendanceProb: 0.5 },
+        { avgGross: 74, par3AvgVsPar: 0.1, par4AvgVsPar: 0.1, par5AvgVsPar: 0.1 }
+      ),
+    ];
+    const result = runSimulation(baseInputs(players));
+    const idx = result.playerIndex["prov"];
+    const provWin = result.players[idx].winProb;
+    // Strong when present, but present only ~50% → wins a real but capped share.
+    expect(provWin).toBeGreaterThan(0.05);
+    expect(provWin).toBeLessThan(0.5);
+    // Positions matrix is 0 in the ~50% of iterations where they don't show.
+    const positions = result.positions!;
+    let absent = 0;
+    for (let i = 0; i < result.simulationCount; i++) {
+      if (positions[idx * result.simulationCount + i] === 0) absent += 1;
+    }
+    expect(absent / result.simulationCount).toBeCloseTo(0.5, 1);
+  });
+
   it("birdie histogram is a probability distribution over 0..18", () => {
     const player = makePlayer("a", {}, { birdiesPerRound: 2.5 });
     const result = runSimulation(baseInputs([player, makePlayer("b")]));

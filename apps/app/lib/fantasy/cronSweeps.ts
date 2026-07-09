@@ -1,6 +1,8 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { generateEventFantasy } from "@/lib/fantasy/odds";
 import { settleFantasyEvent, settleFantasyRoundMarkets } from "@/lib/fantasy/settlement";
+import { generateSeasonFantasy } from "@/lib/fantasy/seasonOdds";
+import { settleFantasySeason } from "@/lib/fantasy/seasonSettlement";
 
 /**
  * Fantasy sweeps run from the single daily cron (Vercel Hobby limit — see
@@ -25,9 +27,16 @@ import { settleFantasyEvent, settleFantasyRoundMarkets } from "@/lib/fantasy/set
 const SNAPSHOT_RETENTION_DAYS = 7;
 const JOB_RETENTION_DAYS = 7;
 const OFFER_RETENTION_DAYS = 30;
+/** Generate fantasy this far ahead so the provisional field + attendance
+ *  pricing exist before entry opens. */
+const GENERATION_LEAD_DAYS = 30;
 
 function daysAgoIso(days: number): string {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+}
+
+function dateInDays(days: number): string {
+  return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
 export async function runFantasySweeps(): Promise<{
@@ -38,6 +47,10 @@ export async function runFantasySweeps(): Promise<{
   purgedSnapshots: number;
   purgedJobs: number;
   purgedOffers: number;
+  purgedJoint: number;
+  repricedAttendance: number;
+  seasonsGenerated: number;
+  seasonsSettled: number;
   errors: string[];
 }> {
   const errors: string[] = [];
@@ -45,10 +58,14 @@ export async function runFantasySweeps(): Promise<{
   let settled = 0;
 
   const today = new Date().toISOString().slice(0, 10);
+  const leadDate = dateInDays(GENERATION_LEAD_DAYS);
+  // Generate ahead of the event (not just on the day) so the provisional field
+  // and attendance pricing exist before entry opens.
   const { data: candidates, error: candErr } = await supabaseAdmin
     .from("events")
     .select("id, group_id, major_groups!inner(fantasy_config)")
-    .eq("event_date", today)
+    .gte("event_date", today)
+    .lte("event_date", leadDate)
     .not("majors_status", "in", '("completed","cancelled")')
     .not("major_groups.fantasy_config", "is", null);
 
@@ -67,6 +84,67 @@ export async function runFantasySweeps(): Promise<{
         generated += 1;
       } catch (e: any) {
         errors.push(`generate ${evt.id}: ${e?.message}`);
+      }
+    }
+  }
+
+  // Attendance-decay reprice: upcoming events whose attendance probabilities
+  // shift with the clock. Marking stale enqueues a debounced refresh (run by the
+  // next viewer, or lazily). Bounded to the generation lead window.
+  let repricedAttendance = 0;
+  const { data: upcoming, error: upcomingErr } = await supabaseAdmin
+    .from("fantasy_event_state")
+    .select("event_id, events!inner(event_date, majors_status)")
+    .eq("is_final", false)
+    .gt("events.event_date", today)
+    .lte("events.event_date", leadDate)
+    .not("events.majors_status", "in", '("completed","cancelled","live")');
+  if (upcomingErr) {
+    errors.push(`attendance reprice: ${upcomingErr.message}`);
+  } else {
+    for (const row of (upcoming ?? []) as { event_id: string }[]) {
+      const { error: markErr } = await supabaseAdmin.rpc("ciaga_fantasy_mark_stale", {
+        p_event_id: row.event_id,
+        p_reason: "attendance_decay",
+      });
+      if (markErr) errors.push(`attendance reprice ${row.event_id}: ${markErr.message}`);
+      else repricedAttendance += 1;
+    }
+  }
+
+  // Season markets: generate for eligible seasons (first cron after they become
+  // priceable) and settle those whose final event just completed.
+  let seasonsGenerated = 0;
+  let seasonsSettled = 0;
+  const { data: seasonRows, error: seasonErr } = await supabaseAdmin
+    .from("group_seasons")
+    .select("id, standings_model, major_groups!inner(fantasy_config)")
+    .neq("standings_model", "none")
+    .not("major_groups.fantasy_config", "is", null);
+  if (seasonErr) {
+    errors.push(`seasons: ${seasonErr.message}`);
+  } else {
+    for (const s of (seasonRows ?? []) as { id: string }[]) {
+      const { data: st } = await supabaseAdmin
+        .from("fantasy_season_state")
+        .select("is_final")
+        .eq("group_season_id", s.id)
+        .maybeSingle();
+      if (!st) {
+        // Throws for event-budget groups / no standings model — those aren't eligible.
+        try {
+          await generateSeasonFantasy(s.id);
+          seasonsGenerated += 1;
+        } catch {
+          /* not eligible for season markets */
+        }
+      } else if (!(st as { is_final: boolean }).is_final) {
+        try {
+          const r = await settleFantasySeason(s.id);
+          if (r.settled) seasonsSettled += 1;
+        } catch (e: any) {
+          errors.push(`season settle ${s.id}: ${e?.message}`);
+        }
       }
     }
   }
@@ -186,6 +264,17 @@ export async function runFantasySweeps(): Promise<{
     .select("id");
   if (purgeOffersErr) errors.push(`offer retention: ${purgeOffersErr.message}`);
 
+  // Superseded joint-sample matrices are pure pricing cache (never referenced by
+  // a pick), so purge them on the same window — this is the other unbounded
+  // grower alongside snapshots.
+  const { data: purgedJointRows, error: purgeJointErr } = await supabaseAdmin
+    .from("fantasy_joint_samples")
+    .delete()
+    .eq("status", "superseded")
+    .lt("computed_at", daysAgoIso(SNAPSHOT_RETENTION_DAYS))
+    .select("event_id");
+  if (purgeJointErr) errors.push(`joint retention: ${purgeJointErr.message}`);
+
   return {
     generated,
     settled,
@@ -194,6 +283,10 @@ export async function runFantasySweeps(): Promise<{
     purgedSnapshots,
     purgedJobs: purgedJobRows?.length ?? 0,
     purgedOffers: purgedOfferRows?.length ?? 0,
+    purgedJoint: purgedJointRows?.length ?? 0,
+    repricedAttendance,
+    seasonsGenerated,
+    seasonsSettled,
     errors,
   };
 }

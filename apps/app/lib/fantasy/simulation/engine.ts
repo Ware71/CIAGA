@@ -111,6 +111,15 @@ export function runSimulation(inputs: SimulationInputs): SimulationResult {
 
   const basisTotals = new Int16Array(playerCount);
   const roundGrossScratch = new Array<number>(roundNumbers.length).fill(0);
+  // Per-iteration finishing positions (1-based; 0 = absent), retained for
+  // correlated-acca joint pricing. [pi * simulationCount + iter].
+  const positions = new Int8Array(playerCount * simulationCount);
+  // Attendance: provisional (not-yet-entered) members are present only a
+  // fraction of iterations. Confirmed players never draw, so the RNG stream is
+  // unchanged for fully-confirmed fields (existing behaviour holds).
+  const attendanceProbs = players.map((p) => p.attendanceProb ?? 1);
+  const provisional = attendanceProbs.map((a) => a < 1);
+  const present = new Uint8Array(playerCount);
 
   for (let iter = 0; iter < simulationCount; iter++) {
     for (let pi = 0; pi < playerCount; pi++) {
@@ -143,30 +152,43 @@ export function runSimulation(inputs: SimulationInputs): SimulationResult {
       basisTotals[pi] = rankingBasis === "gross" ? gross : net;
     }
 
-    // Standard competition ranking ("1224"): position = 1 + strictly better.
-    // Winner/last ties split evenly; top-N ties all count as in.
+    // Sample attendance (confirmed players always present; provisional players
+    // present with probability attendanceProb) — only present players rank.
+    for (let pi = 0; pi < playerCount; pi++) {
+      present[pi] = provisional[pi] ? (rand() < attendanceProbs[pi] ? 1 : 0) : 1;
+    }
+
+    // Standard competition ranking ("1224"): position = 1 + strictly better,
+    // over the PRESENT players. Winner/last ties split evenly; top-N ties all in.
     let best = Infinity;
     let worst = -Infinity;
+    let presentCount = 0;
     for (let pi = 0; pi < playerCount; pi++) {
+      if (!present[pi]) continue;
+      presentCount += 1;
       if (basisTotals[pi] < best) best = basisTotals[pi];
       if (basisTotals[pi] > worst) worst = basisTotals[pi];
     }
+    if (presentCount === 0) continue; // degenerate: nobody turned up this iteration
     let tiedForBest = 0;
     let tiedForWorst = 0;
     for (let pi = 0; pi < playerCount; pi++) {
+      if (!present[pi]) continue;
       if (basisTotals[pi] === best) tiedForBest += 1;
       if (basisTotals[pi] === worst) tiedForWorst += 1;
     }
     for (let pi = 0; pi < playerCount; pi++) {
+      if (!present[pi]) continue;
       const mine = basisTotals[pi];
       if (mine === best) results[pi].winProb += 1 / tiedForBest;
       if (mine === worst) results[pi].lastProb += 1 / tiedForWorst;
       let strictlyBetter = 0;
       for (let pj = 0; pj < playerCount; pj++) {
-        if (basisTotals[pj] < mine) strictlyBetter += 1;
+        if (present[pj] && basisTotals[pj] < mine) strictlyBetter += 1;
       }
       const position = 1 + strictlyBetter;
       results[pi].positionHistogram[position - 1] += 1;
+      positions[pi * simulationCount + iter] = position;
       for (const n of TOP_N_TARGETS) {
         if (position <= n) {
           results[pi].topNProb[n] = (results[pi].topNProb[n] ?? 0) + 1;
@@ -200,5 +222,5 @@ export function runSimulation(inputs: SimulationInputs): SimulationResult {
     playerIndex[p.profileId] = pi;
   });
 
-  return { simulationCount, rankingBasis, players: results, playerIndex, holes };
+  return { simulationCount, rankingBasis, players: results, playerIndex, holes, positions };
 }

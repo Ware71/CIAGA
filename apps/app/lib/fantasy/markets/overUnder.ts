@@ -41,7 +41,7 @@ function makeOverUnder(type: Extract<FantasyMarketType, "gross_ou" | "net_ou">):
     },
 
     generateMarkets(ctx: GenerateCtx): MarketSpec[] {
-      return ctx.players.flatMap((p) => {
+      return ctx.players.filter((p) => !p.provisional).flatMap((p) => {
         const projection = ctx.projections[p.profileId];
         if (!projection) return [];
         const specs: MarketSpec[] = [];

@@ -43,7 +43,7 @@ export const headToHead: MarketDefinition = {
     const specs: MarketSpec[] = [];
     for (const basis of ["gross", "net"] as const) {
       const sorted = ctx.players
-        .filter((p) => ctx.projections[p.profileId])
+        .filter((p) => ctx.projections[p.profileId] && !p.provisional)
         .sort((x, y) => {
           const px = ctx.projections[x.profileId];
           const py = ctx.projections[y.profileId];

@@ -61,7 +61,12 @@ export type MarketSpec = {
 export type RoundProjection = { meanGross: number; meanNet: number };
 
 export type GenerateCtx = {
-  players: { profileId: string }[];
+  /**
+   * The full field, INCLUDING provisional (not-yet-entered) members so field
+   * markets size correctly. Per-player markets skip `provisional` players until
+   * they enter (their markets materialise on the next refresh).
+   */
+  players: { profileId: string; provisional?: boolean }[];
   /** From a preliminary sim run — used to set O/U lines and pair matchups. */
   projections: Record<
     string,

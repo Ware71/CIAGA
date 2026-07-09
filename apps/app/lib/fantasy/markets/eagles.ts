@@ -30,7 +30,7 @@ export const eagleCount: MarketDefinition = {
   },
 
   generateMarkets(ctx: GenerateCtx): MarketSpec[] {
-    return ctx.players.map((p) => ({
+    return ctx.players.filter((p) => !p.provisional).map((p) => ({
       market_type: "eagle_count" as const,
       subject_profile_id: p.profileId,
       params: { count: 1 },

@@ -35,8 +35,22 @@ const SPLIT_WEIGHT = 0.6;
 const ANCHOR_BUFFER = 3;
 const ANCHOR_FULL_SAMPLE = 10;
 
-/** Recent form nudges the gross mean; it must never replace it. */
+/**
+ * Differential-path anchor. A player's mean score differential sits ABOVE their
+ * handicap index (the index is best-8-of-20, the mean is all rounds), so a thin
+ * history anchors at HI + ~3.5. The anchor's pull decays to zero by
+ * ANCHOR_FULL_SAMPLE_DIFF effective differentials.
+ */
+const ANCHOR_BUFFER_DIFF = 3.5;
+const ANCHOR_FULL_SAMPLE_DIFF = 12;
+
+/** Recent form nudges the mean; it must never replace it. */
 const FORM_WEIGHT = 0.4;
+/**
+ * On the differential path the mean is ALREADY recency-weighted, so form drift
+ * would double-count the trend — it applies at half weight there.
+ */
+const FORM_WEIGHT_DIFFERENTIAL = 0.2;
 const FORM_CLAMP = 4; // strokes/round before weighting
 
 const CONFIDENCE_SIGMA_FACTOR: Record<SimPlayerProfile["confidence"], number> = {
@@ -98,7 +112,70 @@ function anchorAvgVsPar(profile: SimPlayerProfile): number | null {
   return (profile.handicapIndex + ANCHOR_BUFFER) / 18;
 }
 
+/** Clamped, weighted recent-form drift per hole. */
+function formDrift(profile: SimPlayerProfile, weight: number): number {
+  const form = Math.max(-FORM_CLAMP, Math.min(FORM_CLAMP, profile.recentForm ?? 0));
+  return (weight * form) / 18;
+}
+
+/**
+ * Effective mean differential — blends the observed recency-weighted mean with
+ * the handicap anchor for thin histories. Null when the player has no
+ * differential history at all (→ gross-average fallback).
+ */
+function effectiveDifferential(profile: SimPlayerProfile): number | null {
+  const mu = profile.avgDifferential;
+  if (mu == null) return null;
+  if (profile.handicapIndex == null) return mu;
+  const anchor = profile.handicapIndex + ANCHOR_BUFFER_DIFF;
+  const w = Math.min(1, (profile.differentialEffectiveN ?? 0) / ANCHOR_FULL_SAMPLE_DIFF);
+  return w * mu + (1 - w) * anchor;
+}
+
+/**
+ * Expected 18-hole-equivalent gross for this hole's tee, worked back from the
+ * player's differential via the inverse WHS relation: AGS ≈ D·slope/113 +
+ * rating. Null when the differential or the tee's rating/slope is missing, or
+ * the round isn't a full ~18 (a differential is an 18-hole quantity).
+ */
+function expectedRoundGrossFromDifferential(
+  profile: SimPlayerProfile,
+  hole: SimHole
+): number | null {
+  const muD = effectiveDifferential(profile);
+  if (muD == null) return null;
+  if (hole.rating == null || hole.slope == null || hole.slope <= 0) return null;
+  if (hole.parTotal == null || hole.holesInRound == null || hole.holesInRound < 14) return null;
+  return muD * (hole.slope / 113) + hole.rating;
+}
+
+/**
+ * Observed par-type / length-bucket SHAPE as a deviation from the player's own
+ * overall per-hole scoring — layered on the differential LEVEL so a hard par-4
+ * still plays above the player's average without dragging the level back to the
+ * (course-blind) gross average.
+ */
+function observedShapeTilt(profile: SimPlayerProfile, hole: SimHole): number {
+  const overall = profile.avgGross != null ? (profile.avgGross - 72) / 18 : null;
+  if (overall == null) return 0;
+  let tilt = parTypeAvgVsPar(profile, hole.par) - overall;
+  const bucketAvg = splitBucketAvg(profile.holeSplits, hole);
+  if (bucketAvg != null) tilt = SPLIT_WEIGHT * (bucketAvg - overall) + (1 - SPLIT_WEIGHT) * tilt;
+  return tilt;
+}
+
 export function holeMu(profile: SimPlayerProfile, hole: SimHole): number {
+  const si = siAdjustment(profile.holeSplits, hole);
+
+  // Differential path: LEVEL from the course-normalised differential, SHAPE from
+  // the observed sample, form drift at half weight (recency already in μ_D).
+  const expectedGross = expectedRoundGrossFromDifferential(profile, hole);
+  if (expectedGross != null && hole.parTotal != null && hole.holesInRound != null) {
+    const level = (expectedGross - hole.parTotal) / hole.holesInRound;
+    return level + observedShapeTilt(profile, hole) + si + formDrift(profile, FORM_WEIGHT_DIFFERENTIAL);
+  }
+
+  // Gross-average fallback (no differential / no tee rating) — unchanged.
   const observed = parTypeAvgVsPar(profile, hole.par);
   const anchor = anchorAvgVsPar(profile);
   // Blend observed history with the handicap prior by sample weight: a full
@@ -109,20 +186,28 @@ export function holeMu(profile: SimPlayerProfile, hole: SimHole): number {
   const bucketAvg = splitBucketAvg(profile.holeSplits, hole);
   const blended =
     bucketAvg != null ? SPLIT_WEIGHT * bucketAvg + (1 - SPLIT_WEIGHT) * base : base;
-  const form = Math.max(-FORM_CLAMP, Math.min(FORM_CLAMP, profile.recentForm ?? 0));
-  const drift = (FORM_WEIGHT * form) / 18;
-  return blended + siAdjustment(profile.holeSplits, hole) + drift;
+  return blended + si + formDrift(profile, FORM_WEIGHT);
 }
 
-export function holeSigma(profile: SimPlayerProfile): number {
-  // Observed round variability always wins; the handicap-based default only
-  // covers players with no stddev yet (higher handicap → wider spread).
-  const sigmaRound =
-    profile.scoreStddev ??
-    (profile.handicapIndex != null
-      ? Math.min(9, Math.max(3, 2.6 + 0.13 * Math.max(profile.handicapIndex, 0)))
-      : DEFAULT_SIGMA_ROUND);
-  const perHole = sigmaRound / Math.sqrt(18);
+export function holeSigma(profile: SimPlayerProfile, hole?: SimHole): number {
+  // Differential spread converted to gross strokes on this tee (σ_gross =
+  // σ_D · slope/113) when the differential path is live; otherwise the observed
+  // round stddev, then a handicap-based default (higher handicap → wider spread).
+  const useDifferential =
+    hole?.slope != null &&
+    hole.slope > 0 &&
+    hole.holesInRound != null &&
+    hole.holesInRound >= 14 &&
+    profile.avgDifferential != null &&
+    profile.differentialStddev != null;
+  const sigmaRound = useDifferential
+    ? profile.differentialStddev! * (hole!.slope! / 113)
+    : profile.scoreStddev ??
+      (profile.handicapIndex != null
+        ? Math.min(9, Math.max(3, 2.6 + 0.13 * Math.max(profile.handicapIndex, 0)))
+        : DEFAULT_SIGMA_ROUND);
+  const holesInRound = hole?.holesInRound && hole.holesInRound >= 14 ? hole.holesInRound : 18;
+  const perHole = sigmaRound / Math.sqrt(holesInRound);
   const widened = perHole * CONFIDENCE_SIGMA_FACTOR[profile.confidence];
   return Math.min(1.8, Math.max(0.7, widened));
 }
@@ -161,8 +246,9 @@ export function buildHoleDistributions(
   profile: SimPlayerProfile,
   holes: SimHole[]
 ): number[][] {
-  const sigma = holeSigma(profile);
-  const dists = holes.map((hole) => discretizedDistribution(holeMu(profile, hole), sigma));
+  const dists = holes.map((hole) =>
+    discretizedDistribution(holeMu(profile, hole), holeSigma(profile, hole))
+  );
 
   const observed = profile.birdiesPerRound;
   if (observed != null && observed >= 0 && holes.length > 0) {

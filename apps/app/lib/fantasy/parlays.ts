@@ -11,11 +11,32 @@ import {
 } from "@/lib/fantasy/wallet";
 import { COMBO_BET } from "@/lib/fantasy/terminology";
 import {
-  findCorrelation,
+  findParlayViolation,
+  isPositionFamily,
   MAX_LEGS,
   MIN_LEGS,
   subjectKeysFor,
 } from "@/lib/fantasy/parlayRules";
+import {
+  combineAccaOdds,
+  type AccaLegForPricing,
+  type PositionLeg,
+} from "@/lib/fantasy/simulation/jointPricing";
+import { loadJointMatrices } from "@/lib/fantasy/jointSamples";
+
+/** Resolve the player a finishing-position-family leg concerns, for joint pricing. */
+function positionLegFor(market: FantasyMarket, selectionKey: string): PositionLeg | null {
+  if (!isPositionFamily(market.market_type)) return null;
+  const playerId =
+    market.market_type === "finish_position" ? market.subject_profile_id : selectionKey;
+  if (!playerId) return null;
+  return {
+    marketType: market.market_type,
+    params: (market.params ?? {}) as Record<string, unknown>,
+    playerId,
+    selectionKey,
+  };
+}
 
 /**
  * Accumulator (internal: parlay) orchestration. Game rules run here via the
@@ -41,10 +62,9 @@ export async function placeParlay(params: {
     throw new PickError(`An ${COMBO_BET.short} needs between ${MIN_LEGS} and ${MAX_LEGS} legs`);
   }
 
+  // Legs may share a market row (e.g. two players in one Top-3 market), so
+  // query by DISTINCT market id but keep every leg.
   const marketIds = [...new Set(params.legs.map((l) => l.marketId))];
-  if (marketIds.length !== params.legs.length) {
-    throw new PickError("Duplicate legs on the same market are not allowed");
-  }
   const { data: marketData, error: marketErr } = await supabaseAdmin
     .from("fantasy_markets")
     .select("*")
@@ -93,17 +113,28 @@ export async function placeParlay(params: {
     };
   });
 
-  const correlated = findCorrelation(
-    rpcLegs.map((l) => ({
-      eventId: markets.get(l.market_id)!.event_id,
-      subjectKeys: l.subject_keys,
-    }))
+  // Co-occurrence rule: one player per event across the finishing markets, no
+  // two exclusive slots (two winners / wooden spoons / same exact position),
+  // no exact dupes. Independent legs (birdies, over/unders) combine freely.
+  const violation = findParlayViolation(
+    params.legs.map((leg) => {
+      const market = markets.get(leg.marketId)!;
+      return {
+        eventId: market.event_id,
+        marketId: leg.marketId,
+        marketType: market.market_type,
+        params: (market.params ?? {}) as Record<string, unknown>,
+        subjectKeys: subjectKeysFor(market, leg.selectionKey),
+        selectionKey: leg.selectionKey,
+      };
+    })
   );
-  if (correlated) {
-    throw new PickError(
-      `Correlated legs — only one pick per player per event in an ${COMBO_BET.short}`
-    );
-  }
+  if (violation) throw new PickError(violation);
+
+  // Combined odds: finishing-position legs jointly priced from the retained
+  // per-iteration matrices (P(X top-3 ∧ Y top-3) ≠ product); independent legs
+  // multiply in. Falls back to the product when a matrix is unavailable.
+  const { combinedOdds: combined, jointPriced } = await priceAcca(params.legs);
 
   const scope = await resolveWalletScope(groupId, config, eventIds[0]);
   await ensureBudgetGrant(groupId, params.profileId, config, scope);
@@ -115,12 +146,64 @@ export async function placeParlay(params: {
     p_legs: rpcLegs,
     p_group_season_id: scope.kind === "season" ? scope.groupSeasonId : null,
     p_scope_event: scope.kind === "event",
+    p_combined_odds: combined,
+    p_joint_priced: jointPriced,
   });
   if (rpcErr) {
     throw new PickError(rpcErr.message.replace(/^.*?: /, ""), 400);
   }
 
   return { parlayId: parlayId as string };
+}
+
+/**
+ * Price an acca's legs without placing it (drives the slip's live combined
+ * odds). Finishing-position legs are jointly priced from the retained matrices;
+ * everything else multiplies in. Read-only, so no membership/eligibility gate
+ * beyond the odds already being visible.
+ */
+export async function priceAcca(
+  legs: ParlayLegInput[]
+): Promise<{ combinedOdds: number; jointPriced: boolean }> {
+  if (legs.length === 0) return { combinedOdds: 1, jointPriced: false };
+  const marketIds = [...new Set(legs.map((l) => l.marketId))];
+  const { data: marketData, error: marketErr } = await supabaseAdmin
+    .from("fantasy_markets")
+    .select("id, event_id, market_type, subject_profile_id, params")
+    .in("id", marketIds);
+  if (marketErr) throw marketErr;
+  const markets = new Map(((marketData ?? []) as FantasyMarket[]).map((m) => [m.id, m]));
+  const eventIds = [...new Set([...markets.values()].map((m) => m.event_id))];
+
+  const { data: snapRows, error: snapErr } = await supabaseAdmin
+    .from("fantasy_odds_snapshots")
+    .select("id, decimal_odds")
+    .in("id", legs.map((l) => l.snapshotId));
+  if (snapErr) throw snapErr;
+  const oddsBySnap = new Map(
+    ((snapRows ?? []) as { id: string; decimal_odds: number | string }[]).map((s) => [
+      s.id,
+      Number(s.decimal_odds),
+    ])
+  );
+
+  const matrices = await loadJointMatrices(eventIds);
+  const pricingLegs: AccaLegForPricing[] = legs.map((leg) => {
+    const market = markets.get(leg.marketId);
+    return {
+      eventId: market?.event_id ?? "",
+      decimalOdds: oddsBySnap.get(leg.snapshotId) ?? 1,
+      position: market ? positionLegFor(market, leg.selectionKey) ?? undefined : undefined,
+    };
+  });
+  const combinedOdds = combineAccaOdds(pricingLegs, matrices);
+
+  const posByEvent = new Map<string, number>();
+  for (const l of pricingLegs) {
+    if (l.position) posByEvent.set(l.eventId, (posByEvent.get(l.eventId) ?? 0) + 1);
+  }
+  const jointPriced = [...posByEvent.entries()].some(([e, count]) => count >= 2 && matrices.has(e));
+  return { combinedOdds, jointPriced };
 }
 
 export type MyParlayLeg = {

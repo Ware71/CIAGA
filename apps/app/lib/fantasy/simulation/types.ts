@@ -9,6 +9,17 @@ export type SimHole = {
   strokeIndex: number;
   /** Event round this hole belongs to (1-based). Absent = round 1. */
   round?: number;
+  /**
+   * WHS rating/slope of this round's tee. When present (with parTotal +
+   * holesInRound) the model prices strokes off the player's score-differential
+   * distribution via the inverse WHS relation; when absent it falls back to the
+   * gross-average path. Optional so fallback/legacy hole sets still type-check.
+   */
+  rating?: number | null;
+  slope?: number | null;
+  /** Par total + hole count of this round's tee (differential → gross). */
+  parTotal?: number | null;
+  holesInRound?: number | null;
 };
 
 /**
@@ -39,6 +50,16 @@ export type SimPlayerProfile = {
   handicapIndex: number | null;
   avgGross: number | null;
   scoreStddev: number | null;
+  /**
+   * WHS score-differential distribution (course-difficulty-normalised, full
+   * history recency-weighted). When present the model prices off these; avgGross
+   * stays as the fallback. Optional so existing SimPlayerProfile literals (tests,
+   * narrative) keep the legacy gross path without change.
+   */
+  avgDifferential?: number | null;
+  differentialStddev?: number | null;
+  /** Recency-weighted effective sample — drives the handicap-anchor blend. */
+  differentialEffectiveN?: number | null;
   /** Recent-form drift in strokes/round (negative = trending better). */
   recentForm: number | null;
   birdiesPerRound: number | null;
@@ -65,6 +86,14 @@ export type SimPlayer = {
    * leaderboard's per-submission handicap sum.
    */
   playingHandicap: number;
+  /**
+   * Probability this player actually plays (1 = confirmed entrant). Provisional
+   * group members who haven't entered yet carry an attendance probability that
+   * decays as the event nears; each iteration samples their presence, so their
+   * win/top-N naturally scales by attendance and confirmed players' odds rise
+   * when a provisional is absent. Absent (or 1) → always present.
+   */
+  attendanceProb?: number;
   /** Gross strokes for holes already played: holeKey(round, hole) → strokes. */
   completedHoles: Record<number, number>;
   /** True when the player has finished EVERY round of the event. */
@@ -124,6 +153,15 @@ export type SimulationResult = {
   playerIndex: Record<string, number>;
   /** The simulated hole set — holeOutcomes[i] corresponds to holes[i]. */
   holes: SimHole[];
+  /**
+   * Per-iteration finishing positions, laid out [playerIdx * simulationCount +
+   * iter], 1-based; 0 = player absent that iteration (attendance sampling).
+   * Retained so correlated accas price off the TRUE joint distribution
+   * (P(X top-3 ∧ Y top-3) ≠ product of marginals). Int8 keeps it compact for
+   * persistence — field sizes are far below 127. Optional so test fixtures that
+   * fake a SimulationResult need not build it.
+   */
+  positions?: Int8Array;
 };
 
 /** Engine-wide probability clamp: no impossible or infinite odds. */

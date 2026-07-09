@@ -57,7 +57,7 @@ export const holeScore: MarketDefinition = {
 
   generateMarkets(ctx: GenerateCtx): MarketSpec[] {
     if (ctx.holes.length === 0) return [];
-    return ctx.players.flatMap((p) =>
+    return ctx.players.filter((p) => !p.provisional).flatMap((p) =>
       (["birdie_or_better", "bogey_or_worse"] as const).map((outcome) => ({
         market_type: "hole_score" as const,
         subject_profile_id: p.profileId,

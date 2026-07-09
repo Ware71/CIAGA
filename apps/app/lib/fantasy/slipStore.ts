@@ -20,6 +20,11 @@ export type SlipLeg = {
   marketLabel: string;
   selectionLabel: string;
   subjectKeys: string[];
+  /** Market type + params, for the co-occurrence rule + joint-pricing display. */
+  marketType?: string;
+  params?: Record<string, unknown> | null;
+  /** Two different selections on this same row may co-exist (top-N, wide ranges). */
+  coOccurrable?: boolean;
 };
 
 const KEY = "ciaga:fantasy:slip";
@@ -64,9 +69,12 @@ export function useSlip() {
     if (existing >= 0) {
       current.splice(existing, 1);
     } else {
-      // One selection per market in the slip — replace a sibling selection.
-      const sibling = current.findIndex((l) => l.marketId === leg.marketId);
-      if (sibling >= 0) current.splice(sibling, 1);
+      // One selection per market — EXCEPT co-occurrable field markets (two
+      // players in the same Top-3 row), where multiple selections combine.
+      if (!leg.coOccurrable) {
+        const sibling = current.findIndex((l) => l.marketId === leg.marketId);
+        if (sibling >= 0) current.splice(sibling, 1);
+      }
       current.push(leg);
     }
     writeLegs(current);

@@ -7,6 +7,8 @@ import type { FantasyMarket, GenerateCtx, LiveMarketCtx, MarketSpec } from "@/li
 import { runSimulation, pickSimulationCount } from "@/lib/fantasy/simulation/engine";
 import { hashSeed } from "@/lib/fantasy/simulation/rng";
 import { generateNarrative } from "@/lib/fantasy/narrative";
+import { writeJointSamples } from "@/lib/fantasy/jointSamples";
+import { computeAttendanceProbability, participationRate } from "@/lib/fantasy/attendance";
 import {
   clampProbability,
   holeKey,
@@ -39,6 +41,8 @@ export type EventRow = {
   scoring_basis: string | null;
   handicap_rules: Record<string, unknown> | null;
   num_rounds: number | null;
+  entry_window_start: string | null;
+  entry_window_end: string | null;
 };
 
 export type EntryRow = {
@@ -65,7 +69,7 @@ export async function loadEvent(eventId: string): Promise<EventRow> {
   const { data, error } = await supabaseAdmin
     .from("events")
     .select(
-      "id, name, group_id, course_id, event_date, majors_status, scoring_model, scoring_basis, handicap_rules, num_rounds"
+      "id, name, group_id, course_id, event_date, majors_status, scoring_model, scoring_basis, handicap_rules, num_rounds, entry_window_start, entry_window_end"
     )
     .eq("id", eventId)
     .single();
@@ -176,15 +180,18 @@ async function loadCourseHoles(
 
   const { data: tees, error: teeErr } = await supabaseAdmin
     .from("course_tee_boxes")
-    .select("id, holes_count, gender, name")
+    .select("id, holes_count, gender, name, rating, slope")
     .eq("course_id", courseId);
   if (teeErr) throw teeErr;
-  const teeRows = (tees ?? []) as { id: string; holes_count: number | null }[];
+  const teeRows = (tees ?? []) as {
+    id: string; holes_count: number | null; rating: number | null; slope: number | null;
+  }[];
   const teeId =
     preferredTee && teeRows.some((t) => t.id === preferredTee)
       ? preferredTee
       : (teeRows.find((t) => (t.holes_count ?? 18) >= 18) ?? teeRows[0])?.id;
   if (!teeId) return [];
+  const tee = teeRows.find((t) => t.id === teeId);
 
   const { data: holes, error: holeErr } = await supabaseAdmin
     .from("course_tee_holes")
@@ -193,14 +200,25 @@ async function loadCourseHoles(
     .order("hole_number", { ascending: true });
   if (holeErr) throw holeErr;
 
-  return ((holes ?? []) as { hole_number: number; par: number | null; yardage: number | null; handicap: number | null }[])
-    .filter((h) => h.par != null)
-    .map((h) => ({
-      holeNumber: h.hole_number,
-      par: h.par as number,
-      yardage: h.yardage,
-      strokeIndex: h.handicap ?? h.hole_number,
-    }));
+  const valid = ((holes ?? []) as { hole_number: number; par: number | null; yardage: number | null; handicap: number | null }[])
+    .filter((h) => h.par != null);
+  // Rating/slope drive the differential → gross inverse; parTotal + count let the
+  // model spread the round target across holes. All four ride on each hole so a
+  // multi-round event across different tees prices each round on its own tee.
+  const parTotal = valid.reduce((s, h) => s + (h.par as number), 0);
+  const holesInRound = valid.length;
+  const rating = tee?.rating != null ? Number(tee.rating) : null;
+  const slope = tee?.slope != null ? Number(tee.slope) : null;
+  return valid.map((h) => ({
+    holeNumber: h.hole_number,
+    par: h.par as number,
+    yardage: h.yardage,
+    strokeIndex: h.handicap ?? h.hole_number,
+    rating,
+    slope,
+    parTotal,
+    holesInRound,
+  }));
 }
 
 /** Standard-par fallback so pre-course events can still be simulated. */
@@ -443,6 +461,76 @@ export async function loadPlacementContext(eventId: string): Promise<{
   return { event, holes, live: makeLiveCtx(event, holes, liveData), liveData };
 }
 
+type ProvisionalPlayer = { profileId: string; attendanceProb: number };
+
+/**
+ * Active group members who haven't entered yet but should still appear in the
+ * field, with their attendance probability (see lib/fantasy/attendance.ts).
+ * Empty once the event is live/past or the 2-week cutoff has passed.
+ */
+async function loadProvisionalPlayers(
+  event: EventRow,
+  groupId: string,
+  enteredIds: Set<string>
+): Promise<ProvisionalPlayer[]> {
+  const now = Date.now();
+  const eventDate = event.event_date ? new Date(event.event_date).getTime() : null;
+  if (eventDate == null || eventDate <= now) return [];
+  if (["completed", "cancelled"].includes(event.majors_status)) return [];
+
+  const { data: memberRows, error: memberErr } = await supabaseAdmin
+    .from("major_group_memberships")
+    .select("profile_id, joined_at")
+    .eq("group_id", groupId)
+    .eq("status", "active");
+  if (memberErr) throw memberErr;
+  const members = ((memberRows ?? []) as { profile_id: string; joined_at: string | null }[]).filter(
+    (m) => !enteredIds.has(m.profile_id)
+  );
+  if (members.length === 0) return [];
+  const memberIds = members.map((m) => m.profile_id);
+
+  const [{ data: statRows }, { data: eventRows }] = await Promise.all([
+    supabaseAdmin
+      .from("profile_event_stats")
+      .select("profile_id, events_played")
+      .eq("group_id", groupId)
+      .in("profile_id", memberIds),
+    supabaseAdmin
+      .from("events")
+      .select("event_date, majors_status")
+      .eq("group_id", groupId)
+      .in("majors_status", ["completed", "official"]),
+  ]);
+  const playedBy = new Map(
+    ((statRows ?? []) as { profile_id: string; events_played: number | null }[]).map((s) => [
+      s.profile_id,
+      Number(s.events_played ?? 0),
+    ])
+  );
+  const heldDates = ((eventRows ?? []) as { event_date: string | null }[])
+    .map((e) => (e.event_date ? new Date(e.event_date).getTime() : null))
+    .filter((t): t is number => t != null);
+  const windowStart = event.entry_window_start
+    ? new Date(event.entry_window_start).getTime()
+    : null;
+
+  const out: ProvisionalPlayer[] = [];
+  for (const m of members) {
+    const joined = m.joined_at ? new Date(m.joined_at).getTime() : 0;
+    const heldSinceJoin = heldDates.filter((d) => d >= joined).length;
+    const participation = participationRate(playedBy.get(m.profile_id) ?? 0, heldSinceJoin);
+    const p = computeAttendanceProbability(
+      { entered: false, participation },
+      now,
+      eventDate,
+      windowStart
+    );
+    if (p > 0) out.push({ profileId: m.profile_id, attendanceProb: Math.round(p * 1000) / 1000 });
+  }
+  return out;
+}
+
 export async function loadSimInputs(eventId: string): Promise<EventSimContext> {
   const event = await loadEvent(eventId);
   if (!event.group_id) throw new Error("Event has no group");
@@ -457,7 +545,14 @@ export async function loadSimInputs(eventId: string): Promise<EventSimContext> {
     .in("entry_status", ACTIVE_ENTRY_STATUSES);
   if (entryErr) throw entryErr;
   const entries = (entryData ?? []) as EntryRow[];
-  const fieldIds = entries.map((e) => e.profile_id);
+  const enteredIds = new Set(entries.map((e) => e.profile_id));
+
+  // Not-yet-entered members carry an attendance probability that decays as the
+  // event nears; the engine samples their presence each iteration.
+  const provisional = await loadProvisionalPlayers(event, groupId, enteredIds);
+  const provisionalIds = provisional.map((p) => p.profileId);
+  const attendanceById = new Map(provisional.map((p) => [p.profileId, p.attendanceProb]));
+  const fieldIds = [...enteredIds, ...provisionalIds];
 
   const [profiles, names] = await Promise.all([
     ensureProfiles(groupId, fieldIds),
@@ -466,7 +561,18 @@ export async function loadSimInputs(eventId: string): Promise<EventSimContext> {
 
   const profileHi = new Map<string, number | null>();
   for (const [pid, row] of profiles) profileHi.set(pid, row.handicap_index);
-  const playingHandicaps = resolvePlayingHandicaps(event, entries, profileHi);
+
+  // Provisional players get a synthetic entry (no assigned values) so their PH
+  // resolves from profile HI × allowance — the same path the leaderboard uses.
+  const provisionalEntries: EntryRow[] = provisionalIds.map((profile_id) => ({
+    profile_id,
+    entry_status: "provisional",
+    assigned_handicap_index: null,
+    assigned_course_handicap: null,
+    assigned_playing_handicap: null,
+  }));
+  const allEntries = [...entries, ...provisionalEntries];
+  const playingHandicaps = resolvePlayingHandicaps(event, allEntries, profileHi);
 
   let holes = await loadHoles(event);
   if (holes.length === 0) holes = fallbackHoles();
@@ -475,10 +581,11 @@ export async function loadSimInputs(eventId: string): Promise<EventSimContext> {
   const { profileRoundStatus, completedByProfile } = liveData;
 
   const roundNumbers = [...new Set(holes.map((h) => h.round ?? 1))].sort((a, b) => a - b);
-  const players: SimPlayer[] = entries.map((e) => {
+  const players: SimPlayer[] = allEntries.map((e) => {
     const stored = profiles.get(e.profile_id)!;
     const perRound = profileRoundStatus.get(e.profile_id);
     const completedRounds = roundNumbers.filter((r) => perRound?.get(r)?.finished ?? false);
+    const attendanceProb = attendanceById.get(e.profile_id);
     return {
       profileId: e.profile_id,
       displayName: names[e.profile_id] ?? "Player",
@@ -487,6 +594,7 @@ export async function loadSimInputs(eventId: string): Promise<EventSimContext> {
       completedHoles: completedByProfile.get(e.profile_id) ?? {},
       roundComplete: roundNumbers.length > 0 && completedRounds.length === roundNumbers.length,
       completedRounds,
+      ...(attendanceProb != null ? { attendanceProb } : {}),
     };
   });
 
@@ -609,7 +717,10 @@ async function ensureMarkets(
     projections[p.profileId] = { meanGross: p.meanGross, meanNet: p.meanNet, rounds };
   }
   const generateCtx: GenerateCtx = {
-    players: ctx.players.map((p) => ({ profileId: p.profileId })),
+    players: ctx.players.map((p) => ({
+      profileId: p.profileId,
+      provisional: (p.attendanceProb ?? 1) < 1,
+    })),
     projections,
     rounds: [...new Set(ctx.holes.map((h) => h.round ?? 1))].sort((a, b) => a - b),
     holes: ctx.holes.map((h) => ({ holeNumber: h.holeNumber, par: h.par, round: h.round ?? 1 })),
@@ -680,6 +791,12 @@ async function executeRefresh(eventId: string, jobId: string): Promise<void> {
     if (marketErr) throw marketErr;
 
     await writeSnapshots(ctx, sim, (marketData ?? []) as FantasyMarket[], version);
+
+    // Retain the joint positions matrix for correlated-acca pricing. Best-effort
+    // — accas fall back to the independent product if it's missing.
+    await writeJointSamples(eventId, ctx.groupId, version, sim).catch((e) =>
+      console.error(`[fantasy] writeJointSamples failed for ${eventId}`, e)
+    );
 
     // Best-effort — a narrative failure must never fail the reprice.
     const narrative = await generateNarrative(ctx, sim, version, allowancePct(ctx.event)).catch(
@@ -811,7 +928,7 @@ export async function generateEventFantasy(eventId: string): Promise<{ markets: 
   logPhase("checks+state");
 
   const ctx = await loadSimInputs(eventId);
-  if (ctx.players.length < 2) throw new Error("Need at least 2 entered players");
+  if (ctx.players.length < 2) throw new Error("Need at least 2 players in the field");
   logPhase(`inputs+profiles (${ctx.players.length} players)`);
 
   const state = await readState(eventId);
@@ -830,6 +947,9 @@ export async function generateEventFantasy(eventId: string): Promise<{ markets: 
   const markets = (marketData ?? []) as FantasyMarket[];
 
   await writeSnapshots(ctx, sim, markets, version);
+  await writeJointSamples(eventId, ctx.groupId, version, sim).catch((e) =>
+    console.error(`[fantasy] writeJointSamples failed for ${eventId}`, e)
+  );
   const narrative = await generateNarrative(ctx, sim, version, allowancePct(ctx.event)).catch(
     () => null
   );

@@ -42,7 +42,7 @@ export const birdies: MarketDefinition = {
   },
 
   generateMarkets(ctx: GenerateCtx): MarketSpec[] {
-    return ctx.players.flatMap((p) => {
+    return ctx.players.filter((p) => !p.provisional).flatMap((p) => {
       const specs: MarketSpec[] = [1, 2, 3, 4].map((count) => ({
         market_type: "birdies" as const,
         subject_profile_id: p.profileId,

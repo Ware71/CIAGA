@@ -1,13 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 import { safeJson } from "@/lib/fantasy/safeJson";
 import { useSlip } from "@/lib/fantasy/slipStore";
-import { combinedOdds, findCorrelation, MAX_LEGS } from "@/lib/fantasy/parlayRules";
+import { combinedOdds, findParlayViolation, MAX_LEGS } from "@/lib/fantasy/parlayRules";
 import { COMBO_BET } from "@/lib/fantasy/terminology";
 import { OddsValue } from "@/components/fantasy/OddsValue";
 
@@ -29,10 +29,21 @@ export function BetSlip({ onPlaced }: { onPlaced?: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  // Naive product — the immediate display + fallback while the joint price loads.
   const accaOdds = useMemo(() => combinedOdds(legs.map((l) => l.decimalOdds)), [legs]);
   const sameGroup = useMemo(() => new Set(legs.map((l) => l.groupId)).size <= 1, [legs]);
-  const correlated = useMemo(
-    () => findCorrelation(legs.map((l) => ({ eventId: l.eventId, subjectKeys: l.subjectKeys }))),
+  const violation = useMemo(
+    () =>
+      findParlayViolation(
+        legs.map((l) => ({
+          eventId: l.eventId,
+          marketId: l.marketId,
+          marketType: l.marketType ?? "",
+          params: l.params ?? null,
+          subjectKeys: l.subjectKeys,
+          selectionKey: l.selectionKey,
+        }))
+      ),
     [legs]
   );
   const accaBlockedReason =
@@ -42,9 +53,49 @@ export function BetSlip({ onPlaced }: { onPlaced?: () => void }) {
       ? `Max ${MAX_LEGS} legs`
       : !sameGroup
       ? "Legs must come from one group"
-      : correlated
-      ? "Correlated legs — one pick per player per event"
+      : violation
+      ? violation
       : null;
+
+  // Finishing-position legs are jointly priced server-side — fetch the true
+  // combined odds (falls back to the product while loading or on error).
+  const [jointOdds, setJointOdds] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setJointOdds(null);
+    if (legs.length < 2 || accaBlockedReason) return;
+    (async () => {
+      try {
+        const session = await getViewerSession();
+        if (!session) return;
+        const res = await fetch("/api/fantasy/parlays/price", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${session.accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            legs: legs.map((l) => ({
+              marketId: l.marketId,
+              selectionKey: l.selectionKey,
+              snapshotId: l.snapshotId,
+            })),
+          }),
+        });
+        const j = await safeJson(res);
+        if (!cancelled && res.ok && typeof (j as { combinedOdds?: number }).combinedOdds === "number") {
+          setJointOdds((j as { combinedOdds: number }).combinedOdds);
+        }
+      } catch {
+        // Keep the product fallback.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [legs, accaBlockedReason]);
+
+  const displayAccaOdds = jointOdds ?? accaOdds;
 
   if (legs.length === 0) return null;
   if (typeof document === "undefined") return null;
@@ -129,7 +180,7 @@ export function BetSlip({ onPlaced }: { onPlaced?: () => void }) {
     <>
       {/* Floating slip bar */}
       {!open && (
-        <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+16px)] left-0 right-0 z-40 px-4">
+        <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+78px)] left-0 right-0 z-40 px-4">
           <button
             type="button"
             onClick={() => {
@@ -148,7 +199,7 @@ export function BetSlip({ onPlaced }: { onPlaced?: () => void }) {
             <span className="text-[12px] font-bold text-[#f5e6b0]">
               {legs.length >= 2 && !accaBlockedReason ? (
                 <>
-                  {COMBO_BET.short} <OddsValue odds={accaOdds} />
+                  {COMBO_BET.short} <OddsValue odds={displayAccaOdds} />
                 </>
               ) : (
                 "View →"
@@ -282,11 +333,11 @@ export function BetSlip({ onPlaced }: { onPlaced?: () => void }) {
                 <>
                   {legs.length}-leg {COMBO_BET.short} @{" "}
                   <span className="font-bold text-[#f5e6b0]">
-                    <OddsValue odds={accaOdds} />
+                    <OddsValue odds={displayAccaOdds} />
                   </span>
                   {" · "}returns{" "}
                   <span className="font-bold text-[#f5e6b0]">
-                    {(stake * accaOdds).toFixed(2)} pts
+                    {(stake * displayAccaOdds).toFixed(2)} pts
                   </span>
                 </>
               )}

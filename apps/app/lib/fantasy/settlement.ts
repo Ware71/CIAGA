@@ -275,11 +275,13 @@ export async function settleFantasyEvent(
 
   const { data: eventRow, error: eventErr } = await supabaseAdmin
     .from("events")
-    .select("id, name, majors_status")
+    .select("id, name, majors_status, group_season_id")
     .eq("id", eventId)
     .single();
   if (eventErr) throw eventErr;
-  const event = eventRow as { id: string; name: string; majors_status: string };
+  const event = eventRow as {
+    id: string; name: string; majors_status: string; group_season_id: string | null;
+  };
   if (event.majors_status !== "completed" && !opts.force) {
     return { settled: false, reason: `event is ${event.majors_status}, not completed` };
   }
@@ -314,6 +316,25 @@ export async function settleFantasyEvent(
 
   await settleParlayLegs(eventId, markets.map((m) => m.id), outcomesByMarket).catch(() => {});
   await notifySettledPicks(eventId, event.name, picks.map((p) => p.id));
+
+  // Cascade to season markets: this result shifts the standings, so re-price the
+  // season and try to settle it (in case this was its final event). Best-effort —
+  // a season-cascade failure must never fail event settlement.
+  if (event.group_season_id) {
+    const gsid = event.group_season_id;
+    try {
+      await supabaseAdmin.rpc("ciaga_fantasy_mark_season_stale", {
+        p_group_season_id: gsid,
+        p_reason: "constituent_event_completed",
+      });
+      const { refreshSeasonIfStale } = await import("@/lib/fantasy/seasonOdds");
+      await refreshSeasonIfStale(gsid);
+      const { settleFantasySeason } = await import("@/lib/fantasy/seasonSettlement");
+      await settleFantasySeason(gsid);
+    } catch {
+      // ignore
+    }
+  }
 
   const c = (counts ?? {}) as { won?: number; lost?: number; void?: number };
   return { settled: true, won: c.won ?? 0, lost: c.lost ?? 0, void: c.void ?? 0 };

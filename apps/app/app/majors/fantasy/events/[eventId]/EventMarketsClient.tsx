@@ -7,10 +7,10 @@ import { getViewerSession } from "@/lib/auth/viewerSession";
 import { supabase } from "@/lib/supabaseClient";
 import { safeJson } from "@/lib/fantasy/safeJson";
 import { MARKET_GROUPS } from "@/lib/fantasy/markets/types";
-import { subjectKeysFor } from "@/lib/fantasy/parlayRules";
+import { marketAllowsMultiple, subjectKeysFor } from "@/lib/fantasy/parlayRules";
 import { useSlip } from "@/lib/fantasy/slipStore";
 import { BetSlip } from "@/components/fantasy/BetSlip";
-import { OddsFormatToggle, OddsValue } from "@/components/fantasy/OddsValue";
+import { OddsFormatMenu, OddsValue } from "@/components/fantasy/OddsValue";
 import { PlayerStatsSheet, type PlayerStats } from "@/components/fantasy/PlayerStatsSheet";
 
 type Selection = {
@@ -201,6 +201,9 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
         },
         selection.key
       ),
+      marketType: market.market_type,
+      params: market.params,
+      coOccurrable: marketAllowsMultiple({ market_type: market.market_type, params: market.params }),
     });
   };
 
@@ -260,9 +263,12 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
         )}
       </div>
       <div className="px-4 mb-3">
-        <h1 className="text-lg font-bold text-[#f5e6b0] leading-tight">
-          {board?.event?.name ?? "Fantasy Markets"}
-        </h1>
+        <div className="flex items-start justify-between gap-2">
+          <h1 className="text-lg font-bold text-[#f5e6b0] leading-tight">
+            {board?.event?.name ?? "Fantasy Markets"}
+          </h1>
+          {board?.generated && <OddsFormatMenu className="shrink-0" />}
+        </div>
         {board?.state?.last_refreshed_at && (
           <div className="text-[10px] text-emerald-200/45 mt-0.5">
             Odds updated {new Date(board.state.last_refreshed_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
@@ -283,13 +289,6 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
               {board.state.narrative}
             </p>
           </div>
-        </div>
-      )}
-
-      {/* Odds format toggle */}
-      {board?.generated && (
-        <div className="px-4 mb-4">
-          <OddsFormatToggle />
         </div>
       )}
 

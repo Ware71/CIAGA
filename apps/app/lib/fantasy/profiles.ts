@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { lengthBand, siBand, splitKey, strokesReceived } from "@/lib/fantasy/simulation/holeModel";
+import { recencyWeightedDifferentialStats } from "@/lib/fantasy/simulation/differentials";
 import type { HoleSplits, SimPlayerProfile } from "@/lib/fantasy/simulation/types";
 
 /**
@@ -12,14 +13,20 @@ import type { HoleSplits, SimPlayerProfile } from "@/lib/fantasy/simulation/type
  * entire score-event table and its computed played_at ordering defeats every
  * index, which made first-time market generation take minutes per player.
  *
- * Sampling: the most recent MAX_ROUNDS finished rounds with ≥ MIN_HOLES holes
+ * Sampling: the most recent SHAPE_MAX_ROUNDS finished rounds with ≥ MIN_HOLES holes
  * scored, rounds submitted to this group's events first, padded with the
  * player's other rounds when the group sample is thin. Partial (9-hole)
  * rounds are scaled to 18-hole equivalents for round-level aggregates.
  */
 
-const MAX_ROUNDS = 20;
-/** Recent finished rounds fetched before sampling (headroom over MAX_ROUNDS). */
+/**
+ * Performance cap on the per-hole SHAPE sample (par-type/SI splits, birdie/eagle
+ * rates, gross average). NOT an ability cap: the differential mean/variance that
+ * sets the model LEVEL is recency-weighted over the player's FULL history
+ * (ciaga_scoring_record_stream), uncapped.
+ */
+const SHAPE_MAX_ROUNDS = 20;
+/** Recent finished rounds fetched before sampling (headroom over SHAPE_MAX_ROUNDS). */
 const CANDIDATE_ROUNDS = 30;
 const MIN_HOLES = 9;
 const GROUP_SAMPLE_TARGET = 8;
@@ -50,6 +57,11 @@ export type StoredFantasyProfile = {
   avg_gross: number | null;
   avg_net: number | null;
   score_stddev: number | null;
+  /** WHS score-differential distribution over full history (recency-weighted). */
+  avg_differential: number | null;
+  differential_stddev: number | null;
+  differential_sample_size: number;
+  differential_effective_n: number | null;
   recent_form: number | null;
   birdies_per_round: number | null;
   eagles_per_round: number | null;
@@ -269,12 +281,12 @@ export async function buildPlayerProfile(
   }
   candidates.sort((a, b) => (a.playedAt < b.playedAt ? 1 : -1));
 
-  const groupRounds = candidates.filter((r) => r.isGroupRound).slice(0, MAX_ROUNDS);
+  const groupRounds = candidates.filter((r) => r.isGroupRound).slice(0, SHAPE_MAX_ROUNDS);
   const padded = groupRounds.length < GROUP_SAMPLE_TARGET;
   const sample = padded
     ? [
         ...groupRounds,
-        ...candidates.filter((r) => !r.isGroupRound).slice(0, MAX_ROUNDS - groupRounds.length),
+        ...candidates.filter((r) => !r.isGroupRound).slice(0, SHAPE_MAX_ROUNDS - groupRounds.length),
       ]
     : groupRounds;
   sample.sort((a, b) => (a.playedAt < b.playedAt ? 1 : -1));
@@ -292,11 +304,32 @@ export async function buildPlayerProfile(
       ? Number((hiRow as { handicap_index: number }).handicap_index)
       : null;
 
+  // Full-history score differentials (course-normalised) from the canonical WHS
+  // stream — accepted rounds only, 9-hole rounds already reduced to 18-hole
+  // equivalents. Independent of the SHAPE sample above and NOT capped, so a
+  // 200-round history informs the model level; recency-weighted so it still
+  // tracks form. Global to the player (course-normalised → group-independent).
+  const { data: diffRows, error: diffErr } = await supabaseAdmin
+    .from("ciaga_scoring_record_stream")
+    .select("differential, played_at")
+    .eq("profile_id", profileId)
+    .not("differential", "is", null)
+    .order("played_at", { ascending: false });
+  if (diffErr) throw diffErr;
+  const differentials = ((diffRows ?? []) as { differential: number | string | null }[])
+    .map((r) => Number(r.differential))
+    .filter((d) => Number.isFinite(d));
+  const diffStats = recencyWeightedDifferentialStats(differentials);
+
   const sampleSize = sample.length;
   const base = {
     group_id: groupId,
     profile_id: profileId,
     handicap_index: handicapIndex,
+    avg_differential: diffStats ? round2(diffStats.mean) : null,
+    differential_stddev: diffStats?.stddev != null ? round2(diffStats.stddev) : null,
+    differential_sample_size: diffStats?.sampleSize ?? 0,
+    differential_effective_n: diffStats ? round2(diffStats.effectiveN) : null,
     computed_at: new Date().toISOString(),
   };
 
@@ -518,6 +551,9 @@ export function toSimProfile(row: StoredFantasyProfile): SimPlayerProfile {
     handicapIndex: numOrNull(merged.handicap_index),
     avgGross: numOrNull(merged.avg_gross),
     scoreStddev: numOrNull(merged.score_stddev),
+    avgDifferential: numOrNull(merged.avg_differential),
+    differentialStddev: numOrNull(merged.differential_stddev),
+    differentialEffectiveN: numOrNull(merged.differential_effective_n),
     recentForm: numOrNull(merged.recent_form),
     birdiesPerRound: numOrNull(merged.birdies_per_round),
     eaglesPerRound: numOrNull(merged.eagles_per_round),
