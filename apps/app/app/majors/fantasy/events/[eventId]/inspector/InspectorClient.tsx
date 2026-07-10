@@ -109,6 +109,38 @@ export default function InspectorClient({ eventId }: { eventId: string }) {
     })();
   }, [fetchData, isSandbox]);
 
+  const exportExcel = useCallback(async () => {
+    const session = await getViewerSession();
+    if (!session) return;
+    setBusy("export");
+    setError(null);
+    try {
+      const res = await fetch(`/api/fantasy/events/${eventId}/inspect/export`, {
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+      });
+      if (!res.ok) {
+        const j = await safeJson(res);
+        setError((j as { error?: string }).error ?? "Export failed");
+        return;
+      }
+      const blob = await res.blob();
+      const disposition = res.headers.get("Content-Disposition") ?? "";
+      const match = /filename="?([^"]+)"?/.exec(disposition);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = match?.[1] ?? "fantasy-inspect.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Export failed");
+    } finally {
+      setBusy(null);
+    }
+  }, [eventId]);
+
   const runAction = useCallback(
     async (label: string, path: string, body?: unknown) => {
       const session = await getViewerSession();
@@ -181,6 +213,13 @@ export default function InspectorClient({ eventId }: { eventId: string }) {
             className="rounded-lg border border-emerald-700/70 bg-emerald-800/40 px-2.5 py-1.5 text-xs text-emerald-100 disabled:opacity-50"
           >
             {busy === "rebuild" ? "Rebuilding…" : "Rebuild profiles"}
+          </button>
+          <button
+            disabled={!!busy}
+            onClick={exportExcel}
+            className="rounded-lg border border-emerald-700/70 bg-emerald-800/40 px-2.5 py-1.5 text-xs text-emerald-100 disabled:opacity-50"
+          >
+            {busy === "export" ? "Exporting…" : "Export Excel"}
           </button>
           <button
             disabled={!data}

@@ -1,38 +1,32 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Info } from "lucide-react";
+import { Info } from "lucide-react";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 import { supabase } from "@/lib/supabaseClient";
 import { safeJson } from "@/lib/fantasy/safeJson";
-import { MARKET_GROUPS } from "@/lib/fantasy/markets/types";
 import { marketAllowsMultiple, subjectKeysFor } from "@/lib/fantasy/parlayRules";
 import { useSlip } from "@/lib/fantasy/slipStore";
+import {
+  buildCountTable,
+  buildFinishesTable,
+  buildRareRows,
+  deriveTabs,
+  marketsInTab,
+  sortExactFinish,
+  sortHoles,
+  type BoardMarket,
+  type Cell,
+  type Selection,
+} from "@/lib/fantasy/board/groupBoard";
 import { BetSlip } from "@/components/fantasy/BetSlip";
-import { OddsFormatMenu, OddsValue } from "@/components/fantasy/OddsValue";
+import { OddsFormatMenu } from "@/components/fantasy/OddsValue";
+import { OddsBlank, OddsButton } from "@/components/fantasy/board/OddsButton";
+import { MarketTable } from "@/components/fantasy/board/MarketTable";
+import { PlayerAccordion } from "@/components/fantasy/board/PlayerAccordion";
+import { SeasonMarketsPanel } from "@/components/fantasy/SeasonMarketsPanel";
 import { PlayerStatsSheet, type PlayerStats } from "@/components/fantasy/PlayerStatsSheet";
-
-type Selection = {
-  key: string;
-  label: string;
-  probability: number;
-  decimal_odds: number;
-  snapshot_id: string;
-  event_version: number;
-};
-
-type BoardMarket = {
-  id: string;
-  market_type: string;
-  group: string;
-  display_name: string;
-  status: string;
-  params: Record<string, unknown>;
-  subject_profile_id: string | null;
-  opponent_profile_id: string | null;
-  selections: Selection[];
-};
 
 type BoardResponse = {
   generated: boolean;
@@ -54,6 +48,9 @@ type BoardResponse = {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const FLASH_MS = 1400;
+const SEASON_TAB = "season";
+
+type HoleOutcome = "birdie_or_better" | "bogey_or_worse";
 
 export default function EventMarketsClient({ eventId }: { eventId: string }) {
   const router = useRouter();
@@ -62,8 +59,13 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const refetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Accordion — group ids currently open; seeded once from the first board.
-  const [expanded, setExpanded] = useState<Set<string> | null>(null);
+  // Tabs: "event" | "round-N" | "season".
+  const [activeTab, setActiveTab] = useState<string>("event");
+  const [seasonId, setSeasonId] = useState<string | null>(null);
+  // Collapsibles: exact-finish keyed by market id, hole specials keyed by player.
+  const [openExact, setOpenExact] = useState<Set<string>>(new Set());
+  const [openHole, setOpenHole] = useState<Set<string>>(new Set());
+  const [holeOutcome, setHoleOutcome] = useState<Map<string, HoleOutcome>>(new Map());
   // Price movement flashes: `${marketId}|${selectionKey}` → up/down.
   const prevOdds = useRef<Map<string, number>>(new Map());
   const [flashes, setFlashes] = useState<Map<string, "up" | "down">>(new Map());
@@ -134,8 +136,25 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
     if (board?.generated && board.event?.group_id) fetchBalance(board.event.group_id);
   }, [board?.generated, board?.event?.group_id, fetchBalance]);
 
-  // Realtime: refetch when the event's fantasy state flips (debounced refresh
-  // done elsewhere, staleness bump from a live score, settlement).
+  // Discover the group's season board (if any) for the Season tab.
+  useEffect(() => {
+    const groupId = board?.event?.group_id;
+    if (!board?.generated || !groupId) return;
+    let cancelled = false;
+    (async () => {
+      const session = await getViewerSession();
+      if (!session) return;
+      const res = await fetch(`/api/fantasy/groups/${groupId}/season`, {
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+      }).catch(() => null);
+      if (!res || !res.ok || cancelled) return;
+      const j = await res.json().catch(() => null);
+      if (!cancelled && j?.headline?.seasonId) setSeasonId(j.headline.seasonId as string);
+    })();
+    return () => { cancelled = true; };
+  }, [board?.generated, board?.event?.group_id]);
+
+  // Realtime: refetch when the event's fantasy state flips.
   useEffect(() => {
     const channel = supabase
       .channel(`fantasy-event-state:${eventId}`)
@@ -213,27 +232,250 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
 
   const stale = !!board?.state?.odds_stale;
   const boardLocked = !!board?.state?.is_final || board?.event?.status === "completed";
-  const markets = board?.markets ?? [];
+  const markets = useMemo(() => board?.markets ?? [], [board?.markets]);
+  const names = board?.names ?? {};
 
-  const sections = MARKET_GROUPS.map((g) => ({
-    ...g,
-    markets: markets.filter((m) => (m.group ?? "") === g.id && m.selections.length > 0),
-  })).filter((s) => s.markets.length > 0);
+  const tabs = useMemo(() => {
+    const base = deriveTabs(markets);
+    return seasonId ? [...base, { id: SEASON_TAB, label: "Season", round: null }] : base;
+  }, [markets, seasonId]);
 
-  // Seed the accordion once: first section open, the rest labeled + collapsed.
+  // Keep the active tab valid as markets load / change.
   useEffect(() => {
-    if (expanded === null && sections.length > 0) {
-      setExpanded(new Set([sections[0].id]));
-    }
-  }, [expanded, sections]);
+    if (!tabs.some((t) => t.id === activeTab)) setActiveTab("event");
+  }, [tabs, activeTab]);
 
-  const toggleSection = (id: string) => {
-    setExpanded((prev) => {
-      const next = new Set(prev ?? []);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const activeRound = useMemo(
+    () => tabs.find((t) => t.id === activeTab)?.round ?? null,
+    [tabs, activeTab]
+  );
+
+  // ---- shared row / cell renderers (close over slip / flash / lock state) ----
+
+  const renderCell = (cell: Cell) => {
+    if (!cell) return <OddsBlank />;
+    const { market, selection } = cell;
+    return (
+      <OddsButton
+        odds={selection.decimal_odds}
+        inSlip={slip.has(market.id, selection.key)}
+        canBack={!stale && !boardLocked && market.status === "open"}
+        stale={stale}
+        flash={flashes.get(`${market.id}|${selection.key}`)}
+        onClick={() => toggleSelection(market, selection)}
+      />
+    );
+  };
+
+  const selectionRow = (market: BoardMarket, sel: Selection) => {
+    const isPlayerKey = UUID_RE.test(sel.key);
+    return (
+      <div
+        key={sel.key}
+        className="flex items-center justify-between py-1 border-b border-emerald-900/20 last:border-b-0"
+      >
+        <span className="flex min-w-0 items-center gap-1 pr-2">
+          <span className="text-[12px] text-emerald-100/85 truncate">{sel.label}</span>
+          {isPlayerKey && (
+            <button
+              type="button"
+              aria-label={`About ${sel.label}`}
+              onClick={() => openStats(sel.key)}
+              className="shrink-0 text-emerald-100/35 hover:text-emerald-100/80"
+            >
+              <Info className="h-3 w-3" />
+            </button>
+          )}
+        </span>
+        {renderCell({ market, selection: sel })}
+      </div>
+    );
+  };
+
+  // A single market card (round winner, finish ranges, match bets, scoring).
+  const marketCard = (market: BoardMarket, selections: Selection[]) => (
+    <div
+      key={market.id}
+      className={`rounded-xl border border-emerald-900/60 bg-[#0b3b21]/70 px-3 py-2.5 ${market.status === "suspended" ? "opacity-50" : ""}`}
+    >
+      <div className="flex items-center justify-between mb-1.5">
+        <button
+          type="button"
+          disabled={!market.subject_profile_id}
+          onClick={() => market.subject_profile_id && openStats(market.subject_profile_id)}
+          className="flex items-center gap-1 text-[12px] font-semibold text-emerald-100 disabled:cursor-default min-w-0"
+        >
+          <span className="truncate">{market.display_name}</span>
+          {market.subject_profile_id && <Info className="h-3 w-3 shrink-0 text-emerald-100/40" />}
+        </button>
+        {market.status === "suspended" && (
+          <span className="text-[9px] text-amber-300/70 uppercase tracking-wider">Suspended</span>
+        )}
+      </div>
+      <div className="space-y-1">{selections.map((sel) => selectionRow(market, sel))}</div>
+    </div>
+  );
+
+  const section = (label: string, count: number, children: React.ReactNode) =>
+    count > 0 ? (
+      <section className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/40 overflow-hidden">
+        <div className="px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#f5e6b0]/80">
+          {label}
+        </div>
+        <div className="px-2.5 pb-2.5 space-y-2">{children}</div>
+      </section>
+    ) : null;
+
+  const toggleIn = (set: Set<string>, setter: (s: Set<string>) => void, id: string) => {
+    const next = new Set(set);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setter(next);
+  };
+
+  // ---- per-tab market board ----
+
+  const renderMarketBoard = (round: number | null) => {
+    const tabMarkets = marketsInTab(markets, round);
+    const finishes = round == null ? buildFinishesTable(tabMarkets) : null;
+    const roundWinner = round != null ? tabMarkets.filter((m) => m.market_type === "outright_winner") : [];
+    const exact = tabMarkets.filter((m) => m.market_type === "finish_position");
+    const ranges = tabMarkets.filter((m) => m.market_type === "finish_range");
+    const h2h = tabMarkets.filter((m) => m.market_type === "h2h");
+    const scoring = tabMarkets.filter((m) =>
+      ["gross_ou", "net_ou", "score_band", "score_exact"].includes(m.market_type)
+    );
+    const birdies = buildCountTable(tabMarkets, names, "birdies", round, (c) => `${c}+`);
+    const eagles = buildCountTable(tabMarkets, names, "eagle_count", round, () => "Yes");
+    const rare = round == null ? buildRareRows(tabMarkets) : [];
+    const holeMarkets = round == null ? tabMarkets.filter((m) => m.market_type === "hole_score") : [];
+    const holePlayers = [...new Set(holeMarkets.map((m) => m.subject_profile_id).filter(Boolean))] as string[];
+
+    const anything =
+      finishes || roundWinner.length || exact.length || ranges.length || h2h.length ||
+      scoring.length || birdies || eagles || rare.length || holePlayers.length;
+
+    if (!anything) {
+      return (
+        <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 px-4 py-6 text-center text-sm text-emerald-100/70">
+          No open markets{round != null ? " for this round" : ""}.
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-3">
+        {section(
+          round != null ? "Round Winner" : "Finishes",
+          round != null ? roundWinner.length : finishes ? 1 : 0,
+          round != null
+            ? roundWinner.map((m) => marketCard(m, m.selections))
+            : finishes && <MarketTable model={finishes} renderCell={renderCell} onPlayer={openStats} />
+        )}
+
+        {section(
+          "Exact Finish",
+          exact.length,
+          exact.map((m) => {
+            const pid = m.subject_profile_id ?? m.id;
+            const name = (m.subject_profile_id && names[m.subject_profile_id]) || m.display_name;
+            return (
+              <PlayerAccordion
+                key={m.id}
+                name={name}
+                subtitle="Finishing position"
+                open={openExact.has(m.id)}
+                onToggle={() => toggleIn(openExact, setOpenExact, m.id)}
+                onInfo={m.subject_profile_id ? () => openStats(pid) : undefined}
+              >
+                <div className="space-y-1">{sortExactFinish(m.selections).map((sel) => selectionRow(m, sel))}</div>
+              </PlayerAccordion>
+            );
+          })
+        )}
+
+        {section("Finish Ranges", ranges.length, ranges.map((m) => marketCard(m, m.selections)))}
+
+        {section(round != null ? "Round Match Bets" : "Match Bets", h2h.length, h2h.map((m) => marketCard(m, m.selections)))}
+
+        {section(
+          round != null ? "Round Player Scoring" : "Player Scoring",
+          scoring.length,
+          scoring.map((m) => marketCard(m, m.selections))
+        )}
+
+        {section(
+          round != null ? "Round Birdies" : "Birdies",
+          birdies ? 1 : 0,
+          birdies && <MarketTable model={birdies} renderCell={renderCell} onPlayer={openStats} />
+        )}
+
+        {section(
+          "Eagles",
+          eagles ? 1 : 0,
+          eagles && <MarketTable model={eagles} renderCell={renderCell} onPlayer={openStats} />
+        )}
+
+        {section(
+          "Rare Events",
+          rare.length,
+          <div className="rounded-xl border border-emerald-900/60 bg-[#0b3b21]/70 px-3 py-1.5">
+            {rare.map(({ market, selection }) => (
+              <div
+                key={market.id}
+                className="flex items-center justify-between py-1.5 border-b border-emerald-900/20 last:border-b-0"
+              >
+                <span className="text-[12px] text-emerald-100/85 truncate pr-2">{market.display_name}</span>
+                {renderCell({ market, selection })}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {section(
+          "Hole Specials",
+          holePlayers.length,
+          holePlayers.map((pid) => {
+            const outcome = holeOutcome.get(pid) ?? "birdie_or_better";
+            const forPlayer = holeMarkets.filter((m) => m.subject_profile_id === pid);
+            const active =
+              forPlayer.find((m) => (m.params.outcome ?? "birdie_or_better") === outcome) ?? forPlayer[0];
+            return (
+              <PlayerAccordion
+                key={pid}
+                name={names[pid] ?? "Player"}
+                subtitle="By hole"
+                open={openHole.has(pid)}
+                onToggle={() => toggleIn(openHole, setOpenHole, pid)}
+                onInfo={() => openStats(pid)}
+              >
+                <div className="mb-2 flex rounded-lg border border-emerald-900/60 p-0.5 text-[10px]">
+                  {(["birdie_or_better", "bogey_or_worse"] as HoleOutcome[]).map((o) => (
+                    <button
+                      key={o}
+                      type="button"
+                      onClick={() => {
+                        const next = new Map(holeOutcome);
+                        next.set(pid, o);
+                        setHoleOutcome(next);
+                      }}
+                      className={`flex-1 rounded-md px-2 py-1 font-semibold transition-colors ${
+                        outcome === o ? "bg-emerald-800/50 text-[#f5e6b0]" : "text-emerald-200/60"
+                      }`}
+                    >
+                      {o === "birdie_or_better" ? "Birdie or better" : "Bogey or worse"}
+                    </button>
+                  ))}
+                </div>
+                <div className="space-y-1">
+                  {active ? sortHoles(active.selections).map((sel) => selectionRow(active, sel)) : null}
+                </div>
+              </PlayerAccordion>
+            );
+          })
+        )}
+      </div>
+    );
   };
 
   return (
@@ -316,119 +558,32 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
           </div>
         </div>
       ) : (
-        <div className="px-4 space-y-3 pb-12">
-          {sections.length === 0 && (
-            <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 px-4 py-6 text-center text-sm text-emerald-100/70">
-              No open markets.
+        <div className="px-4 pb-12">
+          {/* Tabs */}
+          {tabs.length > 1 && (
+            <div className="flex gap-1.5 overflow-x-auto pb-2 mb-1 -mx-1 px-1">
+              {tabs.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setActiveTab(t.id)}
+                  className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors ${
+                    activeTab === t.id
+                      ? "bg-[#f5e6b0] text-[#042713]"
+                      : "border border-emerald-900/60 text-emerald-100/70 hover:text-emerald-50"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
             </div>
           )}
-          {sections.map((section) => {
-            const open = expanded?.has(section.id) ?? false;
-            return (
-              <section
-                key={section.id}
-                className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/40 overflow-hidden"
-              >
-                <button
-                  type="button"
-                  onClick={() => toggleSection(section.id)}
-                  className="w-full flex items-center justify-between px-3.5 py-2.5"
-                >
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#f5e6b0]/80">
-                    {section.label}
-                  </span>
-                  <span className="flex items-center gap-1.5 text-emerald-200/50">
-                    <span className="text-[10px]">{section.markets.length}</span>
-                    <ChevronDown
-                      className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`}
-                    />
-                  </span>
-                </button>
-                {open && (
-                  <div className="px-2.5 pb-2.5 space-y-2">
-                    {section.markets.map((market) => (
-                      <div
-                        key={market.id}
-                        className={`rounded-xl border border-emerald-900/60 bg-[#0b3b21]/70 px-3 py-2.5 ${market.status === "suspended" ? "opacity-50" : ""}`}
-                      >
-                        {market.market_type !== "outright_winner" && (
-                          <div className="flex items-center justify-between mb-1.5">
-                            <button
-                              type="button"
-                              disabled={!market.subject_profile_id}
-                              onClick={() =>
-                                market.subject_profile_id && openStats(market.subject_profile_id)
-                              }
-                              className="flex items-center gap-1 text-[12px] font-semibold text-emerald-100 disabled:cursor-default"
-                            >
-                              <span className="truncate">{market.display_name}</span>
-                              {market.subject_profile_id && (
-                                <Info className="h-3 w-3 shrink-0 text-emerald-100/40" />
-                              )}
-                            </button>
-                            {market.status === "suspended" && (
-                              <span className="text-[9px] text-amber-300/70 uppercase tracking-wider">Suspended</span>
-                            )}
-                          </div>
-                        )}
-                        <div className="space-y-1">
-                          {market.selections.map((sel) => {
-                            const canBack = !stale && !boardLocked && market.status === "open";
-                            const flash = flashes.get(`${market.id}|${sel.key}`);
-                            const inSlip = slip.has(market.id, sel.key);
-                            const isPlayerKey = UUID_RE.test(sel.key);
-                            return (
-                              <div
-                                key={sel.key}
-                                className="flex items-center justify-between py-1 border-b border-emerald-900/20 last:border-b-0"
-                              >
-                                <span className="flex min-w-0 items-center gap-1 pr-2">
-                                  <span className="text-[12px] text-emerald-100/85 truncate">{sel.label}</span>
-                                  {isPlayerKey && (
-                                    <button
-                                      type="button"
-                                      aria-label={`About ${sel.label}`}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        openStats(sel.key);
-                                      }}
-                                      className="shrink-0 text-emerald-100/35 hover:text-emerald-100/80"
-                                    >
-                                      <Info className="h-3 w-3" />
-                                    </button>
-                                  )}
-                                </span>
-                                <button
-                                  type="button"
-                                  disabled={!canBack && !inSlip}
-                                  onClick={() => toggleSelection(market, sel)}
-                                  className={`shrink-0 min-w-[58px] text-center rounded-lg border px-2 py-1 text-[11px] font-bold transition-colors disabled:cursor-default ${
-                                    inSlip
-                                      ? "border-[#f5e6b0] bg-[#f5e6b0] text-[#042713]"
-                                      : stale
-                                      ? "border-emerald-900/50 text-emerald-200/40 animate-pulse"
-                                      : flash === "up"
-                                      ? "border-emerald-400/60 bg-emerald-500/15 text-emerald-300"
-                                      : flash === "down"
-                                      ? "border-red-400/50 bg-red-500/10 text-red-300"
-                                      : canBack
-                                      ? "border-emerald-700/50 bg-emerald-950/40 text-[#f5e6b0] hover:bg-emerald-800/40 active:scale-95"
-                                      : "border-emerald-900/50 text-emerald-200/50"
-                                  }`}
-                                >
-                                  <OddsValue odds={sel.decimal_odds} />
-                                </button>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </section>
-            );
-          })}
+
+          {activeTab === SEASON_TAB && seasonId ? (
+            <SeasonMarketsPanel seasonId={seasonId} />
+          ) : (
+            renderMarketBoard(activeRound)
+          )}
         </div>
       )}
 
