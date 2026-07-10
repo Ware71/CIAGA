@@ -1,5 +1,6 @@
-import type { FantasyMarket } from "@/lib/fantasy/markets/types";
+import type { FantasyMarket, GenerateCtx } from "@/lib/fantasy/markets/types";
 import type { RankingBasis, SimulationResult } from "@/lib/fantasy/simulation/types";
+import { POPULATION_GAP } from "@/lib/fantasy/simulation/holeModel";
 
 /**
  * Shared helpers for round-scoped market variants. A market with
@@ -83,6 +84,30 @@ export function countDistribution(perHoleProb: number[]): number[] {
     dist = next;
   }
   return dist;
+}
+
+/**
+ * Reverse-engineers the score a player "should" shoot from their playing
+ * handicap and the event's course setup (par + PH + POPULATION_GAP per
+ * round, summed across the event) — net drops the PH term, since by the
+ * handicap system's own design net ≈ par + POPULATION_GAP regardless of
+ * handicap (mirrors holeModel.ts's anchorLevel, the same net-consistency
+ * anchor the simulation itself falls back to for thin-data players). Used to
+ * CENTER display markets (score bands/totals) on an intuitive number,
+ * independent of the model's own (differential/form-adjusted) projection,
+ * which still prices the actual odds. Null when the event has no holes/rounds.
+ */
+export function handicapImpliedScore(
+  ctx: Pick<GenerateCtx, "rounds" | "holes">,
+  playingHandicap: number,
+  basis: "gross" | "net"
+): number | null {
+  const numRounds = ctx.rounds.length;
+  const totalPar = ctx.holes.reduce((s, h) => s + h.par, 0);
+  if (numRounds === 0 || totalPar === 0) return null;
+  return basis === "gross"
+    ? totalPar + numRounds * (playingHandicap + POPULATION_GAP)
+    : totalPar + numRounds * POPULATION_GAP;
 }
 
 /** Hole indices (into sim.holes / holeOutcomes) belonging to a round. */

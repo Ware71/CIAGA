@@ -8,9 +8,10 @@ import type {
   SettlementOutcome,
 } from "@/lib/fantasy/markets/types";
 import { playerName } from "@/lib/fantasy/markets/types";
+import { handicapImpliedScore } from "@/lib/fantasy/markets/roundUtil";
 import type { SimulationResult } from "@/lib/fantasy/simulation/types";
 
-const SPREAD = 4; // projection ± SPREAD score values offered, same window as the old score_exact
+const SPREAD = 4; // handicap-implied score ± SPREAD score values offered
 
 type Basis = "gross" | "net";
 
@@ -32,9 +33,12 @@ function parseKey(selectionKey: string): { side: "u" | "e" | "o"; value: number 
 /**
  * Score totals — one market per (player, gross|net). Replaces the old
  * separate over/under line and exact-score markets: for each of the ~9 score
- * values around the player's projection, offers a three-way Under / Exactly /
- * Over split instead of a single fixed .5 line. Selection keys: u_{v} / e_{v}
- * / o_{v}. Event-wide only (no round variant), mirroring the old score_exact.
+ * values, offers a three-way Under / Exactly / Over split instead of a single
+ * fixed .5 line. Selection keys: u_{v} / e_{v} / o_{v}. Event-wide only (no
+ * round variant), mirroring the old score_exact. Values are centred on the
+ * player's HANDICAP-IMPLIED score (par + playing handicap + POPULATION_GAP
+ * from the event setup), not the model's own projection — the actual odds
+ * still come from the real simulated distribution.
  */
 export const scoreTotal: MarketDefinition = {
   type: "score_total",
@@ -55,12 +59,10 @@ export const scoreTotal: MarketDefinition = {
 
   generateMarkets(ctx: GenerateCtx): MarketSpec[] {
     return ctx.players.filter((p) => !p.provisional).flatMap((p) => {
-      const projection = ctx.projections[p.profileId];
-      if (!projection) return [];
       const specs: MarketSpec[] = [];
       for (const basis of ["gross", "net"] as const) {
-        const mean = basis === "gross" ? projection.meanGross : projection.meanNet;
-        if (!Number.isFinite(mean)) continue;
+        const mean = handicapImpliedScore(ctx, p.playingHandicap, basis);
+        if (mean == null) continue;
         const c = Math.round(mean);
         const scores = Array.from({ length: SPREAD * 2 + 1 }, (_, i) => c - SPREAD + i);
         specs.push({

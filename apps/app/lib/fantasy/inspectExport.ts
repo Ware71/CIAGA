@@ -39,7 +39,7 @@ const DERIVATION: Record<string, string> = {
   top_n: "Per-player topNProb[n] — share of iterations finishing in position ≤ n (ties count in full).",
   finish_position: "positionHistogram[pos-1] — share of iterations finishing exactly that place under 1224 competition ranking (every tied player carries the tied position in full).",
   finish_range: "Sum of positionHistogram across the range (Wooden Spoon = lastProb).",
-  h2h: "Tie-EXCLUDED conditional: wins / (wins + losses). Ties settle void (stake back), so tie iterations carry no pricing weight.",
+  h2h: "1-X-2 match odds: P(a) / P(draw) / P(b) from the joint totals — every unique pairing, both bases. Draw is a real, backable outcome (not a void).",
   score_band: "Share of iterations with the gross/net total inside the band.",
   score_total: "Per score value: share of iterations under / equal to / over that value (gross or net total).",
   birdies: "Tail of the birdie-count distribution: P(birdies ≥ count).",

@@ -64,7 +64,7 @@ export type GenerateCtx = {
    * markets size correctly. Per-player markets skip `provisional` players until
    * they enter (their markets materialise on the next refresh).
    */
-  players: { profileId: string; provisional?: boolean }[];
+  players: { profileId: string; provisional?: boolean; playingHandicap: number }[];
   /** From a preliminary sim run — used to set O/U lines and pair matchups. */
   projections: Record<
     string,

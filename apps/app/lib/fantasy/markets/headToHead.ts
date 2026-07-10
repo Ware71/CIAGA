@@ -16,13 +16,10 @@ function marketBasis(market: FantasyMarket): "gross" | "net" {
 }
 
 /**
- * Head-to-head matchups (A beats B, gross or net). Rather than every pair
- * (O(n²) markets), players are paired with their nearest projected rival —
- * sorted by projected mean, adjacent pairs — separately for gross and net.
- * Ties settle as void (stake refunded), so the fair price is the
- * TIE-EXCLUDED conditional P(A wins | not a tie) — crediting half the tie
- * mass to each side (the old pricing) shades value toward the favorite,
- * because a tie returns the stake rather than paying half.
+ * Head-to-head matchups (A / Draw / B, gross or net) — every unique pairing
+ * in the field (not just nearest-rival), separately for gross and net. A tie
+ * is a real, backable outcome ("draw"), not a void — matches the standard
+ * 1-X-2 match-odds shape.
  */
 export const headToHead: MarketDefinition = {
   type: "h2h",
@@ -36,6 +33,7 @@ export const headToHead: MarketDefinition = {
   },
 
   selectionLabel(market, selectionKey, names) {
+    if (selectionKey === "draw") return "Draw";
     return selectionKey === "a"
       ? playerName(names, market.subject_profile_id)
       : playerName(names, market.opponent_profile_id);
@@ -44,31 +42,25 @@ export const headToHead: MarketDefinition = {
   generateMarkets(ctx: GenerateCtx): MarketSpec[] {
     const specs: MarketSpec[] = [];
     for (const basis of ["gross", "net"] as const) {
-      const sorted = ctx.players
-        .filter((p) => ctx.projections[p.profileId] && !p.provisional)
-        .sort((x, y) => {
-          const px = ctx.projections[x.profileId];
-          const py = ctx.projections[y.profileId];
-          return basis === "gross"
-            ? px.meanGross - py.meanGross
-            : px.meanNet - py.meanNet;
-        });
-      for (let i = 0; i + 1 < sorted.length; i += 2) {
-        specs.push({
-          market_type: "h2h",
-          subject_profile_id: sorted[i].profileId,
-          opponent_profile_id: sorted[i + 1].profileId,
-          params: { basis },
-        });
-        // Same nearest-rival pairing per round for multi-round events.
-        if (ctx.rounds.length > 1) {
-          for (const round of ctx.rounds) {
-            specs.push({
-              market_type: "h2h",
-              subject_profile_id: sorted[i].profileId,
-              opponent_profile_id: sorted[i + 1].profileId,
-              params: { basis, round },
-            });
+      const players = ctx.players.filter((p) => ctx.projections[p.profileId] && !p.provisional);
+      for (let i = 0; i < players.length; i++) {
+        for (let j = i + 1; j < players.length; j++) {
+          specs.push({
+            market_type: "h2h",
+            subject_profile_id: players[i].profileId,
+            opponent_profile_id: players[j].profileId,
+            params: { basis },
+          });
+          // Same pairing per round for multi-round events.
+          if (ctx.rounds.length > 1) {
+            for (const round of ctx.rounds) {
+              specs.push({
+                market_type: "h2h",
+                subject_profile_id: players[i].profileId,
+                opponent_profile_id: players[j].profileId,
+                params: { basis, round },
+              });
+            }
           }
         }
       }
@@ -77,7 +69,7 @@ export const headToHead: MarketDefinition = {
   },
 
   selections(): string[] {
-    return ["a", "b"];
+    return ["a", "draw", "b"];
   },
 
   simulate(sim: SimulationResult, market): Map<string, number> {
@@ -95,12 +87,10 @@ export const headToHead: MarketDefinition = {
       if (totalsA[i] < totalsB[i]) winsA += 1;
       else if (totalsA[i] === totalsB[i]) ties += 1;
     }
-    // Ties void the market (stake back), so price on the decided iterations
-    // only. Sides still sum to 1.
-    const decided = sim.simulationCount - ties;
-    const pA = decided > 0 ? winsA / decided : 0.5;
-    out.set("a", pA);
-    out.set("b", 1 - pA);
+    const n = sim.simulationCount;
+    out.set("a", winsA / n);
+    out.set("draw", ties / n);
+    out.set("b", (n - winsA - ties) / n);
     return out;
   },
 
@@ -120,12 +110,14 @@ export const headToHead: MarketDefinition = {
         : p?.netScore;
     const scoreA = scoreOf(a);
     const scoreB = scoreOf(b);
-    if (!a || !b || a.withdrawn || b.withdrawn || scoreA == null || scoreB == null || scoreA === scoreB) {
+    if (!a || !b || a.withdrawn || b.withdrawn || scoreA == null || scoreB == null) {
       out.set("a", "void");
+      out.set("draw", "void");
       out.set("b", "void");
       return out;
     }
     out.set("a", scoreA < scoreB ? "won" : "lost");
+    out.set("draw", scoreA === scoreB ? "won" : "lost");
     out.set("b", scoreB < scoreA ? "won" : "lost");
     return out;
   },

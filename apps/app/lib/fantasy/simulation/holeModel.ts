@@ -44,7 +44,7 @@ const SPLIT_WEIGHT = 0.6;
  * handicap, so high handicappers were modelled below par on net. POPULATION_GAP
  * is the typical amateur gap between average and best-8 rounds (μ_D − HI).
  */
-const POPULATION_GAP = 4;
+export const POPULATION_GAP = 4;
 /** Gross-sample weight reaches 1 (pure observed history) by this many rounds. */
 const ANCHOR_FULL_SAMPLE = 10;
 /** Differential-sample weight reaches 1 (pure μ_D) by this effective count. */

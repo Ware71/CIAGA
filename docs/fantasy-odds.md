@@ -277,11 +277,17 @@ Round-scoped markets settle as their round completes
 ### Market catalogue
 
 `outright_winner`, `top_n`, `finish_position` (exact, from the position
-histogram), `finish_range` (wooden spoon / bottom-3 / mid-pack), `h2h`,
-`gross_ou`/`net_ou`, `score_band` (4-stroke bands, gross+net), `score_exact`
-(gross longshots), `birdies`, `eagle_count`, `hole_score` (birdie-or-better /
-bogey-or-worse per hole; played holes lock), `field_special` (HIO / albatross /
-any eagle).
+histogram), `finish_range` (wooden spoon / bottom-3 / mid-pack), `h2h`
+(1-X-2 match odds — every unique pairing in the field, gross+net, draw is a
+real backable outcome), `score_band` (4-stroke bands, gross+net),
+`score_total` (Under/Exactly/Over per score value, gross+net — replaces the
+old `gross_ou`/`net_ou`/`score_exact`), `birdies`, `eagle_count` (1+/2+/3+),
+`hole_score` (birdie-or-better / bogey-or-worse per hole; played holes lock),
+`field_special` (HIO / albatross / any eagle). Score bands and score totals
+are centred on the player's **handicap-implied** score (par + playing
+handicap + `POPULATION_GAP` from the event setup — see §11), not the model's
+own projection; the odds themselves still price off the real simulated
+distribution.
 
 ### Accumulators
 
@@ -364,7 +370,7 @@ the eagle pass then perturbed the just-calibrated birdie mass.
 |---|---|---|
 | Outright winner (event) | leaderboard `position = 1` (playoff/countback resolves ties) | `winProb` — ties **split** evenly (fair when ties resolve ~randomly) |
 | Round winner | "ties all win" (no round playoffs) | ties at **full** credit (`winProbsFrom(…, "all")`) — **bug fixed**: was priced tie-split, systematically too long |
-| Head-to-head | tie → **void** (stake back) | tie-**excluded**: `wins/(wins + losses)` — **bug fixed**: was `(wins + ties/2)`, shading value toward the favourite |
+| Head-to-head | 1-X-2: `a` wins if lower score, `draw` wins if equal, `b` wins if lower score (§11 — no more void-on-tie) | `winsA/n`, `ties/n`, `winsB/n` — a genuine three-way split, sums to 1 |
 | `finish_position` / `top_n` / `finish_range` | shared leaderboard positions | position histogram under 1224 ranking — tied players carry the tied position in full |
 
 `P(position 1 incl. ties) ≥ winProb` whenever ties occur; both are shown side
@@ -380,3 +386,49 @@ factor → mean residual → passes), latent μ **and** post-calibration E[score
 per hole with `Σ+par` reconciliation columns, simulated E[birdies], and
 `P(1st incl ties)` next to `Win%`. Missing profile values render "—" (they
 are never numeric defaults; each has a documented fallback).
+
+---
+
+## 11. Board UX rework + match-odds redesign (2026-07-13)
+
+**Season markets**: `loadSeasonContext`/the cron sweep no longer gate on
+`group_seasons.standings_model` — that field turned out to be a cosmetic
+Majors-app display toggle, not a real data dependency (standings entries are
+computed by `ciaga_compute_group_season_standings` regardless of it). Season
+market eligibility is now purely "fantasy enabled + `budgetScope: "season"`",
+already enforced inside `generateSeasonFantasy`. The group-season headline
+route (`/api/fantasy/groups/[id]/season`) self-generates on first view,
+mirroring the season odds route.
+
+**`score_total`** replaces `gross_ou`/`net_ou`/`score_exact` (the old three
+stay in the `fantasy_markets.market_type` CHECK as a superset — zero picks
+ever referenced them). One market per (player, gross|net); for each of 9
+score values, three selections `u_{v}`/`e_{v}`/`o_{v}` (Under/Exactly/Over)
+instead of a single fixed `.5` line.
+
+**Handicap-implied centering**: `score_band` and `score_total` no longer
+centre their range on the model's own projected mean. They reverse-engineer
+an expected score from the player's **playing handicap** and the event's
+course setup: `handicapImpliedScore` (`lib/fantasy/markets/roundUtil.ts`) —
+`totalPar + numRounds·(playingHandicap + POPULATION_GAP)` for gross,
+`totalPar + numRounds·POPULATION_GAP` for net (net is handicap-independent
+by the handicap system's own design — same `POPULATION_GAP` constant
+`holeModel.ts` uses as its own thin-data anchor, now exported). `GenerateCtx`
+threads `playingHandicap` per player for this. The **odds themselves** are
+unaffected — `simulate()` still prices off the real Monte Carlo distribution;
+only which values/bands are *offered* changed.
+
+**Head-to-head → 1-X-2**: `headToHead.ts` now generates every unique pairing
+in the field (not just nearest-projected-rival), separately for gross and
+net, and prices a real `draw` selection (`ties/simulationCount`) instead of
+excluding ties from the price and voiding them at settlement. Settlement:
+lower score wins, equal scores win the draw. `parlayRules.ts` needed no
+changes (h2h was never in `POSITION_FAMILY_TYPES`).
+
+**Board UI**: the event markets page gained a second, category-scoped tab row
+(Finishes / Match Bets / Score Bands / Score Totals / Birdies / Eagles / Rare
+Events / Hole Specials) replacing the old single flat vertical stack of every
+section. Match Bets renders as an A/Draw/B table (`buildMatchRows`, one row
+per pairing). Score Bands/Totals share a gross/net toggle. Exact Finish stays
+one player per row with its position selections in two columns. `eagle_count`
+now generates 1+/2+/3+ (was hardcoded to 1+ only), mirroring `birdies.ts`.

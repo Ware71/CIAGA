@@ -179,6 +179,34 @@ export function buildRareRows(
     .filter((r): r is { market: BoardMarket; selection: Selection } => r != null);
 }
 
+/** One match-bet row: A / Draw / B, one row per unique pairing. */
+export type MatchRow = {
+  market: BoardMarket;
+  aName: string;
+  aSelection: Selection | null;
+  drawSelection: Selection | null;
+  bName: string;
+  bSelection: Selection | null;
+};
+
+/** Match-bet (1-X-2) rows — one row per h2h market, no de-duplication needed
+ * since each pairing is generated exactly once (A-vs-B, never also B-vs-A). */
+export function buildMatchRows(markets: BoardMarket[], names: Record<string, string>): MatchRow[] {
+  return markets
+    .filter((m) => m.market_type === "h2h")
+    .map((m) => {
+      const byKey = new Map(m.selections.map((s) => [s.key, s]));
+      return {
+        market: m,
+        aName: (m.subject_profile_id && names[m.subject_profile_id]) || "Player",
+        aSelection: byKey.get("a") ?? null,
+        drawSelection: byKey.get("draw") ?? null,
+        bName: (m.opponent_profile_id && names[m.opponent_profile_id]) || "Player",
+        bSelection: byKey.get("b") ?? null,
+      };
+    });
+}
+
 /** Read-only slim projection of a MarketTableModel for hub/group coupon
  * cards — strips market/snapshot identity (these cards never place bets) and
  * caps to the top `limit` rows, already probability-sorted by playerTable. */

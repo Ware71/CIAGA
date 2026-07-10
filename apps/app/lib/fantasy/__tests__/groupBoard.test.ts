@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildCountTable,
   buildFinishesTable,
+  buildMatchRows,
   buildRareRows,
   buildScoreBandTable,
   buildScoreTotalTable,
@@ -154,6 +155,28 @@ describe("buildRareRows", () => {
     const rows = buildRareRows([hio, alb, market({ market_type: "birdies", selections: [sel("yes", 0.4)] })]);
     expect(rows.map((r) => r.market.display_name)).toEqual(["A hole-in-one", "An albatross"]);
     expect(rows[0].selection.key).toBe("yes");
+  });
+});
+
+describe("buildMatchRows", () => {
+  it("builds one A/Draw/B row per h2h market, no de-duplication needed", () => {
+    const names = { p1: "Alice", p2: "Bob" };
+    const m = market({
+      market_type: "h2h",
+      subject_profile_id: "p1",
+      opponent_profile_id: "p2",
+      selections: [sel("a", 0.45, "Alice"), sel("draw", 0.2, "Draw"), sel("b", 0.35, "Bob")],
+    });
+    const rows = buildMatchRows([m], names);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].aName).toBe("Alice");
+    expect(rows[0].bName).toBe("Bob");
+    expect(rows[0].drawSelection?.key).toBe("draw");
+    expect(rows[0].aSelection?.probability).toBe(0.45);
+  });
+
+  it("ignores non-h2h markets", () => {
+    expect(buildMatchRows([market({ market_type: "birdies", selections: [sel("yes", 0.4)] })], {})).toEqual([]);
   });
 });
 

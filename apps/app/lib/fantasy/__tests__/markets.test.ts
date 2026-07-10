@@ -69,7 +69,7 @@ function liveCtx(overrides: Partial<LiveMarketCtx> = {}): LiveMarketCtx {
 }
 
 function makeGenerateCtx(n: number, rounds: number[] = [1]): GenerateCtx {
-  const players = Array.from({ length: n }, (_, i) => ({ profileId: `p${i}` }));
+  const players = Array.from({ length: n }, (_, i) => ({ profileId: `p${i}`, playingHandicap: 10 + i }));
   const projections: GenerateCtx["projections"] = {};
   players.forEach((p, i) => {
     const base = { meanGross: 78 + i * 1.7, meanNet: 70 + i * 0.9 };
@@ -141,7 +141,7 @@ describe("market generation", () => {
     expect(gen(14)).toEqual([3, 5, 10]);
   });
 
-  it("score totals offer a 9-value window (gross + net) around the projection", () => {
+  it("score totals offer a 9-value window (gross + net) centred on the handicap-implied score", () => {
     const specs = MARKET_REGISTRY.score_total.generateMarkets(makeGenerateCtx(3));
     expect(specs).toHaveLength(6); // 3 players × (gross + net)
     for (const s of specs) {
@@ -150,15 +150,31 @@ describe("market generation", () => {
       // Consecutive integers, centred on the middle value.
       for (let i = 1; i < scores.length; i++) expect(scores[i]).toBe(scores[i - 1] + 1);
     }
+    // p0 (18 holes, par 72, playing handicap 10): gross centres on par+PH+4=86,
+    // net on par+4=76 — independent of the model's own projection.
+    const p0Gross = specs.find((s) => s.subject_profile_id === "p0" && s.params.basis === "gross")!;
+    const p0Net = specs.find((s) => s.subject_profile_id === "p0" && s.params.basis === "net")!;
+    expect((p0Gross.params.scores as number[])[4]).toBe(86);
+    expect((p0Net.params.scores as number[])[4]).toBe(76);
   });
 
-  it("h2h pairs nearest projected rivals for gross and net", () => {
+  it("score bands are centred on the handicap-implied score", () => {
+    const specs = MARKET_REGISTRY.score_band.generateMarkets(makeGenerateCtx(2));
+    const p1Gross = specs.find((s) => s.subject_profile_id === "p1" && s.params.basis === "gross")!;
+    // p1 playing handicap 11 → gross centre 72+11+4=87 → the 87–90 middle band.
+    const bands = p1Gross.params.bands as { key: string }[];
+    expect(bands.map((b) => b.key)).toContain("85_88");
+  });
+
+  it("h2h generates every unique pairing (round-robin), for gross and net", () => {
     const specs = MARKET_REGISTRY.h2h.generateMarkets(makeGenerateCtx(6));
-    expect(specs.filter((s) => s.params.basis === "gross")).toHaveLength(3);
-    expect(specs.filter((s) => s.params.basis === "net")).toHaveLength(3);
-    // Sorted by mean → first gross pair is the two lowest projections.
-    const first = specs[0];
-    expect([first.subject_profile_id, first.opponent_profile_id]).toEqual(["p0", "p1"]);
+    // C(6,2) = 15 pairs per basis.
+    expect(specs.filter((s) => s.params.basis === "gross")).toHaveLength(15);
+    expect(specs.filter((s) => s.params.basis === "net")).toHaveLength(15);
+    // No duplicate/reversed pairing.
+    const pairKeys = specs.map((s) => [s.subject_profile_id, s.opponent_profile_id, s.params.basis].join("|"));
+    expect(new Set(pairKeys).size).toBe(pairKeys.length);
+    expect(specs.some((s) => s.subject_profile_id === "p0" && s.opponent_profile_id === "p5")).toBe(true);
   });
 
   it("birdie markets cover 1+..4+ per player", () => {
@@ -187,12 +203,12 @@ describe("pricing", () => {
       sim,
       makeMarket({ market_type: "h2h", subject_profile_id: "a", opponent_profile_id: "b", params: { basis: "gross" } })
     );
-    expect((h2h.get("a") ?? 0) + (h2h.get("b") ?? 0)).toBeCloseTo(1, 6);
+    expect((h2h.get("a") ?? 0) + (h2h.get("draw") ?? 0) + (h2h.get("b") ?? 0)).toBeCloseTo(1, 6);
     // "a" projects ~5 shots better → clear favourite.
     expect(h2h.get("a")!).toBeGreaterThan(0.6);
   });
 
-  it("h2h prices tie-EXCLUDED (ties settle void, so they carry no pricing weight)", () => {
+  it("h2h prices a real 1-X-2 (draw is a backable outcome, not excluded)", () => {
     // Hand-built joint samples: 5 iterations — 2 ties, a wins 2, b wins 1.
     const totals = {
       a: Int16Array.from([70, 70, 69, 71, 69]),
@@ -223,9 +239,10 @@ describe("pricing", () => {
       mini,
       makeMarket({ market_type: "h2h", subject_profile_id: "a", opponent_profile_id: "b", params: { basis: "gross" } })
     );
-    // Decided iterations: a 2, b 1 → P(a) = 2/3, NOT (2 + 2/2)/5 = 0.6.
-    expect(probs.get("a")).toBeCloseTo(2 / 3, 9);
-    expect(probs.get("b")).toBeCloseTo(1 / 3, 9);
+    // 5 iterations: a wins 2, b wins 1, 2 ties → a 0.4, draw 0.4, b 0.2.
+    expect(probs.get("a")).toBeCloseTo(0.4, 9);
+    expect(probs.get("draw")).toBeCloseTo(0.4, 9);
+    expect(probs.get("b")).toBeCloseTo(0.2, 9);
   });
 
   it("birdie ladder probabilities decrease with count", () => {
@@ -294,7 +311,7 @@ describe("settlement truth tables", () => {
     ).toBe("void");
   });
 
-  it("h2h: lower score wins, ties void", () => {
+  it("h2h: lower score wins, equal scores win the draw", () => {
     const market = makeMarket({
       market_type: "h2h", subject_profile_id: "a", opponent_profile_id: "b", params: { basis: "net" },
     });
@@ -303,13 +320,15 @@ describe("settlement truth tables", () => {
       market
     );
     expect(won.get("a")).toBe("won");
+    expect(won.get("draw")).toBe("lost");
     expect(won.get("b")).toBe("lost");
     const tied = MARKET_REGISTRY.h2h.settle(
       finalData({ a: score("a", { netScore: 71 }), b: score("b", { netScore: 71 }) }),
       market
     );
-    expect(tied.get("a")).toBe("void");
-    expect(tied.get("b")).toBe("void");
+    expect(tied.get("a")).toBe("lost");
+    expect(tied.get("draw")).toBe("won");
+    expect(tied.get("b")).toBe("lost");
   });
 });
 

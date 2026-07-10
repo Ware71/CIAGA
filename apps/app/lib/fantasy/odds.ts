@@ -727,6 +727,7 @@ async function ensureMarkets(
     players: ctx.players.map((p) => ({
       profileId: p.profileId,
       provisional: (p.attendanceProb ?? 1) < 1,
+      playingHandicap: p.playingHandicap,
     })),
     projections,
     rounds: [...new Set(ctx.holes.map((h) => h.round ?? 1))].sort((a, b) => a - b),

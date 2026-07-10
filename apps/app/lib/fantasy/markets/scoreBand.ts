@@ -8,6 +8,7 @@ import type {
   SettlementOutcome,
 } from "@/lib/fantasy/markets/types";
 import { playerName } from "@/lib/fantasy/markets/types";
+import { handicapImpliedScore } from "@/lib/fantasy/markets/roundUtil";
 import type { SimulationResult } from "@/lib/fantasy/simulation/types";
 
 export type Band = { key: string; lo: number | null; hi: number | null };
@@ -48,7 +49,11 @@ function inBand(score: number, band: Band): boolean {
 
 /**
  * Score bands — one market per player per basis; selections are the bands
- * (fixed at generation, like O/U lines), so exactly one band wins.
+ * (fixed at generation, like O/U lines), so exactly one band wins. Bands are
+ * centred on the player's HANDICAP-IMPLIED score (par + playing handicap +
+ * POPULATION_GAP from the event setup), not the model's own projection — an
+ * intuitive, model-independent anchor. The actual odds still come from the
+ * real simulated distribution.
  */
 export const scoreBand: MarketDefinition = {
   type: "score_band",
@@ -66,12 +71,10 @@ export const scoreBand: MarketDefinition = {
 
   generateMarkets(ctx: GenerateCtx): MarketSpec[] {
     return ctx.players.filter((p) => !p.provisional).flatMap((p) => {
-      const projection = ctx.projections[p.profileId];
-      if (!projection) return [];
       const specs: MarketSpec[] = [];
       for (const basis of ["gross", "net"] as const) {
-        const mean = basis === "gross" ? projection.meanGross : projection.meanNet;
-        if (!Number.isFinite(mean)) continue;
+        const mean = handicapImpliedScore(ctx, p.playingHandicap, basis);
+        if (mean == null) continue;
         specs.push({
           market_type: "score_band",
           subject_profile_id: p.profileId,

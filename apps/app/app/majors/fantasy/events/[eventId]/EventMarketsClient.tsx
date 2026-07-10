@@ -11,6 +11,7 @@ import { useSlip } from "@/lib/fantasy/slipStore";
 import {
   buildCountTable,
   buildFinishesTable,
+  buildMatchRows,
   buildRareRows,
   buildScoreBandTable,
   buildScoreTotalTable,
@@ -415,7 +416,7 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
           <div className="space-y-3">
             {data.finishes && <MarketTable model={data.finishes} renderCell={renderCell} onPlayer={openStats} />}
             {data.exact.length > 0 && (
-              <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-2">
                 {data.exact.map((m) => {
                   const pid = m.subject_profile_id ?? m.id;
                   const name = (m.subject_profile_id && names[m.subject_profile_id]) || m.display_name;
@@ -428,7 +429,9 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
                       onToggle={() => toggleIn(openExact, setOpenExact, m.id)}
                       onInfo={m.subject_profile_id ? () => openStats(pid) : undefined}
                     >
-                      <div className="space-y-1">{sortExactFinish(m.selections).map((sel) => selectionRow(m, sel))}</div>
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                        {sortExactFinish(m.selections).map((sel) => selectionRow(m, sel))}
+                      </div>
                     </PlayerAccordion>
                   );
                 })}
@@ -441,14 +444,43 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
         );
       }
 
-      case "match":
-        if (data.h2h.length === 0) return noMarkets(round);
+      case "match": {
+        const matchRows = buildMatchRows(data.h2h, names);
+        if (matchRows.length === 0) return noMarkets(round);
         return (
           <div>
             {basisToggle}
-            <div className="space-y-2">{data.h2h.map((m) => marketCard(m, m.selections))}</div>
+            <div className="overflow-x-auto -mx-1 px-1">
+              <table className="w-full border-collapse rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/40">
+                <tbody>
+                  {matchRows.map((r) => (
+                    <tr key={r.market.id} className="border-b border-emerald-900/20 last:border-b-0">
+                      <td className="px-1.5 py-2 w-[38%]">
+                        <div className="flex flex-col items-center gap-1">
+                          <span className="w-full truncate text-center text-[10px] text-emerald-100/85">{r.aName}</span>
+                          {renderCell(r.aSelection ? { market: r.market, selection: r.aSelection } : null)}
+                        </div>
+                      </td>
+                      <td className="px-1.5 py-2 w-[24%]">
+                        <div className="flex flex-col items-center gap-1">
+                          <span className="text-[9px] uppercase tracking-wider text-emerald-200/50">Draw</span>
+                          {renderCell(r.drawSelection ? { market: r.market, selection: r.drawSelection } : null)}
+                        </div>
+                      </td>
+                      <td className="px-1.5 py-2 w-[38%]">
+                        <div className="flex flex-col items-center gap-1">
+                          <span className="w-full truncate text-center text-[10px] text-emerald-100/85">{r.bName}</span>
+                          {renderCell(r.bSelection ? { market: r.market, selection: r.bSelection } : null)}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         );
+      }
 
       case "scoreBands":
         if (!data.scoreBandTable) return noMarkets(round);
