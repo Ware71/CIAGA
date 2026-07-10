@@ -3,14 +3,12 @@ import type { SimulationResult } from "@/lib/fantasy/simulation/types";
 export type FantasyMarketType =
   | "outright_winner"
   | "top_n"
-  | "gross_ou"
-  | "net_ou"
+  | "score_total"
   | "birdies"
   | "h2h"
   | "finish_position"
   | "finish_range"
   | "score_band"
-  | "score_exact"
   | "eagle_count"
   | "hole_score"
   | "field_special";

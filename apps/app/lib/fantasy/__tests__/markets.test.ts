@@ -141,12 +141,14 @@ describe("market generation", () => {
     expect(gen(14)).toEqual([3, 5, 10]);
   });
 
-  it("O/U lines are .5 around the projection", () => {
-    const specs = MARKET_REGISTRY.gross_ou.generateMarkets(makeGenerateCtx(3));
-    expect(specs).toHaveLength(3);
+  it("score totals offer a 9-value window (gross + net) around the projection", () => {
+    const specs = MARKET_REGISTRY.score_total.generateMarkets(makeGenerateCtx(3));
+    expect(specs).toHaveLength(6); // 3 players × (gross + net)
     for (const s of specs) {
-      const line = Number(s.params.line);
-      expect(line % 1).toBe(0.5);
+      const scores = s.params.scores as number[];
+      expect(scores).toHaveLength(9);
+      // Consecutive integers, centred on the middle value.
+      for (let i = 1; i < scores.length; i++) expect(scores[i]).toBe(scores[i - 1] + 1);
     }
   });
 
@@ -164,16 +166,22 @@ describe("market generation", () => {
     expect(specs).toHaveLength(8);
     expect(new Set(specs.map((s) => s.params.count))).toEqual(new Set([1, 2, 3, 4]));
   });
+
+  it("eagle markets cover 1+..3+ per player", () => {
+    const specs = MARKET_REGISTRY.eagle_count.generateMarkets(makeGenerateCtx(2));
+    expect(specs).toHaveLength(6);
+    expect(new Set(specs.map((s) => s.params.count))).toEqual(new Set([1, 2, 3]));
+  });
 });
 
 describe("pricing", () => {
-  it("O/U over+under sum to 1 and h2h a+b sum to 1", () => {
+  it("score total under+exact+over sum to 1 and h2h a+b sum to 1", () => {
     const sim = simFor([{ profileId: "a" }, { profileId: "b", avgGross: 90, par4AvgVsPar: 1.0 }]);
-    const ou = MARKET_REGISTRY.gross_ou.simulate(
+    const total = MARKET_REGISTRY.score_total.simulate(
       sim,
-      makeMarket({ market_type: "gross_ou", subject_profile_id: "a", params: { line: 84.5 } })
+      makeMarket({ market_type: "score_total", subject_profile_id: "a", params: { basis: "gross", scores: [85] } })
     );
-    expect((ou.get("over") ?? 0) + (ou.get("under") ?? 0)).toBeCloseTo(1, 6);
+    expect((total.get("u_85") ?? 0) + (total.get("e_85") ?? 0) + (total.get("o_85") ?? 0)).toBeCloseTo(1, 6);
 
     const h2h = MARKET_REGISTRY.h2h.simulate(
       sim,
@@ -259,13 +267,18 @@ describe("settlement truth tables", () => {
     expect(outcomes.get("b")).toBe("lost");
   });
 
-  it("gross O/U: exact comparisons, missing score voids", () => {
-    const market = makeMarket({ market_type: "gross_ou", subject_profile_id: "a", params: { line: 82.5 } });
-    const under = MARKET_REGISTRY.gross_ou.settle(finalData({ a: score("a", { grossScore: 82 }) }), market);
-    expect(under.get("under")).toBe("won");
-    expect(under.get("over")).toBe("lost");
-    const voided = MARKET_REGISTRY.gross_ou.settle(finalData({ a: score("a", { grossScore: null }) }), market);
-    expect(voided.get("under")).toBe("void");
+  it("gross score total: exact comparisons per value, missing score voids all three", () => {
+    const market = makeMarket({ market_type: "score_total", subject_profile_id: "a", params: { basis: "gross", scores: [82] } });
+    const under = MARKET_REGISTRY.score_total.settle(finalData({ a: score("a", { grossScore: 80 }) }), market);
+    expect(under.get("u_82")).toBe("won");
+    expect(under.get("e_82")).toBe("lost");
+    expect(under.get("o_82")).toBe("lost");
+    const exact = MARKET_REGISTRY.score_total.settle(finalData({ a: score("a", { grossScore: 82 }) }), market);
+    expect(exact.get("e_82")).toBe("won");
+    const voided = MARKET_REGISTRY.score_total.settle(finalData({ a: score("a", { grossScore: null }) }), market);
+    expect(voided.get("u_82")).toBe("void");
+    expect(voided.get("e_82")).toBe("void");
+    expect(voided.get("o_82")).toBe("void");
   });
 
   it("birdies: achieved count wins even after withdrawal; unknown voids", () => {
@@ -317,13 +330,13 @@ describe("self-dependency and placement guards", () => {
     ).toBe(true);
   });
 
-  it("O/U on yourself blocks cash-out on the final hole", () => {
-    const market = makeMarket({ market_type: "gross_ou", subject_profile_id: "me", params: { line: 84.5 } });
+  it("score total on yourself blocks cash-out on the final hole", () => {
+    const market = makeMarket({ market_type: "score_total", subject_profile_id: "me", params: { basis: "gross", scores: [84] } });
     expect(
-      MARKET_REGISTRY.gross_ou.isSelfDependent(market, "under", "me", liveCtx({ holesRemaining: () => 5 }))
+      MARKET_REGISTRY.score_total.isSelfDependent(market, "u_84", "me", liveCtx({ holesRemaining: () => 5 }))
     ).toBe(false);
     expect(
-      MARKET_REGISTRY.gross_ou.isSelfDependent(market, "under", "me", liveCtx({ holesRemaining: () => 1 }))
+      MARKET_REGISTRY.score_total.isSelfDependent(market, "u_84", "me", liveCtx({ holesRemaining: () => 1 }))
     ).toBe(true);
   });
 
@@ -342,10 +355,10 @@ describe("self-dependency and placement guards", () => {
   });
 
   it("cash-out cutoffs: round complete cuts player-scoped markets", () => {
-    const market = makeMarket({ market_type: "gross_ou", subject_profile_id: "a", params: { line: 84.5 } });
-    const cut = MARKET_REGISTRY.gross_ou.cashoutCutoff(market, "under", liveCtx({ roundComplete: () => true }));
+    const market = makeMarket({ market_type: "score_total", subject_profile_id: "a", params: { basis: "gross", scores: [84] } });
+    const cut = MARKET_REGISTRY.score_total.cashoutCutoff(market, "u_84", liveCtx({ roundComplete: () => true }));
     expect(cut.eligible).toBe(false);
-    const ok = MARKET_REGISTRY.gross_ou.cashoutCutoff(market, "under", liveCtx());
+    const ok = MARKET_REGISTRY.score_total.cashoutCutoff(market, "u_84", liveCtx());
     expect(ok.eligible).toBe(true);
   });
 });

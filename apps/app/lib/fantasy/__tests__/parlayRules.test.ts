@@ -53,7 +53,7 @@ describe("isPositionFamily / marketAllowsMultiple / exclusivitySlot", () => {
     for (const t of ["outright_winner", "top_n", "finish_position", "finish_range"]) {
       expect(isPositionFamily(t)).toBe(true);
     }
-    for (const t of ["birdies", "gross_ou", "h2h", "eagle_count", "field_special"]) {
+    for (const t of ["birdies", "score_total", "h2h", "eagle_count", "field_special"]) {
       expect(isPositionFamily(t)).toBe(false);
     }
   });

@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 import { OddsFormatMenu, OddsValue } from "@/components/fantasy/OddsValue";
 import type { FantasyConfig } from "@/lib/fantasy/types";
+import type { PreviewTableModel } from "@/lib/fantasy/board/groupBoard";
 
 type GroupSummary = {
   group: { id: string; name: string; image_url: string | null };
@@ -21,15 +22,61 @@ type EventSummary = {
   event_date: string | null;
   majors_status: string;
   has_markets: boolean;
+  preview: PreviewTableModel | null;
 };
 
-/** A headline season market surfaced on the coupon (Phase 5 season board). */
+/** A headline season market surfaced on the coupon (Win / Top 3 preview). */
 type SeasonHeadline = {
   seasonId: string;
   seasonName: string;
-  marketLabel: string;
-  selections: { label: string; decimal_odds: number }[];
+  preview: PreviewTableModel;
 };
+
+/** Small non-interactive Win/Top-3 preview grid used on both the season and
+ * event coupon cards — same shape MarketTable renders full-size, no odds
+ * pills you can tap (these cards only navigate, they never place bets). */
+function PreviewTable({ model }: { model: PreviewTableModel }) {
+  if (model.rows.length === 0) return null;
+  return (
+    <div className="overflow-x-auto -mx-1 px-1">
+      <table className="w-full border-collapse">
+        <thead>
+          <tr>
+            <th className="px-1 py-1 text-left text-[9px] font-semibold uppercase tracking-wider text-emerald-200/45" />
+            {model.columns.map((c) => (
+              <th
+                key={c.id}
+                className="px-1 py-1 text-center text-[9px] font-semibold uppercase tracking-wider text-emerald-200/50 whitespace-nowrap"
+              >
+                {c.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {model.rows.map((row) => (
+            <tr key={row.profileId} className="border-t border-emerald-900/20">
+              <td className="px-1 py-1 max-w-[110px]">
+                <span className="block truncate text-[11px] text-emerald-100/85">{row.name}</span>
+              </td>
+              {row.cells.map((cell, i) => (
+                <td key={model.columns[i]?.id ?? i} className="px-1 py-1 text-center">
+                  {cell ? (
+                    <span className="inline-block min-w-[46px] rounded-lg border border-emerald-800/50 bg-emerald-950/40 px-1.5 py-0.5 text-[11px] font-bold text-[#f5e6b0]">
+                      <OddsValue odds={cell.decimal_odds} />
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-emerald-200/25">—</span>
+                  )}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 function formatPoints(n: number): string {
   const r = Math.round(n * 100) / 100;
@@ -163,21 +210,8 @@ export default function GroupMarketsClient({ groupId }: { groupId: string }) {
                 onClick={() => router.push(`/majors/fantasy/seasons/${season.seasonId}`)}
                 className="w-full text-left rounded-2xl border border-[#f5e6b0]/25 bg-[#0b3b21]/70 px-3.5 py-3 hover:bg-emerald-900/30 transition-colors"
               >
-                <div className="text-[12px] font-semibold text-emerald-50 mb-1.5">{season.marketLabel}</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {season.selections.slice(0, 3).map((s) => (
-                    <span
-                      key={s.label}
-                      className="flex items-center gap-1 rounded-lg border border-emerald-800/50 bg-emerald-950/40 px-2 py-1 text-[11px] text-emerald-100/85"
-                    >
-                      {s.label}
-                      <span className="font-bold text-[#f5e6b0]">
-                        <OddsValue odds={s.decimal_odds} />
-                      </span>
-                    </span>
-                  ))}
-                  <span className="ml-auto self-center text-[11px] font-semibold text-emerald-400">All →</span>
-                </div>
+                <PreviewTable model={season.preview} />
+                <div className="mt-1.5 text-right text-[11px] font-semibold text-emerald-400">Markets →</div>
               </button>
             </section>
           )}
@@ -216,6 +250,11 @@ export default function GroupMarketsClient({ groupId }: { groupId: string }) {
                         {e.has_markets ? "Markets →" : "Soon"}
                       </span>
                     </div>
+                    {e.preview && (
+                      <div className="mt-2 pt-2 border-t border-emerald-900/30">
+                        <PreviewTable model={e.preview} />
+                      </div>
+                    )}
                   </button>
                 ))}
               </div>

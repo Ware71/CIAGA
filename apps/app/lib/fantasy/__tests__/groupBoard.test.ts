@@ -3,11 +3,14 @@ import {
   buildCountTable,
   buildFinishesTable,
   buildRareRows,
+  buildScoreBandTable,
+  buildScoreTotalTable,
   deriveTabs,
   marketsInTab,
   roundOf,
   sortExactFinish,
   sortHoles,
+  toPreviewRows,
   type BoardMarket,
   type Selection,
 } from "@/lib/fantasy/board/groupBoard";
@@ -151,6 +154,75 @@ describe("buildRareRows", () => {
     const rows = buildRareRows([hio, alb, market({ market_type: "birdies", selections: [sel("yes", 0.4)] })]);
     expect(rows.map((r) => r.market.display_name)).toEqual(["A hole-in-one", "An albatross"]);
     expect(rows[0].selection.key).toBe("yes");
+  });
+});
+
+describe("buildScoreTotalTable", () => {
+  it("lays out score values as rows and Under/Exact/Over as columns", () => {
+    const m = market({
+      market_type: "score_total",
+      subject_profile_id: "p1",
+      params: { basis: "gross", scores: [83, 84] },
+      selections: [
+        sel("u_83", 0.3, "Under 83"), sel("e_83", 0.1, "Exactly 83"), sel("o_83", 0.6, "Over 83"),
+        sel("u_84", 0.4, "Under 84"), sel("e_84", 0.1, "Exactly 84"), sel("o_84", 0.5, "Over 84"),
+      ],
+    });
+    const table = buildScoreTotalTable(m);
+    expect(table.columns.map((c) => c.label)).toEqual(["Under", "Exact", "Over"]);
+    expect(table.rows.map((r) => r.name)).toEqual(["83", "84"]);
+    expect(table.rows[0].cells.map((c) => c?.selection.key)).toEqual(["u_83", "e_83", "o_83"]);
+  });
+});
+
+describe("buildScoreBandTable", () => {
+  const names = { p1: "Alice", p2: "Bob" };
+  function band(pid: string, basis: "gross" | "net", prob: number): BoardMarket {
+    return market({
+      market_type: "score_band",
+      subject_profile_id: pid,
+      params: {
+        basis,
+        bands: [
+          { key: "le_80", lo: null, hi: 80 },
+          { key: "81_84", lo: 81, hi: 84 },
+          { key: "85_88", lo: 85, hi: 88 },
+          { key: "ge_89", lo: 89, hi: null },
+        ],
+      },
+      selections: [
+        sel("le_80", prob, "80 or less"),
+        sel("81_84", 0.4, "81–84"),
+        sel("85_88", 0.2, "85–88"),
+        sel("ge_89", 0.1, "89 or more"),
+      ],
+    });
+  }
+
+  it("uses fixed order-based columns since band ranges differ per player", () => {
+    const table = buildScoreBandTable([band("p1", "gross", 0.3), band("p2", "gross", 0.6)], names, "gross")!;
+    expect(table.columns).toHaveLength(4);
+    expect(table.rows.map((r) => r.name)).toEqual(["Bob", "Alice"]);
+    expect(table.rows[0].cells[0]?.selection.label).toBe("80 or less");
+  });
+
+  it("filters by basis and returns null when none match", () => {
+    expect(buildScoreBandTable([band("p1", "gross", 0.3)], names, "net")).toBeNull();
+    expect(buildScoreBandTable([band("p1", "net", 0.3)], names, "net")).not.toBeNull();
+  });
+});
+
+describe("toPreviewRows", () => {
+  it("slims a table to top rows with label+odds only", () => {
+    const winner = market({
+      market_type: "outright_winner",
+      selections: [sel("p1", 0.2, "Alice"), sel("p2", 0.5, "Bob"), sel("p3", 0.3, "Cara")],
+    });
+    const table = buildFinishesTable([winner])!;
+    const preview = toPreviewRows(table, 2);
+    expect(preview.rows).toHaveLength(2);
+    expect(preview.rows.map((r) => r.name)).toEqual(["Bob", "Cara"]);
+    expect(preview.rows[0].cells[0]).toEqual({ label: "Bob", decimal_odds: table.rows[0].cells[0]!.selection.decimal_odds });
   });
 });
 

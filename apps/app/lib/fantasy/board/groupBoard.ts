@@ -179,6 +179,105 @@ export function buildRareRows(
     .filter((r): r is { market: BoardMarket; selection: Selection } => r != null);
 }
 
+/** Read-only slim projection of a MarketTableModel for hub/group coupon
+ * cards — strips market/snapshot identity (these cards never place bets) and
+ * caps to the top `limit` rows, already probability-sorted by playerTable. */
+export type PreviewCell = { label: string; decimal_odds: number } | null;
+export type PreviewTableModel = {
+  columns: TableColumn[];
+  rows: { profileId: string; name: string; cells: PreviewCell[] }[];
+};
+
+export function toPreviewRows(model: MarketTableModel, limit = 3): PreviewTableModel {
+  return {
+    columns: model.columns,
+    rows: model.rows.slice(0, limit).map((r) => ({
+      profileId: r.profileId,
+      name: r.name,
+      cells: r.cells.map((c) => (c ? { label: c.selection.label, decimal_odds: c.selection.decimal_odds } : null)),
+    })),
+  };
+}
+
+const SCORE_TOTAL_COLUMNS: TableColumn[] = [
+  { id: "under", label: "Under" },
+  { id: "exact", label: "Exact" },
+  { id: "over", label: "Over" },
+];
+
+/**
+ * Score-totals table for ONE player's score_total market — rows are score
+ * values in ascending order (not odds-sorted), columns are the fixed
+ * Under/Exact/Over triad. Caller wraps this in a PlayerAccordion.
+ */
+export function buildScoreTotalTable(market: BoardMarket): MarketTableModel {
+  const byKey = new Map(market.selections.map((s) => [s.key, s]));
+  const values = [...new Set(market.selections.map((s) => Number(s.key.slice(2))))].sort((a, b) => a - b);
+  const cellFor = (sel?: Selection): Cell => (sel ? { market, selection: sel } : null);
+  return {
+    columns: SCORE_TOTAL_COLUMNS,
+    rows: values.map((v) => ({
+      profileId: String(v),
+      name: String(v),
+      cells: [cellFor(byKey.get(`u_${v}`)), cellFor(byKey.get(`e_${v}`)), cellFor(byKey.get(`o_${v}`))],
+    })),
+  };
+}
+
+const BAND_COLUMN_LABELS = ["≤ Low", "Low–Mid", "Mid–High", "≥ High"];
+
+function bandBasisOf(m: Pick<BoardMarket, "params">): "gross" | "net" {
+  return (m.params as { basis?: unknown }).basis === "net" ? "net" : "gross";
+}
+
+function bandKeysInOrder(m: Pick<BoardMarket, "params">): string[] {
+  const bands = (m.params as { bands?: { key: string }[] }).bands;
+  return Array.isArray(bands) ? bands.map((b) => b.key) : [];
+}
+
+/**
+ * Score-bands matrix, one basis at a time. Bands are computed per-player
+ * relative to that player's own projection (bandsAround in scoreBand.ts), so
+ * the actual numeric range differs across players — but bandsAround always
+ * builds exactly 4 bands in fixed [≤low, mid-low, mid-high, ≥high] order, so
+ * array position is a safe, universal column index. The real range still
+ * lives on each cell's selection.label for the caller to render.
+ */
+export function buildScoreBandTable(
+  markets: BoardMarket[],
+  names: Record<string, string>,
+  basis: "gross" | "net"
+): MarketTableModel | null {
+  const ms = markets.filter(
+    (m) => m.market_type === "score_band" && bandBasisOf(m) === basis && m.subject_profile_id
+  );
+  if (ms.length === 0) return null;
+
+  const columns: TableColumn[] = BAND_COLUMN_LABELS.map((label, i) => ({ id: `b${i}`, label }));
+  const order: string[] = [];
+  const byPlayer = new Map<string, BoardMarket>();
+  for (const m of ms) {
+    const pid = m.subject_profile_id as string;
+    if (!order.includes(pid)) order.push(pid);
+    byPlayer.set(pid, m);
+  }
+
+  const rows: TableRow[] = order.map((pid) => {
+    const m = byPlayer.get(pid) as BoardMarket;
+    const keys = bandKeysInOrder(m);
+    return {
+      profileId: pid,
+      name: names[pid] ?? "Player",
+      cells: columns.map((_, i) => {
+        const sel = keys[i] ? m.selections.find((s) => s.key === keys[i]) : undefined;
+        return sel ? { market: m, selection: sel } : null;
+      }),
+    };
+  });
+  rows.sort((a, b) => rowSortKey(b) - rowSortKey(a));
+  return { columns, rows };
+}
+
 /** Exact-finish selections in position order (1st → Nth), not by odds. */
 export function sortExactFinish(selections: Selection[]): Selection[] {
   return [...selections].sort((a, b) => Number(a.key) - Number(b.key));

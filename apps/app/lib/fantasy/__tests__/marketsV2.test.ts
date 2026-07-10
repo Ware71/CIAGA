@@ -14,7 +14,7 @@ import type {
 import { finishRange } from "@/lib/fantasy/markets/finishRange";
 import { finishPosition } from "@/lib/fantasy/markets/finishPosition";
 import { scoreBand, bandsAround } from "@/lib/fantasy/markets/scoreBand";
-import { scoreExact } from "@/lib/fantasy/markets/scoreExact";
+import { scoreTotal } from "@/lib/fantasy/markets/scoreTotal";
 import { eagleCount } from "@/lib/fantasy/markets/eagles";
 import { holeScore, holeSelectionKey } from "@/lib/fantasy/markets/holeScore";
 import { fieldSpecial } from "@/lib/fantasy/markets/fieldSpecials";
@@ -295,19 +295,21 @@ describe("score bands and exacts", () => {
     expect(outcomes.get("le_82")).toBe("lost");
   });
 
-  it("exact score wins only on equality", () => {
+  it("score totals settle under/exact/over against each value", () => {
     const m = market({
-      market_type: "score_exact",
+      market_type: "score_total",
       subject_profile_id: "a",
       params: { basis: "gross", scores: [83, 84, 85] },
     });
-    const outcomes = scoreExact.settle(
+    const outcomes = scoreTotal.settle(
       finalData([finalPlayer({ profileId: "a", grossScore: 84 })]),
       m
     );
-    expect(outcomes.get("84")).toBe("won");
-    expect(outcomes.get("83")).toBe("lost");
-    expect(outcomes.get("85")).toBe("lost");
+    expect(outcomes.get("e_84")).toBe("won");
+    expect(outcomes.get("u_84")).toBe("lost");
+    expect(outcomes.get("o_84")).toBe("lost");
+    expect(outcomes.get("o_83")).toBe("won");
+    expect(outcomes.get("u_85")).toBe("won");
   });
 });
 

@@ -118,8 +118,7 @@ export async function runFantasySweeps(): Promise<{
   let seasonsSettled = 0;
   const { data: seasonRows, error: seasonErr } = await supabaseAdmin
     .from("group_seasons")
-    .select("id, standings_model, major_groups!inner(fantasy_config)")
-    .neq("standings_model", "none")
+    .select("id, major_groups!inner(fantasy_config)")
     .not("major_groups.fantasy_config", "is", null);
   if (seasonErr) {
     errors.push(`seasons: ${seasonErr.message}`);
@@ -131,7 +130,7 @@ export async function runFantasySweeps(): Promise<{
         .eq("group_season_id", s.id)
         .maybeSingle();
       if (!st) {
-        // Throws for event-budget groups / no standings model — those aren't eligible.
+        // Throws for event-budget groups (only budgetScope="season" is eligible).
         try {
           await generateSeasonFantasy(s.id);
           seasonsGenerated += 1;

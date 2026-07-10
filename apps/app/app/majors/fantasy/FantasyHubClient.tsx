@@ -42,27 +42,36 @@ export default function FantasyHubClient() {
   const [toppingUp, setToppingUp] = useState(false);
   const [topupError, setTopupError] = useState<string | null>(null);
 
-  const fetchGroups = useCallback(async () => {
+  /** Returns true when it redirected away (caller should keep loading=true). */
+  const fetchGroups = useCallback(async (): Promise<boolean> => {
     const session = await getViewerSession();
-    if (!session) return;
+    if (!session) return false;
     const res = await fetch("/api/fantasy/me", {
       headers: { Authorization: `Bearer ${session.accessToken}` },
     });
-    if (res.ok) {
-      const j = await res.json();
-      setGroups(j.groups ?? []);
-      setEvents(j.events ?? []);
+    if (!res.ok) return false;
+    const j = await res.json();
+    const fetchedGroups: FantasyGroupSummary[] = j.groups ?? [];
+    // Exactly one fantasy-enabled wallet — skip straight to it, no list to pick from.
+    if (fetchedGroups.length === 1) {
+      router.replace(`/majors/fantasy/groups/${fetchedGroups[0].group.id}`);
+      return true;
     }
-  }, []);
+    setGroups(fetchedGroups);
+    setEvents(j.events ?? []);
+    return false;
+  }, [router]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
+      let redirected = false;
       try {
-        await fetchGroups();
+        redirected = await fetchGroups();
       } finally {
-        if (!cancelled) setLoading(false);
+        // Stay in the loading state through a redirect — no flash of the list.
+        if (!cancelled && !redirected) setLoading(false);
       }
     })();
     return () => {

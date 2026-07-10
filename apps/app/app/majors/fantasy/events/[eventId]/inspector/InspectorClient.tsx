@@ -337,7 +337,9 @@ export default function InspectorClient({ eventId }: { eventId: string }) {
                 </thead>
                 <tbody>
                   {data.markets.map((m) => {
-                    const singleWinner = ["outright_winner", "h2h", "gross_ou", "net_ou"].includes(m.marketType);
+                    // score_total sums to ~N (N score values, each an independent
+                    // under/exact/over triad) — excluded from the Σp≈1 check below.
+                    const singleWinner = ["outright_winner", "h2h"].includes(m.marketType);
                     const sumOff = singleWinner && Math.abs(m.probabilitySum - 1) > 0.05;
                     return (
                       <>

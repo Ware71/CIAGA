@@ -12,6 +12,8 @@ import {
   buildCountTable,
   buildFinishesTable,
   buildRareRows,
+  buildScoreBandTable,
+  buildScoreTotalTable,
   deriveTabs,
   marketsInTab,
   sortExactFinish,
@@ -52,6 +54,20 @@ const SEASON_TAB = "season";
 
 type HoleOutcome = "birdie_or_better" | "bogey_or_worse";
 
+type CategoryId =
+  | "finishes" | "match" | "scoreBands" | "scoreTotals" | "birdies" | "eagles" | "rare" | "holes";
+
+const CATEGORY_TABS: { id: CategoryId; label: string }[] = [
+  { id: "finishes", label: "Finishes" },
+  { id: "match", label: "Match Bets" },
+  { id: "scoreBands", label: "Score Bands" },
+  { id: "scoreTotals", label: "Score Totals" },
+  { id: "birdies", label: "Birdies" },
+  { id: "eagles", label: "Eagles" },
+  { id: "rare", label: "Rare Events" },
+  { id: "holes", label: "Hole Specials" },
+];
+
 export default function EventMarketsClient({ eventId }: { eventId: string }) {
   const router = useRouter();
   const [board, setBoard] = useState<BoardResponse | null>(null);
@@ -62,8 +78,13 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
   // Tabs: "event" | "round-N" | "season".
   const [activeTab, setActiveTab] = useState<string>("event");
   const [seasonId, setSeasonId] = useState<string | null>(null);
-  // Collapsibles: exact-finish keyed by market id, hole specials keyed by player.
+  // Category tabs within the Event/Round board (Finishes, Match Bets, ...).
+  const [activeCategory, setActiveCategory] = useState<CategoryId>("finishes");
+  // Shared gross/net toggle for Match Bets, Score Bands, Score Totals.
+  const [scoreBasis, setScoreBasis] = useState<"gross" | "net">("gross");
+  // Collapsibles: exact-finish/score-totals keyed by market id, hole specials keyed by player.
   const [openExact, setOpenExact] = useState<Set<string>>(new Set());
+  const [openTotals, setOpenTotals] = useState<Set<string>>(new Set());
   const [openHole, setOpenHole] = useState<Set<string>>(new Set());
   const [holeOutcome, setHoleOutcome] = useState<Map<string, HoleOutcome>>(new Map());
   // Price movement flashes: `${marketId}|${selectionKey}` → up/down.
@@ -267,6 +288,18 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
     );
   };
 
+  // Score-band cells also show the player-relative numeric range (band
+  // boundaries differ per player, so the column header alone isn't enough).
+  const renderBandCell = (cell: Cell) => {
+    if (!cell) return <OddsBlank />;
+    return (
+      <div className="flex flex-col items-center gap-0.5">
+        <span className="text-[8px] text-emerald-200/45 whitespace-nowrap">{cell.selection.label}</span>
+        {renderCell(cell)}
+      </div>
+    );
+  };
+
   const selectionRow = (market: BoardMarket, sel: Selection) => {
     const isPlayerKey = UUID_RE.test(sel.key);
     return (
@@ -316,16 +349,6 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
     </div>
   );
 
-  const section = (label: string, count: number, children: React.ReactNode) =>
-    count > 0 ? (
-      <section className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/40 overflow-hidden">
-        <div className="px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#f5e6b0]/80">
-          {label}
-        </div>
-        <div className="px-2.5 pb-2.5 space-y-2">{children}</div>
-      </section>
-    ) : null;
-
   const toggleIn = (set: Set<string>, setter: (s: Set<string>) => void, id: string) => {
     const next = new Set(set);
     if (next.has(id)) next.delete(id);
@@ -333,94 +356,148 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
     setter(next);
   };
 
-  // ---- per-tab market board ----
+  const basisOf = (m: BoardMarket): "gross" | "net" =>
+    (m.params as { basis?: unknown }).basis === "net" ? "net" : "gross";
 
-  const renderMarketBoard = (round: number | null) => {
+  const noMarkets = (round: number | null) => (
+    <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 px-4 py-6 text-center text-sm text-emerald-100/70">
+      No open markets in this category{round != null ? " for this round" : ""}.
+    </div>
+  );
+
+  const basisToggle = (
+    <div className="mb-2 inline-flex rounded-lg border border-emerald-900/60 p-0.5 text-[10px]">
+      {(["gross", "net"] as const).map((b) => (
+        <button
+          key={b}
+          type="button"
+          onClick={() => setScoreBasis(b)}
+          className={`rounded-md px-3 py-1 font-semibold capitalize transition-colors ${
+            scoreBasis === b ? "bg-emerald-800/50 text-[#f5e6b0]" : "text-emerald-200/60"
+          }`}
+        >
+          {b}
+        </button>
+      ))}
+    </div>
+  );
+
+  // ---- per-tab market data (grouped by category, driven by market_type + params) ----
+
+  const boardData = (round: number | null) => {
     const tabMarkets = marketsInTab(markets, round);
-    const finishes = round == null ? buildFinishesTable(tabMarkets) : null;
-    const roundWinner = round != null ? tabMarkets.filter((m) => m.market_type === "outright_winner") : [];
-    const exact = tabMarkets.filter((m) => m.market_type === "finish_position");
-    const ranges = tabMarkets.filter((m) => m.market_type === "finish_range");
-    const h2h = tabMarkets.filter((m) => m.market_type === "h2h");
-    const scoring = tabMarkets.filter((m) =>
-      ["gross_ou", "net_ou", "score_band", "score_exact"].includes(m.market_type)
-    );
-    const birdies = buildCountTable(tabMarkets, names, "birdies", round, (c) => `${c}+`);
-    const eagles = buildCountTable(tabMarkets, names, "eagle_count", round, () => "Yes");
-    const rare = round == null ? buildRareRows(tabMarkets) : [];
-    const holeMarkets = round == null ? tabMarkets.filter((m) => m.market_type === "hole_score") : [];
-    const holePlayers = [...new Set(holeMarkets.map((m) => m.subject_profile_id).filter(Boolean))] as string[];
+    return {
+      finishes: round == null ? buildFinishesTable(tabMarkets) : null,
+      roundWinner: round != null ? tabMarkets.filter((m) => m.market_type === "outright_winner") : [],
+      exact: tabMarkets.filter((m) => m.market_type === "finish_position"),
+      ranges: tabMarkets.filter((m) => m.market_type === "finish_range"),
+      h2h: tabMarkets.filter((m) => m.market_type === "h2h" && basisOf(m) === scoreBasis),
+      scoreBandTable: buildScoreBandTable(tabMarkets, names, scoreBasis),
+      scoreTotalMarkets: tabMarkets.filter((m) => m.market_type === "score_total" && basisOf(m) === scoreBasis),
+      birdies: buildCountTable(tabMarkets, names, "birdies", round, (c) => `${c}+`),
+      eagles: buildCountTable(tabMarkets, names, "eagle_count", round, (c) => `${c}+`),
+      rare: round == null ? buildRareRows(tabMarkets) : [],
+      holeMarkets: round == null ? tabMarkets.filter((m) => m.market_type === "hole_score") : [],
+    };
+  };
 
-    const anything =
-      finishes || roundWinner.length || exact.length || ranges.length || h2h.length ||
-      scoring.length || birdies || eagles || rare.length || holePlayers.length;
+  const renderCategory = (category: CategoryId, round: number | null) => {
+    const data = boardData(round);
 
-    if (!anything) {
-      return (
-        <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 px-4 py-6 text-center text-sm text-emerald-100/70">
-          No open markets{round != null ? " for this round" : ""}.
-        </div>
-      );
-    }
+    switch (category) {
+      case "finishes": {
+        if (round != null) {
+          if (data.roundWinner.length === 0) return noMarkets(round);
+          return <div className="space-y-2">{data.roundWinner.map((m) => marketCard(m, m.selections))}</div>;
+        }
+        if (!data.finishes && data.exact.length === 0 && data.ranges.length === 0) return noMarkets(round);
+        return (
+          <div className="space-y-3">
+            {data.finishes && <MarketTable model={data.finishes} renderCell={renderCell} onPlayer={openStats} />}
+            {data.exact.length > 0 && (
+              <div className="grid grid-cols-2 gap-2">
+                {data.exact.map((m) => {
+                  const pid = m.subject_profile_id ?? m.id;
+                  const name = (m.subject_profile_id && names[m.subject_profile_id]) || m.display_name;
+                  return (
+                    <PlayerAccordion
+                      key={m.id}
+                      name={name}
+                      subtitle="Finishing position"
+                      open={openExact.has(m.id)}
+                      onToggle={() => toggleIn(openExact, setOpenExact, m.id)}
+                      onInfo={m.subject_profile_id ? () => openStats(pid) : undefined}
+                    >
+                      <div className="space-y-1">{sortExactFinish(m.selections).map((sel) => selectionRow(m, sel))}</div>
+                    </PlayerAccordion>
+                  );
+                })}
+              </div>
+            )}
+            {data.ranges.length > 0 && (
+              <div className="space-y-2">{data.ranges.map((m) => marketCard(m, m.selections))}</div>
+            )}
+          </div>
+        );
+      }
 
-    return (
-      <div className="space-y-3">
-        {section(
-          round != null ? "Round Winner" : "Finishes",
-          round != null ? roundWinner.length : finishes ? 1 : 0,
-          round != null
-            ? roundWinner.map((m) => marketCard(m, m.selections))
-            : finishes && <MarketTable model={finishes} renderCell={renderCell} onPlayer={openStats} />
-        )}
+      case "match":
+        if (data.h2h.length === 0) return noMarkets(round);
+        return (
+          <div>
+            {basisToggle}
+            <div className="space-y-2">{data.h2h.map((m) => marketCard(m, m.selections))}</div>
+          </div>
+        );
 
-        {section(
-          "Exact Finish",
-          exact.length,
-          exact.map((m) => {
-            const pid = m.subject_profile_id ?? m.id;
-            const name = (m.subject_profile_id && names[m.subject_profile_id]) || m.display_name;
-            return (
-              <PlayerAccordion
-                key={m.id}
-                name={name}
-                subtitle="Finishing position"
-                open={openExact.has(m.id)}
-                onToggle={() => toggleIn(openExact, setOpenExact, m.id)}
-                onInfo={m.subject_profile_id ? () => openStats(pid) : undefined}
-              >
-                <div className="space-y-1">{sortExactFinish(m.selections).map((sel) => selectionRow(m, sel))}</div>
-              </PlayerAccordion>
-            );
-          })
-        )}
+      case "scoreBands":
+        if (!data.scoreBandTable) return noMarkets(round);
+        return (
+          <div>
+            {basisToggle}
+            <MarketTable model={data.scoreBandTable} renderCell={renderBandCell} onPlayer={openStats} />
+          </div>
+        );
 
-        {section("Finish Ranges", ranges.length, ranges.map((m) => marketCard(m, m.selections)))}
+      case "scoreTotals":
+        if (data.scoreTotalMarkets.length === 0) return noMarkets(round);
+        return (
+          <div>
+            {basisToggle}
+            <div className="space-y-2">
+              {data.scoreTotalMarkets.map((m) => {
+                const pid = m.subject_profile_id ?? m.id;
+                const name = (m.subject_profile_id && names[m.subject_profile_id]) || m.display_name;
+                return (
+                  <PlayerAccordion
+                    key={m.id}
+                    name={name}
+                    subtitle="Score totals"
+                    open={openTotals.has(m.id)}
+                    onToggle={() => toggleIn(openTotals, setOpenTotals, m.id)}
+                    onInfo={m.subject_profile_id ? () => openStats(pid) : undefined}
+                  >
+                    <MarketTable model={buildScoreTotalTable(m)} renderCell={renderCell} />
+                  </PlayerAccordion>
+                );
+              })}
+            </div>
+          </div>
+        );
 
-        {section(round != null ? "Round Match Bets" : "Match Bets", h2h.length, h2h.map((m) => marketCard(m, m.selections)))}
+      case "birdies":
+        if (!data.birdies) return noMarkets(round);
+        return <MarketTable model={data.birdies} renderCell={renderCell} onPlayer={openStats} />;
 
-        {section(
-          round != null ? "Round Player Scoring" : "Player Scoring",
-          scoring.length,
-          scoring.map((m) => marketCard(m, m.selections))
-        )}
+      case "eagles":
+        if (!data.eagles) return noMarkets(round);
+        return <MarketTable model={data.eagles} renderCell={renderCell} onPlayer={openStats} />;
 
-        {section(
-          round != null ? "Round Birdies" : "Birdies",
-          birdies ? 1 : 0,
-          birdies && <MarketTable model={birdies} renderCell={renderCell} onPlayer={openStats} />
-        )}
-
-        {section(
-          "Eagles",
-          eagles ? 1 : 0,
-          eagles && <MarketTable model={eagles} renderCell={renderCell} onPlayer={openStats} />
-        )}
-
-        {section(
-          "Rare Events",
-          rare.length,
+      case "rare":
+        if (data.rare.length === 0) return noMarkets(round);
+        return (
           <div className="rounded-xl border border-emerald-900/60 bg-[#0b3b21]/70 px-3 py-1.5">
-            {rare.map(({ market, selection }) => (
+            {data.rare.map(({ market, selection }) => (
               <div
                 key={market.id}
                 className="flex items-center justify-between py-1.5 border-b border-emerald-900/20 last:border-b-0"
@@ -430,52 +507,58 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
               </div>
             ))}
           </div>
-        )}
+        );
 
-        {section(
-          "Hole Specials",
-          holePlayers.length,
-          holePlayers.map((pid) => {
-            const outcome = holeOutcome.get(pid) ?? "birdie_or_better";
-            const forPlayer = holeMarkets.filter((m) => m.subject_profile_id === pid);
-            const active =
-              forPlayer.find((m) => (m.params.outcome ?? "birdie_or_better") === outcome) ?? forPlayer[0];
-            return (
-              <PlayerAccordion
-                key={pid}
-                name={names[pid] ?? "Player"}
-                subtitle="By hole"
-                open={openHole.has(pid)}
-                onToggle={() => toggleIn(openHole, setOpenHole, pid)}
-                onInfo={() => openStats(pid)}
-              >
-                <div className="mb-2 flex rounded-lg border border-emerald-900/60 p-0.5 text-[10px]">
-                  {(["birdie_or_better", "bogey_or_worse"] as HoleOutcome[]).map((o) => (
-                    <button
-                      key={o}
-                      type="button"
-                      onClick={() => {
-                        const next = new Map(holeOutcome);
-                        next.set(pid, o);
-                        setHoleOutcome(next);
-                      }}
-                      className={`flex-1 rounded-md px-2 py-1 font-semibold transition-colors ${
-                        outcome === o ? "bg-emerald-800/50 text-[#f5e6b0]" : "text-emerald-200/60"
-                      }`}
-                    >
-                      {o === "birdie_or_better" ? "Birdie or better" : "Bogey or worse"}
-                    </button>
-                  ))}
-                </div>
-                <div className="space-y-1">
-                  {active ? sortHoles(active.selections).map((sel) => selectionRow(active, sel)) : null}
-                </div>
-              </PlayerAccordion>
-            );
-          })
-        )}
-      </div>
-    );
+      case "holes": {
+        const holePlayers = [...new Set(data.holeMarkets.map((m) => m.subject_profile_id).filter(Boolean))] as string[];
+        if (holePlayers.length === 0) return noMarkets(round);
+        return (
+          <div className="space-y-2">
+            {holePlayers.map((pid) => {
+              const outcome = holeOutcome.get(pid) ?? "birdie_or_better";
+              const forPlayer = data.holeMarkets.filter((m) => m.subject_profile_id === pid);
+              const active =
+                forPlayer.find((m) => (m.params.outcome ?? "birdie_or_better") === outcome) ?? forPlayer[0];
+              return (
+                <PlayerAccordion
+                  key={pid}
+                  name={names[pid] ?? "Player"}
+                  subtitle="By hole"
+                  open={openHole.has(pid)}
+                  onToggle={() => toggleIn(openHole, setOpenHole, pid)}
+                  onInfo={() => openStats(pid)}
+                >
+                  <div className="mb-2 flex rounded-lg border border-emerald-900/60 p-0.5 text-[10px]">
+                    {(["birdie_or_better", "bogey_or_worse"] as HoleOutcome[]).map((o) => (
+                      <button
+                        key={o}
+                        type="button"
+                        onClick={() => {
+                          const next = new Map(holeOutcome);
+                          next.set(pid, o);
+                          setHoleOutcome(next);
+                        }}
+                        className={`flex-1 rounded-md px-2 py-1 font-semibold transition-colors ${
+                          outcome === o ? "bg-emerald-800/50 text-[#f5e6b0]" : "text-emerald-200/60"
+                        }`}
+                      >
+                        {o === "birdie_or_better" ? "Birdie or better" : "Bogey or worse"}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="space-y-1">
+                    {active ? sortHoles(active.selections).map((sel) => selectionRow(active, sel)) : null}
+                  </div>
+                </PlayerAccordion>
+              );
+            })}
+          </div>
+        );
+      }
+
+      default:
+        return null;
+    }
   };
 
   return (
@@ -582,7 +665,26 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
           {activeTab === SEASON_TAB && seasonId ? (
             <SeasonMarketsPanel seasonId={seasonId} />
           ) : (
-            renderMarketBoard(activeRound)
+            <>
+              {/* Category tabs */}
+              <div className="flex gap-1.5 overflow-x-auto pb-2 mb-2 -mx-1 px-1">
+                {CATEGORY_TABS.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setActiveCategory(c.id)}
+                    className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors ${
+                      activeCategory === c.id
+                        ? "bg-emerald-700 text-white"
+                        : "border border-emerald-900/60 text-emerald-100/70 hover:text-emerald-50"
+                    }`}
+                  >
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+              {renderCategory(activeCategory, activeRound)}
+            </>
           )}
         </div>
       )}

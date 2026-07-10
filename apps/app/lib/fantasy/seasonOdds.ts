@@ -74,14 +74,11 @@ async function loadSeasonMarkets(groupSeasonId: string): Promise<SeasonMarketRow
 export async function loadSeasonContext(groupSeasonId: string): Promise<SeasonContext | null> {
   const { data: seasonRow } = await supabaseAdmin
     .from("group_seasons")
-    .select("id, group_id, name, standings_model")
+    .select("id, group_id, name")
     .eq("id", groupSeasonId)
     .maybeSingle();
   if (!seasonRow) return null;
-  const season = seasonRow as {
-    id: string; group_id: string; name: string; standings_model: string | null;
-  };
-  if (!season.standings_model || season.standings_model === "none") return null;
+  const season = seasonRow as { id: string; group_id: string; name: string };
 
   const { data: standRows } = await supabaseAdmin
     .from("group_season_standings_entries")
