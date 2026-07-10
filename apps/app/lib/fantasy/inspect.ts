@@ -7,7 +7,12 @@ import {
   simulateEvent,
   type EntryRow,
 } from "@/lib/fantasy/odds";
-import { holeMu, holeSigma } from "@/lib/fantasy/simulation/holeModel";
+import {
+  buildHoleDistributionsDetailed,
+  holeMu,
+  holeSigmaDetailed,
+  OUTCOME_OFFSET,
+} from "@/lib/fantasy/simulation/holeModel";
 import { getMarketDefinition } from "@/lib/fantasy/markets/registry";
 import type { FantasyMarket } from "@/lib/fantasy/markets/types";
 import type { StoredFantasyProfile } from "@/lib/fantasy/profiles";
@@ -84,6 +89,12 @@ export async function inspectEvent(eventId: string) {
     const res = sim.players[sim.playerIndex[p.profileId]];
     const detail = phDetails.get(p.profileId);
     const modelPath = p.profile.avgDifferential != null && teeHasRating ? "differential" : "gross";
+    // Full-round calibrated distributions for the audit (the LIVE sim only
+    // builds each player's REMAINING holes; with completed holes this block is
+    // the prospective full-round model, not the in-play one).
+    const detailed = buildHoleDistributionsDetailed(p.profile, ctx.holes, p.playingHandicap);
+    const sigmaDetail = holeSigmaDetailed(p.profile, repHole);
+    const r3 = (n: number) => Math.round(n * 1000) / 1000;
     return {
       profileId: p.profileId,
       name: p.displayName,
@@ -96,13 +107,38 @@ export async function inspectEvent(eventId: string) {
       model: {
         // Pass a real hole + PH so μ/σ reflect the LIVE model (differential path
         // needs the tee rating/slope; the anchor needs the playing handicap).
-        sigmaPerHole: Math.round(holeSigma(p.profile, repHole) * 1000) / 1000,
-        muByHole: ctx.holes.map((h) => Math.round(holeMu(p.profile, h, p.playingHandicap) * 1000) / 1000),
+        sigmaPerHole: r3(sigmaDetail.sigma),
+        sigmaRound: r3(sigmaDetail.sigmaRound),
+        sigmaSource: sigmaDetail.source,
+        sigmaClamped: sigmaDetail.clamped,
+        // Latent normal mean (strokes vs par) — the model's LEVEL per hole…
+        muByHole: ctx.holes.map((h) => r3(holeMu(p.profile, h, p.playingHandicap))),
+        // …and the expected score of the discretized + calibrated distribution
+        // the sim actually draws from. Reconciles: Σ eByHole ≈ Σ muByHole
+        // (within meanResidual) and Σ eByHole + par ≈ sim mean gross.
+        eByHole: detailed.dists.map((d) =>
+          r3(d.reduce((s, prob, k) => s + (k - OUTCOME_OFFSET) * prob, 0))
+        ),
+        formStatus:
+          p.profile.recentForm != null ? "observed" : ("missing_defaults_to_0" as const),
+        calibration: detailed.meta,
       },
       sim: {
         meanGross: Math.round(res.meanGross * 100) / 100,
         meanNet: Math.round(res.meanNet * 100) / 100,
         winProb: Math.round(res.winProb * 10000) / 10000,
+        // Full-credit shared-first probability (1224 ranking) — ≥ winProb
+        // whenever ties occur; winProb splits ties evenly.
+        pFirstInclTies: Math.round((res.positionHistogram[0] ?? 0) * 10000) / 10000,
+        // E[birdies] from the simulated histogram — reconciles against
+        // model.calibration.birdie.targetRate (within completed-hole fixing
+        // and MC noise).
+        expectedBirdies:
+          Math.round(
+            (res.birdieHistogram.reduce((s, count, i) => s + i * count, 0) /
+              sim.simulationCount) *
+              1000
+          ) / 1000,
         topNProb: res.topNProb,
         grossPercentiles: percentiles(res.grossTotals),
         netPercentiles: percentiles(res.netTotals),

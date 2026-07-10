@@ -30,7 +30,12 @@ function makeMarket(overrides: Partial<FantasyMarket>): FantasyMarket {
 }
 
 function finalData(players: FinalScoringData["players"]): FinalScoringData {
-  return { players, fieldSize: Object.keys(players).length };
+  return {
+    players,
+    fieldSize: Object.keys(players).length,
+    holes: [],
+    field: { ace: null, albatross: null, eagle: null },
+  };
 }
 
 function score(
@@ -43,6 +48,9 @@ function score(
     grossScore: 85,
     netScore: 72,
     birdieCount: 1,
+    eagleCount: null,
+    roundScores: {},
+    holeStrokes: null,
     withdrawn: false,
     ...overrides,
   };
@@ -54,6 +62,8 @@ function liveCtx(overrides: Partial<LiveMarketCtx> = {}): LiveMarketCtx {
     roundComplete: () => false,
     holesRemaining: () => 18,
     currentBirdies: () => 0,
+    currentEagles: () => 0,
+    holeScore: () => null,
     ...overrides,
   };
 }
@@ -172,6 +182,42 @@ describe("pricing", () => {
     expect((h2h.get("a") ?? 0) + (h2h.get("b") ?? 0)).toBeCloseTo(1, 6);
     // "a" projects ~5 shots better → clear favourite.
     expect(h2h.get("a")!).toBeGreaterThan(0.6);
+  });
+
+  it("h2h prices tie-EXCLUDED (ties settle void, so they carry no pricing weight)", () => {
+    // Hand-built joint samples: 5 iterations — 2 ties, a wins 2, b wins 1.
+    const totals = {
+      a: Int16Array.from([70, 70, 69, 71, 69]),
+      b: Int16Array.from([70, 70, 71, 70, 70]),
+    };
+    const mini = {
+      simulationCount: 5,
+      rankingBasis: "gross" as const,
+      holes: [],
+      playerIndex: { a: 0, b: 1 },
+      players: (["a", "b"] as const).map((id) => ({
+        profileId: id,
+        grossTotals: totals[id],
+        netTotals: totals[id],
+        roundGrossTotals: { 1: totals[id] },
+        roundNetTotals: { 1: totals[id] },
+        birdieHistogram: [5],
+        winProb: 0,
+        topNProb: {},
+        positionHistogram: [0, 0],
+        lastProb: 0,
+        meanGross: 0,
+        meanNet: 0,
+        holeOutcomes: [],
+      })),
+    };
+    const probs = MARKET_REGISTRY.h2h.simulate(
+      mini,
+      makeMarket({ market_type: "h2h", subject_profile_id: "a", opponent_profile_id: "b", params: { basis: "gross" } })
+    );
+    // Decided iterations: a 2, b 1 → P(a) = 2/3, NOT (2 + 2/2)/5 = 0.6.
+    expect(probs.get("a")).toBeCloseTo(2 / 3, 9);
+    expect(probs.get("b")).toBeCloseTo(1 / 3, 9);
   });
 
   it("birdie ladder probabilities decrease with count", () => {

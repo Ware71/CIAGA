@@ -237,8 +237,9 @@ describe("net-consistency, variance & format (model fixes)", () => {
         avgGross: null,
         scoreStddev: null,
         recentForm: null,
-        // A no-data profile has no birdie/eagle rate either (else the calibration
-        // forces low-score mass on, understating a high handicapper's gross).
+        // No birdie/eagle rate → calibration runs off the handicap prior alone;
+        // the mean-preservation loop keeps the level pinned to the anchor, so
+        // prior-driven birdie mass can't understate the gross.
         birdiesPerRound: null,
         eaglesPerRound: null,
         par3AvgVsPar: null,

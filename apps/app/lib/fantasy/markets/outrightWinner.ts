@@ -51,13 +51,20 @@ export const outrightWinner: MarketDefinition = {
     const out = new Map<string, number>();
     const round = marketRound(market);
     if (round == null) {
+      // Event-wide: settlement reads the leaderboard's position 1, and the
+      // leaderboard resolves ties (playoff/countback the sim can't model) to a
+      // single winner — so the tie-SPLIT winProb is the fair price, assuming
+      // ties resolve roughly randomly between the tied players.
       for (const p of sim.players) out.set(p.profileId, p.winProb);
       return out;
     }
     const totals = sim.players.map((_, pi) =>
       totalsFor(sim, pi, sim.rankingBasis, round)
     );
-    const probs = winProbsFrom(totals, sim.simulationCount);
+    // Round winners settle "ties all win" (no round playoffs), so every tied
+    // winner must be priced at FULL credit — tie-splitting here made the odds
+    // systematically too long for what the market actually pays.
+    const probs = winProbsFrom(totals, sim.simulationCount, "all");
     sim.players.forEach((p, pi) => out.set(p.profileId, probs[pi]));
     return out;
   },

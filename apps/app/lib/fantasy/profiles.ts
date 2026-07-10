@@ -317,14 +317,24 @@ export async function buildPlayerProfile(
   // equivalents. Independent of the SHAPE sample above and NOT capped, so a
   // 200-round history informs the model level; recency-weighted so it still
   // tracks form. Global to the player (course-normalised → group-independent).
-  const { data: diffRows, error: diffErr } = await supabaseAdmin
-    .from("ciaga_scoring_record_stream")
-    .select("differential, played_at")
-    .eq("profile_id", profileId)
-    .not("differential", "is", null)
-    .order("played_at", { ascending: false });
-  if (diffErr) throw diffErr;
-  const differentials = ((diffRows ?? []) as { differential: number | string | null }[])
+  // Paged explicitly: PostgREST silently truncates un-limited queries at its
+  // max-rows default (1000), which would drop the OLDEST rounds unnoticed.
+  const DIFF_PAGE = 1000;
+  const diffRowsAll: { differential: number | string | null }[] = [];
+  for (let from = 0; ; from += DIFF_PAGE) {
+    const { data: diffRows, error: diffErr } = await supabaseAdmin
+      .from("ciaga_scoring_record_stream")
+      .select("differential, played_at")
+      .eq("profile_id", profileId)
+      .not("differential", "is", null)
+      .order("played_at", { ascending: false })
+      .range(from, from + DIFF_PAGE - 1);
+    if (diffErr) throw diffErr;
+    const page = (diffRows ?? []) as { differential: number | string | null }[];
+    diffRowsAll.push(...page);
+    if (page.length < DIFF_PAGE) break;
+  }
+  const differentials = diffRowsAll
     .map((r) => Number(r.differential))
     .filter((d) => Number.isFinite(d));
   const diffStats = recencyWeightedDifferentialStats(differentials);

@@ -9,7 +9,15 @@ import {
   type EntryRow,
 } from "@/lib/fantasy/odds";
 import { hashSeed } from "@/lib/fantasy/simulation/rng";
-import { holeMu, holeSigma } from "@/lib/fantasy/simulation/holeModel";
+import {
+  BIRDIE_PRIOR_STRENGTH,
+  EAGLE_PRIOR_STRENGTH,
+  buildHoleDistributionsDetailed,
+  holeMu,
+  holeSigmaDetailed,
+  OUTCOME_OFFSET,
+} from "@/lib/fantasy/simulation/holeModel";
+import { DIFFERENTIAL_HALFLIFE_ROUNDS } from "@/lib/fantasy/simulation/differentials";
 import { getMarketDefinition } from "@/lib/fantasy/markets/registry";
 import { clampProbability, probabilityToDecimalOdds } from "@/lib/fantasy/simulation/types";
 import type { FantasyMarket } from "@/lib/fantasy/markets/types";
@@ -27,11 +35,11 @@ const GREEN_FILL: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: {
 
 /** How each market type turns sim output into a selection probability. */
 const DERIVATION: Record<string, string> = {
-  outright_winner: "Per-player winProb — share of iterations finishing 1st (round variant: recomputed from that round's joint totals).",
-  top_n: "Per-player topNProb[n] — share of iterations finishing in position ≤ n.",
-  finish_position: "positionHistogram[pos-1] — share of iterations finishing exactly that place.",
+  outright_winner: "Event-wide: per-player winProb — share of iterations finishing 1st, ties SPLIT evenly (settlement reads the tie-resolved leaderboard). Round variant: recomputed from that round's joint totals with ties at FULL credit (round winners settle 'ties all win').",
+  top_n: "Per-player topNProb[n] — share of iterations finishing in position ≤ n (ties count in full).",
+  finish_position: "positionHistogram[pos-1] — share of iterations finishing exactly that place under 1224 competition ranking (every tied player carries the tied position in full).",
   finish_range: "Sum of positionHistogram across the range (Wooden Spoon = lastProb).",
-  h2h: "Share of iterations where the side's basis total beats the other, plus half of the ties.",
+  h2h: "Tie-EXCLUDED conditional: wins / (wins + losses). Ties settle void (stake back), so tie iterations carry no pricing weight.",
   gross_ou: "Share of iterations with the player's gross total under the line (Over = 1 − Under).",
   net_ou: "Share of iterations with the player's net total under the line (Over = 1 − Under).",
   score_band: "Share of iterations with the gross total inside the band.",
@@ -47,10 +55,11 @@ const GUIDE: [string, string][] = [
   ["One refresh", "A single simulation run prices every market. Each market type reads the shared SimulationResult and counts outcomes into a probability; that probability is clamped and inverted into decimal odds."],
   ["Model paths", "Differential (WHS) path when the tee carries rating/slope AND the player has score differentials; otherwise the gross-average fallback path. The 'Model path' column on Player inputs shows which was used."],
   ["Handicap anchor", "Handicap is a PRIOR, not a driver: per-hole μ blends the player's own scoring toward a handicap-derived anchor, weighted by effective sample size (thin samples lean on the anchor)."],
-  ["Per-hole μ / σ", "Each hole is a discretized normal over strokes-vs-par. μ combines observed shape + stroke-index tilt + form; σ comes from differential/round stddev, widened by a confidence factor and clamped per hole."],
-  ["Rare-event calibration", "Birdie-or-better and eagle bins are scaled so the modelled birdies/eagles per round match the player's observed rates — the normal tail alone would overstate these."],
+  ["Per-hole μ / σ", "Each hole is a discretized normal over strokes-vs-par. μ (latent) combines observed shape + stroke-index tilt + form; σ comes from differential/round stddev, widened by a confidence factor and clamped per hole. The sim draws from the DISCRETIZED + CALIBRATED bins, whose expected score E is shown alongside μ — a mean-preservation loop keeps E ≈ μ, so Σ(E)+par reconciles with the simulated mean gross."],
+  ["Rare-event calibration", "Birdie-or-better mass is calibrated EXACTLY to a Bayesian target: the observed rate over the shape sample, shrunk toward a handicap-based prior (Gamma-Poisson, prior strength in rounds — see Assumptions). Eagle mass is then set WITHIN the birdie mass. The Calibration sheet reconciles observed → prior → target → simulated."],
   ["Attendance", "Provisional (not-yet-entered) members are sampled present/absent each iteration by an attendance probability; only present players are ranked, so confirmed players' odds rise when a provisional is absent."],
-  ["Ranking", "Each iteration ranks the field on the event's basis (gross / net / stableford) with standard '1224' competition ranking; ties split evenly. Positions are retained per iteration for correlated accumulators."],
+  ["Ranking", "Each iteration ranks the field on the event's basis (gross / net / stableford) with standard '1224' competition ranking. Two first-place quantities exist: Win% splits ties evenly (prices the outright, which settles on the tie-resolved leaderboard); P(1st incl ties) counts every tied leader in full (prices finish-position, which settles on the shared position). Positions are retained per iteration for correlated accumulators."],
+  ["Cell legend", "'—' = value missing from the profile (the model then uses the documented fallback for that field — never a hidden numeric default). Numbers are calculated values; the Error column on Refresh jobs is the job's stored error text."],
   ["Odds conversion", "probability is clamped to [0.005, 0.995] then decimal odds = round(1 / p, 2), capped at 200.00 — see the Markets sheet for each selection's raw → clamped → odds."],
 ];
 
@@ -128,12 +137,52 @@ export async function buildInspectWorkbook(
   const holeLabel = (h: { round?: number | null; holeNumber: number }) =>
     `${(h.round ?? 1) > 1 ? `R${h.round} ` : ""}H${h.holeNumber}`;
 
+  // Full-round calibrated model per player, shared across the audit sheets.
+  // (The live sim builds only each player's REMAINING holes; for in-play
+  // events this block is the prospective full-round model.)
+  const dash = "—";
+  const detailedByProfile = new Map(
+    ctx.players.map((p) => [
+      p.profileId,
+      buildHoleDistributionsDetailed(p.profile, ctx.holes, p.playingHandicap),
+    ])
+  );
+  const sigmaByProfile = new Map(
+    ctx.players.map((p) => [p.profileId, holeSigmaDetailed(p.profile, repHole)])
+  );
+  const distMean = (d: number[]) => d.reduce((s, prob, k) => s + (k - OUTCOME_OFFSET) * prob, 0);
+  const parTotal = ctx.holes.reduce((s, h) => s + h.par, 0);
+  const stddevOf = (totals: Int16Array): number => {
+    let sum = 0;
+    for (let i = 0; i < totals.length; i++) sum += totals[i];
+    const m = sum / totals.length;
+    let acc = 0;
+    for (let i = 0; i < totals.length; i++) acc += (totals[i] - m) * (totals[i] - m);
+    return Math.sqrt(acc / Math.max(1, totals.length - 1));
+  };
+
   const wb = new ExcelJS.Workbook();
   wb.creator = "Ciaga Fantasy Picks — Odds Inspector";
   wb.created = new Date();
 
   // 1. Guide
   addSheet(wb, "Guide", ["Topic", "Explanation"], GUIDE);
+
+  // 1b. Assumptions — every model constant the audit relies on.
+  addSheet(wb, "Assumptions", ["Constant", "Value", "Why"], [
+    ["Handicap anchor", "PH + 4 over par", "Net-consistency prior for thin data: no-signal players net ≈ par + 4 whatever their handicap (4 ≈ typical amateur gap between average and best-8 rounds)."],
+    ["Anchor full-sample", "10 rounds (gross) / 12 effective (differential)", "Sample size at which observed history fully overrides the anchor."],
+    ["Differential half-life", `${DIFFERENTIAL_HALFLIFE_ROUNDS} rounds`, "Recency weighting of the FULL differential history; effective N asymptotes ≈ 57.7 however long the history — that is the 'cap' Neff shows, by construction, not truncation."],
+    ["Shape sample cap", "20 rounds (30 candidates)", "Per-hole shape, birdie/eagle rates and form come from the most recent ≤20 rounds — freshness cap on SHAPE only; ability (differentials) is uncapped."],
+    ["Birdie prior", "λ0 = clamp(2.2·e^(−0.115·HI), 0.03, 3.0), K = " + BIRDIE_PRIOR_STRENGTH, "Gamma-Poisson shrinkage of the observed birdies/round toward published amateur rates (scratch ≈ 2.2, HI 10 ≈ 0.70, HI 20 ≈ 0.22); K in rounds — 20 observed rounds get 71% data weight."],
+    ["Eagle prior", "λ0 = clamp(0.06·e^(−0.18·HI), 0.001, 0.15), K = " + EAGLE_PRIOR_STRENGTH, "Eagles ≈ 1 per 15–25 rounds even for scratch; heavy shrinkage because the event is rare. Eagle target never exceeds the birdie target."],
+    ["Calibration exactness", "Σ P(birdie) = target, per hole sums = 1", "Single global factor on the birdie bins, non-birdie bins rescaled per hole — no clipping toward the raw normal tail (the old [0.5,2] clip floor bound for whole fields)."],
+    ["Mean preservation", "≤ 6 fixed-point passes, tol 0.01 strokes/hole", "Calibration alone would shift the expected score; the latent means are re-targeted so the post-calibration E[score] still equals holeMu (the differential level already includes real birdies)."],
+    ["Per-hole σ clamp", "[0.5, 2.6]", "Round σ ≈ 2.1–11; flagged on the Sim aggregates sheet when it binds."],
+    ["Confidence σ widening", "high ×1.0 / medium ×1.1 / low ×1.3", "Thin profiles simulate wider."],
+    ["Probability clamp", "[0.005, 0.995] → odds ≤ 200", "Book protection on every priced selection."],
+    ["Simulation count", "10,000 (5,000 for fields > 60)", "Seeded per event version — re-runs reproduce the board exactly."],
+  ]);
 
   // 2. Event & sim meta
   addSheet(wb, "Event & Sim", ["Field", "Value"], [
@@ -160,12 +209,13 @@ export async function buildInspectWorkbook(
     ctx.holes.map((h) => [h.round ?? 1, h.holeNumber, h.par, h.strokeIndex, h.yardage ?? "", h.rating ?? "", h.slope ?? ""])
   );
 
-  // 4. Player inputs
+  // 4. Player inputs — '—' marks a MISSING profile value (see Guide legend);
+  // the "σ source" / "Form status" columns say which fallback then applies.
   addSheet(
     wb,
     "Player inputs",
-    ["Player", "PH", "PH source", "Model path", "HI", "Avg diff", "σ diff", "Neff", "Diff sample",
-     "Avg gross", "σ round", "Form", "Birdies/rd", "Eagles/rd", "Sample", "Confidence", "Built at"],
+    ["Player", "PH", "PH source", "Model path", "σ source", "HI", "Avg diff", "σ diff", "Neff", "Diff sample",
+     "Avg gross", "σ round", "Form", "Form status", "Birdies/rd", "Eagles/rd", "Sample", "Confidence", "Built at"],
     ctx.players.map((p) => {
       const prof = storedByProfile.get(p.profileId);
       const modelPath = p.profile.avgDifferential != null && teeHasRating ? "differential" : "gross";
@@ -174,48 +224,111 @@ export async function buildInspectWorkbook(
         p.playingHandicap,
         phDetails.get(p.profileId)?.source ?? "no_data",
         modelPath,
-        prof?.handicap_index ?? "",
-        prof?.avg_differential ?? "",
-        prof?.differential_stddev ?? "",
-        prof?.differential_effective_n ?? "",
+        sigmaByProfile.get(p.profileId)?.source ?? dash,
+        prof?.handicap_index ?? dash,
+        prof?.avg_differential ?? dash,
+        prof?.differential_stddev ?? dash,
+        prof?.differential_effective_n ?? dash,
         prof?.differential_sample_size ?? 0,
-        prof?.avg_gross ?? "",
-        prof?.score_stddev ?? "",
-        prof?.recent_form ?? "",
-        prof?.birdies_per_round ?? "",
-        prof?.eagles_per_round ?? "",
+        prof?.avg_gross ?? dash,
+        prof?.score_stddev ?? dash,
+        prof?.recent_form ?? dash,
+        prof?.recent_form != null ? "observed" : "missing → 0 drift",
+        prof?.birdies_per_round ?? dash,
+        prof?.eagles_per_round ?? dash,
         prof?.sample_size ?? 0,
-        prof?.confidence ?? "",
-        prof?.computed_at ?? "",
+        prof?.confidence ?? dash,
+        prof?.computed_at ?? dash,
       ];
     })
   );
 
-  // 5. Per-hole μ / σ
+  // 4b. Calibration — observed → prior → target → simulated, per player.
+  addSheet(
+    wb,
+    "Calibration",
+    ["Player", "Obs brd/rd", "n rounds", "Prior mean", "Prior K", "Target λ* (shrunk)",
+     "Model mass (pre-cal)", "Mass after cal", "Factor", "Factor capped?",
+     "Sim E[birdies]", "Obs eag/rd", "Eagle prior", "Eagle target", "Eagle mass post", "Eagle capped?",
+     "Mean residual (strokes/hole)", "Passes"],
+    ctx.players.map((p) => {
+      const meta = detailedByProfile.get(p.profileId)!.meta;
+      const res = sim.players[sim.playerIndex[p.profileId]];
+      const simBirdies =
+        res.birdieHistogram.reduce((s, count, i) => s + i * count, 0) / sim.simulationCount;
+      return [
+        p.displayName,
+        meta.birdie.observedRate ?? dash,
+        meta.birdie.sampleRounds,
+        r3(meta.birdie.priorMean),
+        meta.birdie.priorStrength,
+        r3(meta.birdie.targetRate),
+        r3(meta.birdie.preMass),
+        r3(meta.birdie.postMass),
+        r3(meta.birdie.factor),
+        meta.birdie.capped ? "YES" : "no",
+        r3(simBirdies),
+        meta.eagle.observedRate ?? dash,
+        r3(meta.eagle.priorMean),
+        r3(meta.eagle.targetRate),
+        r3(meta.eagle.postMass),
+        meta.eagle.capped ? "YES" : "no",
+        r3(meta.meanResidual),
+        meta.iterations,
+      ];
+    })
+  );
+
+  // 5. Per-hole μ / σ — one row pair per player: the latent normal mean and
+  // the expected score of the discretized+calibrated bins the sim draws from.
+  // Reconciliation: Σ E + par ≈ sim mean gross (exact up to completed-hole
+  // fixing and MC noise); |Σ E − Σ μ| ≤ mean residual × holes.
+  const perHoleRows: (string | number)[][] = [];
+  for (const p of ctx.players) {
+    const detail = detailedByProfile.get(p.profileId)!;
+    const sig = sigmaByProfile.get(p.profileId)!;
+    const res = sim.players[sim.playerIndex[p.profileId]];
+    const mus = ctx.holes.map((h) => holeMu(p.profile, h, p.playingHandicap));
+    const es = detail.dists.map(distMean);
+    const muSum = mus.reduce((s, m) => s + m, 0);
+    const eSum = es.reduce((s, m) => s + m, 0);
+    perHoleRows.push([
+      p.displayName, "μ (latent)", r3(sig.sigma), r3(muSum + parTotal), r3(res.meanGross),
+      ...mus.map(r3),
+    ]);
+    perHoleRows.push([
+      p.displayName, "E (calibrated)", sig.clamped ? "σ clamped" : "", r3(eSum + parTotal), r3(res.meanGross),
+      ...es.map(r3),
+    ]);
+  }
   addSheet(
     wb,
     "Per-hole mu-sigma",
-    ["Player", "σ/hole", ...ctx.holes.map(holeLabel)],
-    ctx.players.map((p) => [
-      p.displayName,
-      r3(holeSigma(p.profile, repHole)),
-      ...ctx.holes.map((h) => r3(holeMu(p.profile, h, p.playingHandicap))),
-    ])
+    ["Player", "Row", "σ/hole", "Σ + par", "Sim mean gross", ...ctx.holes.map(holeLabel)],
+    perHoleRows
   );
 
-  // 6. Sim aggregates
+  // 6. Sim aggregates. Win% splits ties; P1st counts shared firsts in full —
+  // both are correct, for different markets (see Guide → Ranking). σ target is
+  // the round-level sigma the model wants; σ implied is what the per-hole
+  // clamp actually allows (× √18); Sim gross SD is what the draws produced
+  // (multi-round events scale ≈ √rounds above the per-round figure).
   addSheet(
     wb,
     "Sim aggregates",
-    ["Player", "Mean gross", "Mean net", "Win%", "Top3%", "Top5%", "Top10%", "Last%",
+    ["Player", "Mean gross", "Mean net", "Win% (ties split)", "P1st incl ties", "Top3%", "Top5%", "Top10%", "Last%",
+     "σ round target", "σ round implied", "σ clamped?", "Sim gross SD",
      "Gross p5", "p25", "p50", "p75", "p95", "Net p5", "p50", "p95"],
     ctx.players.map((p) => {
       const res = sim.players[sim.playerIndex[p.profileId]];
+      const sig = sigmaByProfile.get(p.profileId)!;
       const g = percentiles(res.grossTotals);
       const n = percentiles(res.netTotals);
       return [
         p.displayName, r3(res.meanGross), r3(res.meanNet),
-        r3(res.winProb), r3(res.topNProb[3] ?? 0), r3(res.topNProb[5] ?? 0), r3(res.topNProb[10] ?? 0), r3(res.lastProb),
+        r3(res.winProb), r3(res.positionHistogram[0] ?? 0),
+        r3(res.topNProb[3] ?? 0), r3(res.topNProb[5] ?? 0), r3(res.topNProb[10] ?? 0), r3(res.lastProb),
+        r3(sig.sigmaRound), r3(sig.sigma * Math.sqrt(18)), sig.clamped ? "YES" : "no", r3(stddevOf(res.grossTotals)),
         g.p5, g.p25, g.p50, g.p75, g.p95, n.p5, n.p50, n.p95,
       ];
     })
@@ -341,7 +454,7 @@ export async function buildInspectWorkbook(
     ["Status", "Reason", "Attempts", "Updated", "Error"],
     ((jobsRes.data ?? []) as {
       status: string; reason: string; attempts: number; updated_at: string; last_error: string | null;
-    }[]).map((j) => [j.status, j.reason, j.attempts, j.updated_at, j.last_error ?? ""])
+    }[]).map((j) => [j.status, j.reason, j.attempts, j.updated_at, j.last_error ?? dash])
   );
 
   const slug = ctx.event.name.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "event";

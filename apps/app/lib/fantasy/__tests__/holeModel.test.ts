@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
+  BIRDIE_PRIOR_STRENGTH,
+  EAGLE_PRIOR_STRENGTH,
+  birdiePriorMean,
   buildHoleDistributions,
+  buildHoleDistributionsDetailed,
   discretizedDistribution,
+  eaglePriorMean,
   holeMu,
   holeSigma,
+  OUTCOME_OFFSET,
+  shrunkRate,
   strokesReceived,
 } from "@/lib/fantasy/simulation/holeModel";
 import type { SimHole, SimPlayerProfile } from "@/lib/fantasy/simulation/types";
@@ -198,23 +205,125 @@ describe("discretizedDistribution", () => {
   });
 });
 
-describe("buildHoleDistributions birdie calibration", () => {
+describe("buildHoleDistributions birdie/eagle calibration", () => {
   const holes: SimHole[] = Array.from({ length: 18 }, (_, i) =>
     hole({ holeNumber: i + 1, strokeIndex: i + 1 })
   );
 
-  function expectedBirdies(p: SimPlayerProfile): number {
-    return buildHoleDistributions(p, holes).reduce((s, d) => s + d[0] + d[1], 0);
-  }
+  const birdieMass = (dists: number[][]) => dists.reduce((s, d) => s + d[0] + d[1], 0);
+  const eagleMass = (dists: number[][]) => dists.reduce((s, d) => s + d[0], 0);
+  const distMean = (d: number[]) => d.reduce((s, p, k) => s + (k - OUTCOME_OFFSET) * p, 0);
 
-  it("matches the player's observed birdie rate", () => {
-    const few = expectedBirdies(profile({ birdiesPerRound: 0.5 }));
-    const many = expectedBirdies(profile({ birdiesPerRound: 3 }));
+  it("Σ P(birdie-or-better) equals the shrunk target EXACTLY", () => {
+    for (const rate of [0.15, 0.5, 3]) {
+      const p = profile({ birdiesPerRound: rate });
+      const { dists, meta } = buildHoleDistributionsDetailed(p, holes);
+      const target = shrunkRate(rate, p.sampleSize, birdiePriorMean(p.handicapIndex!), BIRDIE_PRIOR_STRENGTH);
+      expect(meta.birdie.targetRate).toBeCloseTo(target, 12);
+      expect(birdieMass(dists)).toBeCloseTo(target, 9);
+      expect(meta.birdie.capped).toBe(false);
+    }
+  });
+
+  it("REGRESSION: a zero-birdie player converges to the shrunk target, not 0.5× the raw model", () => {
+    // The old [0.5, 2] clip floor gave every zero-birdie player HALF the
+    // (wildly overstated) normal-tail birdie mass — e.g. observed 0.00 →
+    // simulated ~0.4/round.
+    const p = profile({ birdiesPerRound: 0, sampleSize: 17, handicapIndex: 28, avgGross: 105 });
+    const { dists, meta } = buildHoleDistributionsDetailed(p, holes);
+    const target = shrunkRate(0, 17, birdiePriorMean(28), BIRDIE_PRIOR_STRENGTH);
+    expect(birdieMass(dists)).toBeCloseTo(target, 9);
+    // Pure-prior contribution only: (0·17 + λ0·8)/25 — a handful of birdies a
+    // SEASON, nowhere near half the raw model mass.
+    expect(birdieMass(dists)).toBeLessThan(0.1);
+    expect(birdieMass(dists)).toBeLessThan(0.5 * meta.birdie.preMass);
+  });
+
+  it("every hole still sums to exactly 1 after both calibrations", () => {
+    const p = profile({ birdiesPerRound: 0.2, eaglesPerRound: 0.02 });
+    const { dists } = buildHoleDistributionsDetailed(p, holes);
+    for (const d of dists) {
+      expect(d.reduce((s, x) => s + x, 0)).toBeCloseTo(1, 9);
+      for (const x of d) expect(x).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it("eagle calibration moves mass WITHIN birdie-or-better — birdie total untouched", () => {
+    const base = profile({ birdiesPerRound: 1 });
+    const noEagles = buildHoleDistributionsDetailed({ ...base, eaglesPerRound: 0 }, holes);
+    const manyEagles = buildHoleDistributionsDetailed({ ...base, eaglesPerRound: 0.5 }, holes);
+    expect(birdieMass(noEagles.dists)).toBeCloseTo(birdieMass(manyEagles.dists), 9);
+    expect(eagleMass(manyEagles.dists)).toBeGreaterThan(eagleMass(noEagles.dists));
+    const eagleTarget = shrunkRate(0.5, base.sampleSize, eaglePriorMean(base.handicapIndex!), EAGLE_PRIOR_STRENGTH);
+    expect(eagleMass(manyEagles.dists)).toBeCloseTo(eagleTarget, 9);
+  });
+
+  it("mean preservation: post-calibration expected round score matches Σ holeMu", () => {
+    const cases: SimPlayerProfile[] = [
+      // High-handicap zero-birdie player — the live-bug shape.
+      profile({ birdiesPerRound: 0, handicapIndex: 30, avgGross: 108, sampleSize: 20,
+        par3AvgVsPar: 1.8, par4AvgVsPar: 2.0, par5AvgVsPar: 2.0 }),
+      // Scratch-ish heavy downscale (raw model overstates birdies most here).
+      profile({ birdiesPerRound: 1, handicapIndex: 0, avgGross: 73, sampleSize: 20,
+        par3AvgVsPar: 0.05, par4AvgVsPar: 0.05, par5AvgVsPar: 0.05, scoreStddev: 3 }),
+    ];
+    for (const p of cases) {
+      const { dists, meta } = buildHoleDistributionsDetailed(p, holes);
+      const muSum = holes.reduce((s, h) => s + holeMu(p, h), 0);
+      const eSum = dists.reduce((s, d) => s + distMean(d), 0);
+      expect(Math.abs(eSum - muSum)).toBeLessThan(0.25);
+      expect(meta.meanResidual).toBeLessThan(0.05);
+    }
+  });
+
+  it("9-hole rounds calibrate to half the per-18 rate", () => {
+    const nine = holes.slice(0, 9).map((h) => ({ ...h, holesInRound: 9 }));
+    const p = profile({ birdiesPerRound: 1 });
+    const { dists, meta } = buildHoleDistributionsDetailed(p, nine);
+    expect(birdieMass(dists)).toBeCloseTo(meta.birdie.targetRate / 2, 9);
+  });
+
+  it("no observed rate → pure prior (never skips calibration)", () => {
+    const p = profile({ birdiesPerRound: null, eaglesPerRound: null, sampleSize: 0, handicapIndex: 20 });
+    const { dists, meta } = buildHoleDistributionsDetailed(p, holes);
+    expect(meta.birdie.targetRate).toBeCloseTo(birdiePriorMean(20), 12);
+    expect(birdieMass(dists)).toBeCloseTo(birdiePriorMean(20), 9);
+  });
+
+  it("prior handicap proxy falls back HI → differential − gap → PH", () => {
+    const viaHi = buildHoleDistributionsDetailed(profile({ birdiesPerRound: null, handicapIndex: 16 }), holes);
+    const viaDiff = buildHoleDistributionsDetailed(
+      profile({ birdiesPerRound: null, handicapIndex: null, avgDifferential: 20, differentialStddev: 4, differentialEffectiveN: 10 }),
+      holes
+    );
+    // avgDifferential 20 − POPULATION_GAP 4 = proxy 16, same prior as HI 16.
+    expect(viaDiff.meta.birdie.priorMean).toBeCloseTo(viaHi.meta.birdie.priorMean, 12);
+    const viaPh = buildHoleDistributionsDetailed(
+      profile({ birdiesPerRound: null, handicapIndex: null }),
+      holes,
+      16
+    );
+    expect(viaPh.meta.birdie.priorMean).toBeCloseTo(viaHi.meta.birdie.priorMean, 12);
+  });
+
+  it("absurd targets stay valid: per-hole mass bounded, sums exact, target met", () => {
+    // 12 observed birdies/round → target ≈ 9.2. The mean-preservation loop
+    // settles on lower latent means (more natural birdie mass) rather than
+    // leaving the factor pinned at the 0.95-per-hole cap.
+    const p = profile({ birdiesPerRound: 12, sampleSize: 20, handicapIndex: 0 });
+    const { dists, meta } = buildHoleDistributionsDetailed(p, holes);
+    expect(birdieMass(dists)).toBeCloseTo(meta.birdie.targetMass, 6);
+    for (const d of dists) {
+      expect(d[0] + d[1]).toBeLessThanOrEqual(0.95 + 1e-9);
+      expect(d.reduce((s, x) => s + x, 0)).toBeCloseTo(1, 9);
+      for (const x of d) expect(x).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it("more observed birdies → more simulated birdies", () => {
+    const few = birdieMass(buildHoleDistributions(profile({ birdiesPerRound: 0.5 }), holes));
+    const many = birdieMass(buildHoleDistributions(profile({ birdiesPerRound: 3 }), holes));
     expect(many).toBeGreaterThan(few);
-    // Calibration clips at 2× the raw model, so exact equality isn't
-    // guaranteed — but the ordering and rough scale must hold.
-    expect(few).toBeLessThan(1.5);
-    expect(many).toBeGreaterThan(1.5);
   });
 });
 

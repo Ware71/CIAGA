@@ -30,24 +30,6 @@ client). The engine is pure TypeScript: `apps/app/lib/fantasy/simulation/`.
 
 ## 2. When are markets and odds first GENERATED?
 
-Generation (`generateEventFantasy` in `lib/fantasy/odds.ts`) is what turns an
-ordinary event into a fantasy event. It:
-
-1. Verifies the group has `fantasy_config` set, the event is not completed,
-   and ≥ 2 players are entered. (Multi-round events are supported since V2 —
-   each round contributes its own course/tee hole set.)
-2. Builds performance profiles for any entered player missing one, and
-   rebuilds any older than 24 h (direct indexed queries on
-   `round_participants` → `rounds` → `round_score_events`).
-3. Inserts the `fantasy_event_state` row (**this activates the staleness
-   triggers** for the event).
-4. Runs one simulation to get projected means per player.
-5. Asks every market definition in the registry to materialize its markets —
-   projections set the O/U lines (`mean ± → x.5`) and pair the head-to-head
-   rivals (adjacent players sorted by projected mean).
-6. Prices every market from the same sim run and writes the initial `active`
-   snapshots at the current version.
-
 **Triggered by** (either path, both idempotent — re-running adds markets for
 new entrants, never duplicates):
 
@@ -261,16 +243,18 @@ The `event_version` on every snapshot is what makes cached odds *safe*:
 2. **Net from event setup.** Scoring model, allowance % and per-round playing
    handicaps are applied on top of simulated gross (net = gross − PH × rounds,
    mirroring the leaderboard) to produce net totals and positions.
-3. **Handicap is a prior, not a driver.** Thin profiles blend toward
-   `HI + 3 over par` by sample weight (`w = sampleSize/10`); no-history
-   players price entirely off it. Sigma defaults follow handicap when no
-   observed stddev exists.
-4. **Recent form is damped**: 40% weight, clamped ±4 strokes — it nudges the
-   mean, never replaces it.
-5. **Rare outcomes are calibrated**: birdie bins against `birdies_per_round`
-   (clip 0.5–2), eagle bins against `eagles_per_round` (clip 0.1–3);
-   hole-in-one/albatross specials price off amateur base rates (1/3500 per
-   par-3 player-hole, 1/50000), never the normal tail.
+3. **Handicap is a prior, not a driver.** Thin profiles blend toward the
+   net-consistent anchor `PH + POPULATION_GAP (4) over par` by sample weight
+   (gross path `w = sampleSize/10`; differential path `w = effectiveN/12`);
+   no-history players price entirely off it. Sigma defaults follow handicap
+   when no observed stddev exists.
+4. **Recent form is damped**: 40% weight on the gross path (20% on the
+   differential path — the level is already recency-weighted there), clamped
+   ±4 strokes — it nudges the mean, never replaces it.
+5. **Rare outcomes are calibrated** — see §10 for the current (exact,
+   Bayesian-shrunk) calibration; hole-in-one/albatross specials price off
+   amateur base rates (1/3500 per par-3 player-hole, 1/50000), never the
+   normal tail.
 6. **Profiles have a 24 h TTL** — `ensureProfiles` rebuilds stale rows, so
    form inputs follow new rounds.
 
@@ -314,3 +298,85 @@ Sandbox-only dev tool (`NEXT_PUBLIC_APP_ENV === "sandbox"`): resolved playing
 handicaps with source path, stored profile inputs, per-hole μ/σ, sim
 percentiles, market prices with probability-sum checks, refresh-job log, plus
 "rebuild profiles" and "regenerate + reprice" actions.
+
+---
+
+## 10. V4 model audit fixes (2026-07-10)
+
+An independent audit of the pricing model surfaced three real bugs; this
+section documents the corrected model. The audit workbook (inspector Excel
+export) now carries **Assumptions** and **Calibration** sheets that reconcile
+every number below against the live simulation.
+
+### The level model is differential-first
+
+When the event tee has WHS rating/slope and the player has score
+differentials, the per-hole level works the player's **recency-weighted mean
+differential** back to gross (`AGS ≈ μ_D·slope/113 + rating`), blended toward
+the `PH + 4` anchor by `min(1, effectiveN/12)`. The gross-average path of §9
+is the fallback (no rating/slope, or no differentials).
+
+- **Differential history is uncapped** — the full accepted-round stream feeds
+  the level (paged explicitly past PostgREST's 1000-row default so long
+  histories can never silently truncate).
+- **Recency weighting**: half-life 20 rounds. The effective sample size
+  `Neff = (Σw)²/Σw²` therefore **asymptotes at ≈ 57.7** no matter how long
+  the history — a 249-round history shows Neff ≈ 57.7 by construction, not
+  truncation.
+- **The 20-round SHAPE cap** (`SHAPE_MAX_ROUNDS`) applies only to per-hole
+  shape, birdie/eagle rates and form — a freshness window, not an ability cap.
+
+### Birdie/eagle calibration: exact, with a documented Bayesian prior
+
+**Bug fixed:** the old calibration clipped its scale factor to `[0.5, 2]`. The
+discretized normal overstates amateur birdie odds so badly that the 0.5 floor
+bound for entire fields — every player simulated at exactly half the raw
+model's birdie mass, and a player with **zero** observed birdies still got
+`max(0.5, 0) = 0.5` of it (e.g. observed 0.00/round → simulated ~0.4/round).
+A post-scale renormalize also pulled even unclipped factors off target, and
+the eagle pass then perturbed the just-calibrated birdie mass.
+
+**Current model** (`buildHoleDistributionsDetailed`, holeModel.ts):
+
+1. **Shrunk target** (Gamma-Poisson posterior mean):
+   `λ* = (λ_obs·n + λ0·K)/(n + K)` with `n` = shape-sample rounds, `K = 8`.
+   Prior mean `λ0(HI) = clamp(2.2·e^(−0.115·HI), 0.03, 3.0)` birdies/round
+   (fit to published amateur rates: scratch ≈ 2.2, HI 10 ≈ 0.70, HI 20 ≈
+   0.22). Eagles: `λ0e(HI) = clamp(0.06·e^(−0.18·HI), 0.001, 0.15)`,
+   `K = 40`, target never above the birdie target. Handicap proxy for the
+   prior: `HI → (μ_D − 4) → PH`. A missing observed rate means `n = 0` →
+   pure prior (calibration never skips).
+2. **Exact mass transfer**: one global factor `f = T/B` on the birdie bins;
+   each hole's non-birdie bins rescale by `(1 − f·b_h)/(1 − b_h)` so every
+   hole sums to exactly 1 and `Σ P(birdie-or-better) = λ*·holes/18` exactly
+   (per-hole birdie mass capped at 0.95). The eagle bin is then set **within**
+   the birdie-or-better mass, leaving the birdie total untouched.
+3. **Mean preservation**: calibration alone would shift each hole's expected
+   score (the differential level already includes the player's real birdies),
+   so a fixed-point loop (≤ 20 passes, tol 0.01 strokes/hole) re-targets the
+   latent means until the **post-calibration** expected score matches
+   `holeMu`. Invariant: Σ E[hole] + par ≈ simulated mean gross ≈ the
+   differential-anchored level.
+
+### Tie semantics: pricing matches settlement, per market
+
+| Market | Settlement | Price |
+|---|---|---|
+| Outright winner (event) | leaderboard `position = 1` (playoff/countback resolves ties) | `winProb` — ties **split** evenly (fair when ties resolve ~randomly) |
+| Round winner | "ties all win" (no round playoffs) | ties at **full** credit (`winProbsFrom(…, "all")`) — **bug fixed**: was priced tie-split, systematically too long |
+| Head-to-head | tie → **void** (stake back) | tie-**excluded**: `wins/(wins + losses)` — **bug fixed**: was `(wins + ties/2)`, shading value toward the favourite |
+| `finish_position` / `top_n` / `finish_range` | shared leaderboard positions | position histogram under 1224 ranking — tied players carry the tied position in full |
+
+`P(position 1 incl. ties) ≥ winProb` whenever ties occur; both are shown side
+by side on the inspector and the Sim aggregates sheet — they are different
+quantities pricing different contracts, not a discrepancy.
+
+### Audit surfaces
+
+The inspector (JSON + Excel) now emits, per player: model path, σ source
+(differential / observed / handicap / default) with clamp flag, form status,
+the full calibration block (observed → prior → λ* target → pre/post mass →
+factor → mean residual → passes), latent μ **and** post-calibration E[score]
+per hole with `Σ+par` reconciliation columns, simulated E[birdies], and
+`P(1st incl ties)` next to `Win%`. Missing profile values render "—" (they
+are never numeric defaults; each has a documented fallback).

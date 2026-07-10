@@ -19,8 +19,10 @@ function marketBasis(market: FantasyMarket): "gross" | "net" {
  * Head-to-head matchups (A beats B, gross or net). Rather than every pair
  * (O(n²) markets), players are paired with their nearest projected rival —
  * sorted by projected mean, adjacent pairs — separately for gross and net.
- * Ties settle as void (stake refunded); pricing gives half the tie mass to
- * each side.
+ * Ties settle as void (stake refunded), so the fair price is the
+ * TIE-EXCLUDED conditional P(A wins | not a tie) — crediting half the tie
+ * mass to each side (the old pricing) shades value toward the favorite,
+ * because a tie returns the stake rather than paying half.
  */
 export const headToHead: MarketDefinition = {
   type: "h2h",
@@ -93,7 +95,10 @@ export const headToHead: MarketDefinition = {
       if (totalsA[i] < totalsB[i]) winsA += 1;
       else if (totalsA[i] === totalsB[i]) ties += 1;
     }
-    const pA = (winsA + ties / 2) / sim.simulationCount;
+    // Ties void the market (stake back), so price on the decided iterations
+    // only. Sides still sum to 1.
+    const decided = sim.simulationCount - ties;
+    const pA = decided > 0 ? winsA / decided : 0.5;
     out.set("a", pA);
     out.set("b", 1 - pA);
     return out;

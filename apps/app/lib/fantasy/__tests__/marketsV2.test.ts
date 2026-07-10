@@ -169,11 +169,47 @@ describe("multi-round simulation", () => {
     }
   });
 
-  it("round-scoped outright prices from that round's samples", () => {
+  it("round-scoped outright prices from that round's samples with ties at FULL credit", () => {
     const m = market({ market_type: "outright_winner", params: { round: 2 } });
     const probs = outrightWinner.simulate(two, m);
     const total = [...probs.values()].reduce((s, p) => s + p, 0);
-    expect(total).toBeCloseTo(1, 6);
+    // Round winners settle "ties all win", so tied iterations credit every
+    // tied player in full — Σp exceeds 1 by exactly the tie mass.
+    expect(total).toBeGreaterThanOrEqual(1 - 1e-9);
+    expect(total).toBeLessThan(1.5);
+  });
+
+  it("round outright: constructed dead-heat prices both winners in full", () => {
+    // Hand-built sim: 4 iterations, players tie for the round-1 lead in 2 of them.
+    const totals = {
+      a: Int16Array.from([70, 70, 69, 72]),
+      b: Int16Array.from([70, 70, 71, 70]),
+    };
+    const mini: SimulationResult = {
+      simulationCount: 4,
+      rankingBasis: "gross",
+      holes: makeHoles([1]),
+      playerIndex: { a: 0, b: 1 },
+      players: (["a", "b"] as const).map((id) => ({
+        profileId: id,
+        grossTotals: totals[id],
+        netTotals: totals[id],
+        roundGrossTotals: { 1: totals[id] },
+        roundNetTotals: { 1: totals[id] },
+        birdieHistogram: [4],
+        winProb: 0,
+        topNProb: {},
+        positionHistogram: [0, 0],
+        lastProb: 0,
+        meanGross: 0,
+        meanNet: 0,
+        holeOutcomes: [],
+      })),
+    };
+    const probs = outrightWinner.simulate(mini, market({ market_type: "outright_winner", params: { round: 1 } }));
+    // a wins iters 1,2 (tie), 3 → 3/4; b wins iters 1,2 (tie), 4 → 3/4.
+    expect(probs.get("a")).toBeCloseTo(0.75, 9);
+    expect(probs.get("b")).toBeCloseTo(0.75, 9);
   });
 });
 

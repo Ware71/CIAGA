@@ -44,9 +44,27 @@ type InspectPayload = {
       recent_rounds: { playedAt: string; gross18: number; birdies: number; holes: number }[] | null;
       hole_splits: Record<string, unknown> | null;
     } | null;
-    model: { sigmaPerHole: number; muByHole: number[] };
+    model: {
+      sigmaPerHole: number; sigmaRound: number; sigmaSource: string; sigmaClamped: boolean;
+      muByHole: number[]; eByHole: number[];
+      formStatus: string;
+      calibration: {
+        birdie: {
+          observedRate: number | null; sampleRounds: number; priorMean: number;
+          priorStrength: number; targetRate: number; targetMass: number;
+          preMass: number; postMass: number; factor: number; capped: boolean;
+        };
+        eagle: {
+          observedRate: number | null; sampleRounds: number; priorMean: number;
+          priorStrength: number; targetRate: number; targetMass: number;
+          preMass: number; postMass: number; capped: boolean;
+        };
+        meanResidual: number; iterations: number;
+      };
+    };
     sim: {
       meanGross: number; meanNet: number; winProb: number;
+      pFirstInclTies: number; expectedBirdies: number;
       topNProb: Record<number, number>;
       grossPercentiles: Record<string, number>; netPercentiles: Record<string, number>;
     };
@@ -278,7 +296,8 @@ export default function InspectorClient({ eventId }: { eventId: string }) {
                     <th className={th}>Brd/rd</th>
                     <th className={th}>Mean G</th>
                     <th className={th}>Mean N</th>
-                    <th className={th}>Win</th>
+                    <th className={th} title="Ties split evenly — prices the outright">Win</th>
+                    <th className={th} title="Shared firsts in full — prices finish-position 1">P1st</th>
                     <th className={th}>Top3</th>
                     <th className={th}>G p5–p95</th>
                     <th className={th}>Built</th>
@@ -432,27 +451,40 @@ function PlayerRows({
         <td className={td}>{num(p.sim.meanGross)}</td>
         <td className={td}>{num(p.sim.meanNet)}</td>
         <td className={td}>{pct(p.sim.winProb)}</td>
+        <td className={td}>{pct(p.sim.pFirstInclTies)}</td>
         <td className={td}>{p.sim.topNProb[3] != null ? pct(p.sim.topNProb[3]) : "—"}</td>
         <td className={td}>{p.sim.grossPercentiles.p5}–{p.sim.grossPercentiles.p95}</td>
         <td className={td}>{ago(prof?.computed_at)}</td>
       </tr>
       {open && (
         <tr>
-          <td colSpan={20} className="bg-emerald-950/40 px-3 py-2">
+          <td colSpan={21} className="bg-emerald-950/40 px-3 py-2">
             <div className="space-y-2">
               <div className="flex flex-wrap gap-1">
                 {holes.map((h, i) => (
                   <span
                     key={h.holeNumber}
                     className="rounded-md border border-emerald-900/70 px-1.5 py-0.5 text-[10px] text-emerald-100/80"
-                    title={`Par ${h.par} · SI ${h.strokeIndex}${h.yardage ? ` · ${h.yardage}y` : ""}`}
+                    title={`Par ${h.par} · SI ${h.strokeIndex}${h.yardage ? ` · ${h.yardage}y` : ""} · μ = latent mean, E = calibrated expected score (both vs par)`}
                   >
-                    H{h.holeNumber}: μ+{p.model.muByHole[i]?.toFixed(2)}
+                    H{h.holeNumber}: μ+{p.model.muByHole[i]?.toFixed(2)} / E+{p.model.eByHole[i]?.toFixed(2)}
                   </span>
                 ))}
                 <span className="rounded-md border border-emerald-700/70 px-1.5 py-0.5 text-[10px] text-emerald-200">
-                  σ/hole {p.model.sigmaPerHole.toFixed(2)}
+                  σ/hole {p.model.sigmaPerHole.toFixed(2)} ({p.model.sigmaSource}
+                  {p.model.sigmaClamped ? ", clamped" : ""})
                 </span>
+              </div>
+              <div className="text-[10px] text-emerald-100/60">
+                Birdie calibration: obs {num(p.model.calibration.birdie.observedRate, 2)}/rd over{" "}
+                {p.model.calibration.birdie.sampleRounds} rds · prior{" "}
+                {p.model.calibration.birdie.priorMean.toFixed(2)} (K {p.model.calibration.birdie.priorStrength}) →
+                target {p.model.calibration.birdie.targetRate.toFixed(2)}/rd · model pre-cal{" "}
+                {p.model.calibration.birdie.preMass.toFixed(2)} → post{" "}
+                {p.model.calibration.birdie.postMass.toFixed(2)}
+                {p.model.calibration.birdie.capped ? " · CAPPED" : ""} · sim E[brd]{" "}
+                {p.sim.expectedBirdies.toFixed(2)} · mean residual{" "}
+                {p.model.calibration.meanResidual.toFixed(3)} ({p.model.calibration.iterations} passes)
               </div>
               {prof?.recent_rounds && prof.recent_rounds.length > 0 && (
                 <div className="flex flex-wrap gap-1">

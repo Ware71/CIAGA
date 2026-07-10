@@ -139,7 +139,7 @@ export type SimPlayerResult = {
   meanNet: number;
   /**
    * holeOutcomes[holeIdx][k] = iterations scoring par+(k-2) on that hole
-   * (k 0..6 → eagle-or-better .. quad-or-worse). Foundation for future
+   * (k 0..10 → eagle-or-better .. the blow-up tail). Foundation for future
    * hole-specific markets; already-played holes have their real outcome.
    */
   holeOutcomes: number[][];

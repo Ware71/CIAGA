@@ -37,10 +37,18 @@ export function totalsFor(
 
 /**
  * Per-iteration "who wins" probabilities on arbitrary totals arrays (used by
- * round-scoped winner/H2H where the engine's event-wide winProb doesn't
- * apply). Ties split evenly, mirroring the engine.
+ * round-scoped winner markets where the engine's event-wide winProb doesn't
+ * apply). Tie handling must match how the market SETTLES:
+ *   "split" — tied winners share the win 1/tied (engine's winProb semantics;
+ *             right when ties get resolved to a single winner downstream).
+ *   "all"   — every tied winner counts in full (right when settlement pays
+ *             all ties, e.g. round winners: "ties all win, no round playoffs").
  */
-export function winProbsFrom(totalsByPlayer: Int16Array[], simulationCount: number): number[] {
+export function winProbsFrom(
+  totalsByPlayer: Int16Array[],
+  simulationCount: number,
+  ties: "split" | "all" = "split"
+): number[] {
   const n = totalsByPlayer.length;
   const wins = new Array<number>(n).fill(0);
   for (let iter = 0; iter < simulationCount; iter++) {
@@ -51,8 +59,9 @@ export function winProbsFrom(totalsByPlayer: Int16Array[], simulationCount: numb
     }
     let tied = 0;
     for (let pi = 0; pi < n; pi++) if (totalsByPlayer[pi][iter] === best) tied += 1;
+    const credit = ties === "all" ? 1 : 1 / tied;
     for (let pi = 0; pi < n; pi++) {
-      if (totalsByPlayer[pi][iter] === best) wins[pi] += 1 / tied;
+      if (totalsByPlayer[pi][iter] === best) wins[pi] += credit;
     }
   }
   return wins.map((w) => w / simulationCount);

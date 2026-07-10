@@ -4,8 +4,8 @@ import type { HoleSplits, SimHole, SimPlayerProfile } from "@/lib/fantasy/simula
 /**
  * Per-(player, hole) discrete score model.
  *
- * Outcomes are relative to par, indexed k = 0..6 → par−2 .. par+4
- * (eagle-or-better collapsed into k=0, quad-bogey-or-worse into k=6).
+ * Outcomes are relative to par, indexed k = 0..10 → par−2 .. par+8
+ * (eagle-or-better collapsed into k=0, the blow-up tail into k=10).
  *
  * The distribution is a discretized normal over strokes-vs-par:
  *   mu    — player's expected strokes over par on this hole, blending the flat
@@ -13,8 +13,14 @@ import type { HoleSplits, SimHole, SimPlayerProfile } from "@/lib/fantasy/simula
  *           plus a stroke-index difficulty tilt and recent-form drift.
  *   sigma — per-hole spread derived from the player's round stddev
  *           (sigma_round / √18), widened for low-confidence profiles.
- * The birdie bin is then calibrated so the modelled birdies/round matches the
- * player's observed rate (birdie markets price off real birdie propensity).
+ *
+ * The birdie-or-better mass is then calibrated EXACTLY to a Bayesian-shrunk
+ * target rate (observed birdies/round shrunk toward a handicap-based prior —
+ * the normal tail wildly overstates amateur birdie odds), the eagle bin is set
+ * within that mass, and a fixed-point loop re-adjusts each hole's latent mean
+ * so the POST-calibration expected score still equals holeMu (the differential
+ * level already includes the player's real birdies, so calibration must fix
+ * the shape without moving the level).
  */
 
 export const OUTCOME_OFFSET = 2; // k index 2 = par
@@ -58,6 +64,36 @@ const CONFIDENCE_SIGMA_FACTOR: Record<SimPlayerProfile["confidence"], number> = 
   medium: 1.1,
   low: 1.3,
 };
+
+/**
+ * Rare-event calibration priors (Gamma-Poisson): the observed rate over the
+ * ≤20-round shape sample is shrunk toward a handicap-based prior mean with
+ * strength K (in rounds): λ* = (λ_obs·n + λ0·K)/(n + K). Prior curves are fit
+ * to published amateur rates (birdies/round: scratch ≈ 2.2, HI 10 ≈ 0.70,
+ * HI 20 ≈ 0.22; eagles are ~1 per 15–25 rounds even for scratch).
+ */
+export const BIRDIE_PRIOR_STRENGTH = 8;
+export const EAGLE_PRIOR_STRENGTH = 40;
+
+export function birdiePriorMean(hi: number): number {
+  return Math.min(3.0, Math.max(0.03, 2.2 * Math.exp(-0.115 * hi)));
+}
+
+export function eaglePriorMean(hi: number): number {
+  return Math.min(0.15, Math.max(0.001, 0.06 * Math.exp(-0.18 * hi)));
+}
+
+/** Gamma-Poisson posterior mean; a null observation contributes zero rounds. */
+export function shrunkRate(
+  observed: number | null,
+  sampleRounds: number,
+  priorMean: number,
+  priorStrength: number
+): number {
+  const n = observed != null && observed >= 0 ? Math.max(0, sampleRounds) : 0;
+  const obs = observed != null && observed >= 0 ? observed : 0;
+  return (obs * n + priorMean * priorStrength) / (n + priorStrength);
+}
 
 export function lengthBand(par: number, yardage: number | null): "short" | "mid" | "long" | null {
   if (yardage == null || yardage <= 0) return null;
@@ -173,7 +209,19 @@ export function holeMu(profile: SimPlayerProfile, hole: SimHole, playingHandicap
   return blended + si + formDrift(profile, FORM_WEIGHT);
 }
 
-export function holeSigma(profile: SimPlayerProfile, hole?: SimHole): number {
+/** Audit detail of the sigma resolution (odds inspector). */
+export type SigmaDetail = {
+  /** Per-hole sigma the simulation uses (post widening + clamp). */
+  sigma: number;
+  /** The round-level sigma the per-hole value was derived from. */
+  sigmaRound: number;
+  /** Which fallback tier supplied sigmaRound. */
+  source: "differential" | "observed" | "handicap" | "default";
+  /** True when the per-hole clamp [0.5, 2.6] changed the value. */
+  clamped: boolean;
+};
+
+export function holeSigmaDetailed(profile: SimPlayerProfile, hole?: SimHole): SigmaDetail {
   // Differential spread converted to gross strokes on this tee (σ_gross =
   // σ_D · slope/113) when the differential path is live; otherwise the observed
   // round stddev, then a handicap-based default (higher handicap → wider spread).
@@ -184,6 +232,13 @@ export function holeSigma(profile: SimPlayerProfile, hole?: SimHole): number {
     hole.holesInRound >= 14 &&
     profile.avgDifferential != null &&
     profile.differentialStddev != null;
+  const source: SigmaDetail["source"] = useDifferential
+    ? "differential"
+    : profile.scoreStddev != null
+    ? "observed"
+    : profile.handicapIndex != null
+    ? "handicap"
+    : "default";
   const sigmaRound = useDifferential
     ? profile.differentialStddev! * (hole!.slope! / 113)
     : profile.scoreStddev ??
@@ -196,8 +251,13 @@ export function holeSigma(profile: SimPlayerProfile, hole?: SimHole): number {
   // Wider than V3's [0.7,1.8]: that flattened round σ to ~3–7.6 for everyone, so
   // a volatile player and a steady one simulated almost identically. [0.5,2.6]
   // (round σ ≈ 2.1–11) lets σ_D actually separate them; the top of the range is
-  // about all the par−2…par+4 outcome grid can express.
-  return Math.min(2.6, Math.max(0.5, widened));
+  // about all the par−2…par+8 outcome grid can express.
+  const sigma = Math.min(2.6, Math.max(0.5, widened));
+  return { sigma, sigmaRound, source, clamped: Math.abs(sigma - widened) > 1e-12 };
+}
+
+export function holeSigma(profile: SimPlayerProfile, hole?: SimHole): number {
+  return holeSigmaDetailed(profile, hole).sigma;
 }
 
 /** Discretize N(mu, sigma) over k = par−2 .. par+8 with collapsed tails. */
@@ -231,55 +291,240 @@ function normalize(dist: number[]): number[] {
   return dist.map((p) => p / total);
 }
 
+/** Audit trail of one player's rare-event calibration (odds inspector). */
+export type CalibrationMeta = {
+  birdie: {
+    observedRate: number | null;
+    sampleRounds: number;
+    priorMean: number;
+    priorStrength: number;
+    /** λ*: shrunk birdies/round the sim is calibrated to. */
+    targetRate: number;
+    /** T = λ* × holes/18 — target mass over these holes. */
+    targetMass: number;
+    /** Raw discretized-normal mass before any calibration (first pass). */
+    preMass: number;
+    /** Σ P(birdie-or-better) after the final pass — equals targetMass unless capped. */
+    postMass: number;
+    /** Final global scale factor applied to the birdie bins. */
+    factor: number;
+    /** True when the 0.95-per-hole guard capped the factor short of the target. */
+    capped: boolean;
+  };
+  eagle: {
+    observedRate: number | null;
+    sampleRounds: number;
+    priorMean: number;
+    priorStrength: number;
+    targetRate: number;
+    targetMass: number;
+    preMass: number;
+    postMass: number;
+    capped: boolean;
+  };
+  /** Max per-hole |holeMu − E[score]| after the final pass (strokes). */
+  meanResidual: number;
+  /** Fixed-point passes run (1 when already converged). */
+  iterations: number;
+};
+
+const CALIBRATION_EPS = 1e-9;
+// Fixed-point convergence is a damped contraction but can be slow when the
+// calibration removes a lot of birdie mass (heavy downscales contract ~0.75/
+// pass); a pass is only holes × bins CDF evaluations, so run plenty.
+const CALIBRATION_MAX_PASSES = 20;
+const CALIBRATION_MEAN_TOL = 0.01; // strokes per hole
+const CALIBRATION_MU_ADJ_CLAMP = 2; // strokes per hole
+/** Birdie mass on a single hole never scales above this (keeps bins sane). */
+const CALIBRATION_MAX_HOLE_MASS = 0.95;
+
+/** Exact mass-transfer calibration, in place. Returns the audit numbers. */
+function calibrateDistributions(
+  dists: number[][],
+  targetBirdieMass: number,
+  targetEagleMass: number
+): { factor: number; capped: boolean; eagleCapped: boolean } {
+  const birdieMass = dists.map((d) => d[0] + d[1]);
+  const total = birdieMass.reduce((s, x) => s + x, 0);
+  let factor = 1;
+  let capped = false;
+  if (total > CALIBRATION_EPS) {
+    // One GLOBAL factor preserves the relative birdie shape across holes and
+    // makes Σ birdie mass land on the target exactly; the cap only binds under
+    // absurd targets (recorded so the audit can show the shortfall).
+    const maxHole = Math.max(...birdieMass);
+    const factorCap = maxHole > CALIBRATION_EPS ? CALIBRATION_MAX_HOLE_MASS / maxHole : 1;
+    factor = targetBirdieMass / total;
+    if (factor > factorCap) {
+      factor = factorCap;
+      capped = true;
+    }
+    for (let i = 0; i < dists.length; i++) {
+      const d = dists[i];
+      const bh = birdieMass[i];
+      if (bh <= CALIBRATION_EPS) continue;
+      const nonBirdie = 1 - bh;
+      d[0] *= factor;
+      d[1] *= factor;
+      if (nonBirdie <= CALIBRATION_EPS) {
+        // Degenerate hole (all mass birdie-or-better): park the removed mass on par.
+        d[2] += (1 - factor) * bh;
+      } else {
+        // Scale the other bins so the hole still sums to exactly 1 — this is
+        // what the old normalize() got wrong (it re-divided the birdie bins
+        // too, pulling the "calibrated" mass off target).
+        const g = (1 - factor * bh) / nonBirdie;
+        for (let k = 2; k < OUTCOME_BINS; k++) d[k] *= g;
+      }
+    }
+  }
+
+  // Eagle bin is set WITHIN the birdie-or-better mass (moving weight between
+  // k=0 and k=1) so the just-calibrated birdie total is untouched.
+  let eagleCapped = false;
+  const eagleTotal = dists.reduce((s, d) => s + d[0], 0);
+  if (eagleTotal > CALIBRATION_EPS) {
+    const eagleFactor = targetEagleMass / eagleTotal;
+    for (const d of dists) {
+      const bb = d[0] + d[1];
+      const d0 = Math.min(eagleFactor * d[0], CALIBRATION_MAX_HOLE_MASS * bb);
+      if (d0 < eagleFactor * d[0] - CALIBRATION_EPS) eagleCapped = true;
+      d[1] = bb - d0;
+      d[0] = d0;
+    }
+  }
+
+  return { factor, capped, eagleCapped };
+}
+
 /**
- * Build the outcome distribution for every hole, then calibrate the
- * birdie-or-better mass so Σ P(birdie) over the holes matches the player's
- * observed birdies/round (factor clipped to [0.5, 2] to stay sane on thin
- * data), and the eagle-or-better bin against observed eagles/round — the
- * normal tail wildly overstates rare outcomes, so without this a mid
- * handicapper "eagles" several times a season in the model.
+ * Build the outcome distribution for every hole, calibrated so that:
+ *   1. Σ P(birdie-or-better) = λ*_birdie × holes/18 EXACTLY, where λ* is the
+ *      observed rate shrunk toward the handicap prior (Gamma-Poisson);
+ *   2. Σ P(eagle-or-better) ≈ λ*_eagle × holes/18, moved within the birdie
+ *      mass so (1) survives;
+ *   3. each hole's expected score still equals holeMu — a fixed-point loop
+ *      re-targets the latent mean because calibration shifts it (removing
+ *      overstated birdie mass would otherwise raise the simulated gross).
+ * Returns the distributions plus the full audit trail.
  */
+export function buildHoleDistributionsDetailed(
+  profile: SimPlayerProfile,
+  holes: SimHole[],
+  playingHandicap = 0
+): { dists: number[][]; meta: CalibrationMeta } {
+  // Handicap proxy for the priors, per the model's handicap-as-prior doctrine:
+  // HI, else the differential level minus the population gap, else the PH.
+  const hiProxy =
+    profile.handicapIndex ??
+    (profile.avgDifferential != null ? profile.avgDifferential - POPULATION_GAP : playingHandicap);
+
+  const birdieRounds = profile.birdiesPerRound != null ? profile.sampleSize : 0;
+  const eagleRounds = profile.eaglesPerRound != null ? profile.sampleSize : 0;
+  const birdiePrior = birdiePriorMean(hiProxy);
+  const eaglePrior = eaglePriorMean(hiProxy);
+  const birdieTargetRate = shrunkRate(
+    profile.birdiesPerRound,
+    birdieRounds,
+    birdiePrior,
+    BIRDIE_PRIOR_STRENGTH
+  );
+  // Eagles are a subset of birdie-or-better, so the target can never exceed it.
+  const eagleTargetRate = Math.min(
+    birdieTargetRate,
+    shrunkRate(profile.eaglesPerRound, eagleRounds, eaglePrior, EAGLE_PRIOR_STRENGTH)
+  );
+
+  const perRoundScale = holes.length / 18;
+  const targetBirdieMass = birdieTargetRate * perRoundScale;
+  const targetEagleMass = eagleTargetRate * perRoundScale;
+
+  const mus = holes.map((hole) => holeMu(profile, hole, playingHandicap));
+  const sigmas = holes.map((hole) => holeSigma(profile, hole));
+  const muAdj = mus.slice();
+
+  let dists: number[][] = [];
+  let preMass = 0;
+  let preEagleMass = 0;
+  let factor = 1;
+  let capped = false;
+  let eagleCapped = false;
+  let meanResidual = 0;
+  let iterations = 0;
+
+  for (let pass = 0; pass < CALIBRATION_MAX_PASSES && holes.length > 0; pass++) {
+    iterations = pass + 1;
+    dists = holes.map((_, i) => discretizedDistribution(muAdj[i], sigmas[i]));
+    if (pass === 0) {
+      preMass = dists.reduce((s, d) => s + d[0] + d[1], 0);
+      preEagleMass = dists.reduce((s, d) => s + d[0], 0);
+    }
+    const cal = calibrateDistributions(dists, targetBirdieMass, targetEagleMass);
+    factor = cal.factor;
+    capped = cal.capped;
+    eagleCapped = cal.eagleCapped;
+
+    // Calibration is always the LAST operation on the distributions (birdie
+    // exactness prices the birdie markets); the loop only decides whether the
+    // latent means need another nudge.
+    meanResidual = 0;
+    const residuals = new Array<number>(holes.length).fill(0);
+    for (let i = 0; i < holes.length; i++) {
+      const mean = dists[i].reduce((s, p, k) => s + (k - OUTCOME_OFFSET) * p, 0);
+      residuals[i] = mus[i] - mean;
+      meanResidual = Math.max(meanResidual, Math.abs(residuals[i]));
+    }
+    if (meanResidual < CALIBRATION_MEAN_TOL || pass === CALIBRATION_MAX_PASSES - 1) break;
+    for (let i = 0; i < holes.length; i++) {
+      muAdj[i] = Math.min(
+        mus[i] + CALIBRATION_MU_ADJ_CLAMP,
+        Math.max(mus[i] - CALIBRATION_MU_ADJ_CLAMP, muAdj[i] + residuals[i])
+      );
+    }
+  }
+
+  const postMass = dists.reduce((s, d) => s + d[0] + d[1], 0);
+  const postEagleMass = dists.reduce((s, d) => s + d[0], 0);
+
+  return {
+    dists,
+    meta: {
+      birdie: {
+        observedRate: profile.birdiesPerRound,
+        sampleRounds: birdieRounds,
+        priorMean: birdiePrior,
+        priorStrength: BIRDIE_PRIOR_STRENGTH,
+        targetRate: birdieTargetRate,
+        targetMass: targetBirdieMass,
+        preMass,
+        postMass,
+        factor,
+        capped,
+      },
+      eagle: {
+        observedRate: profile.eaglesPerRound,
+        sampleRounds: eagleRounds,
+        priorMean: eaglePrior,
+        priorStrength: EAGLE_PRIOR_STRENGTH,
+        targetRate: eagleTargetRate,
+        targetMass: targetEagleMass,
+        preMass: preEagleMass,
+        postMass: postEagleMass,
+        capped: eagleCapped,
+      },
+      meanResidual,
+      iterations,
+    },
+  };
+}
+
+/** Distribution-only wrapper — what the simulation engine consumes. */
 export function buildHoleDistributions(
   profile: SimPlayerProfile,
   holes: SimHole[],
   playingHandicap = 0
 ): number[][] {
-  const dists = holes.map((hole) =>
-    discretizedDistribution(holeMu(profile, hole, playingHandicap), holeSigma(profile, hole))
-  );
-
-  const observed = profile.birdiesPerRound;
-  if (observed != null && observed >= 0 && holes.length > 0) {
-    const perRoundScale = holes.length / 18;
-    const modelBirdies = dists.reduce((s, d) => s + d[0] + d[1], 0);
-    if (modelBirdies > 0.01) {
-      const factor = Math.min(2, Math.max(0.5, (observed * perRoundScale) / modelBirdies));
-      for (const d of dists) {
-        d[0] *= factor;
-        d[1] *= factor;
-        const scaled = normalize(d);
-        for (let k = 0; k < OUTCOME_BINS; k++) d[k] = scaled[k];
-      }
-    }
-  }
-
-  const observedEagles = profile.eaglesPerRound;
-  if (observedEagles != null && observedEagles >= 0 && holes.length > 0) {
-    const perRoundScale = holes.length / 18;
-    const modelEagles = dists.reduce((s, d) => s + d[0], 0);
-    if (modelEagles > 0.001) {
-      // Wider clip than birdies (rarer event, thinner data); floor keeps a
-      // small tail alive even for players who have never recorded an eagle.
-      const factor = Math.min(3, Math.max(0.1, (observedEagles * perRoundScale) / modelEagles));
-      for (const d of dists) {
-        d[0] *= factor;
-        const scaled = normalize(d);
-        for (let k = 0; k < OUTCOME_BINS; k++) d[k] = scaled[k];
-      }
-    }
-  }
-
-  return dists;
+  return buildHoleDistributionsDetailed(profile, holes, playingHandicap).dists;
 }
 
 /** Cumulative lookup tables for fast inverse-CDF sampling. */
