@@ -23,6 +23,7 @@ type EventSummary = {
   majors_status: string;
   has_markets: boolean;
   preview: PreviewTableModel | null;
+  narrative: string | null;
 };
 
 /** A headline season market surfaced on the coupon (Win / Top 3 preview). */
@@ -250,6 +251,16 @@ export default function GroupMarketsClient({ groupId }: { groupId: string }) {
                         {e.has_markets ? "Markets →" : "Soon"}
                       </span>
                     </div>
+                    {e.narrative && (
+                      <div className="mt-2 pt-2 border-t border-emerald-900/30">
+                        <div className="text-[8px] uppercase tracking-[0.2em] text-[#f5e6b0]/55 mb-0.5">
+                          Preview
+                        </div>
+                        <p className="text-[11px] leading-snug text-emerald-100/75 line-clamp-2">
+                          {e.narrative}
+                        </p>
+                      </div>
+                    )}
                     {e.preview && (
                       <div className="mt-2 pt-2 border-t border-emerald-900/30">
                         <PreviewTable model={e.preview} />

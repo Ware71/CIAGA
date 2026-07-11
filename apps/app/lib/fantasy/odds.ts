@@ -43,6 +43,12 @@ export type EventRow = {
   num_rounds: number | null;
   entry_window_start: string | null;
   entry_window_end: string | null;
+  // Season/series linkage — nullable (one-off or untagged events). Only the
+  // narrator reads these today, for season/defending-champion storylines.
+  group_season_id: string | null;
+  competition_id: string | null;
+  competition_event_template_id: string | null;
+  event_year: number | null;
 };
 
 export type EntryRow = {
@@ -69,7 +75,7 @@ export async function loadEvent(eventId: string): Promise<EventRow> {
   const { data, error } = await supabaseAdmin
     .from("events")
     .select(
-      "id, name, group_id, course_id, event_date, majors_status, scoring_model, scoring_basis, handicap_rules, num_rounds, entry_window_start, entry_window_end"
+      "id, name, group_id, course_id, event_date, majors_status, scoring_model, scoring_basis, handicap_rules, num_rounds, entry_window_start, entry_window_end, group_season_id, competition_id, competition_event_template_id, event_year"
     )
     .eq("id", eventId)
     .single();

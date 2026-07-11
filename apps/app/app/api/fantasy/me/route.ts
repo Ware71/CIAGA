@@ -73,7 +73,7 @@ export async function GET(req: Request) {
     let events: {
       id: string; name: string; group_id: string; group_name: string;
       event_date: string | null; majors_status: string; has_markets: boolean;
-      preview: PreviewTableModel | null;
+      preview: PreviewTableModel | null; narrative: string | null;
     }[] = [];
     const groupIds = groups.map((g) => g.group.id);
     if (groupIds.length > 0) {
@@ -89,12 +89,16 @@ export async function GET(req: Request) {
         id: string; name: string; group_id: string; event_date: string | null; majors_status: string;
       }[];
       const withMarkets = new Set<string>();
+      const narrativeByEvent = new Map<string, string>();
       if (rows.length > 0) {
         const { data: states } = await supabaseAdmin
           .from("fantasy_event_state")
-          .select("event_id")
+          .select("event_id, narrative")
           .in("event_id", rows.map((r) => r.id));
-        for (const s of (states ?? []) as { event_id: string }[]) withMarkets.add(s.event_id);
+        for (const s of (states ?? []) as { event_id: string; narrative: string | null }[]) {
+          withMarkets.add(s.event_id);
+          if (s.narrative) narrativeByEvent.set(s.event_id, s.narrative);
+        }
       }
 
       // Batched Win/Top-3 preview for every event with markets — three
@@ -171,6 +175,7 @@ export async function GET(req: Request) {
         majors_status: r.majors_status,
         has_markets: withMarkets.has(r.id),
         preview: previewByEvent.get(r.id) ?? null,
+        narrative: narrativeByEvent.get(r.id) ?? null,
       }));
     }
 
