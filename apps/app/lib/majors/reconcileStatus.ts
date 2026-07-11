@@ -178,5 +178,14 @@ export async function reconcileEventStatus(
     if (target === "live" || target === "completed") {
       emitCompetitionRoundFeedItems({ eventId, newStatus: target }).catch(() => {});
     }
+
+    if (target === "completed") {
+      // Fantasy picks settle when the event completes. Best-effort — the daily
+      // cron sweep is the safety net. Dynamic import keeps this hot path free
+      // of the fantasy module graph when fantasy isn't in play.
+      import("@/lib/fantasy/settlement")
+        .then(({ settleFantasyEvent }) => settleFantasyEvent(eventId))
+        .catch(() => {});
+    }
   }
 }

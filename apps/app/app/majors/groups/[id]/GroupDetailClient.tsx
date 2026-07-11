@@ -24,6 +24,7 @@ import { formatHI } from "@/lib/rounds/handicapUtils";
 import { EVENT_TYPES, FORMAT_DEFAULT_SCORING, FORMAT_ALLOWS_SCORING_CHOICE } from "@/lib/events/constants";
 import { getWhsDefaultPolicyForEvent } from "@/lib/rounds/whsDefaults";
 import type { MajorGroupType, EventTypeV2 } from "@/lib/majors/types";
+import type { FantasyConfig, FantasyWalletSummary } from "@/lib/fantasy/types";
 
 type CompetitionSeriesWithEventCount = Competition & {
   event_templates: Pick<CompetitionEventTemplate, "id">[];
@@ -31,7 +32,7 @@ type CompetitionSeriesWithEventCount = Competition & {
   latest_season: { id: string; season_label: string; status: string } | null;
 };
 
-type Tab = "overview" | "events" | "standings" | "seasons" | "schedule" | "history" | "competitions" | "members" | "finances" | "settings";
+type Tab = "overview" | "events" | "standings" | "seasons" | "schedule" | "history" | "competitions" | "members" | "fantasy" | "finances" | "settings";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
@@ -40,6 +41,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "competitions", label: "Competitions" },
   { id: "seasons", label: "Seasons" },
   { id: "members", label: "Members" },
+  { id: "fantasy", label: "Fantasy Picks" },
   { id: "finances", label: "Finances" },
   { id: "settings", label: "Settings" },
 ];
@@ -481,6 +483,15 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     name: string; description: string; access: string; max_members: string;
   } | null>(null);
   const [savingGroupDetails, setSavingGroupDetails] = useState(false);
+  // Fantasy picks
+  const [fantasyWallet, setFantasyWallet] = useState<FantasyWalletSummary | null>(null);
+  const [fantasyWalletLoading, setFantasyWalletLoading] = useState(false);
+  const [fantasyConfigForm, setFantasyConfigForm] = useState<{
+    enabled: boolean; mode: "fixed" | "topup"; budgetScope: "season" | "event";
+    budgetAmount: string; topupIncrement: string;
+  } | null>(null);
+  const [savingFantasyConfig, setSavingFantasyConfig] = useState(false);
+  const [fantasyConfigError, setFantasyConfigError] = useState<string | null>(null);
   // Player detail drawer
   const [selectedPlayerForDrawer, setSelectedPlayerForDrawer] = useState<{ profileId: string; name: string; avatarUrl: string | null; currentSeasonId: string | null; seasonLabel?: string } | null>(null);
   const [playerBreakdownEntries, setPlayerBreakdownEntries] = useState<PlayerBreakdownEntry[]>([]);
@@ -641,6 +652,32 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     })();
     return () => { cancelled = true; };
   }, [tab, groupId, groupChargesLoaded]);
+
+  // Lazy-load the caller's fantasy wallet when the fantasy tab is first opened.
+  // Event-budget groups have per-event balances, shown on the event market pages.
+  useEffect(() => {
+    if (tab !== "fantasy") return;
+    const config = group?.fantasy_config;
+    if (!config || config.budgetScope === "event") { setFantasyWallet(null); return; }
+    let cancelled = false;
+    (async () => {
+      setFantasyWalletLoading(true);
+      try {
+        const session = await getViewerSession();
+        if (!session || cancelled) return;
+        const res = await fetch(`/api/fantasy/groups/${groupId}/wallet`, {
+          headers: { Authorization: `Bearer ${session.accessToken}` },
+        });
+        if (!cancelled && res.ok) {
+          const j = await res.json();
+          setFantasyWallet(j.summary ?? null);
+        }
+      } finally {
+        if (!cancelled) setFantasyWalletLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [tab, groupId, group?.fantasy_config]);
 
   const refreshMembers = async () => {
     const session = await getViewerSession();
@@ -2773,6 +2810,81 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       );
     })(),
 
+    fantasy: (() => {
+      const config = group.fantasy_config;
+      if (!config) {
+        return (
+          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 px-4 py-6 text-center space-y-2">
+            <div className="text-sm text-emerald-100/70">Fantasy picks aren&apos;t enabled for this group.</div>
+            {isAdminOrOwner ? (
+              <button
+                type="button"
+                onClick={() => setTab("settings")}
+                className="text-[11px] font-semibold text-emerald-400 hover:text-emerald-300"
+              >
+                Enable in Settings →
+              </button>
+            ) : (
+              <div className="text-[11px] text-emerald-200/50">Ask a group admin to enable it.</div>
+            )}
+          </div>
+        );
+      }
+      return (
+        <div className="space-y-3">
+          {/* My wallet */}
+          <div className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/70 px-3 py-3">
+            <div className="flex items-center justify-between mb-1">
+              <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider">My Wallet</div>
+              <span className="text-[10px] text-emerald-200/50">
+                {config.mode === "topup" ? "Top-up budget" : "Fixed budget"} · {config.budgetScope === "event" ? "per event" : "per season"}
+              </span>
+            </div>
+            {config.budgetScope === "event" ? (
+              <div className="text-[11px] text-emerald-200/55 py-1">
+                Budgets are per event — your balance appears on each event&apos;s market page.
+              </div>
+            ) : fantasyWalletLoading ? (
+              <div className="text-[11px] text-emerald-200/50 py-1">Loading…</div>
+            ) : fantasyWallet ? (
+              <div className="flex items-end justify-between">
+                <div>
+                  <div className="text-xl font-bold text-[#f5e6b0]">{fmtPts(fantasyWallet.balance)} pts</div>
+                  <div className="text-[10px] text-emerald-200/50">available balance</div>
+                </div>
+                <div className={`text-sm font-semibold ${fantasyWallet.pnl > 0 ? "text-emerald-300" : fantasyWallet.pnl < 0 ? "text-red-300" : "text-emerald-100/60"}`}>
+                  {fantasyWallet.pnl > 0 ? "+" : ""}{fmtPts(fantasyWallet.pnl)} PnL
+                </div>
+              </div>
+            ) : (
+              <div className="text-[11px] text-emerald-200/50 py-1">Wallet unavailable</div>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => router.push("/majors/fantasy")}
+            className="w-full rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/70 px-3 py-3 text-left hover:bg-emerald-900/30 transition-colors"
+          >
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-semibold text-emerald-50">Fantasy Hub</div>
+              <span className="text-[10px] text-emerald-400/80">Open →</span>
+            </div>
+            <div className="text-[10px] text-emerald-200/50 mt-0.5">
+              Picks, cash-outs, top-ups and the fantasy leaderboard live in the hub.
+            </div>
+          </button>
+
+          <div className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/70 px-4 py-5 text-center">
+            <div className="text-sm text-emerald-100/70">Markets open soon</div>
+            <div className="text-[11px] text-emerald-200/50 mt-1">
+              Odds and pick placement for this group&apos;s events will appear here.
+            </div>
+          </div>
+        </div>
+      );
+    })(),
+
     settings: isAdminOrOwner ? (
       <div className="space-y-4">
         {/* Group Details */}
@@ -3120,6 +3232,164 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           })()}
         </div>
 
+        {/* Fantasy Picks */}
+        <div className="space-y-3">
+          <div className="text-[10px] uppercase tracking-wider text-emerald-200/50">Fantasy Picks</div>
+          {(() => {
+            const saved = group.fantasy_config;
+            const form = fantasyConfigForm ?? {
+              enabled: !!saved,
+              mode: saved?.mode ?? "fixed",
+              budgetScope: saved?.budgetScope ?? "season",
+              budgetAmount: saved ? String(saved.budgetAmount) : "500",
+              topupIncrement: saved?.topupIncrement ? String(saved.topupIncrement) : "100",
+            };
+            const setForm = (patch: Partial<typeof form>) => {
+              setFantasyConfigError(null);
+              setFantasyConfigForm({ ...form, ...patch });
+            };
+
+            return (
+              <div className="space-y-4 rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/60 p-4">
+                <button
+                  type="button"
+                  onClick={() => setForm({ enabled: !form.enabled })}
+                  className="flex items-center justify-between w-full"
+                >
+                  <div className="text-left">
+                    <div className="text-[11px] font-semibold text-emerald-100">Enable Fantasy Picks</div>
+                    <div className="text-[10px] text-emerald-200/40">Points-based picks on group events — no money involved</div>
+                  </div>
+                  <div className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${form.enabled ? "bg-emerald-600" : "bg-emerald-900/50"}`}>
+                    <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.enabled ? "translate-x-5" : ""}`} />
+                  </div>
+                </button>
+
+                {form.enabled && (
+                  <>
+                    {/* Budget mode */}
+                    <div className="space-y-1.5">
+                      <div className="text-[10px] text-emerald-200/50">Budget Mode</div>
+                      <div className="flex gap-2">
+                        {([
+                          { v: "fixed" as const, label: "Fixed" },
+                          { v: "topup" as const, label: "Top-up" },
+                        ]).map(({ v, label }) => (
+                          <button
+                            key={v}
+                            type="button"
+                            onClick={() => setForm({ mode: v })}
+                            className={`flex-1 py-1.5 rounded-full text-[11px] font-semibold transition-colors ${form.mode === v ? "bg-emerald-700 text-white" : "border border-emerald-900/60 text-emerald-200/60 hover:text-emerald-100"}`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="text-[9px] text-emerald-200/35">
+                        {form.mode === "fixed"
+                          ? "Players get one budget — when it's gone, it's gone."
+                          : "Players can top up anytime. The leaderboard ranks net profit, so top-ups can't game it."}
+                      </div>
+                    </div>
+
+                    {/* Budget scope */}
+                    <div className="space-y-1.5">
+                      <div className="text-[10px] text-emerald-200/50">Budget Scope</div>
+                      <div className="flex gap-2">
+                        {([
+                          { v: "season" as const, label: "Per Season" },
+                          { v: "event" as const, label: "Per Event" },
+                        ]).map(({ v, label }) => (
+                          <button
+                            key={v}
+                            type="button"
+                            onClick={() => setForm({ budgetScope: v })}
+                            className={`flex-1 py-1.5 rounded-full text-[11px] font-semibold transition-colors ${form.budgetScope === v ? "bg-emerald-700 text-white" : "border border-emerald-900/60 text-emerald-200/60 hover:text-emerald-100"}`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Amounts */}
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 space-y-1.5">
+                        <div className="text-[10px] text-emerald-200/50">Starting Budget (pts)</div>
+                        <input
+                          type="number"
+                          min={1}
+                          value={form.budgetAmount}
+                          onChange={(e) => setForm({ budgetAmount: e.target.value })}
+                          className="w-full bg-[#042713] border border-emerald-900/60 rounded-lg px-2 py-1 text-[12px] text-emerald-100 text-center"
+                        />
+                      </div>
+                      {form.mode === "topup" && (
+                        <div className="flex-1 space-y-1.5">
+                          <div className="text-[10px] text-emerald-200/50">Top-up Increment (pts)</div>
+                          <input
+                            type="number"
+                            min={1}
+                            value={form.topupIncrement}
+                            onChange={(e) => setForm({ topupIncrement: e.target.value })}
+                            className="w-full bg-[#042713] border border-emerald-900/60 rounded-lg px-2 py-1 text-[12px] text-emerald-100 text-center"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {fantasyConfigError && (
+                  <div className="text-[11px] text-red-300 text-center">{fantasyConfigError}</div>
+                )}
+
+                <button
+                  type="button"
+                  disabled={savingFantasyConfig || !fantasyConfigForm}
+                  onClick={async () => {
+                    if (!fantasyConfigForm) return;
+                    setSavingFantasyConfig(true);
+                    setFantasyConfigError(null);
+                    try {
+                      const session = await getViewerSession();
+                      if (!session) return;
+                      const body = fantasyConfigForm.enabled
+                        ? {
+                            mode: fantasyConfigForm.mode,
+                            budgetScope: fantasyConfigForm.budgetScope,
+                            budgetAmount: Number(fantasyConfigForm.budgetAmount),
+                            ...(fantasyConfigForm.mode === "topup"
+                              ? { topupIncrement: Number(fantasyConfigForm.topupIncrement) }
+                              : {}),
+                          }
+                        : { disabled: true };
+                      const res = await fetch(`/api/fantasy/groups/${groupId}/config`, {
+                        method: "PUT",
+                        headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+                        body: JSON.stringify(body),
+                      });
+                      const j = await res.json();
+                      if (!res.ok) {
+                        setFantasyConfigError(j.error ?? "Failed to save");
+                        return;
+                      }
+                      setGroup((g) => (g ? { ...g, fantasy_config: j.config } : g));
+                      setFantasyConfigForm(null);
+                      setFantasyWallet(null);
+                    } finally {
+                      setSavingFantasyConfig(false);
+                    }
+                  }}
+                  className="w-full py-2.5 rounded-full bg-emerald-700 text-sm font-semibold text-white disabled:opacity-40"
+                >
+                  {savingFantasyConfig ? "Saving…" : "Save Fantasy Settings"}
+                </button>
+              </div>
+            );
+          })()}
+        </div>
+
         {/* Group Charges */}
         <div className="space-y-2">
           <div className="text-[10px] uppercase tracking-wider text-emerald-200/50">Group Charges</div>
@@ -3305,6 +3575,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
   const visibleTabs = TABS.filter((t) => {
     if (t.id === "settings" || t.id === "finances") return isAdminOrOwner;
+    if (t.id === "fantasy") return !!group.fantasy_config || isAdminOrOwner;
     return true;
   });
 

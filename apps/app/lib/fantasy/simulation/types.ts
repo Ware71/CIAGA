@@ -1,0 +1,192 @@
+// Fantasy Picks — simulation types.
+// Pure data shapes; the only runtime import is the (equally pure) odds
+// ladder, so the engine stays unit-testable.
+
+import { quantizeToLadder } from "@/lib/fantasy/oddsLadder";
+
+export type SimHole = {
+  holeNumber: number;
+  par: number;
+  yardage: number | null;
+  /** Stroke index 1–18 (course "handicap" column). */
+  strokeIndex: number;
+  /** Event round this hole belongs to (1-based). Absent = round 1. */
+  round?: number;
+  /**
+   * WHS rating/slope of this round's tee. When present (with parTotal +
+   * holesInRound) the model prices strokes off the player's score-differential
+   * distribution via the inverse WHS relation; when absent it falls back to the
+   * gross-average path. Optional so fallback/legacy hole sets still type-check.
+   */
+  rating?: number | null;
+  slope?: number | null;
+  /** Par total + hole count of this round's tee (differential → gross). */
+  parTotal?: number | null;
+  holesInRound?: number | null;
+};
+
+/**
+ * Canonical key for a (round, hole) pair — hole numbers repeat across the
+ * rounds of a multi-round event, so completed-hole maps use this key.
+ */
+export function holeKey(round: number, holeNumber: number): number {
+  return round * 100 + holeNumber;
+}
+
+export type HoleSplitBucket = {
+  /** Average strokes over par in this bucket. */
+  avgVsPar: number;
+  birdieRate: number;
+  bogeyPlusRate: number;
+  sample: number;
+};
+
+/**
+ * Performance splits keyed by bucket:
+ *   par-type × length band — p3_short, p3_mid, p3_long, p4_short, … p5_long
+ *   stroke-index band      — si_1_6, si_7_12, si_13_18
+ */
+export type HoleSplits = Record<string, HoleSplitBucket>;
+
+export type SimPlayerProfile = {
+  profileId: string;
+  handicapIndex: number | null;
+  avgGross: number | null;
+  scoreStddev: number | null;
+  /**
+   * WHS score-differential distribution (course-difficulty-normalised, full
+   * history recency-weighted). When present the model prices off these; avgGross
+   * stays as the fallback. Optional so existing SimPlayerProfile literals (tests,
+   * narrative) keep the legacy gross path without change.
+   */
+  avgDifferential?: number | null;
+  differentialStddev?: number | null;
+  /** Recency-weighted effective sample — drives the handicap-anchor blend. */
+  differentialEffectiveN?: number | null;
+  /** Recent-form drift in strokes/round (negative = trending better). */
+  recentForm: number | null;
+  birdiesPerRound: number | null;
+  /** Eagle-or-better holes per round (calibrates rare-outcome markets). */
+  eaglesPerRound: number | null;
+  parsPerRound: number | null;
+  bogeysPerRound: number | null;
+  doublesPlusPerRound: number | null;
+  par3AvgVsPar: number | null;
+  par4AvgVsPar: number | null;
+  par5AvgVsPar: number | null;
+  holeSplits: HoleSplits | null;
+  sampleSize: number;
+  confidence: "low" | "medium" | "high";
+};
+
+export type SimPlayer = {
+  profileId: string;
+  displayName: string;
+  profile: SimPlayerProfile;
+  /**
+   * Event playing handicap (allowance % applied) — drives net scores.
+   * Applied per round: event net = gross − PH × rounds, same as the
+   * leaderboard's per-submission handicap sum.
+   */
+  playingHandicap: number;
+  /**
+   * Probability this player actually plays (1 = confirmed entrant). Provisional
+   * group members who haven't entered yet carry an attendance probability that
+   * decays as the event nears; each iteration samples their presence, so their
+   * win/top-N naturally scales by attendance and confirmed players' odds rise
+   * when a provisional is absent. Absent (or 1) → always present.
+   */
+  attendanceProb?: number;
+  /** Gross strokes for holes already played: holeKey(round, hole) → strokes. */
+  completedHoles: Record<number, number>;
+  /** True when the player has finished EVERY round of the event. */
+  roundComplete: boolean;
+  /**
+   * Rounds the player has finished — their unscored holes in these rounds are
+   * skipped (played but not recorded), not simulated. Absent = derive from
+   * roundComplete alone (single-round behaviour).
+   */
+  completedRounds?: number[];
+};
+
+export type RankingBasis = "gross" | "net" | "stableford";
+
+export type SimulationInputs = {
+  players: SimPlayer[];
+  holes: SimHole[];
+  /** How event positions are decided (stableford ranks by net equivalent). */
+  rankingBasis: RankingBasis;
+  simulationCount: number;
+  seed: number;
+};
+
+export type SimPlayerResult = {
+  profileId: string;
+  /** Joint samples: index i across players = same simulated event. */
+  grossTotals: Int16Array;
+  netTotals: Int16Array;
+  /** Per-round joint samples, keyed by round number (prices round markets). */
+  roundGrossTotals: Record<number, Int16Array>;
+  roundNetTotals: Record<number, Int16Array>;
+  /** birdieHistogram[c] = iterations with exactly c simulated birdies. */
+  birdieHistogram: number[];
+  /** P(win) on the ranking basis; ties split evenly. */
+  winProb: number;
+  /** P(position ≤ N), ties count as in. Keys 3, 5, 10. */
+  topNProb: Record<number, number>;
+  /** P(finishing exactly position i+1) under "1224" ranking; ties share the tied position. */
+  positionHistogram: number[];
+  /** P(finishing last); ties at the bottom split evenly (mirrors winProb). */
+  lastProb: number;
+  meanGross: number;
+  meanNet: number;
+  /**
+   * holeOutcomes[holeIdx][k] = iterations scoring par+(k-2) on that hole
+   * (k 0..10 → eagle-or-better .. the blow-up tail). Foundation for future
+   * hole-specific markets; already-played holes have their real outcome.
+   */
+  holeOutcomes: number[][];
+};
+
+export type SimulationResult = {
+  simulationCount: number;
+  rankingBasis: RankingBasis;
+  players: SimPlayerResult[];
+  /** profileId → index into players (and into every totals array). */
+  playerIndex: Record<string, number>;
+  /** The simulated hole set — holeOutcomes[i] corresponds to holes[i]. */
+  holes: SimHole[];
+  /**
+   * Per-iteration finishing positions, laid out [playerIdx * simulationCount +
+   * iter], 1-based; 0 = player absent that iteration (attendance sampling).
+   * Retained so correlated accas price off the TRUE joint distribution
+   * (P(X top-3 ∧ Y top-3) ≠ product of marginals). Int8 keeps it compact for
+   * persistence — field sizes are far below 127. Optional so test fixtures that
+   * fake a SimulationResult need not build it.
+   */
+  positions?: Int8Array;
+};
+
+/**
+ * Engine-wide probability clamp: no impossible or infinite odds. The floor
+ * pins longshots to the ladder top (1/0.001 → the 1000/1 rung, decimal
+ * 1001.00); at 10k iterations that is 10 simulated hits, so floored prices
+ * stay deterministic per version rather than tail noise.
+ */
+export const PROBABILITY_FLOOR = 0.001;
+export const PROBABILITY_CEILING = 0.995;
+
+export function clampProbability(p: number): number {
+  if (!Number.isFinite(p)) return PROBABILITY_FLOOR;
+  return Math.min(PROBABILITY_CEILING, Math.max(PROBABILITY_FLOOR, p));
+}
+
+/**
+ * Probability → quoted decimal odds. Clamps, then snaps 1/p to the bookmaker
+ * fraction ladder so every stored price IS a ladder rung — decimal, fractional
+ * and American displays derive from the same rung and always agree.
+ */
+export function probabilityToDecimalOdds(p: number): number {
+  const clamped = clampProbability(p);
+  return quantizeToLadder(1 / clamped).decimal;
+}

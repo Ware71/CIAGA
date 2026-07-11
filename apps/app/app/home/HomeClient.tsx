@@ -37,7 +37,7 @@ const homeMenuItemsBase: MenuItem[] = [
 const majorsMenuItems: MenuItem[] = [
   { id: "majors-hub", label: "Majors Hub" },
   { id: "schedule", label: "Schedule" },
-  { id: "leaderboard", label: "Leaderboard" },
+  { id: "fantasy", label: "Fantasy Picks" },
   { id: "history", label: "History" },
   { id: "profile", label: "Majors Profile" },
 ];
@@ -288,7 +288,7 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
 
     if (id === "majors-hub") { router.push("/majors"); return; }
     if (id === "schedule") { router.push("/majors/schedule"); return; }
-    if (id === "leaderboard") { router.push("/majors/leaderboard"); return; }
+    if (id === "fantasy") { router.push("/majors/fantasy"); return; }
     if (id === "history") { router.push("/majors/history"); return; }
     if (id === "profile") { router.push("/majors/profile"); return; }
   };

@@ -1,5 +1,7 @@
 // CIAGA Majors — TypeScript types mirroring the database schema
 
+import type { FantasyConfig } from "@/lib/fantasy/types";
+
 // ─── Spec-aligned enum types (Phase 1) ──────────────────────────────────────
 
 export type CompetitionType =
@@ -277,6 +279,8 @@ export type MajorGroup = {
   updated_at: string;
   // Upgrade additions
   allow_credit: boolean;
+  // Fantasy picks (NULL = disabled); written via /api/fantasy/groups/[id]/config only
+  fantasy_config: FantasyConfig | null;
 };
 
 export type GroupSeasonStatus = "upcoming" | "active" | "completed";

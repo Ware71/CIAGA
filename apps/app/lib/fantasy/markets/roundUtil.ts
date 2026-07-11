@@ -1,0 +1,120 @@
+import type { FantasyMarket, GenerateCtx } from "@/lib/fantasy/markets/types";
+import type { RankingBasis, SimulationResult } from "@/lib/fantasy/simulation/types";
+import { POPULATION_GAP } from "@/lib/fantasy/simulation/holeModel";
+
+/**
+ * Shared helpers for round-scoped market variants. A market with
+ * params.round prices/settles against that event round only; without it,
+ * against the whole event.
+ */
+
+export function marketRound(market: FantasyMarket): number | null {
+  const r = Number((market.params as { round?: unknown }).round);
+  return Number.isInteger(r) && r > 0 ? r : null;
+}
+
+/** "Round 2 " prefix for display names; empty for event-wide markets. */
+export function roundPrefix(market: FantasyMarket): string {
+  const r = marketRound(market);
+  return r != null ? `Round ${r} ` : "";
+}
+
+/** The right joint-sample array for a market's scope and basis. */
+export function totalsFor(
+  sim: SimulationResult,
+  playerIdx: number,
+  // Round winners price on gross/net stroke totals; stableford collapses to net
+  // (there's no per-round stableford total array, and round winners are rare).
+  basis: RankingBasis,
+  round: number | null
+): Int16Array {
+  const p = sim.players[playerIdx];
+  if (round != null) {
+    const totals = basis === "gross" ? p.roundGrossTotals[round] : p.roundNetTotals[round];
+    if (totals) return totals;
+  }
+  return basis === "gross" ? p.grossTotals : p.netTotals;
+}
+
+/**
+ * Per-iteration "who wins" probabilities on arbitrary totals arrays (used by
+ * round-scoped winner markets where the engine's event-wide winProb doesn't
+ * apply). Tie handling must match how the market SETTLES:
+ *   "split" — tied winners share the win 1/tied (engine's winProb semantics;
+ *             right when ties get resolved to a single winner downstream).
+ *   "all"   — every tied winner counts in full (right when settlement pays
+ *             all ties, e.g. round winners: "ties all win, no round playoffs").
+ */
+export function winProbsFrom(
+  totalsByPlayer: Int16Array[],
+  simulationCount: number,
+  ties: "split" | "all" = "split"
+): number[] {
+  const n = totalsByPlayer.length;
+  const wins = new Array<number>(n).fill(0);
+  for (let iter = 0; iter < simulationCount; iter++) {
+    let best = Infinity;
+    for (let pi = 0; pi < n; pi++) {
+      const v = totalsByPlayer[pi][iter];
+      if (v < best) best = v;
+    }
+    let tied = 0;
+    for (let pi = 0; pi < n; pi++) if (totalsByPlayer[pi][iter] === best) tied += 1;
+    const credit = ties === "all" ? 1 : 1 / tied;
+    for (let pi = 0; pi < n; pi++) {
+      if (totalsByPlayer[pi][iter] === best) wins[pi] += credit;
+    }
+  }
+  return wins.map((w) => w / simulationCount);
+}
+
+/**
+ * Exact count distribution from independent per-hole probabilities
+ * (the model samples holes independently, so this matches the engine's
+ * joint sampling): dist[k] = P(exactly k successes over the given holes).
+ */
+export function countDistribution(perHoleProb: number[]): number[] {
+  let dist = [1];
+  for (const p of perHoleProb) {
+    const next = new Array<number>(dist.length + 1).fill(0);
+    for (let k = 0; k < dist.length; k++) {
+      next[k] += dist[k] * (1 - p);
+      next[k + 1] += dist[k] * p;
+    }
+    dist = next;
+  }
+  return dist;
+}
+
+/**
+ * Reverse-engineers the score a player "should" shoot from their playing
+ * handicap and the event's course setup (par + PH + POPULATION_GAP per
+ * round, summed across the event) — net drops the PH term, since by the
+ * handicap system's own design net ≈ par + POPULATION_GAP regardless of
+ * handicap (mirrors holeModel.ts's anchorLevel, the same net-consistency
+ * anchor the simulation itself falls back to for thin-data players). Used to
+ * CENTER display markets (score bands/totals) on an intuitive number,
+ * independent of the model's own (differential/form-adjusted) projection,
+ * which still prices the actual odds. Null when the event has no holes/rounds.
+ */
+export function handicapImpliedScore(
+  ctx: Pick<GenerateCtx, "rounds" | "holes">,
+  playingHandicap: number,
+  basis: "gross" | "net"
+): number | null {
+  const numRounds = ctx.rounds.length;
+  const totalPar = ctx.holes.reduce((s, h) => s + h.par, 0);
+  if (numRounds === 0 || totalPar === 0) return null;
+  return basis === "gross"
+    ? totalPar + numRounds * (playingHandicap + POPULATION_GAP)
+    : totalPar + numRounds * POPULATION_GAP;
+}
+
+/** Hole indices (into sim.holes / holeOutcomes) belonging to a round. */
+export function holeIdxsForRound(sim: SimulationResult, round: number | null): number[] {
+  const out: number[] = [];
+  sim.holes.forEach((h, i) => {
+    if (round == null || (h.round ?? 1) === round) out.push(i);
+  });
+  return out;
+}
