@@ -58,7 +58,7 @@ const GUIDE: [string, string][] = [
   ["Attendance", "Provisional (not-yet-entered) members are sampled present/absent each iteration by an attendance probability; only present players are ranked, so confirmed players' odds rise when a provisional is absent."],
   ["Ranking", "Each iteration ranks the field on the event's basis (gross / net / stableford) with standard '1224' competition ranking. Two first-place quantities exist: Win% splits ties evenly (prices the outright, which settles on the tie-resolved leaderboard); P(1st incl ties) counts every tied leader in full (prices finish-position, which settles on the shared position). Positions are retained per iteration for correlated accumulators."],
   ["Cell legend", "'—' = value missing from the profile (the model then uses the documented fallback for that field — never a hidden numeric default). Numbers are calculated values; the Error column on Refresh jobs is the job's stored error text."],
-  ["Odds conversion", "probability is clamped to [0.005, 0.995] then decimal odds = round(1 / p, 2), capped at 200.00 — see the Markets sheet for each selection's raw → clamped → odds."],
+  ["Odds conversion", "probability is clamped to [0.001, 0.995], then 1/p snaps to the bookmaker fraction ladder (1/100 … 1000/1, decimal 1.01 … 1001.00) — decimal, fractional and American all derive from the same rung. See the Markets sheet for each selection's raw → clamped → odds."],
 ];
 
 function percentiles(totals: Int16Array): Record<string, number> {
@@ -178,7 +178,7 @@ export async function buildInspectWorkbook(
     ["Mean preservation", "≤ 6 fixed-point passes, tol 0.01 strokes/hole", "Calibration alone would shift the expected score; the latent means are re-targeted so the post-calibration E[score] still equals holeMu (the differential level already includes real birdies)."],
     ["Per-hole σ clamp", "[0.5, 2.6]", "Round σ ≈ 2.1–11; flagged on the Sim aggregates sheet when it binds."],
     ["Confidence σ widening", "high ×1.0 / medium ×1.1 / low ×1.3", "Thin profiles simulate wider."],
-    ["Probability clamp", "[0.005, 0.995] → odds ≤ 200", "Book protection on every priced selection."],
+    ["Probability clamp", "[0.001, 0.995] → odds ≤ 1000/1, ladder-quantized", "Book protection on every priced selection."],
     ["Simulation count", "10,000 (5,000 for fields > 60)", "Seeded per event version — re-runs reproduce the board exactly."],
   ]);
 

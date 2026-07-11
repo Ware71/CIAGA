@@ -7,6 +7,7 @@ import { getViewerSession } from "@/lib/auth/viewerSession";
 import { supabase } from "@/lib/supabaseClient";
 import { safeJson } from "@/lib/fantasy/safeJson";
 import { marketAllowsMultiple, subjectKeysFor } from "@/lib/fantasy/parlayRules";
+import { findSelfRestriction } from "@/lib/fantasy/selfRestriction";
 import { useSlip } from "@/lib/fantasy/slipStore";
 import {
   buildCountTable,
@@ -33,7 +34,14 @@ import { PlayerStatsSheet, type PlayerStats } from "@/components/fantasy/PlayerS
 
 type BoardResponse = {
   generated: boolean;
-  event: { id: string; name: string; status: string; group_id: string; course_id: string | null };
+  event: {
+    id: string;
+    name: string;
+    status: string;
+    group_id: string;
+    course_id: string | null;
+    ranking_basis?: "gross" | "net" | "stableford";
+  };
   state?: {
     version: number;
     odds_stale: boolean;
@@ -97,6 +105,17 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
   // Bet slip (multi-selection, shared across event pages)
   const slip = useSlip();
   const [balance, setBalance] = useState<number | null>(null);
+  // Who's looking — self-betting restrictions grey out selections against
+  // yourself (placement enforces the same rule server-side).
+  const [viewerProfileId, setViewerProfileId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getViewerSession().then((session) => {
+      if (!cancelled && session) setViewerProfileId(session.profileId);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   const fetchBalance = useCallback(async (groupId: string) => {
     const session = await getViewerSession();
@@ -222,8 +241,23 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
     }
   };
 
+  // Why the viewer may not back a selection (betting against themselves), or
+  // null when it's fine. Mirrored server-side at placement.
+  const selfRestriction = (market: BoardMarket, selectionKey: string): string | null =>
+    findSelfRestriction(
+      viewerProfileId,
+      {
+        market_type: market.market_type,
+        subject_profile_id: market.subject_profile_id,
+        opponent_profile_id: market.opponent_profile_id,
+        params: market.params,
+      },
+      selectionKey
+    );
+
   const toggleSelection = (market: BoardMarket, selection: Selection) => {
     if (!board?.event) return;
+    if (selfRestriction(market, selection.key)) return;
     slip.toggle({
       marketId: market.id,
       selectionKey: selection.key,
@@ -245,6 +279,9 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
       marketType: market.market_type,
       params: market.params,
       coOccurrable: marketAllowsMultiple({ market_type: market.market_type, params: market.params }),
+      subjectProfileId: market.subject_profile_id,
+      opponentProfileId: market.opponent_profile_id,
+      eventRankingBasis: board.event.ranking_basis,
     });
   };
 
@@ -277,14 +314,16 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
   const renderCell = (cell: Cell) => {
     if (!cell) return <OddsBlank />;
     const { market, selection } = cell;
+    const restricted = selfRestriction(market, selection.key);
     return (
       <OddsButton
         odds={selection.decimal_odds}
         inSlip={slip.has(market.id, selection.key)}
-        canBack={!stale && !boardLocked && market.status === "open"}
+        canBack={!stale && !boardLocked && market.status === "open" && !restricted}
         stale={stale}
         flash={flashes.get(`${market.id}|${selection.key}`)}
         onClick={() => toggleSelection(market, selection)}
+        title={restricted ?? undefined}
       />
     );
   };

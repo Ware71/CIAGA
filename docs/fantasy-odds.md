@@ -156,7 +156,10 @@ pending job just sits there costing nothing.
    joint gross/net totals, rankings (ties handled), birdie counts, and
    per-hole outcome distributions for every player.
 4. **Price every open market** via the registry's `simulate()` maps;
-   probabilities clamp to `[0.005, 0.995]` → decimal odds `1.01 … 200.00`.
+   probabilities clamp to `[0.001, 0.995]`, then `1/p` snaps to the bookmaker
+   fraction ladder → prices `1/100 … 1000/1` (decimal `1.01 … 1001.00`),
+   every stored price a ladder rung (see §12 —
+   decimal/fractional/American always agree).
 5. **Write snapshots** at version `V` (upsert on the unique triple), then mark
    older `active` snapshots `superseded`.
 6. **Mark fresh — version-guarded:**
@@ -221,6 +224,9 @@ The `event_version` on every snapshot is what makes cached odds *safe*:
 | Market pricing/settlement rules | `apps/app/lib/fantasy/markets/*` |
 | Narrative engine (event preview text) | `apps/app/lib/fantasy/narrative.ts` |
 | Accumulators (rules, placement, queries) | `apps/app/lib/fantasy/{parlayRules,parlays}.ts` |
+| Correlated joint pricing (positions + h2h) | `apps/app/lib/fantasy/simulation/jointPricing.ts` + `apps/app/lib/fantasy/jointSamples.ts` |
+| Self-betting restrictions | `apps/app/lib/fantasy/selfRestriction.ts` |
+| Odds price ladder (single source for all formats) | `apps/app/lib/fantasy/oddsLadder.ts` |
 | Odds display formats | `apps/app/lib/fantasy/oddsFormat.ts` |
 | Staleness triggers + `mark_stale` | `supabase/migrations/20260708000001_fantasy_odds.sql` |
 | Atomic job claim | `supabase/migrations/20260708000002_fantasy_claim_job.sql` |
@@ -253,8 +259,8 @@ The `event_version` on every snapshot is what makes cached odds *safe*:
    ±4 strokes — it nudges the mean, never replaces it.
 5. **Rare outcomes are calibrated** — see §10 for the current (exact,
    Bayesian-shrunk) calibration; hole-in-one/albatross specials price off
-   amateur base rates (1/3500 per par-3 player-hole, 1/50000), never the
-   normal tail.
+   amateur base rates (since §12: 1/12,500 per par-3 player-hole,
+   1/1,000,000 per par-4/5 player-hole), never the normal tail.
 6. **Profiles have a 24 h TTL** — `ensureProfiles` rebuilds stale rows, so
    form inputs follow new rounds.
 
@@ -291,12 +297,14 @@ distribution.
 
 ### Accumulators
 
-2–8 legs, odds multiply, one stake. Correlation guard: distinct markets AND
-one subject per event (h2h claims both players; field specials share one
-identity). Cross-event accas draw on season/lifetime wallets; event-scoped
-budgets only fund single-event accas. Legs resolve with their market's
-settlement; void legs drop to odds 1.0; all-void refunds. Acca cash-out is
-deferred. UI copy: "Accumulator/Acca" via `lib/fantasy/terminology.ts`.
+2–8 legs, one stake. Independent legs multiply; correlated legs are jointly
+priced or blocked — the current rules are §12 (this section's original blunt
+"distinct markets AND one subject per event" guard is long gone). Cross-event
+accas draw on season/lifetime wallets; event-scoped budgets only fund
+single-event accas. Legs resolve with their market's settlement; void legs
+drop to odds 1.0 (joint-priced accas void whole); all-void refunds. Acca
+cash-out is deferred. UI copy: "Accumulator/Acca" via
+`lib/fantasy/terminology.ts`.
 
 ### Odds inspector
 
@@ -432,3 +440,102 @@ section. Match Bets renders as an A/Draw/B table (`buildMatchRows`, one row
 per pairing). Score Bands/Totals share a gross/net toggle. Exact Finish stays
 one player per row with its position selections in two columns. `eagle_count`
 now generates 1+/2+/3+ (was hardcoded to 1+ only), mirroring `birdies.ts`.
+
+---
+
+## 12. Acca correctness, self-betting, price ladder (2026-07-14)
+
+### The correlated family now includes head-to-heads
+
+The problem: "X to win" + "X beats Y" multiplied both legs' odds, but winning
+implies beating everyone — the product handed the bettor a free multiplier.
+Positively-correlated combos must never be priced as independent.
+
+The correlated family is the position family + `h2h`
+(`isCorrelatedFamily`, `parlayRules.ts`). Per event, all matrix-expressible
+correlated legs are jointly priced from the retained positions matrix
+(`combineAcca`, `jointPricing.ts`). H2h reads off positions exactly:
+competition ranking ("1224") on the shared basis preserves order AND ties of
+the underlying totals, so `posA < posB ⟺ A beat B`, equal = draw; both
+players must be present that iteration (absent fails the leg, mirroring
+void-on-withdrawal). So "X to win + X beats Y (net, net-ranked event)"
+collapses to ≈ X's win price — quantization usually makes it exactly the win
+leg's rung.
+
+**Matrix-expressible** (`isMatrixExpressible`) = event-wide, and for h2h the
+market's basis equals the event's ranking basis
+(`rankingBasisFromScoringModel` — stableford events therefore never
+joint-price h2h; the matrix holds no stroke totals). A player shared between
+two correlated legs where ANY touching leg is inexpressible → blocked
+("Those selections are related and can't combine"). Round-scoped legs are
+never matrix legs — this also fixed a latent bug where a round-scoped
+outright joint-priced as an event win — and round winners now claim
+round-scoped exclusivity slots (`winner:r{n}`), so "R1 winner + R2 winner"
+combines (it was wrongly blocked).
+
+The independent-product fallback (matrix missing) is only reachable for
+negatively-correlated position combos, where the true joint is longer —
+never overpays.
+
+### Impossible combos are rejected, not priced at the cap
+
+- **Hall feasibility** over event-wide finishing claims (intervals: outright
+  `[1,1]`, top-N `[1,n]`, exact `[k,k]`, ranges `[from,to]`): any interval
+  containing more claims than positions → "Too many players for those
+  finishing spots" (4 players all top-3 dies here; 3 is fine and
+  joint-priced).
+- **Deterministic contradictions**: an h2h side vs the named loser holding a
+  win claim, or the named winner holding a wooden-spoon claim.
+- **Numeric backstop**: a joint count of exactly 0 (e.g. an ordering cycle
+  A>B, B>C, C>A that pairwise rules can't see) marks the price `infeasible` —
+  placement rejects it; it is never priced at the ladder top.
+- Combined odds cap at `MAX_COMBINED_ODDS = 10000` (numeric(12,2) guard).
+
+### Multi-selection markets
+
+`hole_score` is now co-occurrable (`marketAllowsMultiple`): birdie-or-better
+on holes 3 AND 7 sits in one slip/acca (independent product — the model
+treats holes as independent given the player). Opposite outcomes on the same
+(player, hole) are blocked. The DB's leftover `UNIQUE (parlay_id, market_id)`
+— which silently broke EVERY multi-selection acca, including two players in
+one top-3 market — is now `UNIQUE (parlay_id, market_id, selection_key)`
+(migration `20260714000000`). `findParlayViolation` also gained the server
+mirror of the slip's replace rule: a second selection on a
+non-co-occurrable market is a violation.
+
+### Self-betting restrictions
+
+`selfRestriction.ts` (pure, shared): you can back yourself to do well, never
+to do badly, and never an exact score/band/position you could steer into.
+Greyed out on the board (with the reason as tooltip), enforced in `placePick`
+and `placeParlay`.
+
+| Market | Blocked when it's you | Still allowed |
+|---|---|---|
+| `h2h` | opposite side and the draw | backing your side |
+| `score_total` | Over, Exactly | Under |
+| `score_band` | every band | — |
+| `hole_score` | all of a bogey-or-worse market | birdie-or-better |
+| `finish_range` | wooden spoon, any range not starting at 1st | from-1st ranges |
+| `finish_position` | 2nd or worse | exactly 1st |
+
+Unrestricted: outright, top-N, birdies, eagles, field specials.
+
+### Rarity rates + the price ladder
+
+- Hole-in-one `1/3,500 → 1/12,500` per par-3 player-hole; albatross
+  `1/50,000 → 1/1,000,000` per par-4/5 player-hole (both aggregate over the
+  whole field × all rounds: `P = 1 − (1 − rate)^exposures`). The old rates
+  were near-pro and priced field HIO absurdly short.
+- Probability floor `0.005 → 0.001`: price range is now `1/100 … 1000/1`
+  (decimal `1.01 … 1001.00`). At 10k iterations the floor is 10 simulated
+  hits — deterministic per version, not tail noise.
+- **Ladder quantization** (`oddsLadder.ts`): `probabilityToDecimalOdds` =
+  clamp → `1/p` → snap to the standard bookmaker fraction ladder (now
+  extended `250/1 … 1000/1`). The rung is the single source of truth: decimal
+  = `1 + num/den` (2dp), fractional = `num/den`, American = `±100·num/den`
+  rounded — the three formats can never disagree (5/1 ⇔ 6.00 ⇔ +500; 8/15 ⇔
+  1.53 ⇔ −188). Acca combined odds stay the exact product of quantized leg
+  prices (not re-quantized), displayed as decimal in the slip.
+- Migration `20260714000000` marks every unsettled book stale so open events
+  reprice under the new constants on next view; open bets keep locked odds.

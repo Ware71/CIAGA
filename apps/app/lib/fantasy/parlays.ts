@@ -12,30 +12,52 @@ import {
 import { COMBO_BET } from "@/lib/fantasy/terminology";
 import {
   findParlayViolation,
-  isPositionFamily,
+  isCorrelatedFamily,
+  isMatrixExpressible,
   MAX_LEGS,
   MIN_LEGS,
+  rankingBasisFromScoringModel,
   subjectKeysFor,
 } from "@/lib/fantasy/parlayRules";
+import { findSelfRestriction } from "@/lib/fantasy/selfRestriction";
+import type { RankingBasis } from "@/lib/fantasy/simulation/types";
 import {
-  combineAccaOdds,
+  combineAcca,
   type AccaLegForPricing,
-  type PositionLeg,
+  type MatrixLeg,
 } from "@/lib/fantasy/simulation/jointPricing";
 import { loadJointMatrices } from "@/lib/fantasy/jointSamples";
 
-/** Resolve the player a finishing-position-family leg concerns, for joint pricing. */
-function positionLegFor(market: FantasyMarket, selectionKey: string): PositionLeg | null {
-  if (!isPositionFamily(market.market_type)) return null;
+/**
+ * Resolve a correlated-family leg (finishing positions / h2h) to the player(s)
+ * it concerns, for joint pricing. Null when the leg can't be priced from the
+ * event's positions matrix (round-scoped, or h2h off the ranking basis) — the
+ * rules layer guarantees such legs never overlap another correlated leg.
+ */
+function matrixLegFor(
+  market: FantasyMarket,
+  selectionKey: string,
+  eventRankingBasis: RankingBasis | undefined
+): MatrixLeg | null {
+  if (!isCorrelatedFamily(market.market_type)) return null;
+  const params = (market.params ?? {}) as Record<string, unknown>;
+  if (!isMatrixExpressible({ marketType: market.market_type, params, eventRankingBasis })) {
+    return null;
+  }
+  if (market.market_type === "h2h") {
+    if (!market.subject_profile_id || !market.opponent_profile_id) return null;
+    return {
+      marketType: market.market_type,
+      params,
+      playerId: market.subject_profile_id,
+      opponentId: market.opponent_profile_id,
+      selectionKey,
+    };
+  }
   const playerId =
     market.market_type === "finish_position" ? market.subject_profile_id : selectionKey;
   if (!playerId) return null;
-  return {
-    marketType: market.market_type,
-    params: (market.params ?? {}) as Record<string, unknown>,
-    playerId,
-    selectionKey,
-  };
+  return { marketType: market.market_type, params, playerId, selectionKey };
 }
 
 /**
@@ -91,9 +113,11 @@ export async function placeParlay(params: {
     );
   }
   const liveByEvent = new Map<string, Awaited<ReturnType<typeof loadPlacementContext>>["live"]>();
+  const basisByEvent = new Map<string, RankingBasis>();
   for (const eventId of eventIds) {
     const placement = await loadPlacementContext(eventId);
     liveByEvent.set(eventId, placement.live);
+    basisByEvent.set(eventId, rankingBasisFromScoringModel(placement.event.scoring_model));
   }
 
   const rpcLegs = params.legs.map((leg) => {
@@ -105,6 +129,8 @@ export async function placeParlay(params: {
     if (!def.placementAllowed(market, leg.selectionKey, live)) {
       throw new PickError("A selection in this acca can no longer be backed");
     }
+    const selfBlocked = findSelfRestriction(params.profileId, market, leg.selectionKey);
+    if (selfBlocked) throw new PickError(selfBlocked);
     return {
       market_id: leg.marketId,
       selection_key: leg.selectionKey,
@@ -113,9 +139,10 @@ export async function placeParlay(params: {
     };
   });
 
-  // Co-occurrence rule: one player per event across the finishing markets, no
-  // two exclusive slots (two winners / wooden spoons / same exact position),
-  // no exact dupes. Independent legs (birdies, over/unders) combine freely.
+  // Co-occurrence rules: one player per event across the finishing markets, no
+  // two exclusive slots, no exact dupes, no infeasible or contradictory
+  // finishing claims, and correlated overlaps (position + h2h on one player)
+  // only where the matrix can price them. Independent legs combine freely.
   const violation = findParlayViolation(
     params.legs.map((leg) => {
       const market = markets.get(leg.marketId)!;
@@ -126,15 +153,20 @@ export async function placeParlay(params: {
         params: (market.params ?? {}) as Record<string, unknown>,
         subjectKeys: subjectKeysFor(market, leg.selectionKey),
         selectionKey: leg.selectionKey,
+        subjectProfileId: market.subject_profile_id,
+        opponentProfileId: market.opponent_profile_id,
+        eventRankingBasis: basisByEvent.get(market.event_id),
       };
     })
   );
   if (violation) throw new PickError(violation);
 
-  // Combined odds: finishing-position legs jointly priced from the retained
-  // per-iteration matrices (P(X top-3 ∧ Y top-3) ≠ product); independent legs
-  // multiply in. Falls back to the product when a matrix is unavailable.
-  const { combinedOdds: combined, jointPriced } = await priceAcca(params.legs);
+  // Combined odds: correlated legs (finishing positions + eligible h2h)
+  // jointly priced from the retained per-iteration matrices; independent legs
+  // multiply in. A zero joint count means the legs contradict — reject rather
+  // than price the impossible at the cap.
+  const { combinedOdds: combined, jointPriced, infeasible } = await priceAcca(params.legs);
+  if (infeasible) throw new PickError("Those selections can't all land together");
 
   const scope = await resolveWalletScope(groupId, config, eventIds[0]);
   await ensureBudgetGrant(groupId, params.profileId, config, scope);
@@ -158,22 +190,35 @@ export async function placeParlay(params: {
 
 /**
  * Price an acca's legs without placing it (drives the slip's live combined
- * odds). Finishing-position legs are jointly priced from the retained matrices;
- * everything else multiplies in. Read-only, so no membership/eligibility gate
- * beyond the odds already being visible.
+ * odds). Correlated legs (finishing positions + h2h on the ranking basis) are
+ * jointly priced from the retained matrices; everything else multiplies in.
+ * Read-only, so no membership/eligibility gate beyond the odds already being
+ * visible.
  */
 export async function priceAcca(
   legs: ParlayLegInput[]
-): Promise<{ combinedOdds: number; jointPriced: boolean }> {
-  if (legs.length === 0) return { combinedOdds: 1, jointPriced: false };
+): Promise<{ combinedOdds: number; jointPriced: boolean; infeasible: boolean }> {
+  if (legs.length === 0) return { combinedOdds: 1, jointPriced: false, infeasible: false };
   const marketIds = [...new Set(legs.map((l) => l.marketId))];
   const { data: marketData, error: marketErr } = await supabaseAdmin
     .from("fantasy_markets")
-    .select("id, event_id, market_type, subject_profile_id, params")
+    .select("id, event_id, market_type, subject_profile_id, opponent_profile_id, params")
     .in("id", marketIds);
   if (marketErr) throw marketErr;
   const markets = new Map(((marketData ?? []) as FantasyMarket[]).map((m) => [m.id, m]));
   const eventIds = [...new Set([...markets.values()].map((m) => m.event_id))];
+
+  const { data: eventRows, error: eventErr } = await supabaseAdmin
+    .from("events")
+    .select("id, scoring_model")
+    .in("id", eventIds);
+  if (eventErr) throw eventErr;
+  const basisByEvent = new Map(
+    ((eventRows ?? []) as { id: string; scoring_model: string | null }[]).map((e) => [
+      e.id,
+      rankingBasisFromScoringModel(e.scoring_model),
+    ])
+  );
 
   const { data: snapRows, error: snapErr } = await supabaseAdmin
     .from("fantasy_odds_snapshots")
@@ -193,17 +238,12 @@ export async function priceAcca(
     return {
       eventId: market?.event_id ?? "",
       decimalOdds: oddsBySnap.get(leg.snapshotId) ?? 1,
-      position: market ? positionLegFor(market, leg.selectionKey) ?? undefined : undefined,
+      matrixLeg: market
+        ? matrixLegFor(market, leg.selectionKey, basisByEvent.get(market.event_id)) ?? undefined
+        : undefined,
     };
   });
-  const combinedOdds = combineAccaOdds(pricingLegs, matrices);
-
-  const posByEvent = new Map<string, number>();
-  for (const l of pricingLegs) {
-    if (l.position) posByEvent.set(l.eventId, (posByEvent.get(l.eventId) ?? 0) + 1);
-  }
-  const jointPriced = [...posByEvent.entries()].some(([e, count]) => count >= 2 && matrices.has(e));
-  return { combinedOdds, jointPriced };
+  return combineAcca(pricingLegs, matrices);
 }
 
 export type MyParlayLeg = {

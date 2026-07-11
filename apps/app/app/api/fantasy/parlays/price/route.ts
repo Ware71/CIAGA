@@ -32,8 +32,11 @@ export async function POST(req: Request) {
     const role = await getGroupRole(groupId, profileId);
     if (!role) return NextResponse.json({ error: "Not a group member" }, { status: 403 });
 
-    const { combinedOdds, jointPriced } = await priceAcca(legs);
-    return NextResponse.json({ combinedOdds, jointPriced }, { headers: { "Cache-Control": "no-store" } });
+    const { combinedOdds, jointPriced, infeasible } = await priceAcca(legs);
+    return NextResponse.json(
+      { combinedOdds, jointPriced, infeasible },
+      { headers: { "Cache-Control": "no-store" } }
+    );
   } catch (e: any) {
     const msg = e?.message ?? "Unknown error";
     const status = String(msg).toLowerCase().includes("auth") ? 401 : 500;

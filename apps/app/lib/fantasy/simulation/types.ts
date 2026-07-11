@@ -1,5 +1,8 @@
 // Fantasy Picks — simulation types.
-// Pure data shapes: no runtime imports so the engine stays unit-testable.
+// Pure data shapes; the only runtime import is the (equally pure) odds
+// ladder, so the engine stays unit-testable.
+
+import { quantizeToLadder } from "@/lib/fantasy/oddsLadder";
 
 export type SimHole = {
   holeNumber: number;
@@ -164,8 +167,13 @@ export type SimulationResult = {
   positions?: Int8Array;
 };
 
-/** Engine-wide probability clamp: no impossible or infinite odds. */
-export const PROBABILITY_FLOOR = 0.005;
+/**
+ * Engine-wide probability clamp: no impossible or infinite odds. The floor
+ * pins longshots to the ladder top (1/0.001 → the 1000/1 rung, decimal
+ * 1001.00); at 10k iterations that is 10 simulated hits, so floored prices
+ * stay deterministic per version rather than tail noise.
+ */
+export const PROBABILITY_FLOOR = 0.001;
 export const PROBABILITY_CEILING = 0.995;
 
 export function clampProbability(p: number): number {
@@ -173,7 +181,12 @@ export function clampProbability(p: number): number {
   return Math.min(PROBABILITY_CEILING, Math.max(PROBABILITY_FLOOR, p));
 }
 
+/**
+ * Probability → quoted decimal odds. Clamps, then snaps 1/p to the bookmaker
+ * fraction ladder so every stored price IS a ladder rung — decimal, fractional
+ * and American displays derive from the same rung and always agree.
+ */
 export function probabilityToDecimalOdds(p: number): number {
   const clamped = clampProbability(p);
-  return Math.round((1 / clamped) * 100) / 100;
+  return quantizeToLadder(1 / clamped).decimal;
 }

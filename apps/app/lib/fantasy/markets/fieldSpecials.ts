@@ -15,9 +15,11 @@ type SpecialKind = "hio" | "albatross" | "field_eagle";
  * Amateur base rates per player-hole. The discretized-normal bins massively
  * overprice these tails (a ~2% per-hole ace!), so HIO/albatross price off
  * empirical rates instead; the field eagle uses the calibrated eagle bins.
+ * ~1/12,500 per par-3 attempt is the commonly cited average-amateur ace rate
+ * (pros ~1/2,500); an amateur albatross is a ~1-in-a-million hole.
  */
-const HIO_RATE_PER_PAR3_PLAYER_HOLE = 1 / 3500;
-const ALBATROSS_RATE_PER_PLAYER_HOLE = 1 / 50000;
+const HIO_RATE_PER_PAR3_PLAYER_HOLE = 1 / 12500;
+const ALBATROSS_RATE_PER_PLAYER_HOLE = 1 / 1_000_000;
 
 function marketKind(market: FantasyMarket): SpecialKind {
   const kind = (market.params as { kind?: unknown }).kind;
@@ -32,7 +34,7 @@ const KIND_LABEL: Record<SpecialKind, string> = {
 
 /**
  * Field-wide novelty specials: hole-in-one / albatross / any eagle. Back-only
- * longshots (odds capped at 200 by the snapshot clamp); no cash-out.
+ * longshots (odds capped at 1000/1 by the snapshot clamp); no cash-out.
  */
 export const fieldSpecial: MarketDefinition = {
   type: "field_special",

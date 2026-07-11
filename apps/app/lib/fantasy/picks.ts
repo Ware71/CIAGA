@@ -3,6 +3,7 @@ import { parsePointsAmount, readFantasyConfig } from "@/lib/fantasy/config";
 import { getMarketDefinition } from "@/lib/fantasy/markets/registry";
 import type { FantasyMarket } from "@/lib/fantasy/markets/types";
 import { loadPlacementContext } from "@/lib/fantasy/odds";
+import { findSelfRestriction } from "@/lib/fantasy/selfRestriction";
 import {
   ensureBudgetGrant,
   getGroupFantasyContext,
@@ -52,6 +53,9 @@ export async function placePick(params: {
   if (!def.placementAllowed(market, params.selectionKey, live)) {
     throw new PickError("This selection can no longer be backed");
   }
+
+  const selfBlocked = findSelfRestriction(params.profileId, market, params.selectionKey);
+  if (selfBlocked) throw new PickError(selfBlocked);
 
   const scope = await resolveWalletScope(market.group_id, config, market.event_id);
   await ensureBudgetGrant(market.group_id, params.profileId, config, scope);

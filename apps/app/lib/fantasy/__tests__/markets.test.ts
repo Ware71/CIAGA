@@ -124,10 +124,17 @@ function simFor(profiles: Array<Partial<SimPlayerProfile> & { profileId: string;
 }
 
 describe("odds clamping", () => {
-  it("caps decimal odds at 200 and floors near-certainties at 1.01", () => {
-    expect(probabilityToDecimalOdds(0.0001)).toBe(200);
-    expect(probabilityToDecimalOdds(0.9999)).toBe(1.01);
+  it("caps decimal odds at the 1000/1 rung and floors near-certainties at 1.01", () => {
+    expect(probabilityToDecimalOdds(0.0001)).toBe(1001); // 1000/1
+    expect(probabilityToDecimalOdds(0.9999)).toBe(1.01); // 1/100
     expect(probabilityToDecimalOdds(0.5)).toBe(2);
+  });
+
+  it("quantizes every price to a fraction-ladder rung", () => {
+    // 1/0.65 = 1.538… → nearest rung 8/15 → 1.53 (not the raw 1.54).
+    expect(probabilityToDecimalOdds(0.65)).toBe(1.53);
+    // 1/0.155 = 6.45… → nearest rung 11/2 → 6.5.
+    expect(probabilityToDecimalOdds(0.155)).toBe(6.5);
   });
 });
 

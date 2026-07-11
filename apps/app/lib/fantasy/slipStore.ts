@@ -23,8 +23,13 @@ export type SlipLeg = {
   /** Market type + params, for the co-occurrence rule + joint-pricing display. */
   marketType?: string;
   params?: Record<string, unknown> | null;
-  /** Two different selections on this same row may co-exist (top-N, wide ranges). */
+  /** Two different selections on this same row may co-exist (top-N, wide ranges, holes). */
   coOccurrable?: boolean;
+  /** h2h only: which side is which, for the contradiction rule. */
+  subjectProfileId?: string | null;
+  opponentProfileId?: string | null;
+  /** Event ranking basis — which h2h legs can joint-price with finishing legs. */
+  eventRankingBasis?: "gross" | "net" | "stableford";
 };
 
 const KEY = "ciaga:fantasy:slip";

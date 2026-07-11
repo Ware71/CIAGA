@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 import { getGroupRole } from "@/lib/fantasy/wallet";
 import { refreshIfStale } from "@/lib/fantasy/odds";
+import { rankingBasisFromScoringModel } from "@/lib/fantasy/parlayRules";
 import { getMarketDefinition, MARKET_TYPE_ORDER } from "@/lib/fantasy/markets/registry";
 import type { FantasyMarket } from "@/lib/fantasy/markets/types";
 
@@ -24,7 +25,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ eventId:
 
     const { data: eventRow, error: eventErr } = await supabaseAdmin
       .from("events")
-      .select("id, name, group_id, majors_status, event_date, course_id")
+      .select("id, name, group_id, majors_status, event_date, course_id, scoring_model")
       .eq("id", eventId)
       .maybeSingle();
     if (eventErr) throw eventErr;
@@ -32,7 +33,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ eventId:
 
     const event = eventRow as {
       id: string; name: string; group_id: string | null; majors_status: string; event_date: string | null;
-      course_id: string | null;
+      course_id: string | null; scoring_model: string | null;
     };
     if (!event.group_id) {
       return NextResponse.json({ error: "Event has no group" }, { status: 400 });
@@ -164,6 +165,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ eventId:
           status: event.majors_status,
           group_id: event.group_id,
           course_id: event.course_id,
+          // The sim's ranking basis — the slip needs it to tell which h2h
+          // legs can joint-price with finishing legs.
+          ranking_basis: rankingBasisFromScoringModel(event.scoring_model),
         },
         state: freshState,
         refreshing,

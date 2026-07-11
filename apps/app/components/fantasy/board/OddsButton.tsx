@@ -15,6 +15,7 @@ export function OddsButton({
   flash,
   onClick,
   className,
+  title,
 }: {
   odds: number;
   inSlip: boolean;
@@ -23,12 +24,15 @@ export function OddsButton({
   flash?: "up" | "down";
   onClick: () => void;
   className?: string;
+  /** Native tooltip — e.g. why a selection is blocked for the viewer. */
+  title?: string;
 }) {
   return (
     <button
       type="button"
       disabled={!canBack && !inSlip}
       onClick={onClick}
+      title={title}
       className={`shrink-0 min-w-[58px] text-center rounded-lg border px-2 py-1 text-[11px] font-bold transition-colors disabled:cursor-default ${
         inSlip
           ? "border-[#f5e6b0] bg-[#f5e6b0] text-[#042713]"

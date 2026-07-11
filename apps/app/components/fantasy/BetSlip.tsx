@@ -42,6 +42,9 @@ export function BetSlip({ onPlaced }: { onPlaced?: () => void }) {
           params: l.params ?? null,
           subjectKeys: l.subjectKeys,
           selectionKey: l.selectionKey,
+          subjectProfileId: l.subjectProfileId,
+          opponentProfileId: l.opponentProfileId,
+          eventRankingBasis: l.eventRankingBasis,
         }))
       ),
     [legs]
@@ -57,12 +60,15 @@ export function BetSlip({ onPlaced }: { onPlaced?: () => void }) {
       ? violation
       : null;
 
-  // Finishing-position legs are jointly priced server-side — fetch the true
-  // combined odds (falls back to the product while loading or on error).
+  // Correlated legs (finishing positions + h2h) are jointly priced server-side
+  // — fetch the true combined odds (falls back to the product while loading or
+  // on error). A joint count of zero means the legs contradict each other.
   const [jointOdds, setJointOdds] = useState<number | null>(null);
+  const [infeasible, setInfeasible] = useState(false);
   useEffect(() => {
     let cancelled = false;
     setJointOdds(null);
+    setInfeasible(false);
     if (legs.length < 2 || accaBlockedReason) return;
     (async () => {
       try {
@@ -85,6 +91,7 @@ export function BetSlip({ onPlaced }: { onPlaced?: () => void }) {
         const j = await safeJson(res);
         if (!cancelled && res.ok && typeof (j as { combinedOdds?: number }).combinedOdds === "number") {
           setJointOdds((j as { combinedOdds: number }).combinedOdds);
+          setInfeasible(!!(j as { infeasible?: boolean }).infeasible);
         }
       } catch {
         // Keep the product fallback.
@@ -96,6 +103,7 @@ export function BetSlip({ onPlaced }: { onPlaced?: () => void }) {
   }, [legs, accaBlockedReason]);
 
   const displayAccaOdds = jointOdds ?? accaOdds;
+  const blockedReason = accaBlockedReason ?? (infeasible ? "Those selections can't all land together" : null);
 
   if (legs.length === 0) return null;
   if (typeof document === "undefined") return null;
@@ -197,7 +205,7 @@ export function BetSlip({ onPlaced }: { onPlaced?: () => void }) {
               <span className="text-[12px] font-semibold text-emerald-50">Bet Slip</span>
             </span>
             <span className="text-[12px] font-bold text-[#f5e6b0]">
-              {legs.length >= 2 && !accaBlockedReason ? (
+              {legs.length >= 2 && !blockedReason ? (
                 <>
                   {COMBO_BET.short} <OddsValue odds={displayAccaOdds} />
                 </>
@@ -327,8 +335,8 @@ export function BetSlip({ onPlaced }: { onPlaced?: () => void }) {
                   Total staked:{" "}
                   <span className="font-bold text-[#f5e6b0]">{stake * legs.length} pts</span>
                 </>
-              ) : accaBlockedReason ? (
-                <span className="text-amber-300/90">{accaBlockedReason}</span>
+              ) : blockedReason ? (
+                <span className="text-amber-300/90">{blockedReason}</span>
               ) : (
                 <>
                   {legs.length}-leg {COMBO_BET.short} @{" "}
@@ -359,7 +367,7 @@ export function BetSlip({ onPlaced }: { onPlaced?: () => void }) {
 
             <button
               type="button"
-              disabled={placing || (mode === "acca" && !!accaBlockedReason)}
+              disabled={placing || (mode === "acca" && !!blockedReason)}
               onClick={mode === "singles" ? placeSingles : placeAcca}
               className="w-full rounded-full bg-emerald-700 py-2.5 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
             >
