@@ -10,6 +10,7 @@ import type { PreviewTableModel } from "@/lib/fantasy/board/groupBoard";
 
 type GroupSummary = {
   group: { id: string; name: string; image_url: string | null };
+  role: string;
   config: FantasyConfig;
   balance: number | null;
   pnl: number;
@@ -93,6 +94,7 @@ export default function GroupMarketsClient({ groupId }: { groupId: string }) {
   const [topupOpen, setTopupOpen] = useState(false);
   const [topupUnits, setTopupUnits] = useState(1);
   const [toppingUp, setToppingUp] = useState(false);
+  const [refreshingAll, setRefreshingAll] = useState(false);
 
   const load = useCallback(async () => {
     const session = await getViewerSession();
@@ -148,6 +150,26 @@ export default function GroupMarketsClient({ groupId }: { groupId: string }) {
     }
   };
 
+  const isAdmin = group?.role === "owner" || group?.role === "admin";
+
+  // Admin "Refresh all": rebuild every field profile then force-reprice every
+  // active event + the season markets in the group.
+  const handleRefreshAll = async () => {
+    if (refreshingAll) return;
+    setRefreshingAll(true);
+    try {
+      const session = await getViewerSession();
+      if (!session) return;
+      await fetch(`/api/fantasy/groups/${groupId}/refresh`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+      });
+      await load();
+    } finally {
+      setRefreshingAll(false);
+    }
+  };
+
   const sortedEvents = [...events].sort((a, b) => {
     const live = (e: EventSummary) => (e.majors_status === "live" ? 0 : 1);
     if (live(a) !== live(b)) return live(a) - live(b);
@@ -156,7 +178,7 @@ export default function GroupMarketsClient({ groupId }: { groupId: string }) {
 
   return (
     <div className="min-h-[100dvh] max-w-sm mx-auto">
-      <div className="px-4 pt-8 flex items-center justify-between mb-4">
+      <div className="px-4 pt-8 flex items-center gap-2 mb-4">
         <button
           type="button"
           onClick={() => router.push("/majors/fantasy")}
@@ -164,7 +186,27 @@ export default function GroupMarketsClient({ groupId }: { groupId: string }) {
         >
           ← Wallets
         </button>
-        <OddsFormatMenu />
+        <button
+          type="button"
+          onClick={() => router.push("/")}
+          className="text-[11px] text-emerald-100/70 hover:text-emerald-50"
+        >
+          Home
+        </button>
+        <div className="ml-auto flex items-center gap-2">
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={handleRefreshAll}
+              disabled={refreshingAll}
+              className="text-[10px] text-emerald-200/80 border border-emerald-800/50 rounded-full px-2 py-0.5 hover:text-emerald-100 disabled:opacity-50"
+              title="Rebuild all player profiles and re-price every event + season"
+            >
+              {refreshingAll ? "Refreshing…" : "⟳ Refresh all"}
+            </button>
+          )}
+          <OddsFormatMenu />
+        </div>
       </div>
 
       {loading ? (

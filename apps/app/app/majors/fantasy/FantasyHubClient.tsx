@@ -52,10 +52,21 @@ export default function FantasyHubClient() {
     if (!res.ok) return false;
     const j = await res.json();
     const fetchedGroups: FantasyGroupSummary[] = j.groups ?? [];
-    // Exactly one fantasy-enabled wallet — skip straight to it, no list to pick from.
+    // Exactly one fantasy-enabled wallet — skip straight to it on first entry.
+    // A per-session flag stops this re-firing when the user navigates BACK to
+    // the hub (via "← Wallets" or the New Picks tab): otherwise single-group
+    // users get bounced group → hub → group forever and can never reach the
+    // Home button that lives on this page.
     if (fetchedGroups.length === 1) {
-      router.replace(`/majors/fantasy/groups/${fetchedGroups[0].group.id}`);
-      return true;
+      const jumpedKey = "ciaga:fantasy:hub-redirected";
+      const alreadyJumped =
+        typeof sessionStorage !== "undefined" && sessionStorage.getItem(jumpedKey) === "1";
+      if (!alreadyJumped) {
+        if (typeof sessionStorage !== "undefined") sessionStorage.setItem(jumpedKey, "1");
+        router.replace(`/majors/fantasy/groups/${fetchedGroups[0].group.id}`);
+        return true;
+      }
+      // Returning to the hub — render the single wallet (with its Home button).
     }
     setGroups(fetchedGroups);
     setEvents(j.events ?? []);

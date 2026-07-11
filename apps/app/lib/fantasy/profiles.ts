@@ -40,8 +40,9 @@ export const PROFILE_TTL_HOURS = 24;
  * ensureProfiles rebuilds any stored profile with a lower model_version, so a
  * model change takes effect immediately instead of waiting out the 24h TTL.
  *   v1: gross-average model. v2: WHS score-differential inputs.
+ *   v3: shape sample restricted to handicap-acceptable rounds only.
  */
-export const PROFILE_MODEL_VERSION = 2;
+export const PROFILE_MODEL_VERSION = 3;
 
 /** One sampled round, kept on the profile for popups/narrative. */
 export type RecentRound = {
@@ -164,6 +165,9 @@ export async function buildPlayerProfile(
   const partByRound = new Map(participations.map((p) => [p.roundId, p]));
 
   const byRound = new Map<string, HoleRow[]>();
+  // Rounds the handicap system has marked acceptable (WHS-acceptable score).
+  // Only these may feed the shape sample — see the candidate loop below.
+  const acceptedRounds = new Set<string>();
 
   if (roundIds.length > 0) {
     const [scoreRes, snapRes, hrrRes] = await Promise.all([
@@ -183,7 +187,7 @@ export async function buildPlayerProfile(
         : Promise.resolve({ data: [] as any[], error: null }),
       supabaseAdmin
         .from("handicap_round_results")
-        .select("round_id, participant_id, course_handicap_used, is_9_hole")
+        .select("round_id, participant_id, course_handicap_used, is_9_hole, accepted")
         .in("round_id", roundIds)
         .in("participant_id", participantIds),
     ]);
@@ -219,7 +223,9 @@ export async function buildPlayerProfile(
     const hrrByRound = new Map<string, { ch: number; holes: number }>();
     for (const h of (hrrRes.data ?? []) as {
       round_id: string; course_handicap_used: number | null; is_9_hole: boolean | null;
+      accepted: boolean | null;
     }[]) {
+      if (h.accepted === true) acceptedRounds.add(h.round_id);
       if (h.course_handicap_used == null) continue;
       hrrByRound.set(h.round_id, {
         ch: Math.round(Number(h.course_handicap_used)),
@@ -278,7 +284,13 @@ export async function buildPlayerProfile(
 
   const candidates: RoundSample[] = [];
   for (const [roundId, holes] of byRound) {
-    // All loaded rounds are already status = 'finished'.
+    // Loaded rounds are all status = 'finished', but only handicap-acceptable
+    // rounds may feed the shape sample. A finished-but-unacceptable round
+    // (walked off, min-holes not met, DQ) — or an in-progress non-event round
+    // whose partial score would masquerade as a gross total — must not skew
+    // gross/form/birdie/eagle stats. This mirrors the accepted-only rule the
+    // differential stream (ciaga_scoring_record_stream) already enforces.
+    if (!acceptedRounds.has(roundId)) continue;
     if (holes.length < MIN_HOLES) continue;
     candidates.push({
       roundId,

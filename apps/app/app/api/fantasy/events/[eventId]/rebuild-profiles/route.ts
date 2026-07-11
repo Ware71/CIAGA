@@ -9,15 +9,12 @@ export const runtime = "nodejs";
 // Rebuilds every field profile, then forces a re-simulation.
 export const maxDuration = 60;
 
-// POST /api/fantasy/events/[eventId]/rebuild-profiles — inspector companion
-// action. Sandbox-only + group owner/admin. Body (optional):
+// POST /api/fantasy/events/[eventId]/rebuild-profiles — group owner/admin only.
+// Rebuilds every field profile then force-reprices; backs both the sandbox
+// inspector and the production admin "Refresh" button. Body (optional):
 // { profileIds?: string[] } to rebuild a subset; defaults to the whole field.
 export async function POST(req: Request, { params }: { params: Promise<{ eventId: string }> }) {
   try {
-    if (process.env.NEXT_PUBLIC_APP_ENV !== "sandbox") {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
-    }
-
     const { profileId } = await getAuthedProfileOrThrow(req);
     const { eventId } = await params;
 

@@ -83,6 +83,8 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
+  // Admin "Refresh": rebuild every field profile then force-reprice this event.
+  const [refreshingMarkets, setRefreshingMarkets] = useState(false);
   const refetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Tabs: "event" | "round-N" | "season".
   const [activeTab, setActiveTab] = useState<string>("event");
@@ -238,6 +240,25 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
       await fetchBoard();
     } finally {
       setGenerating(false);
+    }
+  };
+
+  // Admin refresh: rebuild all field profiles (picks up newly-acceptable rounds)
+  // then force a fresh re-price. Backed by the owner/admin-gated route.
+  const handleRefreshMarkets = async () => {
+    if (refreshingMarkets) return;
+    setRefreshingMarkets(true);
+    try {
+      const session = await getViewerSession();
+      if (!session) return;
+      const res = await fetch(`/api/fantasy/events/${eventId}/rebuild-profiles`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+      });
+      await safeJson(res);
+      await fetchBoard();
+    } finally {
+      setRefreshingMarkets(false);
     }
   };
 
@@ -648,15 +669,35 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
             Updating odds…
           </span>
         )}
-        {process.env.NEXT_PUBLIC_APP_ENV === "sandbox" && (
+        <div className="ml-auto flex items-center gap-2">
+          {board?.generated && board?.canGenerate && (
+            <button
+              type="button"
+              onClick={handleRefreshMarkets}
+              disabled={refreshingMarkets}
+              className="text-[10px] text-emerald-200/80 border border-emerald-800/50 rounded-full px-2 py-0.5 hover:text-emerald-100 disabled:opacity-50"
+              title="Rebuild player profiles and re-price all markets"
+            >
+              {refreshingMarkets ? "Refreshing…" : "⟳ Refresh"}
+            </button>
+          )}
           <button
             type="button"
-            onClick={() => router.push(`/majors/fantasy/events/${eventId}/inspector`)}
-            className="ml-auto text-[10px] text-amber-200/80 border border-amber-800/40 rounded-full px-2 py-0.5 hover:text-amber-100"
+            onClick={() => router.push("/")}
+            className="text-[11px] text-emerald-100/70 hover:text-emerald-50"
           >
-            🔬 Inspector
+            Home
           </button>
-        )}
+          {process.env.NEXT_PUBLIC_APP_ENV === "sandbox" && (
+            <button
+              type="button"
+              onClick={() => router.push(`/majors/fantasy/events/${eventId}/inspector`)}
+              className="text-[10px] text-amber-200/80 border border-amber-800/40 rounded-full px-2 py-0.5 hover:text-amber-100"
+            >
+              🔬 Inspector
+            </button>
+          )}
+        </div>
       </div>
       <div className="px-4 mb-3">
         <div className="flex items-start justify-between gap-2">
