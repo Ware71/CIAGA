@@ -174,6 +174,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ eventId:
         markets: boardMarkets,
         names,
         players: playerStats,
+        // Owner/admin gate for the board's "Refresh" (rebuild profiles + reprice).
+        canGenerate: role === "owner" || role === "admin",
       },
       { headers: { "Cache-Control": "no-store" } }
     );

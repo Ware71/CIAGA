@@ -35,15 +35,27 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     let state = await readState(groupId);
     if (!state) {
-      const { data: activeSeason } = await supabaseAdmin
+      // Resolve the group's current season and self-generate (mirrors the
+      // season-odds route). group_seasons.status is one of upcoming / published
+      // / live / completed / archived — there is no "active", so the previous
+      // .eq("status","active") NEVER matched and season markets could only
+      // appear once the cron had already created state. Prefer an in-progress
+      // season (live/published) whose date range contains today, else the most
+      // recent one.
+      const { data: seasonRows } = await supabaseAdmin
         .from("group_seasons")
-        .select("id")
+        .select("id, start_date, end_date")
         .eq("group_id", groupId)
-        .eq("status", "active")
-        .maybeSingle();
-      if (activeSeason) {
+        .in("status", ["live", "published"]);
+      const rows = (seasonRows ?? []) as { id: string; start_date: string | null; end_date: string | null }[];
+      const today = new Date().toISOString().slice(0, 10);
+      const current =
+        rows.find((s) => s.start_date && s.end_date && s.start_date <= today && today <= s.end_date) ??
+        [...rows].sort((a, b) => (a.start_date ?? "").localeCompare(b.start_date ?? "")).at(-1) ??
+        null;
+      if (current) {
         try {
-          await generateSeasonFantasy((activeSeason as { id: string }).id);
+          await generateSeasonFantasy(current.id);
         } catch {
           /* event-budget group, or no season context yet — degrade gracefully */
         }
