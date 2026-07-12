@@ -43,6 +43,7 @@ export type FormatSummaryInput = {
   holes: Hole[];
   scoresByKey: Record<string, Score>;
   holeStatesByKey: Record<string, HoleState>;
+  starting_hole?: number;
 };
 
 /**
@@ -55,10 +56,10 @@ export function computeFormatSummaryFromData(
   const formatType = input.format_type as RoundFormatType | null;
   if (!formatType) return null;
 
-  const { format_config: formatConfig, side_games: sideGames, participants, teams, holes, scoresByKey, holeStatesByKey } = input;
+  const { format_config: formatConfig, side_games: sideGames, participants, teams, holes, scoresByKey, holeStatesByKey, starting_hole } = input;
   if (!holes.length) return null;
 
-  return _computeFromParsedData(formatType, formatConfig, sideGames, participants, teams, holes, scoresByKey, holeStatesByKey);
+  return _computeFromParsedData(formatType, formatConfig, sideGames, participants, teams, holes, scoresByKey, holeStatesByKey, starting_hole ?? 1);
 }
 
 // ── DB-fetching entry point (legacy, still used by non-batch callers) ─
@@ -69,11 +70,13 @@ export async function computeFormatSummaryForFeed(
   // 1. Round metadata
   const { data: round, error: rErr } = await supabaseAdmin
     .from("rounds")
-    .select("format_type, format_config, side_games")
+    .select("format_type, format_config, side_games, starting_hole")
     .eq("id", roundId)
     .single();
 
   if (rErr || !round) return null;
+
+  const startingHole = typeof (round as any).starting_hole === "number" ? (round as any).starting_hole : 1;
 
   const formatType = (round as any).format_type as RoundFormatType | null;
   if (!formatType) return null;
@@ -192,7 +195,7 @@ export async function computeFormatSummaryForFeed(
     }
   }
 
-  return _computeFromParsedData(formatType, formatConfig, sideGames, participants, teams, holes, scoresByKey, holeStatesByKey);
+  return _computeFromParsedData(formatType, formatConfig, sideGames, participants, teams, holes, scoresByKey, holeStatesByKey, startingHole);
 }
 
 // ── Shared computation logic ─────────────────────────────────────────
@@ -206,6 +209,7 @@ function _computeFromParsedData(
   holes: Hole[],
   scoresByKey: Record<string, Score>,
   holeStatesByKey: Record<string, HoleState>,
+  startingHole: number = 1,
 ): FormatFeedSummary | null {
   // Compute format display
   const nameOf = (p: Participant) => p.display_name || "Player";
@@ -219,6 +223,9 @@ function _computeFromParsedData(
     holeStatesByKey,
     teams,
     nameOf,
+    undefined,
+    undefined,
+    startingHole,
   );
 
   // 8. Compute side game displays

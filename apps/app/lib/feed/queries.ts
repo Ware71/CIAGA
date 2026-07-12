@@ -1,7 +1,7 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { parseFeedPayload } from "@/lib/feed/schemas";
 import type { FeedItemVM, FeedPageResponse } from "@/lib/feed/types";
-import { strokesReceivedOnHole } from "@/lib/rounds/handicapUtils";
+import { strokesReceivedOnHole, netDoubleBogeyGross } from "@/lib/rounds/handicapUtils";
 import { computeFormatSummaryFromData } from "@/lib/feed/helpers/formatSummary";
 import type { Participant, Hole, Score, HoleState, Team, SideGame } from "@/lib/rounds/hooks/useRoundDetail";
 
@@ -563,11 +563,20 @@ export async function getLiveRoundsAsFeedItems(params: { viewerProfileId: string
     }
 
     const holeStatesByKey: Record<string, HoleState> = {};
+    // Picked-up holes never get a numeric strokes row, so scoreMap alone
+    // underreports gross/net/holes-completed. Track them separately per
+    // participant so the totals below can credit the WHS NDB penalty.
+    const pickedUpHolesByParticipant = new Map<string, Set<number>>();
     for (const hs of (rd.hole_states ?? []) as any[]) {
       const key = `${hs.participant_id}:${hs.hole_number}`;
       const status = hs.status as string;
       if (status === "completed" || status === "picked_up" || status === "not_started") {
         holeStatesByKey[key] = status;
+      }
+      if (status === "picked_up") {
+        const pid = hs.participant_id as string;
+        if (!pickedUpHolesByParticipant.has(pid)) pickedUpHolesByParticipant.set(pid, new Set());
+        pickedUpHolesByParticipant.get(pid)!.add(hs.hole_number as number);
       }
     }
 
@@ -587,6 +596,7 @@ export async function getLiveRoundsAsFeedItems(params: { viewerProfileId: string
         holes,
         scoresByKey,
         holeStatesByKey,
+        starting_hole: typeof rd.starting_hole === "number" ? rd.starting_hole : 1,
       });
     } catch {
       // best-effort
@@ -613,6 +623,14 @@ export async function getLiveRoundsAsFeedItems(params: { viewerProfileId: string
             const hole = holeMap.get(holeNum);
             if (hole?.par != null) parPlayed += hole.par;
           }
+        }
+
+        for (const holeNum of (firstMember && pickedUpHolesByParticipant.get(firstMember.id)) || []) {
+          const hole = holeMap.get(holeNum);
+          if (hole?.par == null) continue;
+          grossTotal += netDoubleBogeyGross(hole.par, null, hole.stroke_index);
+          holesCompleted++;
+          parPlayed += hole.par;
         }
 
         const hasScores = holesCompleted > 0;
@@ -660,6 +678,16 @@ export async function getLiveRoundsAsFeedItems(params: { viewerProfileId: string
             netAdjustment += strokesReceivedOnHole(courseHcp, hole?.stroke_index ?? null, holeMap.size || 18);
           }
         }
+      }
+
+      for (const holeNum of pickedUpHolesByParticipant.get(rp.id) || []) {
+        const hole = holeMap.get(holeNum);
+        if (hole?.par == null) continue;
+        const recv = strokesReceivedOnHole(courseHcp, hole.stroke_index, holeMap.size || 18);
+        grossTotal += netDoubleBogeyGross(hole.par, courseHcp, hole.stroke_index, holeMap.size || 18);
+        holesCompleted++;
+        parPlayed += hole.par;
+        if (courseHcp != null) netAdjustment += recv;
       }
 
       const hasScores = holesCompleted > 0;

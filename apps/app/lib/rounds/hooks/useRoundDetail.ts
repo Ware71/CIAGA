@@ -116,6 +116,10 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
 
   const [eventTeeTimeId, setEventTeeTimeId] = useState<string | null>(null);
 
+  // First hole with a non-removed entry, or a manual override (hamburger menu).
+  const [startingHole, setStartingHole] = useState<number>(1);
+  const [startingHoleSource, setStartingHoleSource] = useState<"auto" | "manual">("auto");
+
   // Round settings surfaced for display (hamburger menu) and live preview.
   const [defaultTeeName, setDefaultTeeName] = useState<string | null>(null);
   const [playingHandicapMode, setPlayingHandicapMode] = useState<string | null>(null);
@@ -157,6 +161,8 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
     setFormatConfig((r.format_config as Record<string, any>) || {});
     setSideGames((r.side_games as SideGame[]) || []);
     setEventTeeTimeId((r.event_tee_time_id as string) ?? null);
+    setStartingHole(toNumOrNull(r.starting_hole) ?? 1);
+    setStartingHoleSource(r.starting_hole_source === "manual" ? "manual" : "auto");
 
     // Build extras map from participant_extras
     const extrasMap: Record<string, { playing_handicap_used: number | null; team_id: string | null; handicap_index_direct: number | null }> = {};
@@ -645,6 +651,9 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
     previewLoading,
 
     eventTeeTimeId,
+
+    startingHole,
+    startingHoleSource,
 
     scoresByKey,
     setScoresByKey,

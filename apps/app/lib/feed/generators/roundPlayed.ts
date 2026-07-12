@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { parseFeedPayload } from "@/lib/feed/schemas";
 import { fanOutFeedItemToSubjectsAndFollowers } from "@/lib/feed/fanout";
 import { computeFormatSummaryForFeed } from "@/lib/feed/helpers/formatSummary";
+import { netDoubleBogeyGross } from "@/lib/rounds/handicapUtils";
 
 /**
  * Emits a round_played feed item for a completed round.
@@ -91,7 +92,7 @@ export async function emitRoundPlayedFeedItem(params: {
   // Participants (profiles + guests)
   const { data: participants, error: pErr } = await supabaseAdmin
     .from("round_participants")
-    .select("id, profile_id, is_guest, display_name, team_id")
+    .select("id, profile_id, is_guest, display_name, team_id, tee_snapshot_id")
     .eq("round_id", roundId)
     .order("created_at", { ascending: true });
   if (pErr) throw pErr;
@@ -180,6 +181,46 @@ export async function emitRoundPlayedFeedItem(params: {
     const chRaw = (row as any).course_handicap_used;
     const ch = typeof chRaw === "number" ? chRaw : Number(chRaw);
     courseHandicapByParticipantId.set(pid, Number.isFinite(ch) ? ch : null);
+  }
+
+  // --- FIX: picked-up holes must count as WHS net double bogey, not be dropped ----
+  // A picked-up hole has no numeric strokes row, so the loop above silently skips it.
+  // Credit it the same NDB penalty the in-round leaderboard already applies.
+  if (participantIds.length) {
+    const teeSnapIds = Array.from(
+      new Set((participants ?? []).map((r: any) => r.tee_snapshot_id).filter(Boolean)),
+    ) as string[];
+
+    const [{ data: holeStateRows }, { data: holeRows }] = await Promise.all([
+      supabaseAdmin
+        .from("round_hole_states")
+        .select("participant_id, hole_number, status")
+        .eq("round_id", roundId)
+        .eq("status", "picked_up")
+        .in("participant_id", participantIds),
+      teeSnapIds.length
+        ? supabaseAdmin
+            .from("round_hole_snapshots")
+            .select("hole_number, par, stroke_index")
+            .in("round_tee_snapshot_id", teeSnapIds)
+        : Promise.resolve({ data: [] as any[] }),
+    ]);
+
+    const holeByNumber = new Map<number, { par: number | null; stroke_index: number | null }>();
+    for (const h of (holeRows ?? []) as any[]) {
+      if (!holeByNumber.has(h.hole_number)) {
+        holeByNumber.set(h.hole_number, { par: h.par ?? null, stroke_index: h.stroke_index ?? null });
+      }
+    }
+
+    for (const row of (holeStateRows ?? []) as any[]) {
+      const pid = row.participant_id as string;
+      const hole = holeByNumber.get(row.hole_number);
+      if (!pid || !hole || typeof hole.par !== "number") continue;
+      const penalty = netDoubleBogeyGross(hole.par, courseHandicapByParticipantId.get(pid) ?? null, hole.stroke_index);
+      grossByParticipantId.set(pid, (grossByParticipantId.get(pid) ?? 0) + penalty);
+      holesCompletedByParticipantId.set(pid, (holesCompletedByParticipantId.get(pid) ?? 0) + 1);
+    }
   }
 
   // Profile embeds

@@ -178,6 +178,11 @@ export default function RoundMenuSheet(props: {
   groupId?: string;
   seasonId?: string;
   scoringModel?: string;
+  roundId?: string;
+  startingHole?: number;
+  startingHoleSource?: "auto" | "manual";
+  holeCount?: number;
+  canEditStartingHole?: boolean;
 }) {
   const {
     onClose,
@@ -206,9 +211,37 @@ export default function RoundMenuSheet(props: {
     groupId,
     seasonId,
     scoringModel,
+    roundId,
+    startingHole = 1,
+    startingHoleSource = "auto",
+    holeCount = 18,
+    canEditStartingHole = false,
   } = props;
 
   const showPts = !!competitionPointsModel && competitionPointsModel !== "none";
+
+  const [startingHolePickerOpen, setStartingHolePickerOpen] = useState(false);
+  const [startingHoleSaving, setStartingHoleSaving] = useState(false);
+
+  async function submitStartingHole(value: number | "auto") {
+    if (!roundId || startingHoleSaving) return;
+    setStartingHoleSaving(true);
+    try {
+      const session = await getViewerSession();
+      if (!session) return;
+      await fetch(`/api/rounds/${roundId}/starting-hole`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.accessToken}`,
+        },
+        body: JSON.stringify({ hole_number: value }),
+      });
+      setStartingHolePickerOpen(false);
+    } finally {
+      setStartingHoleSaving(false);
+    }
+  }
 
   const [activeTab, setActiveTab] = useState<LeaderboardTab>(eventId ? "competition" : "gross");
   // Track whether the user has explicitly clicked a tab (vs auto-selected on init).
@@ -842,6 +875,54 @@ export default function RoundMenuSheet(props: {
                   <div className="px-3 py-2.5 flex justify-between items-center">
                     <span className="text-[11px] text-emerald-100/70">Allowance</span>
                     <span className="text-[12px] font-semibold text-emerald-50">{allowanceLabel(playingHandicapMode, playingHandicapValue)}</span>
+                  </div>
+                )}
+                {roundId && (
+                  <div className="px-3 py-2.5">
+                    <button
+                      type="button"
+                      disabled={!canEditStartingHole}
+                      onClick={() => setStartingHolePickerOpen((v) => !v)}
+                      className="w-full flex justify-between items-center disabled:cursor-default"
+                    >
+                      <span className="text-[11px] text-emerald-100/70">Starting hole</span>
+                      <span className="text-[12px] font-semibold text-emerald-50">
+                        {startingHole}
+                        {startingHoleSource === "auto" ? " (Auto)" : ""}
+                        {canEditStartingHole ? " ›" : ""}
+                      </span>
+                    </button>
+                    {startingHolePickerOpen && canEditStartingHole && (
+                      <div className="mt-2.5 flex flex-wrap gap-1.5">
+                        <button
+                          type="button"
+                          disabled={startingHoleSaving}
+                          onClick={() => submitStartingHole("auto")}
+                          className={`px-2.5 h-7 rounded-full text-[11px] font-semibold ${
+                            startingHoleSource === "auto"
+                              ? "bg-[#f5e6b0] text-[#042713]"
+                              : "bg-[#0b3b21]/70 text-emerald-100/80 ring-1 ring-emerald-900/70"
+                          }`}
+                        >
+                          Auto
+                        </button>
+                        {Array.from({ length: holeCount }, (_, i) => i + 1).map((n) => (
+                          <button
+                            key={n}
+                            type="button"
+                            disabled={startingHoleSaving}
+                            onClick={() => submitStartingHole(n)}
+                            className={`w-7 h-7 rounded-full text-[11px] font-semibold ${
+                              startingHoleSource === "manual" && startingHole === n
+                                ? "bg-[#f5e6b0] text-[#042713]"
+                                : "bg-[#0b3b21]/70 text-emerald-100/80 ring-1 ring-emerald-900/70"
+                            }`}
+                          >
+                            {n}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
                 <div className="px-3 py-2.5 flex justify-between items-center">

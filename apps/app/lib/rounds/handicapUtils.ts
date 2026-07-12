@@ -41,3 +41,16 @@ export function formatHI(hi: number): string {
 export function netFromGross(gross: number, recv: number): number {
   return gross - recv;
 }
+
+/**
+ * WHS net double bogey: the gross score assigned to an unplayed/picked-up
+ * hole for scoring purposes (par + 2 + strokes received on that hole).
+ */
+export function netDoubleBogeyGross(
+  par: number,
+  courseHcp: number | null | undefined,
+  strokeIndex: number | null,
+  holeCount: number = 18
+): number {
+  return par + 2 + strokesReceivedOnHole(courseHcp, strokeIndex, holeCount);
+}

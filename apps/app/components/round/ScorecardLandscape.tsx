@@ -38,6 +38,8 @@ export default function ScorecardLandscape(props: {
   canScore: boolean;
   isFinished: boolean;
   activeHole: number;
+  /** First hole with a non-removed entry (or manual override). Shows a badge when != 1. */
+  startingHole?: number;
   savingKey: string | null;
   scoreView: FormatScoreView;
   formatDisplay: FormatDisplayData | null;
@@ -70,6 +72,7 @@ export default function ScorecardLandscape(props: {
     canScore,
     isFinished,
     activeHole,
+    startingHole = 1,
     savingKey,
     scoreView,
     formatDisplay,
@@ -124,9 +127,20 @@ export default function ScorecardLandscape(props: {
               );
 
               if (c.kind === "hole") {
+                const isStartingHole = startingHole !== 1 && c.hole.hole_number === startingHole;
                 return (
                   <div key={`meta-hole-${c.hole.hole_number}`} className="border-b border-emerald-900/60">
-                    {cell(c.hole.hole_number)}
+                    <div
+                      className={`relative h-7 flex items-center justify-center text-[10px] border-r border-emerald-900/60 ${
+                        isActive ? "bg-[#042713] text-[#f5e6b0]" : "bg-[#0b3b21]/40 text-emerald-100/80"
+                      }`}
+                      title={isStartingHole ? `Round started on hole ${startingHole}` : undefined}
+                    >
+                      {c.hole.hole_number}
+                      {isStartingHole && (
+                        <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-[#f5e6b0]" />
+                      )}
+                    </div>
                     {cell(c.hole.par)}
                     {cell(c.hole.yardage)}
                     {cell(c.hole.stroke_index)}
