@@ -1639,6 +1639,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
   const [editingTeeTime, setEditingTeeTime] = useState<EventTeeTime | null>(null);
   const [myProfileId, setMyProfileId] = useState<string | null>(null);
   const [myRole, setMyRole] = useState<string | null>(null);
+  const [fantasyNarrative, setFantasyNarrative] = useState<string | null>(null);
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
   const [matchplayStages, setMatchplayStages] = useState<MatchplayStage[]>([]);
   const [matchplayFixtures, setMatchplayFixtures] = useState<MatchplayFixture[]>([]);
@@ -2213,6 +2214,26 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
     }
   }, [autoEnter, autoEnterHandled, entryOpen, isEntered]);
 
+  // Lazy-load the event's auto-written fantasy "Event preview" for the Overview
+  // tab. Read-only: the card shows only once the event's fantasy odds have been
+  // generated (same condition as the fantasy market board itself).
+  useEffect(() => {
+    if (tab !== "overview") return;
+    let cancelled = false;
+    (async () => {
+      const session = await getViewerSession();
+      if (!session || cancelled) return;
+      const res = await fetch(`/api/fantasy/events/${eventId}/narrative`, {
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+      });
+      if (!cancelled && res.ok) {
+        const j = await res.json();
+        setFantasyNarrative((j?.narrative as string | null) ?? null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [tab, eventId]);
+
   const scoringModel = event?.scoring_model ?? "net";
   const displayScore = (row: any) =>
     scoringModel === "gross"
@@ -2250,6 +2271,21 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
       <div className="space-y-4">
         {event.description && (
           <p className="text-[13px] text-emerald-100/75 leading-relaxed">{event.description}</p>
+        )}
+
+        {/* Fantasy "Event preview" — auto-written narrative */}
+        {fantasyNarrative && (
+          <button
+            type="button"
+            onClick={() => router.push(`/majors/fantasy/events/${eventId}`)}
+            className="w-full text-left rounded-2xl border border-emerald-900/60 bg-gradient-to-br from-[#0b3b21]/90 to-[#07301a]/90 px-4 py-3 hover:from-[#0b3b21] hover:to-[#07301a] transition-colors"
+          >
+            <div className="flex items-center justify-between mb-1">
+              <div className="text-[9px] uppercase tracking-[0.2em] text-[#f5e6b0]/60">Event preview</div>
+              <span className="text-[10px] text-emerald-400/80">Picks →</span>
+            </div>
+            <p className="text-[12px] leading-relaxed text-emerald-100/85">{fantasyNarrative}</p>
+          </button>
         )}
 
         {/* Info grid */}

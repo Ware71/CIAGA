@@ -26,6 +26,16 @@ import { getWhsDefaultPolicyForEvent } from "@/lib/rounds/whsDefaults";
 import type { MajorGroupType, EventTypeV2 } from "@/lib/majors/types";
 import type { FantasyConfig, FantasyWalletSummary } from "@/lib/fantasy/types";
 
+type FantasyLeaderboardEntry = {
+  profile_id: string;
+  name: string;
+  avatar_url: string | null;
+  pnl: number;
+  staked: number;
+  picks: number;
+  position: number;
+};
+
 type CompetitionSeriesWithEventCount = Competition & {
   event_templates: Pick<CompetitionEventTemplate, "id">[];
   current_holder: { name: string | null; avatar_url: string | null } | null;
@@ -475,6 +485,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   const [addPotForm, setAddPotForm] = useState<{ name: string; entry_fee_amount: string; distribution_type: string; is_mandatory: boolean }>({ name: "", entry_fee_amount: "", distribution_type: "entry_only", is_mandatory: true });
   const [showAddPotForm, setShowAddPotForm] = useState(false);
   const [savingPot, setSavingPot] = useState(false);
+  const [potError, setPotError] = useState<string | null>(null);
   // League settings
   const [leagueSettingsForm, setLeagueSettingsForm] = useState<GroupScoringPrefs | null>(null);
   const [savingLeagueSettings, setSavingLeagueSettings] = useState(false);
@@ -486,12 +497,15 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   // Fantasy picks
   const [fantasyWallet, setFantasyWallet] = useState<FantasyWalletSummary | null>(null);
   const [fantasyWalletLoading, setFantasyWalletLoading] = useState(false);
+  const [fantasyLeaderboard, setFantasyLeaderboard] = useState<FantasyLeaderboardEntry[]>([]);
+  const [fantasyLeaderboardLoading, setFantasyLeaderboardLoading] = useState(false);
   const [fantasyConfigForm, setFantasyConfigForm] = useState<{
     enabled: boolean; mode: "fixed" | "topup"; budgetScope: "season" | "event";
     budgetAmount: string; topupIncrement: string;
   } | null>(null);
   const [savingFantasyConfig, setSavingFantasyConfig] = useState(false);
   const [fantasyConfigError, setFantasyConfigError] = useState<string | null>(null);
+  const [seasonNarrative, setSeasonNarrative] = useState<{ text: string; seasonId: string } | null>(null);
   // Player detail drawer
   const [selectedPlayerForDrawer, setSelectedPlayerForDrawer] = useState<{ profileId: string; name: string; avatarUrl: string | null; currentSeasonId: string | null; seasonLabel?: string } | null>(null);
   const [playerBreakdownEntries, setPlayerBreakdownEntries] = useState<PlayerBreakdownEntry[]>([]);
@@ -674,6 +688,55 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         }
       } finally {
         if (!cancelled) setFantasyWalletLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [tab, groupId, group?.fantasy_config]);
+
+  // Lazy-load the season PnL leaderboard when the fantasy tab is first opened.
+  // The leaderboard route resolves season vs. all-time scope server-side.
+  useEffect(() => {
+    if (tab !== "fantasy") return;
+    if (!group?.fantasy_config) { setFantasyLeaderboard([]); return; }
+    let cancelled = false;
+    (async () => {
+      setFantasyLeaderboardLoading(true);
+      try {
+        const session = await getViewerSession();
+        if (!session || cancelled) return;
+        const res = await fetch(`/api/fantasy/groups/${groupId}/leaderboard`, {
+          headers: { Authorization: `Bearer ${session.accessToken}` },
+        });
+        if (!cancelled && res.ok) {
+          const j = await res.json();
+          setFantasyLeaderboard(j.entries ?? []);
+        }
+      } finally {
+        if (!cancelled) setFantasyLeaderboardLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [tab, groupId, group?.fantasy_config]);
+
+  // Lazy-load the auto-written season title-race story for the Overview tab.
+  // The season route resolves the current season and (season-budget groups)
+  // generates its markets + narrative on first view; event-budget or
+  // non-fantasy groups return no narrative and no card shows.
+  useEffect(() => {
+    if (tab !== "overview" || !group?.fantasy_config) { setSeasonNarrative(null); return; }
+    let cancelled = false;
+    (async () => {
+      const session = await getViewerSession();
+      if (!session || cancelled) return;
+      const res = await fetch(`/api/fantasy/groups/${groupId}/season`, {
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+      });
+      if (!cancelled && res.ok) {
+        const j = await res.json();
+        const h = j.headline;
+        setSeasonNarrative(
+          h?.narrative && h?.seasonId ? { text: h.narrative as string, seasonId: h.seasonId as string } : null
+        );
       }
     })();
     return () => { cancelled = true; };
@@ -983,6 +1046,21 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                 );
               })}
             </div>
+          </button>
+        )}
+
+        {/* Season story — auto-written fantasy title-race narrative */}
+        {seasonNarrative && (
+          <button
+            type="button"
+            onClick={() => router.push(`/majors/fantasy/seasons/${seasonNarrative.seasonId}`)}
+            className="w-full text-left rounded-2xl border border-emerald-900/60 bg-gradient-to-br from-[#0b3b21]/90 to-[#07301a]/90 px-4 py-3 hover:from-[#0b3b21] hover:to-[#07301a] transition-colors"
+          >
+            <div className="flex items-center justify-between mb-1">
+              <div className="text-[9px] uppercase tracking-[0.2em] text-[#f5e6b0]/60">Season story</div>
+              <span className="text-[10px] text-emerald-400/80">Markets →</span>
+            </div>
+            <p className="text-[12px] leading-relaxed text-emerald-100/85">{seasonNarrative.text}</p>
           </button>
         )}
 
@@ -2047,6 +2125,12 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           {isAdminOrOwner && groupSeasons.length > 0 && (
             <div className="space-y-1.5">
               <div className="text-[10px] uppercase tracking-wider text-emerald-200/50 font-semibold">Season Pots &amp; Charges</div>
+              {potError && (
+                <div className="text-[11px] text-red-400 bg-red-950/30 border border-red-900/50 rounded-xl px-3 py-2">
+                  {potError}
+                  <button type="button" onClick={() => setPotError(null)} className="ml-2 underline">Dismiss</button>
+                </div>
+              )}
               {[...groupSeasons]
                 .sort((a: any, b: any) => (b.season_year ?? 0) - (a.season_year ?? 0))
                 .map((s: any) => {
@@ -2072,18 +2156,30 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                     setShowAddPotForm(false);
                     await loadPots();
                   };
-                  const handleDeletePot = async (potId: string) => {
+                  const handleDeletePot = async (pot: any) => {
+                    const entryCount: number = pot.entries?.length ?? 0;
+                    if (entryCount > 0) {
+                      const ok = confirm(
+                        `Remove "${pot.name}"? ${entryCount} member${entryCount === 1 ? "" : "s"} already been charged for this — removing it will refund them and delete the charge.`
+                      );
+                      if (!ok) return;
+                    }
                     try {
                       const session = await getViewerSession();
                       if (!session) return;
-                      const res = await fetch(`/api/majors/prize-pots/${potId}`, {
+                      const res = await fetch(`/api/majors/prize-pots/${pot.id}`, {
                         method: "DELETE",
                         headers: { Authorization: `Bearer ${session.accessToken}` },
                       });
                       if (res.ok) {
-                        setSeasonPots((prev) => ({ ...prev, [s.id]: (prev[s.id] ?? []).filter((p) => p.id !== potId) }));
+                        setSeasonPots((prev) => ({ ...prev, [s.id]: (prev[s.id] ?? []).filter((p) => p.id !== pot.id) }));
+                      } else {
+                        const j = await res.json().catch(() => ({}));
+                        setPotError(j.error ?? "Failed to remove charge");
                       }
-                    } catch { /* ignore */ }
+                    } catch {
+                      setPotError("Failed to remove charge");
+                    }
                   };
                   const handleAddPot = async () => {
                     if (!addPotForm.name.trim()) return;
@@ -2139,7 +2235,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                               </div>
                               <button
                                 type="button"
-                                onClick={() => handleDeletePot(pot.id)}
+                                onClick={() => handleDeletePot(pot)}
                                 className="text-[10px] text-red-400/70 border border-red-900/30 rounded-full px-2 py-0.5 hover:bg-red-900/20 shrink-0"
                               >
                                 Remove
@@ -2875,11 +2971,43 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             </div>
           </button>
 
-          <div className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/70 px-4 py-5 text-center">
-            <div className="text-sm text-emerald-100/70">Markets open soon</div>
-            <div className="text-[11px] text-emerald-200/50 mt-1">
-              Odds and pick placement for this group&apos;s events will appear here.
+          <div className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/70 px-3 py-3">
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider">Season Leaderboard</div>
+              <button
+                type="button"
+                onClick={() => router.push("/majors/fantasy/leaderboard")}
+                className="text-[10px] text-emerald-400/80 hover:text-emerald-300"
+              >
+                Full board →
+              </button>
             </div>
+            {fantasyLeaderboardLoading ? (
+              <div className="text-[11px] text-emerald-200/50 py-2 text-center">Loading…</div>
+            ) : fantasyLeaderboard.length === 0 ? (
+              <div className="text-[11px] text-emerald-200/50 py-2 text-center">
+                No picks placed yet — the leaderboard starts with the first pick.
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {fantasyLeaderboard.slice(0, 5).map((e) => (
+                  <div key={e.profile_id} className="flex items-center gap-2.5 py-1">
+                    <span className="w-5 text-center text-[11px] font-bold text-emerald-200/50">{e.position}</span>
+                    {e.avatar_url ? (
+                      <img src={e.avatar_url} alt="" className="h-6 w-6 rounded-full object-cover shrink-0" />
+                    ) : (
+                      <div className="h-6 w-6 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
+                        {e.name.slice(0, 2).toUpperCase()}
+                      </div>
+                    )}
+                    <span className="flex-1 min-w-0 text-[12px] text-emerald-50 truncate">{e.name}</span>
+                    <span className={`text-[12px] font-bold ${e.pnl > 0 ? "text-emerald-300" : e.pnl < 0 ? "text-red-300" : "text-emerald-100/60"}`}>
+                      {e.pnl > 0 ? "+" : ""}{e.pnl}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       );

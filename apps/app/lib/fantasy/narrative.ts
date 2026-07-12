@@ -58,7 +58,7 @@ export type NarrativeInputs = {
   }[];
 };
 
-type Candidate = {
+export type Candidate = {
   /** Higher = more insightful; the setup line is composed separately. */
   score: number;
   /** At most one candidate per player survives selection. */
@@ -79,18 +79,45 @@ const CONSISTENCY_MAX_STDDEV = 2.5;
 const CONSISTENCY_MIN_SAMPLE = 8;
 const EXCEPTIONAL_STDDEV_BELOW = 1.5; // a best round this many σ under the mean
 
-function firstName(full: string): string {
+export function firstName(full: string): string {
   return full.split(" ")[0] || full;
 }
 
-function pick<T>(rand: () => number, arr: T[]): T {
+export function pick<T>(rand: () => number, arr: T[]): T {
   return arr[Math.floor(rand() * arr.length) % arr.length];
 }
 
-function ordinal(n: number): string {
+export function ordinal(n: number): string {
   const s = ["th", "st", "nd", "rd"];
   const v = n % 100;
   return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
+}
+
+/**
+ * Shared selection + composition: rank candidates by score (with a hair of
+ * seeded jitter so equal-score candidates rotate), enforce at most one insight
+ * per player, keep the top `maxInsights`, then join a setup sentence with each
+ * chosen candidate's seeded phrasing. `makeSetup` is invoked *after* the sort so
+ * the RNG call order matches the event narrator's original inline composition.
+ * Reused by the season narrator (seasonNarrative.ts).
+ */
+export function selectAndCompose(
+  makeSetup: (rand: () => number) => string,
+  candidates: Candidate[],
+  rand: () => number,
+  maxInsights: number
+): string {
+  candidates.sort((a, b) => b.score + rand() * 0.5 - (a.score + rand() * 0.5));
+  const seen = new Set<string>();
+  const chosen: Candidate[] = [];
+  for (const c of candidates) {
+    if (c.profileId && seen.has(c.profileId)) continue;
+    if (c.profileId) seen.add(c.profileId);
+    chosen.push(c);
+    if (chosen.length >= maxInsights) break;
+  }
+  const sentences = [makeSetup(rand), ...chosen.map((c) => pick(rand, c.templates))];
+  return sentences.join(" ");
 }
 
 // ── Extractors ────────────────────────────────────────────────────────────
@@ -639,20 +666,7 @@ export function composeNarrative(
     ...consistencyAngle(inputs),
   ];
 
-  // Rank by insightfulness with a hair of seeded jitter so equal-score
-  // candidates rotate between refreshes/events; then enforce one per player.
-  candidates.sort((a, b) => b.score + rand() * 0.5 - (a.score + rand() * 0.5));
-  const seen = new Set<string>();
-  const chosen: Candidate[] = [];
-  for (const c of candidates) {
-    if (c.profileId && seen.has(c.profileId)) continue;
-    if (c.profileId) seen.add(c.profileId);
-    chosen.push(c);
-    if (chosen.length >= MAX_INSIGHTS) break;
-  }
-
-  const sentences = [setupLine(inputs, rand), ...chosen.map((c) => pick(rand, c.templates))];
-  return sentences.join(" ");
+  return selectAndCompose((r) => setupLine(inputs, r), candidates, rand, MAX_INSIGHTS);
 }
 
 // ── Input assembly ────────────────────────────────────────────────────────
@@ -689,7 +703,7 @@ async function loadSeasonStandings(groupSeasonId: string): Promise<{
 }
 
 /** Recent handicap-index movement per player over a bounded window. */
-async function loadHandicapDeltas(profileIds: string[]): Promise<Map<string, number>> {
+export async function loadHandicapDeltas(profileIds: string[]): Promise<Map<string, number>> {
   const out = new Map<string, number>();
   if (profileIds.length === 0) return out;
   const since = new Date(Date.now() - 120 * 24 * 3600 * 1000).toISOString().slice(0, 10);

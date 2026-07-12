@@ -69,17 +69,26 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ potId
     const { pot, authorized } = await getPotAndAssertAdminOrOwner(potId, profileId);
     if (!pot) return NextResponse.json({ error: "Prize pot not found." }, { status: 404 });
     if (!authorized) return NextResponse.json({ error: "Not authorised." }, { status: 403 });
+    if ((pot as any).status === "distributed") {
+      return NextResponse.json({ error: "Cannot delete a pot that has already been distributed." }, { status: 400 });
+    }
 
-    const { count } = await supabaseAdmin
+    // Deleting a charge that members have already been charged for must reverse
+    // those charges too — mirrors the single-entry reversal in
+    // entries/[profileId]/route.ts DELETE, just applied to every entry in the pot.
+    const { data: entries } = await supabaseAdmin
       .from("prize_pot_entries")
-      .select("id", { count: "exact", head: true })
+      .select("id, transaction_id")
       .eq("prize_pot_id", potId);
 
-    if ((count ?? 0) > 0) {
-      return NextResponse.json(
-        { error: "Cannot delete a pot with existing entries. Remove all entries first." },
-        { status: 400 }
-      );
+    const txnIds = (entries ?? [])
+      .map((e: any) => e.transaction_id)
+      .filter((id: string | null): id is string => !!id);
+    if (txnIds.length > 0) {
+      await supabaseAdmin.from("group_balance_transactions").delete().in("id", txnIds);
+    }
+    if ((entries ?? []).length > 0) {
+      await supabaseAdmin.from("prize_pot_entries").delete().eq("prize_pot_id", potId);
     }
 
     const { error } = await supabaseAdmin.from("prize_pots").delete().eq("id", potId);
