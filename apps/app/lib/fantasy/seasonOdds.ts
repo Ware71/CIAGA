@@ -10,6 +10,7 @@ import {
   type SeasonSimResult,
 } from "@/lib/fantasy/simulation/seasonEngine";
 import type { EventPointsConfig } from "@/lib/fantasy/simulation/seasonPoints";
+import { generateSeasonNarrative } from "@/lib/fantasy/seasonNarrative";
 
 /**
  * Season odds service. Season markets (winner / top-3 in the standings) are
@@ -248,9 +249,17 @@ export async function generateSeasonFantasy(groupSeasonId: string): Promise<{ ma
   const sim = runSeasonSim(ctx, version);
   await writeSeasonSnapshots(ctx, sim, markets, version);
 
+  // Best-effort title-race story; a narration failure never fails the reprice.
+  const narrative = await generateSeasonNarrative(ctx, sim, version).catch(() => null);
+
   await supabaseAdmin
     .from("fantasy_season_state")
-    .update({ odds_stale: false, last_refreshed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .update({
+      odds_stale: false,
+      last_refreshed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      ...(narrative ? { narrative } : {}),
+    })
     .eq("group_season_id", groupSeasonId)
     .eq("version", version);
 
@@ -290,9 +299,15 @@ export async function refreshSeasonIfStale(groupSeasonId: string): Promise<{ ref
   const markets = await loadSeasonMarkets(groupSeasonId);
   const sim = runSeasonSim(ctx, version);
   await writeSeasonSnapshots(ctx, sim, markets, version);
+  const narrative = await generateSeasonNarrative(ctx, sim, version).catch(() => null);
   await supabaseAdmin
     .from("fantasy_season_state")
-    .update({ odds_stale: false, last_refreshed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .update({
+      odds_stale: false,
+      last_refreshed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      ...(narrative ? { narrative } : {}),
+    })
     .eq("group_season_id", groupSeasonId)
     .eq("version", version);
   return { refreshed: true };

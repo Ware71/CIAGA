@@ -8,12 +8,12 @@ import { buildFinishesTable, toPreviewRows, type BoardMarket, type Selection } f
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-type SeasonStateRow = { group_season_id: string; version: number };
+type SeasonStateRow = { group_season_id: string; version: number; narrative: string | null };
 
 async function readState(groupId: string): Promise<SeasonStateRow | null> {
   const { data } = await supabaseAdmin
     .from("fantasy_season_state")
-    .select("group_season_id, version")
+    .select("group_season_id, version, narrative")
     .eq("group_id", groupId)
     .eq("is_final", false)
     .order("updated_at", { ascending: false })
@@ -124,6 +124,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         seasonId: state.group_season_id,
         seasonName: (seasonRow as { name: string } | null)?.name ?? "Season",
         preview: toPreviewRows(table, 3),
+        narrative: state.narrative,
       },
     });
   } catch (e: any) {
