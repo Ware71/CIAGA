@@ -92,6 +92,8 @@ export default function ScorecardPortrait(props: {
   canScore: boolean;
   isFinished: boolean;
   activeHole: number;
+  /** First hole with a non-removed entry (or manual override). Shows a badge when != 1. */
+  startingHole?: number;
   savingKey: string | null;
   scoreView: FormatScoreView;
   formatDisplay: FormatDisplayData | null;
@@ -126,6 +128,7 @@ export default function ScorecardPortrait(props: {
     canScore,
     isFinished,
     activeHole,
+    startingHole = 1,
     savingKey,
     scoreView,
     formatDisplay,
@@ -273,8 +276,21 @@ export default function ScorecardPortrait(props: {
               </div>
             );
 
+            const isStartingHole = startingHole !== 1 && h.hole_number === startingHole;
+
             nodes.push(
-              metaCell(h.hole_number, `h-${h.hole_number}-n`),
+              <div
+                key={`h-${h.hole_number}-n`}
+                className={`relative h-9 flex items-center justify-center text-[11px] border-b border-r border-emerald-900/60 ${
+                  isActive ? "bg-[#042713] text-[#f5e6b0]" : "bg-[#0b3b21]/25 text-emerald-100/80"
+                }`}
+                title={isStartingHole ? `Round started on hole ${startingHole}` : undefined}
+              >
+                {h.hole_number}
+                {isStartingHole && (
+                  <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-[#f5e6b0]" />
+                )}
+              </div>,
               metaCell(h.par, `h-${h.hole_number}-p`),
               metaCell(h.yardage, `h-${h.hole_number}-y`),
               metaCell(h.stroke_index, `h-${h.hole_number}-si`)

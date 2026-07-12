@@ -5,7 +5,7 @@
  */
 
 import type { Participant, Hole, Score, HoleState, Team, RoundFormatType, WolfPick, WolfMode } from "./hooks/useRoundDetail";
-import { strokesReceivedOnHole, netFromGross } from "./handicapUtils";
+import { strokesReceivedOnHole, netFromGross, netDoubleBogeyGross } from "./handicapUtils";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -86,9 +86,25 @@ function grossForMatchplay(
   const key = `${pid}:${hole}`;
   const state = holeStatesByKey[key] ?? "not_started";
   if (state === "not_started") return null;
-  if (state === "picked_up") return par + 2 + strokesReceivedOnHole(playingHcp, si, holeCount);
+  if (state === "picked_up") return netDoubleBogeyGross(par, playingHcp, si, holeCount);
   const s = scoresByKey[key];
   return typeof s?.strokes === "number" ? s.strokes : null;
+}
+
+/** Reorders holes into chronological play order, starting from `startingHole` and wrapping around. */
+function toPlayOrder(holes: Hole[], startingHole: number): Hole[] {
+  if (startingHole <= 1) return holes;
+  const idx = holes.findIndex((h) => h.hole_number === startingHole);
+  if (idx <= 0) return holes;
+  return [...holes.slice(idx), ...holes.slice(0, idx)];
+}
+
+/** Per-hole match-state display (e.g. "1UP"/"AS"/"2DN") from one player's perspective. */
+function buildMatchHoleResult(cumulativeState: number, isPlayerA: boolean): FormatHoleResult {
+  const val = isPlayerA ? cumulativeState : -cumulativeState;
+  const displayValue = val > 0 ? `${val}UP` : val < 0 ? `${Math.abs(val)}DN` : "AS";
+  const cssHint: "won" | "lost" | "halved" = val > 0 ? "won" : val < 0 ? "lost" : "halved";
+  return { displayValue, cssHint };
 }
 
 function playingHcp(p: Participant): number {
@@ -235,7 +251,8 @@ function computeMatchPlay(
   scoresByKey: Record<string, Score>,
   holeStatesByKey: Record<string, HoleState>,
   formatConfig: Record<string, any>,
-  getName: (p: Participant) => string
+  getName: (p: Participant) => string,
+  startingHole: number = 1
 ): FormatDisplayData[] {
   const matchups: Array<{ player_a_id: string; player_b_id: string }> = formatConfig.matchups || [];
 
@@ -243,7 +260,7 @@ function computeMatchPlay(
   if (matchups.length === 0) {
     if (participants.length !== 2) return [];
     const pA = participants[0], pB = participants[1];
-    const result = computeMatchPlayPair(pA, pB, participants, holes, scoresByKey, holeStatesByKey);
+    const result = computeMatchPlayPair(pA, pB, participants, holes, scoresByKey, holeStatesByKey, startingHole);
     result.tabLabel = `${getName(pA)} vs ${getName(pB)}`;
     result.filteredParticipantIds = [pA.id, pB.id];
     result.playingHandicaps = { [pA.id]: playingHcp(pA), [pB.id]: playingHcp(pB) };
@@ -256,7 +273,7 @@ function computeMatchPlay(
       const pA = participants.find((p) => p.id === m.player_a_id);
       const pB = participants.find((p) => p.id === m.player_b_id);
       if (!pA || !pB) return null;
-      const result = computeMatchPlayPair(pA, pB, participants, holes, scoresByKey, holeStatesByKey);
+      const result = computeMatchPlayPair(pA, pB, participants, holes, scoresByKey, holeStatesByKey, startingHole);
       result.tabLabel = `${getName(pA)} vs ${getName(pB)}`;
       result.filteredParticipantIds = [pA.id, pB.id];
       result.playingHandicaps = { [pA.id]: playingHcp(pA), [pB.id]: playingHcp(pB) };
@@ -286,7 +303,8 @@ function computeMatchPlayPair(
   allParticipants: Participant[],
   holes: Hole[],
   scoresByKey: Record<string, Score>,
-  holeStatesByKey: Record<string, HoleState>
+  holeStatesByKey: Record<string, HoleState>,
+  startingHole: number = 1
 ): FormatDisplayData {
   const hcpA = playingHcp(pA);
   const hcpB = playingHcp(pB);
@@ -296,8 +314,12 @@ function computeMatchPlayPair(
   let matchDecidedAtHole: number | null = null;
   const totalHoles = holes.length;
   const holeCount = holes.length;
+  // Dormie/"match decided" detection and the running up/down state need true
+  // chronological order — if the round didn't start on hole 1, holes before
+  // startingHole were actually played last.
+  const playOrderHoles = toPlayOrder(holes, startingHole);
 
-  for (const h of holes) {
+  for (const h of playOrderHoles) {
     // If match already decided, remaining holes are dormie — show dashes
     if (matchDecidedAtHole !== null) {
       holeResults[`${pA.id}:${h.hole_number}`] = { displayValue: null };
@@ -308,6 +330,29 @@ function computeMatchPlayPair(
     if (!h.par) {
       holeResults[`${pA.id}:${h.hole_number}`] = { displayValue: null };
       holeResults[`${pB.id}:${h.hole_number}`] = { displayValue: null };
+      continue;
+    }
+
+    const holeStateA = holeStatesByKey[`${pA.id}:${h.hole_number}`] ?? "not_started";
+    const holeStateB = holeStatesByKey[`${pB.id}:${h.hole_number}`] ?? "not_started";
+
+    // A pickup always forfeits the hole outright — never wins or halves on
+    // score, regardless of the opponent's (or the NDB penalty's) net score.
+    if (holeStateA === "picked_up" || holeStateB === "picked_up") {
+      holesPlayed++;
+      if (holeStateA === "picked_up" && holeStateB === "picked_up") {
+        // both forfeit → halved, no state change
+      } else if (holeStateA === "picked_up") {
+        cumulativeState -= 1;
+      } else {
+        cumulativeState += 1;
+      }
+      holeResults[`${pA.id}:${h.hole_number}`] = buildMatchHoleResult(cumulativeState, true);
+      holeResults[`${pB.id}:${h.hole_number}`] = buildMatchHoleResult(cumulativeState, false);
+      const holesRemainingAfterPu = totalHoles - holesPlayed;
+      if (Math.abs(cumulativeState) > holesRemainingAfterPu) {
+        matchDecidedAtHole = h.hole_number;
+      }
       continue;
     }
 
@@ -339,13 +384,8 @@ function computeMatchPlayPair(
     }
 
     // Display cumulative match state from each player's perspective
-    const stateA = cumulativeState > 0 ? `${cumulativeState}UP` : cumulativeState < 0 ? `${Math.abs(cumulativeState)}DN` : "AS";
-    const stateB = cumulativeState < 0 ? `${Math.abs(cumulativeState)}UP` : cumulativeState > 0 ? `${cumulativeState}DN` : "AS";
-    const hintA: "won" | "lost" | "halved" = cumulativeState > 0 ? "won" : cumulativeState < 0 ? "lost" : "halved";
-    const hintB: "won" | "lost" | "halved" = cumulativeState < 0 ? "won" : cumulativeState > 0 ? "lost" : "halved";
-
-    holeResults[`${pA.id}:${h.hole_number}`] = { displayValue: stateA, cssHint: hintA };
-    holeResults[`${pB.id}:${h.hole_number}`] = { displayValue: stateB, cssHint: hintB };
+    holeResults[`${pA.id}:${h.hole_number}`] = buildMatchHoleResult(cumulativeState, true);
+    holeResults[`${pB.id}:${h.hole_number}`] = buildMatchHoleResult(cumulativeState, false);
 
     // Check if match is decided: lead exceeds remaining holes
     const holesRemaining = totalHoles - holesPlayed;
@@ -1065,7 +1105,8 @@ export function computeFormatDisplay(
   teams: Team[],
   getName?: (p: Participant) => string,
   notAcceptedIds: Set<string> = new Set(),
-  wolfPicksByHole: Record<number, WolfPick> = {}
+  wolfPicksByHole: Record<number, WolfPick> = {},
+  startingHole: number = 1
 ): FormatDisplayData[] {
   const nameOf = getName ?? ((p: Participant) => p.display_name || "Player");
 
@@ -1079,7 +1120,7 @@ export function computeFormatDisplay(
       return [computeStableford(participants, holes, scoresByKey, holeStatesByKey, formatConfig, notAcceptedIds)];
 
     case "matchplay":
-      return computeMatchPlay(participants, holes, scoresByKey, holeStatesByKey, formatConfig, nameOf);
+      return computeMatchPlay(participants, holes, scoresByKey, holeStatesByKey, formatConfig, nameOf, startingHole);
 
     case "skins":
       return [computeSkins(participants, holes, scoresByKey, holeStatesByKey, formatConfig)];

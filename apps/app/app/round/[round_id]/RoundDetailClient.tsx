@@ -10,7 +10,7 @@ import { finishRound as finishRoundApi, type RoundResultInput } from "@/lib/roun
 import { useRoundDetail } from "@/lib/rounds/hooks/useRoundDetail";
 import type { Participant, Hole, HoleState, RoundFormatType, WolfPick } from "@/lib/rounds/hooks/useRoundDetail";
 import WolfHoleDetails from "@/components/round/WolfHoleDetails";
-import { strokesReceivedOnHole, netFromGross } from "@/lib/rounds/handicapUtils";
+import { strokesReceivedOnHole, netFromGross, netDoubleBogeyGross } from "@/lib/rounds/handicapUtils";
 import { computeFormatDisplay, computeSideGameDisplays, isFormatView, formatViewIndex, type FormatScoreView, type FormatDisplayData } from "@/lib/rounds/formatScoring";
 import { useOrientationLock } from "@/lib/useOrientationLock";
 
@@ -169,10 +169,7 @@ function stableNumber(n: any): number | null {
   return typeof n === "number" && Number.isFinite(n) ? n : null;
 }
 
-/** WHS net double bogey penalty for a picked-up hole: par + 2 + strokes received */
-function puPenaltyGross(par: number, courseHcp: number | null, si: number | null, holeCount: number = 18): number {
-  return par + 2 + strokesReceivedOnHole(courseHcp, si, holeCount);
-}
+const puPenaltyGross = netDoubleBogeyGross;
 
 /** Returns true if the participant has any holes not yet started */
 function hasIncompleteHoles(
@@ -283,6 +280,8 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     courseId,
     previewLoading,
     eventTeeTimeId,
+    startingHole,
+    startingHoleSource,
     scoresByKey,
     setScoresByKey,
     holeStatesByKey,
@@ -439,10 +438,10 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
   }, [isFinished, participants, holesList, holeStatesByKey]);
 
   const formatDisplays = useMemo<FormatDisplayData[]>(() => {
-    const main = computeFormatDisplay(formatType, formatConfig, participants, holesList, scoresByKey, holeStatesByKey, teams, getParticipantLabel, notAcceptedIds, wolfPicksByHole);
+    const main = computeFormatDisplay(formatType, formatConfig, participants, holesList, scoresByKey, holeStatesByKey, teams, getParticipantLabel, notAcceptedIds, wolfPicksByHole, startingHole);
     const side = computeSideGameDisplays(sideGames, participants, holesList, scoresByKey, holeStatesByKey, wolfPicksByHole);
     return [...main, ...side];
-  }, [formatType, formatConfig, sideGames, participants, holesList, scoresByKey, holeStatesByKey, teams, getParticipantLabel, notAcceptedIds, wolfPicksByHole]);
+  }, [formatType, formatConfig, sideGames, participants, holesList, scoresByKey, holeStatesByKey, teams, getParticipantLabel, notAcceptedIds, wolfPicksByHole, startingHole]);
 
   // ── Wolf live state ────────────────────────────────────────────────────
   const wolfActive = useMemo(
@@ -1635,6 +1634,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
               canScore={canScore}
               isFinished={isFinished}
               activeHole={activeHole}
+              startingHole={startingHole}
               savingKey={savingKey}
               scoreView={scoreView}
               formatDisplay={activeFormatDisplay}
@@ -1657,6 +1657,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
               canScore={canScore}
               isFinished={isFinished}
               activeHole={activeHole}
+              startingHole={startingHole}
               savingKey={savingKey}
               scoreView={scoreView}
               formatDisplay={activeFormatDisplay}
@@ -1694,6 +1695,11 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
             playingHandicapMode={playingHandicapMode}
             playingHandicapValue={playingHandicapValue}
             holesCompletedByParticipantId={holesCompletedByParticipantId}
+            roundId={roundId}
+            startingHole={startingHole}
+            startingHoleSource={startingHoleSource}
+            holeCount={holesList.length || 18}
+            canEditStartingHole={canScore && !isFinished}
             teams={isSingleBall ? teams : undefined}
             allParticipants={isSingleBall ? participants : undefined}
             isTeamFormat={isSingleBall}
