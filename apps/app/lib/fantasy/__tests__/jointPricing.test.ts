@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   combineAcca,
   jointPositionProbability,
+  jointProbability,
+  MIN_JOINT_SUPPORT,
   type AccaLegForPricing,
   type JointMatrix,
   type MatrixLeg,
 } from "@/lib/fantasy/simulation/jointPricing";
+import type { JointBundle } from "@/lib/fantasy/simulation/jointBundle";
 import { probabilityToDecimalOdds } from "@/lib/fantasy/simulation/types";
 
 const A = "A", B = "B", C = "C", D = "D";
@@ -173,8 +176,9 @@ describe("combineAcca", () => {
     expect(jointPriced).toBe(false);
   });
 
-  it("an unpriceable group (round-scoped leg) falls back to the product, not p=0", () => {
-    const r1Winner: MatrixLeg = { marketType: "outright_winner", params: { round: 1 }, playerId: A, selectionKey: A };
+  it("an unpriceable group (round-scoped leg on a positions-only row) falls back to the product, not p=0", () => {
+    // `matrix` has no round arrays — the pre-extension row shape.
+    const r1Winner: MatrixLeg = { marketType: "outright_winner", params: { round: 1, resolvedBasis: "net" }, playerId: A, selectionKey: A };
     const legs: AccaLegForPricing[] = [
       { eventId: "e1", decimalOdds: 4.0, matrixLeg: r1Winner },
       { eventId: "e1", decimalOdds: marginalOdds(B), matrixLeg: top3(B) },
@@ -183,5 +187,176 @@ describe("combineAcca", () => {
     expect(combinedOdds).toBeCloseTo(Math.round(4.0 * marginalOdds(B) * 100) / 100, 2);
     expect(jointPriced).toBe(false);
     expect(infeasible).toBe(false);
+  });
+});
+
+// ─── Extended bundles: cross-family joint pricing ───────────────────────────
+
+function flat8(playerIds: string[], perPlayer: Record<string, number[]>): Int8Array {
+  const simCount = perPlayer[playerIds[0]].length;
+  const out = new Int8Array(playerIds.length * simCount);
+  playerIds.forEach((id, pi) => out.set(perPlayer[id], pi * simCount));
+  return out;
+}
+
+function flat16(playerIds: string[], perPlayer: Record<string, number[]>): Int16Array {
+  const simCount = perPlayer[playerIds[0]].length;
+  const out = new Int16Array(playerIds.length * simCount);
+  playerIds.forEach((id, pi) => out.set(perPlayer[id], pi * simCount));
+  return out;
+}
+
+describe("jointProbability — extended bundles", () => {
+  // Two players, 8 iterations, hand-checkable.
+  const ids = [A, B];
+  const grossA = [70, 69, 74, 71, 73, 70, 72, 75];
+  const grossB = [72, 71, 70, 73, 69, 74, 70, 71];
+  const bundle: JointBundle = {
+    playerIds: ids,
+    simCount: 8,
+    positions: flat8(ids, { A: [1, 1, 2, 1, 2, 1, 2, 2], B: [2, 2, 1, 2, 1, 2, 1, 1] }),
+    birdies: flat8(ids, { A: [2, 3, 0, 1, 0, 2, 1, 0], B: [1, 0, 2, 0, 1, 0, 1, 2] }),
+    eagles: flat8(ids, { A: [1, 0, 0, 2, 0, 0, 0, 0], B: [0, 0, 0, 0, 0, 0, 0, 0] }),
+    grossTotals: flat16(ids, { A: grossA, B: grossB }),
+    netTotals: flat16(ids, {
+      A: grossA.map((v) => v - 5),
+      B: grossB.map((v) => v - 8),
+    }),
+    rounds: {
+      1: {
+        gross: flat16(ids, { A: [35, 34, 35, 36, 36, 35, 36, 38], B: [36, 35, 35, 37, 34, 37, 35, 35] }),
+        net: flat16(ids, { A: [33, 32, 33, 34, 34, 33, 34, 36], B: [32, 31, 31, 33, 30, 33, 31, 31] }),
+        birdies: flat8(ids, { A: [1, 2, 0, 1, 0, 1, 0, 0], B: [1, 0, 1, 0, 1, 0, 0, 1] }),
+      },
+    },
+  };
+  const winA: MatrixLeg = { marketType: "outright_winner", params: {}, playerId: A, selectionKey: A };
+  const birdiesA = (count: number, round?: number): MatrixLeg => ({
+    marketType: "birdies",
+    params: round != null ? { count, round } : { count },
+    playerId: A,
+    selectionKey: "yes",
+  });
+
+  it("THE user case: win × 2+ birdies joint is far above the naive product", () => {
+    // P(A wins) = 4/8; P(A 2+ birdies) = 3/8 (iters 0,1,5) — all three are
+    // win iterations, so the true joint IS 3/8, double the 0.1875 product.
+    const joint = jointProbability(bundle, [winA, birdiesA(2)]);
+    expect(joint!.p).toBeCloseTo(3 / 8, 9);
+    expect(joint!.support).toBe(3);
+    expect(joint!.p).toBeGreaterThan((4 / 8) * (3 / 8));
+  });
+
+  it("eagle_count joins the joint", () => {
+    const eagle1: MatrixLeg = { marketType: "eagle_count", params: { count: 1 }, playerId: A, selectionKey: "yes" };
+    expect(jointProbability(bundle, [eagle1])!.p).toBeCloseTo(2 / 8, 9); // iters 0,3
+    expect(jointProbability(bundle, [winA, eagle1])!.p).toBeCloseTo(2 / 8, 9); // both are win iters
+  });
+
+  it("score_total u/e/o counted straight off the retained totals", () => {
+    const st = (sel: string): MatrixLeg => ({
+      marketType: "score_total",
+      params: { basis: "gross" },
+      playerId: A,
+      selectionKey: sel,
+    });
+    expect(jointProbability(bundle, [st("u_71")])!.p).toBeCloseTo(3 / 8, 9);
+    expect(jointProbability(bundle, [st("e_71")])!.p).toBeCloseTo(1 / 8, 9);
+    expect(jointProbability(bundle, [st("o_71")])!.p).toBeCloseTo(4 / 8, 9);
+    // Win ∩ under-71 = iters {0,1,5}.
+    expect(jointProbability(bundle, [winA, st("u_71")])!.p).toBeCloseTo(3 / 8, 9);
+  });
+
+  it("score_band tests the retained totals against the band bounds", () => {
+    const band: MatrixLeg = {
+      marketType: "score_band",
+      params: { basis: "gross", bands: [{ key: "le_70", lo: null, hi: 70 }, { key: "71_74", lo: 71, hi: 74 }] },
+      playerId: A,
+      selectionKey: "le_70",
+    };
+    expect(jointProbability(bundle, [band])!.p).toBeCloseTo(3 / 8, 9); // 70,69,70
+  });
+
+  it("h2h prices BOTH bases off the totals — no ranking-basis restriction", () => {
+    const h2hBasis = (basis: string, sel: "a" | "b" | "draw"): MatrixLeg => ({
+      marketType: "h2h",
+      params: { basis },
+      playerId: A,
+      opponentId: B,
+      selectionKey: sel,
+    });
+    expect(jointProbability(bundle, [h2hBasis("gross", "a")])!.p).toBeCloseTo(4 / 8, 9);
+    expect(jointProbability(bundle, [h2hBasis("net", "a")])!.p).toBeCloseTo(1 / 8, 9); // only iter 5
+    expect(jointProbability(bundle, [h2hBasis("net", "draw")])!.p).toBeCloseTo(0, 9);
+  });
+
+  it("round winner: ties all win, counted from the round totals", () => {
+    const r1 = (p: string): MatrixLeg => ({
+      marketType: "outright_winner",
+      params: { round: 1, resolvedBasis: "gross" },
+      playerId: p,
+      selectionKey: p,
+    });
+    expect(jointProbability(bundle, [r1(A)])!.p).toBeCloseTo(5 / 8, 9); // wins 0,1,3,5 + tie 2
+    expect(jointProbability(bundle, [r1(B)])!.p).toBeCloseTo(4 / 8, 9); // wins 4,6,7 + tie 2
+    // Joint "both win round 1" = the dead-heat iteration only.
+    expect(jointProbability(bundle, [r1(A), r1(B)])!.p).toBeCloseTo(1 / 8, 9);
+  });
+
+  it("round-scoped birdies read the round's counts", () => {
+    expect(jointProbability(bundle, [birdiesA(2, 1)])!.p).toBeCloseTo(1 / 8, 9); // iter 1 only
+    expect(jointProbability(bundle, [birdiesA(1, 1)])!.p).toBeCloseTo(4 / 8, 9);
+  });
+
+  it("returns null when the bundle lacks the needed arrays (old rows)", () => {
+    const bare: JointBundle = { playerIds: ids, simCount: 8, positions: bundle.positions };
+    expect(jointProbability(bare, [winA, birdiesA(2)])).toBeNull();
+    expect(
+      jointProbability(bare, [
+        { marketType: "score_total", params: { basis: "gross" }, playerId: A, selectionKey: "u_71" },
+      ])
+    ).toBeNull();
+  });
+});
+
+describe("combineAcca — MIN_JOINT_SUPPORT", () => {
+  // 100 iterations; A wins the first `winIters`, birdies land in `birdieIters`.
+  const countsBundle = (winIters: number, birdieIters: [number, number]): JointBundle => {
+    const posA = Array.from({ length: 100 }, (_, i) => (i < winIters ? 1 : 2));
+    const posB = posA.map((p) => (p === 1 ? 2 : 1));
+    const birdA = Array.from({ length: 100 }, (_, i) =>
+      i >= birdieIters[0] && i < birdieIters[1] ? 1 : 0
+    );
+    return {
+      playerIds: [A, B],
+      simCount: 100,
+      positions: flat8([A, B], { A: posA, B: posB }),
+      birdies: flat8([A, B], { A: birdA, B: birdA }),
+    };
+  };
+  const legs: AccaLegForPricing[] = [
+    { eventId: "e1", decimalOdds: 4.0, matrixLeg: { marketType: "outright_winner", params: {}, playerId: A, selectionKey: A } },
+    { eventId: "e1", decimalOdds: 5.0, matrixLeg: { marketType: "birdies", params: { count: 1 }, playerId: A, selectionKey: "yes" } },
+  ];
+
+  it("support at the threshold prices normally", () => {
+    const price = combineAcca(legs, new Map([["e1", countsBundle(50, [0, MIN_JOINT_SUPPORT])]]));
+    expect(price.jointPriced).toBe(true);
+    expect(price.lowSupport).toBe(false);
+    expect(price.infeasible).toBe(false);
+  });
+
+  it("support just below the threshold flags lowSupport", () => {
+    const price = combineAcca(legs, new Map([["e1", countsBundle(50, [0, MIN_JOINT_SUPPORT - 1])]]));
+    expect(price.jointPriced).toBe(true);
+    expect(price.lowSupport).toBe(true);
+    expect(price.infeasible).toBe(false);
+  });
+
+  it("zero support stays infeasible, not lowSupport", () => {
+    // Birdies only land in iterations A doesn't win.
+    const price = combineAcca(legs, new Map([["e1", countsBundle(50, [60, 90])]]));
+    expect(price.infeasible).toBe(true);
+    expect(price.lowSupport).toBe(false);
   });
 });

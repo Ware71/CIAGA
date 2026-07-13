@@ -60,15 +60,18 @@ export function BetSlip({ onPlaced }: { onPlaced?: () => void }) {
       ? violation
       : null;
 
-  // Correlated legs (finishing positions + h2h) are jointly priced server-side
-  // — fetch the true combined odds (falls back to the product while loading or
-  // on error). A joint count of zero means the legs contradict each other.
+  // Correlated legs (finishing positions, h2h, own-score markets) are jointly
+  // priced server-side — fetch the true combined odds (falls back to the
+  // product while loading or on error). A joint count of zero means the legs
+  // contradict each other; a sub-support count is too rare to price reliably.
   const [jointOdds, setJointOdds] = useState<number | null>(null);
   const [infeasible, setInfeasible] = useState(false);
+  const [lowSupport, setLowSupport] = useState(false);
   useEffect(() => {
     let cancelled = false;
     setJointOdds(null);
     setInfeasible(false);
+    setLowSupport(false);
     if (legs.length < 2 || accaBlockedReason) return;
     (async () => {
       try {
@@ -92,6 +95,7 @@ export function BetSlip({ onPlaced }: { onPlaced?: () => void }) {
         if (!cancelled && res.ok && typeof (j as { combinedOdds?: number }).combinedOdds === "number") {
           setJointOdds((j as { combinedOdds: number }).combinedOdds);
           setInfeasible(!!(j as { infeasible?: boolean }).infeasible);
+          setLowSupport(!!(j as { lowSupport?: boolean }).lowSupport);
         }
       } catch {
         // Keep the product fallback.
@@ -103,7 +107,13 @@ export function BetSlip({ onPlaced }: { onPlaced?: () => void }) {
   }, [legs, accaBlockedReason]);
 
   const displayAccaOdds = jointOdds ?? accaOdds;
-  const blockedReason = accaBlockedReason ?? (infeasible ? "Those selections can't all land together" : null);
+  const blockedReason =
+    accaBlockedReason ??
+    (infeasible
+      ? "Those selections can't all land together"
+      : lowSupport
+      ? "That combination is too rare to price reliably — remove a leg"
+      : null);
 
   if (legs.length === 0) return null;
   if (typeof document === "undefined") return null;

@@ -210,6 +210,55 @@ describe("runSimulation", () => {
     const oneOrMore = hist.slice(1).reduce((s, c) => s + c, 0) / result.simulationCount;
     expect(oneOrMore).toBeGreaterThan(0.6);
   });
+
+  it("retained birdieCounts reproduce the histogram; single-round round counts match", () => {
+    const players = [makePlayer("a", {}, { birdiesPerRound: 2.5 }), makePlayer("b")];
+    const result = runSimulation(baseInputs(players));
+    for (const p of result.players) {
+      const hist = new Array<number>(p.birdieHistogram.length).fill(0);
+      for (let i = 0; i < result.simulationCount; i++) hist[p.birdieCounts[i]] += 1;
+      expect(hist).toEqual(p.birdieHistogram);
+      // Single-round event: the round's birdie counts ARE the event counts.
+      for (let i = 0; i < result.simulationCount; i++) {
+        expect(p.roundBirdieCounts[1][i]).toBe(p.birdieCounts[i]);
+      }
+    }
+  });
+
+  it("retained birdie/eagle count totals reconcile with the per-hole outcome bins", () => {
+    const players = [
+      makePlayer("a", {}, { birdiesPerRound: 3, eaglesPerRound: 0.3 }),
+      makePlayer("b"),
+    ];
+    const result = runSimulation(baseInputs(players));
+    for (const p of result.players) {
+      let birdieSum = 0;
+      let eagleSum = 0;
+      for (let i = 0; i < result.simulationCount; i++) {
+        birdieSum += p.birdieCounts[i];
+        eagleSum += p.eagleCounts[i];
+      }
+      // holeOutcomes[hi][0] = eagle-or-better iterations; [1] = birdie.
+      const binEagles = p.holeOutcomes.reduce((s, bins) => s + bins[0], 0);
+      const binBirdies = p.holeOutcomes.reduce((s, bins) => s + bins[0] + bins[1], 0);
+      expect(eagleSum).toBe(binEagles);
+      expect(birdieSum).toBe(binBirdies);
+    }
+  });
+
+  it("completed holes contribute deterministically to the retained counts", () => {
+    // Hole 1 (par 4) already played in 3 → a banked birdie in every iteration;
+    // hole 4 (par 5) played in 3 → a banked eagle.
+    const done = makePlayer("done", {
+      completedHoles: { 101: 3, 104: 3 },
+    });
+    const result = runSimulation(baseInputs([done, makePlayer("b")]));
+    const d = result.players[result.playerIndex["done"]];
+    for (let i = 0; i < 50; i++) {
+      expect(d.birdieCounts[i]).toBeGreaterThanOrEqual(2);
+      expect(d.eagleCounts[i]).toBeGreaterThanOrEqual(1);
+    }
+  });
 });
 
 describe("net-consistency, variance & format (model fixes)", () => {

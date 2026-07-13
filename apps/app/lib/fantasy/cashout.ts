@@ -205,10 +205,24 @@ export async function acceptCashout(params: {
   profileId: string;
   offerId: string;
 }): Promise<{ value: number }> {
-  const { data, error } = await supabaseAdmin.rpc("ciaga_fantasy_accept_cashout", {
-    p_offer_id: params.offerId,
-    p_profile_id: params.profileId,
-  });
+  // Offers are unified: pick offers and acca (parlay) offers share the table
+  // and this endpoint — dispatch to the matching accept RPC.
+  const { data: offerRow, error: offerErr } = await supabaseAdmin
+    .from("fantasy_cashout_offers")
+    .select("pick_id, parlay_id")
+    .eq("id", params.offerId)
+    .maybeSingle();
+  if (offerErr) throw offerErr;
+  if (!offerRow) throw new PickError("Offer not found", 404);
+  const isParlay = (offerRow as { parlay_id: string | null }).parlay_id != null;
+
+  const { data, error } = await supabaseAdmin.rpc(
+    isParlay ? "ciaga_fantasy_accept_parlay_cashout" : "ciaga_fantasy_accept_cashout",
+    {
+      p_offer_id: params.offerId,
+      p_profile_id: params.profileId,
+    }
+  );
   if (error) throw new PickError(error.message.replace(/^.*?: /, ""), 400);
   return { value: Number((data as { value: number }).value) };
 }

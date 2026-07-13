@@ -32,9 +32,9 @@ export async function POST(req: Request) {
     const role = await getGroupRole(groupId, profileId);
     if (!role) return NextResponse.json({ error: "Not a group member" }, { status: 403 });
 
-    const { combinedOdds, jointPriced, infeasible } = await priceAcca(legs);
+    const { combinedOdds, jointPriced, infeasible, lowSupport } = await priceAcca(legs);
     return NextResponse.json(
-      { combinedOdds, jointPriced, infeasible },
+      { combinedOdds, jointPriced, infeasible, lowSupport },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (e: any) {
