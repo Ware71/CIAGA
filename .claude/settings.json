@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc --noEmit)",
+      "Bash(npx vitest run *)",
+      "Bash(node scripts/check-db-env.js)",
+      "Bash(npx supabase projects list)",
+      "Bash(npx supabase migration list *)"
+    ]
+  }
+}
