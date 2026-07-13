@@ -129,6 +129,13 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
   // there's no tee. Gates a scorecard skeleton so the "Round not started" panel
   // never flashes while preview holes are loading. Only ever set false.
   const [previewLoading, setPreviewLoading] = useState<boolean>(true);
+  // Bumped by hydrateFromSnapshot exactly when a pre-activation round (draft/
+  // scheduled/starting, no real tee snapshot yet) was just hydrated. The preview
+  // effect below depends on this so it re-checks its inputs after every realtime
+  // reconcile — not just when participant ids change — without depending on
+  // `participants`/`holes` directly (which would risk a loop via its own
+  // setParticipants/setHoles calls).
+  const [previewHydrateTick, setPreviewHydrateTick] = useState(0);
 
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -164,6 +171,13 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
     setStartingHole(toNumOrNull(r.starting_hole) ?? 1);
     setStartingHoleSource(r.starting_hole_source === "manual" ? "manual" : "auto");
 
+    // Pre-activation (draft/scheduled/starting), there's no real tee snapshot yet,
+    // so the server can't resolve course_handicap/playing_handicap_used — only the
+    // preview effect (client-side, from the *pending* tee) can. Use this to avoid
+    // clobbering its already-correct values with the server's nulls below.
+    const preActivation = r.status !== "live" && r.status !== "finished";
+    const hasRealTee = !!snap.tee_snapshot;
+
     // Build extras map from participant_extras
     const extrasMap: Record<string, { playing_handicap_used: number | null; team_id: string | null; handicap_index_direct: number | null }> = {};
     for (const row of (snap.participant_extras ?? []) as any[]) {
@@ -175,7 +189,13 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
     }
 
     // Default tee name for display (live/finished — preview fills this below).
-    setDefaultTeeName(snap.tee_snapshot?.name ?? null);
+    // Pre-activation with no real tee yet, leave the preview effect's value alone
+    // instead of nulling it out on every reconcile.
+    if (hasRealTee) {
+      setDefaultTeeName(snap.tee_snapshot.name ?? null);
+    } else if (!preActivation) {
+      setDefaultTeeName(null);
+    }
 
     // Build tee meta for CH computation fallback
     const teeMeta = snap.tee_snapshot
@@ -226,7 +246,27 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
       };
     }) as Participant[];
 
-    setParticipants(mappedParticipants);
+    // Live/finished (or a real tee snapshot already exists): server data is
+    // authoritative, replace wholesale as before. Pre-activation with no real tee:
+    // the server can't compute course_handicap/playing_handicap_used, so preserve
+    // whatever the preview effect last computed for those fields rather than
+    // nulling them out — never overwrites a genuine non-null server value.
+    if (!preActivation || hasRealTee) {
+      setParticipants(mappedParticipants);
+    } else {
+      setParticipants((prev) => {
+        const prevById = new Map(prev.map((p) => [p.id, p]));
+        return mappedParticipants.map((np) => {
+          const old = prevById.get(np.id);
+          if (!old) return np;
+          return {
+            ...np,
+            course_handicap: np.course_handicap ?? old.course_handicap ?? null,
+            playing_handicap_used: np.playing_handicap_used ?? old.playing_handicap_used ?? null,
+          };
+        });
+      });
+    }
 
     const teeId = mappedParticipants.find((p: any) => p.tee_snapshot_id)?.tee_snapshot_id ?? null;
     setTeeSnapshotId(teeId);
@@ -257,6 +297,10 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
     setHoleStatesByKey((prev) => ({ ...prev, ...hsMap }));
 
     setMeId(snap.viewer_profile_id ?? null);
+
+    // Let the preview effect know a pre-activation hydrate just happened, so it
+    // can re-check whether its computed CH/PH/tee-name are still correct.
+    if (preActivation && !hasRealTee) setPreviewHydrateTick((t) => t + 1);
   }, []);
 
   const fetchAll = useCallback(async () => {
@@ -517,9 +561,6 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
 
         const notLive = status === "draft" || status === "scheduled";
         if (!notLive) return; // live/finished render from the snapshot
-
-        // Already built for this exact field + we have holes → nothing to do.
-        if (previewBuiltRef.current === participantIdsKey && holes.length > 0) return;
         if (!participantIdsKey) return;
 
         const defaultTeeBoxId = ((round as any).pending_tee_box_id as string) ?? null;
@@ -532,6 +573,34 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
           .from("round_participants")
           .select("id, pending_tee_box_id, handicap_index, assigned_playing_handicap")
           .eq("round_id", roundId);
+        if (cancelled) return;
+
+        const partById = new Map((partRows ?? []).map((p: any) => [p.id, p]));
+
+        // Signature of every input that can change a participant's CH/PH: the
+        // chosen tee, the round's PH mode/value, and — per participant — their
+        // effective HI, pending-tee override, and assigned-PH override. Recomputed
+        // on every hydrate cycle (previewHydrateTick, see deps below) but the
+        // expensive tee/hole fetch + recompute below only runs when this actually
+        // differs from the last build, so a no-op reconcile doesn't re-flash.
+        const signature = JSON.stringify({
+          defaultTeeBoxId,
+          mode,
+          value,
+          parts: [...participants]
+            .sort((a, b) => a.id.localeCompare(b.id))
+            .map((p) => {
+              const row = partById.get(p.id);
+              return [
+                p.id,
+                p.handicap_index ?? toNumOrNull(row?.handicap_index),
+                row?.pending_tee_box_id ?? null,
+                toNumOrNull(row?.assigned_playing_handicap),
+              ];
+            }),
+        });
+        // Already built for this exact input set + we have holes → nothing to do.
+        if (previewBuiltRef.current === signature && holes.length > 0) return;
 
         const teeIds = Array.from(
           new Set([
@@ -555,7 +624,6 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
 
         const teeById = new Map((teeBoxes ?? []).map((t: any) => [t.id, t]));
         const defaultTee = teeById.get(defaultTeeBoxId);
-        const partById = new Map((partRows ?? []).map((p: any) => [p.id, p]));
 
         const chWith = (hi: number | null, tee: any): number | null => {
           if (hi == null || !tee || tee.rating == null || tee.slope == null || tee.par == null) return null;
@@ -603,7 +671,7 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
             return { ...p, course_handicap: ch, playing_handicap_used: ph };
           })
         );
-        previewBuiltRef.current = participantIdsKey;
+        previewBuiltRef.current = signature;
       } finally {
         // Preview has resolved (built holes, no tee, or live) — stop gating the
         // skeleton. Never set back to true, so later rebuilds don't re-flash it.
@@ -615,7 +683,7 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roundId, status, participantIdsKey, holes.length]);
+  }, [roundId, status, participantIdsKey, holes.length, previewHydrateTick]);
 
   // Permission: any participant can score (you already changed this; keep it)
   const canScore = useMemo(() => {
