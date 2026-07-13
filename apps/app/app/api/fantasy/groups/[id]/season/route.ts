@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 import { getGroupRole } from "@/lib/fantasy/wallet";
-import { generateSeasonFantasy } from "@/lib/fantasy/seasonOdds";
+import { generateSeasonFantasy, refreshSeasonIfStale } from "@/lib/fantasy/seasonOdds";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { buildFinishesTable, toPreviewRows, type BoardMarket, type Selection } from "@/lib/fantasy/board/groupBoard";
 
@@ -60,6 +60,16 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
           /* event-budget group, or no season context yet — degrade gracefully */
         }
         state = await readState(groupId);
+      }
+    } else if (state.narrative == null) {
+      // A prior narration attempt failed silently and odds_stale never got
+      // set for it (narrative-only failures don't reprice) — give it another
+      // shot on this view rather than leaving it null forever.
+      try {
+        const { refreshed } = await refreshSeasonIfStale(state.group_season_id);
+        if (refreshed) state = await readState(groupId);
+      } catch {
+        /* best-effort — keep serving the existing (narrative-less) headline */
       }
     }
     if (!state) return NextResponse.json({ headline: null });

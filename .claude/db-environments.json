@@ -1,0 +1,18 @@
+{
+  "supabase": {
+    "staging": {
+      "project_ref": "balcwdqjzouufxigszup",
+      "url": "https://balcwdqjzouufxigszup.supabase.co",
+      "description": "Development and staging environment"
+    },
+    "production": {
+      "project_ref": "jcmkyxlfyrhkgeszefjb",
+      "url": "https://jcmkyxlfyrhkgeszefjb.supabase.co",
+      "description": "Production environment"
+    }
+  },
+  "migration_workflow": {
+    "order": ["staging", "production"],
+    "notes": "Always test migrations on staging before applying to production"
+  }
+}
