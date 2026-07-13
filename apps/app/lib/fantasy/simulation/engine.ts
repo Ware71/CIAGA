@@ -14,9 +14,9 @@ import {
   type SimPlayerResult,
 } from "@/lib/fantasy/simulation/types";
 
-export const SIMULATION_COUNT = 10_000;
+export const SIMULATION_COUNT = 20_000;
 /** Fields larger than this degrade to a lighter run instead of batching. */
-export const REDUCED_SIMULATION_COUNT = 5_000;
+export const REDUCED_SIMULATION_COUNT = 10_000;
 export const REDUCED_SIMULATION_FIELD_SIZE = 60;
 
 export const TOP_N_TARGETS = [3, 5, 10] as const;
@@ -70,6 +70,11 @@ export function runSimulation(inputs: SimulationInputs): SimulationResult {
       roundNumbers.map((r) => [r, new Int16Array(simulationCount)])
     ),
     birdieHistogram: new Array<number>(holes.length + 1).fill(0),
+    birdieCounts: new Int8Array(simulationCount),
+    eagleCounts: new Int8Array(simulationCount),
+    roundBirdieCounts: Object.fromEntries(
+      roundNumbers.map((r) => [r, new Int8Array(simulationCount)])
+    ),
     winProb: 0,
     topNProb: {},
     positionHistogram: new Array<number>(playerCount).fill(0),
@@ -87,7 +92,9 @@ export function runSimulation(inputs: SimulationInputs): SimulationResult {
     );
     const remainingIdx: number[] = [];
     const fixedRoundGross = new Array<number>(roundNumbers.length).fill(0);
+    const fixedRoundBirdies = new Array<number>(roundNumbers.length).fill(0);
     let fixedBirdies = 0;
+    let fixedEagles = 0;
     let fixedStableford = 0;
     holes.forEach((hole, hi) => {
       const round = hole.round ?? 1;
@@ -98,7 +105,11 @@ export function runSimulation(inputs: SimulationInputs): SimulationResult {
           OUTCOME_BINS - 1,
           Math.max(0, played - hole.par + OUTCOME_OFFSET)
         );
-        if (isBirdieOutcome(k)) fixedBirdies += 1;
+        if (isBirdieOutcome(k)) {
+          fixedBirdies += 1;
+          fixedRoundBirdies[roundOfHole[hi]] += 1;
+        }
+        if (k === 0) fixedEagles += 1;
         if (isStableford) {
           const sr = strokesReceived(player.playingHandicap, hole.strokeIndex, holesPerRound[roundOfHole[hi]]);
           fixedStableford += Math.max(0, 2 - (played - hole.par - sr));
@@ -117,7 +128,9 @@ export function runSimulation(inputs: SimulationInputs): SimulationResult {
     return {
       remainingIdx,
       fixedRoundGross,
+      fixedRoundBirdies,
       fixedBirdies,
+      fixedEagles,
       fixedStableford,
       cumulative: toCumulative(dists),
       pars: remainingIdx.map((hi) => holes[hi].par),
@@ -133,6 +146,7 @@ export function runSimulation(inputs: SimulationInputs): SimulationResult {
 
   const basisTotals = new Int16Array(playerCount);
   const roundGrossScratch = new Array<number>(roundNumbers.length).fill(0);
+  const roundBirdieScratch = new Array<number>(roundNumbers.length).fill(0);
   // Per-iteration finishing positions (1-based; 0 = absent), retained for
   // correlated-acca joint pricing. [pi * simulationCount + iter].
   const positions = new Int8Array(playerCount * simulationCount);
@@ -149,14 +163,20 @@ export function runSimulation(inputs: SimulationInputs): SimulationResult {
       const res = results[pi];
       for (let r = 0; r < roundNumbers.length; r++) {
         roundGrossScratch[r] = prep.fixedRoundGross[r];
+        roundBirdieScratch[r] = prep.fixedRoundBirdies[r];
       }
       let birdies = prep.fixedBirdies;
+      let eagles = prep.fixedEagles;
       let stableford = prep.fixedStableford;
 
       for (let r = 0; r < prep.remainingIdx.length; r++) {
         const k = sampleOutcome(prep.cumulative[r], rand());
         roundGrossScratch[prep.rounds[r]] += prep.pars[r] + k - OUTCOME_OFFSET;
-        if (isBirdieOutcome(k)) birdies += 1;
+        if (isBirdieOutcome(k)) {
+          birdies += 1;
+          roundBirdieScratch[prep.rounds[r]] += 1;
+        }
+        if (k === 0) eagles += 1;
         res.holeOutcomes[prep.remainingIdx[r]][k] += 1;
         if (isStableford) {
           stableford += Math.max(0, 2 - (k - OUTCOME_OFFSET - prep.srPerHole[r]));
@@ -175,6 +195,11 @@ export function runSimulation(inputs: SimulationInputs): SimulationResult {
       res.grossTotals[iter] = gross;
       res.netTotals[iter] = net;
       res.birdieHistogram[Math.min(birdies, holes.length)] += 1;
+      res.birdieCounts[iter] = birdies;
+      res.eagleCounts[iter] = eagles;
+      for (let r = 0; r < roundNumbers.length; r++) {
+        res.roundBirdieCounts[roundNumbers[r]][iter] = roundBirdieScratch[r];
+      }
       // Stableford ranks on POINTS (higher = better) → negate so the min-based
       // ranking below still selects the winner.
       basisTotals[pi] = isStableford ? -stableford : rankingBasis === "gross" ? gross : net;

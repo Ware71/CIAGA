@@ -4,6 +4,7 @@
  */
 
 import type { RankingBasis } from "@/lib/fantasy/simulation/types";
+import type { JointCapabilities } from "@/lib/fantasy/simulation/jointBundle";
 
 export const MIN_LEGS = 2;
 export const MAX_LEGS = 8;
@@ -34,14 +35,30 @@ export function isPositionFamily(marketType: string): boolean {
 }
 
 /**
- * The correlated family = position family + head-to-heads. An h2h outcome is
- * a function of the same per-player results the positions come from, so a
- * player shared between an h2h leg and any other correlated leg makes the
- * combo POSITIVELY correlated ("X to win" + "X beats Y" ≈ just X to win) —
- * those must be jointly priced or blocked, never multiplied.
+ * Market types outside the position family whose outcomes are functions of
+ * the same per-player simulated rounds the positions come from. A player
+ * shared between any two correlated-family legs makes the combo POSITIVELY
+ * correlated ("X to win" + "X 2+ birdies" ≈ mostly just X to win) — those
+ * must be jointly priced from the retained samples or blocked, never
+ * multiplied.
+ */
+const EXTENDED_CORRELATED_TYPES = new Set([
+  "h2h",
+  "birdies",
+  "eagle_count",
+  "score_total",
+  "score_band",
+]);
+
+/**
+ * The correlated family = position family + h2h + own-score markets (birdie/
+ * eagle counts, score totals/bands). hole_score and field_special stay
+ * outside: per-hole per-iteration samples aren't retained (an order of
+ * magnitude more storage) and hio/albatross are base-rate constants — their
+ * residual correlation with position legs remains an accepted approximation.
  */
 export function isCorrelatedFamily(marketType: string): boolean {
-  return marketType === "h2h" || isPositionFamily(marketType);
+  return EXTENDED_CORRELATED_TYPES.has(marketType) || isPositionFamily(marketType);
 }
 
 /** The exact scoring_model → sim ranking basis mapping the engine uses. */
@@ -52,23 +69,55 @@ export function rankingBasisFromScoringModel(
 }
 
 /**
- * Whether a correlated-family leg can be priced from the retained
- * per-iteration positions matrix. Positions are event-wide on the event's
- * ranking basis, so: round-scoped legs never qualify; h2h legs qualify only
- * when their basis IS the ranking basis (gross h2h in a net-ranked or
- * stableford event compares totals the matrix doesn't retain).
+ * Whether a correlated-family leg can be priced from an event's retained
+ * joint-sample bundle. `caps` describes what the LOADED bundle actually
+ * holds (bundleCapabilities); when omitted — the client slip pre-check, which
+ * can't load bundles — the check is optimistic and assumes a fully-extended
+ * bundle. The server re-checks with real capabilities and may still reject
+ * (a pre-extension positions-only row expresses much less), mirroring the
+ * existing stale-slip philosophy: optimistic client, authoritative server.
  */
-export function isMatrixExpressible(leg: {
-  marketType: string;
-  params: Record<string, unknown> | null;
-  eventRankingBasis?: RankingBasis;
-}): boolean {
+export function isMatrixExpressible(
+  leg: {
+    marketType: string;
+    params: Record<string, unknown> | null;
+    eventRankingBasis?: RankingBasis;
+  },
+  caps?: JointCapabilities
+): boolean {
   const params = (leg.params ?? {}) as { round?: unknown; basis?: unknown };
-  if (params.round != null) return false;
-  if (leg.marketType === "h2h") {
-    return leg.eventRankingBasis != null && params.basis === leg.eventRankingBasis;
+  const round = params.round != null ? Number(params.round) : null;
+  // Round-scoped legs price off per-round arrays (multi-round bundles only).
+  const roundOk = round == null || caps == null || caps.rounds.has(round);
+
+  switch (leg.marketType) {
+    case "h2h":
+      if (caps != null && !caps.totals) {
+        // Positions-only row: order and ties are readable off the event
+        // positions exactly when the h2h basis IS the ranking basis (gross
+        // h2h in a net-ranked event compares totals the row doesn't retain).
+        return (
+          round == null &&
+          leg.eventRankingBasis != null &&
+          params.basis === leg.eventRankingBasis
+        );
+      }
+      return roundOk;
+    case "birdies":
+      return round == null ? caps == null || caps.birdies : roundOk;
+    case "eagle_count":
+      return round == null && (caps == null || caps.eagles);
+    case "score_total":
+    case "score_band":
+      return round == null && (caps == null || caps.totals);
+    case "outright_winner":
+      // Round winners price off that round's totals; event-wide off positions.
+      return roundOk;
+    default:
+      // Remaining position family (top_n / finish_position / finish_range):
+      // event-wide positions only — no round variants exist.
+      return round == null && isPositionFamily(leg.marketType);
   }
-  return isPositionFamily(leg.marketType);
 }
 
 /**
@@ -198,17 +247,21 @@ function positionClaim(leg: ParlayLeg): { from: number; to: number } | null {
  *  - No duplicate exact (market, selection); a second selection on one market
  *    row only where the market co-occurs (top-N, wide ranges, hole scores).
  *  - Opposite hole outcomes on the same (player, hole) can't both land.
- *  - The correlated family (finishing positions + h2h) is jointly priced, so
- *    within one event: at most ONE position leg per player, no two legs
- *    sharing an exclusive slot, and a player shared between correlated legs
- *    requires every one of those legs to be priceable from the positions
- *    matrix (event-wide, h2h on the ranking basis) — otherwise blocked.
+ *  - The correlated family (finishing positions + h2h + own-score markets) is
+ *    jointly priced, so within one event: at most ONE position leg per
+ *    player, no two legs sharing an exclusive slot, and a player shared
+ *    between correlated legs requires every one of those legs to be priceable
+ *    from the event's joint-sample bundle (capsByEvent — omitted for the
+ *    optimistic client pre-check) — otherwise blocked.
  *  - Deterministic contradictions are blocked outright ("Y to win" + "X beats
  *    Y"), and finishing claims must be satisfiable (no 4 players in a top-3).
- *  - Everything else combines as independent — a player may appear in a
- *    position leg AND own-score legs (X top-3 + X to birdie) freely.
+ *  - Everything else combines as independent — a player may still mix a
+ *    position leg with hole_score legs (X top-3 + X to birdie hole 7) freely.
  */
-export function findParlayViolation(legs: ParlayLeg[]): string | null {
+export function findParlayViolation(
+  legs: ParlayLeg[],
+  capsByEvent?: Map<string, JointCapabilities>
+): string | null {
   const exact = new Set<string>();
   const perMarket = new Map<string, number>();
   const holeKeys = new Set<string>(); // `${eventId}|${player}|${holeSelection}`
@@ -261,7 +314,9 @@ export function findParlayViolation(legs: ParlayLeg[]): string | null {
   }
 
   return (
-    findContradiction(legs) ?? findInexpressibleOverlap(legs) ?? findInfeasibleClaims(legs)
+    findContradiction(legs) ??
+    findInexpressibleOverlap(legs, capsByEvent) ??
+    findInfeasibleClaims(legs)
   );
 }
 
@@ -302,13 +357,17 @@ function findContradiction(legs: ParlayLeg[]): string | null {
 /**
  * A player shared between two correlated-family legs makes the combo
  * positively correlated; multiplying would overpay, so it's only allowed when
- * EVERY leg touching that player can be priced from the positions matrix.
+ * EVERY leg touching that player can be priced from the event's joint-sample
+ * bundle (per capsByEvent; absent caps = optimistic client pre-check).
  */
-function findInexpressibleOverlap(legs: ParlayLeg[]): string | null {
+function findInexpressibleOverlap(
+  legs: ParlayLeg[],
+  capsByEvent?: Map<string, JointCapabilities>
+): string | null {
   const touches = new Map<string, { count: number; allExpressible: boolean }>();
   for (const leg of legs) {
     if (!isCorrelatedFamily(leg.marketType)) continue;
-    const expressible = isMatrixExpressible(leg);
+    const expressible = isMatrixExpressible(leg, capsByEvent?.get(leg.eventId));
     for (const player of leg.subjectKeys) {
       const key = `${leg.eventId}|${player}`;
       const entry = touches.get(key) ?? { count: 0, allExpressible: true };

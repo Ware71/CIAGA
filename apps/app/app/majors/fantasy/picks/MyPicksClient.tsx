@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 import { safeJson } from "@/lib/fantasy/safeJson";
+import { COMBO_BET } from "@/lib/fantasy/terminology";
 import { OddsValue } from "@/components/fantasy/OddsValue";
 
 type Pick = {
@@ -35,7 +36,6 @@ const STATUS_STYLES: Record<Pick["status"], { label: string; cls: string }> = {
 
 type Offer = {
   id: string;
-  pick_id: string;
   offer_value: number;
   expires_at: string;
 };
@@ -56,8 +56,10 @@ type Parlay = {
   stake: number;
   combined_decimal_odds: number;
   potential_return: number;
-  status: "open" | "won" | "lost" | "void";
+  status: "open" | "won" | "lost" | "void" | "cashed_out";
+  cashout_value: number | null;
   placed_at: string;
+  settled_at: string | null;
   group_name: string;
   legs: ParlayLeg[];
 };
@@ -69,14 +71,27 @@ const LEG_DOT: Record<ParlayLeg["status"], string> = {
   void: "bg-amber-300/60",
 };
 
+/** Singles and accas interleave in one list, newest first. */
+type Item =
+  | { kind: "single"; placedAt: string; pick: Pick }
+  | { kind: "acca"; placedAt: string; parlay: Parlay };
+
+/** What the cash-out drawer needs, whichever kind it's quoting. */
+type CashoutTarget = {
+  kind: "single" | "acca";
+  id: string;
+  title: string;
+  subtitle: string;
+};
+
 export default function MyPicksClient() {
   const router = useRouter();
   const [picks, setPicks] = useState<Pick[]>([]);
   const [parlays, setParlays] = useState<Parlay[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"open" | "settled" | "accas">("open");
+  const [tab, setTab] = useState<"open" | "settled">("open");
   // Cash-out drawer
-  const [cashoutPick, setCashoutPick] = useState<Pick | null>(null);
+  const [cashoutTarget, setCashoutTarget] = useState<CashoutTarget | null>(null);
   const [offer, setOffer] = useState<Offer | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [quoting, setQuoting] = useState(false);
@@ -119,9 +134,14 @@ export default function MyPicksClient() {
     return () => { cancelled = true; };
   }, [fetchPicks]);
 
-  const openPicks = picks.filter((p) => p.status === "open");
-  const settledPicks = picks.filter((p) => p.status !== "open");
-  const shown = tab === "open" ? openPicks : settledPicks;
+  const items: Item[] = [
+    ...picks.map((pick) => ({ kind: "single" as const, placedAt: pick.placed_at, pick })),
+    ...parlays.map((parlay) => ({ kind: "acca" as const, placedAt: parlay.placed_at, parlay })),
+  ].sort((a, b) => new Date(b.placedAt).getTime() - new Date(a.placedAt).getTime());
+  const statusOf = (item: Item) => (item.kind === "single" ? item.pick.status : item.parlay.status);
+  const openItems = items.filter((i) => statusOf(i) === "open");
+  const settledItems = items.filter((i) => statusOf(i) !== "open");
+  const shown = tab === "open" ? openItems : settledItems;
 
   const stopCountdown = () => {
     if (countdownRef.current) {
@@ -143,14 +163,18 @@ export default function MyPicksClient() {
 
   useEffect(() => stopCountdown, []);
 
-  const requestQuote = async (pick: Pick) => {
+  const requestQuote = async (target: CashoutTarget) => {
     setQuoting(true);
     setCashoutError(null);
     setOffer(null);
     try {
       const session = await getViewerSession();
       if (!session) return;
-      const res = await fetch(`/api/fantasy/picks/${pick.id}/cashout`, {
+      const path =
+        target.kind === "single"
+          ? `/api/fantasy/picks/${target.id}/cashout`
+          : `/api/fantasy/parlays/${target.id}/cashout`;
+      const res = await fetch(path, {
         method: "POST",
         headers: { Authorization: `Bearer ${session.accessToken}` },
       });
@@ -166,16 +190,16 @@ export default function MyPicksClient() {
     }
   };
 
-  const openCashout = (pick: Pick) => {
-    setCashoutPick(pick);
+  const openCashout = (target: CashoutTarget) => {
+    setCashoutTarget(target);
     setCashoutSuccess(null);
     setCashoutError(null);
     setOffer(null);
-    requestQuote(pick);
+    requestQuote(target);
   };
 
   const closeCashout = () => {
-    setCashoutPick(null);
+    setCashoutTarget(null);
     setOffer(null);
     stopCountdown();
   };
@@ -206,6 +230,132 @@ export default function MyPicksClient() {
     }
   };
 
+  const renderSingle = (p: Pick) => {
+    const badge = STATUS_STYLES[p.status];
+    return (
+      <div
+        key={`pick-${p.id}`}
+        className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/70 px-3 py-2.5"
+      >
+        <button
+          type="button"
+          onClick={() => router.push(`/majors/fantasy/events/${p.event_id}`)}
+          className="w-full text-left"
+        >
+          <div className="flex items-center justify-between mb-0.5">
+            <div className="text-[13px] font-semibold text-emerald-50 truncate pr-2">
+              {p.selection_label}
+            </div>
+            <span className={`shrink-0 text-[9px] uppercase tracking-wider border rounded-full px-2 py-0.5 ${badge.cls}`}>
+              {badge.label}
+            </span>
+          </div>
+          <div className="text-[10px] text-emerald-200/50 truncate">
+            {p.market_label} · {p.event_name}{p.group_name ? ` · ${p.group_name}` : ""}
+          </div>
+          <div className="flex items-center justify-between mt-1.5">
+            <span className="text-[11px] text-emerald-200/60">
+              {p.stake} pts @ <OddsValue odds={Number(p.decimal_odds)} />
+            </span>
+            <span className="text-[11px] font-bold text-[#f5e6b0]">
+              {p.status === "won"
+                ? `+${p.potential_return} pts`
+                : p.status === "cashed_out" && p.cashout_value != null
+                ? `+${p.cashout_value} pts`
+                : p.status === "void"
+                ? "stake returned"
+                : p.status === "lost"
+                ? `−${p.stake} pts`
+                : `returns ${p.potential_return} pts`}
+            </span>
+          </div>
+        </button>
+        {p.status === "open" && p.event_status !== "completed" && (
+          <button
+            type="button"
+            onClick={() =>
+              openCashout({
+                kind: "single",
+                id: p.id,
+                title: p.selection_label,
+                subtitle: `${p.market_label} · staked ${p.stake} pts, returns ${p.potential_return} pts`,
+              })
+            }
+            className="mt-2 w-full py-1.5 rounded-full border border-amber-800/50 text-[11px] font-semibold text-amber-300/90 hover:bg-amber-900/20"
+          >
+            Cash out
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  const renderAcca = (parlay: Parlay) => {
+    const badge = STATUS_STYLES[parlay.status];
+    return (
+      <div
+        key={`acca-${parlay.id}`}
+        className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/70 px-3 py-2.5"
+      >
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="text-[12px] font-semibold text-emerald-50">
+            {parlay.legs.length}-leg {COMBO_BET.short} @{" "}
+            <OddsValue odds={parlay.combined_decimal_odds} />
+          </div>
+          <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${badge.cls}`}>
+            {badge.label}
+          </span>
+        </div>
+        <div className="space-y-1 mb-1.5">
+          {parlay.legs.map((leg) => (
+            <button
+              key={leg.id}
+              type="button"
+              onClick={() => router.push(`/majors/fantasy/events/${leg.event_id}`)}
+              className="w-full flex items-center gap-2 text-left"
+            >
+              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${LEG_DOT[leg.status]}`} />
+              <span className="min-w-0 flex-1 truncate text-[11px] text-emerald-100/85">
+                {leg.selection_label}
+                <span className="text-emerald-200/50"> · {leg.market_label}</span>
+              </span>
+              <span className="shrink-0 text-[10px] text-emerald-200/60">
+                <OddsValue odds={leg.decimal_odds} />
+              </span>
+            </button>
+          ))}
+        </div>
+        <div className="text-[10px] text-emerald-200/55">
+          {parlay.stake} pts stake ·{" "}
+          {parlay.status === "won"
+            ? `returned ${parlay.potential_return} pts`
+            : parlay.status === "cashed_out" && parlay.cashout_value != null
+            ? `cashed out for ${parlay.cashout_value} pts`
+            : parlay.status === "void"
+            ? "stake returned"
+            : `returns ${parlay.potential_return} pts`}
+          {parlay.group_name ? ` · ${parlay.group_name}` : ""}
+        </div>
+        {parlay.status === "open" && (
+          <button
+            type="button"
+            onClick={() =>
+              openCashout({
+                kind: "acca",
+                id: parlay.id,
+                title: `${parlay.legs.length}-leg ${COMBO_BET.short}`,
+                subtitle: `staked ${parlay.stake} pts, returns ${parlay.potential_return} pts`,
+              })
+            }
+            className="mt-2 w-full py-1.5 rounded-full border border-amber-800/50 text-[11px] font-semibold text-amber-300/90 hover:bg-amber-900/20"
+          >
+            Cash out
+          </button>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-[100dvh] pb-[env(safe-area-inset-bottom)] max-w-sm mx-auto">
       <div className="px-4 pt-8 flex items-center justify-between mb-6">
@@ -221,7 +371,7 @@ export default function MyPicksClient() {
       </div>
 
       <div className="px-4 mb-4 flex gap-2">
-        {(["open", "settled", "accas"] as const).map((t) => (
+        {(["open", "settled"] as const).map((t) => (
           <button
             key={t}
             type="button"
@@ -230,72 +380,13 @@ export default function MyPicksClient() {
               tab === t ? "bg-emerald-700 text-white" : "border border-emerald-900/60 text-emerald-200/70"
             }`}
           >
-            {t === "open"
-              ? `Open (${openPicks.length})`
-              : t === "settled"
-              ? `Settled (${settledPicks.length})`
-              : `Accas (${parlays.length})`}
+            {t === "open" ? `Open (${openItems.length})` : `Settled (${settledItems.length})`}
           </button>
         ))}
       </div>
 
       {loading ? (
         <div className="text-sm text-emerald-100/60 text-center py-20">Loading…</div>
-      ) : tab === "accas" ? (
-        <div className="px-4 space-y-2 pb-12">
-          {parlays.length === 0 && (
-            <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 px-4 py-6 text-center text-sm text-emerald-100/70">
-              No accumulators yet — add two or more selections to the bet slip.
-            </div>
-          )}
-          {parlays.map((parlay) => {
-            const badge = STATUS_STYLES[parlay.status === "open" ? "open" : parlay.status];
-            return (
-              <div
-                key={parlay.id}
-                className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/70 px-3 py-2.5"
-              >
-                <div className="flex items-center justify-between mb-1.5">
-                  <div className="text-[12px] font-semibold text-emerald-50">
-                    {parlay.legs.length}-leg Acca @{" "}
-                    <OddsValue odds={parlay.combined_decimal_odds} />
-                  </div>
-                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${badge.cls}`}>
-                    {badge.label}
-                  </span>
-                </div>
-                <div className="space-y-1 mb-1.5">
-                  {parlay.legs.map((leg) => (
-                    <button
-                      key={leg.id}
-                      type="button"
-                      onClick={() => router.push(`/majors/fantasy/events/${leg.event_id}`)}
-                      className="w-full flex items-center gap-2 text-left"
-                    >
-                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${LEG_DOT[leg.status]}`} />
-                      <span className="min-w-0 flex-1 truncate text-[11px] text-emerald-100/85">
-                        {leg.selection_label}
-                        <span className="text-emerald-200/50"> · {leg.market_label}</span>
-                      </span>
-                      <span className="shrink-0 text-[10px] text-emerald-200/60">
-                        <OddsValue odds={leg.decimal_odds} />
-                      </span>
-                    </button>
-                  ))}
-                </div>
-                <div className="text-[10px] text-emerald-200/55">
-                  {parlay.stake} pts stake ·{" "}
-                  {parlay.status === "won"
-                    ? `returned ${parlay.potential_return} pts`
-                    : parlay.status === "void"
-                    ? "stake returned"
-                    : `returns ${parlay.potential_return} pts`}
-                  {parlay.group_name ? ` · ${parlay.group_name}` : ""}
-                </div>
-              </div>
-            );
-          })}
-        </div>
       ) : shown.length === 0 ? (
         <div className="px-4">
           <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 px-4 py-6 text-center text-sm text-emerald-100/70">
@@ -304,63 +395,14 @@ export default function MyPicksClient() {
         </div>
       ) : (
         <div className="px-4 space-y-2 pb-12">
-          {shown.map((p) => {
-            const badge = STATUS_STYLES[p.status];
-            return (
-              <div
-                key={p.id}
-                className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/70 px-3 py-2.5"
-              >
-                <button
-                  type="button"
-                  onClick={() => router.push(`/majors/fantasy/events/${p.event_id}`)}
-                  className="w-full text-left"
-                >
-                  <div className="flex items-center justify-between mb-0.5">
-                    <div className="text-[13px] font-semibold text-emerald-50 truncate pr-2">
-                      {p.selection_label}
-                    </div>
-                    <span className={`shrink-0 text-[9px] uppercase tracking-wider border rounded-full px-2 py-0.5 ${badge.cls}`}>
-                      {badge.label}
-                    </span>
-                  </div>
-                  <div className="text-[10px] text-emerald-200/50 truncate">
-                    {p.market_label} · {p.event_name}{p.group_name ? ` · ${p.group_name}` : ""}
-                  </div>
-                  <div className="flex items-center justify-between mt-1.5">
-                    <span className="text-[11px] text-emerald-200/60">
-                      {p.stake} pts @ <OddsValue odds={Number(p.decimal_odds)} />
-                    </span>
-                    <span className="text-[11px] font-bold text-[#f5e6b0]">
-                      {p.status === "won"
-                        ? `+${p.potential_return} pts`
-                        : p.status === "cashed_out" && p.cashout_value != null
-                        ? `+${p.cashout_value} pts`
-                        : p.status === "void"
-                        ? "stake returned"
-                        : p.status === "lost"
-                        ? `−${p.stake} pts`
-                        : `returns ${p.potential_return} pts`}
-                    </span>
-                  </div>
-                </button>
-                {p.status === "open" && p.event_status !== "completed" && (
-                  <button
-                    type="button"
-                    onClick={() => openCashout(p)}
-                    className="mt-2 w-full py-1.5 rounded-full border border-amber-800/50 text-[11px] font-semibold text-amber-300/90 hover:bg-amber-900/20"
-                  >
-                    Cash out
-                  </button>
-                )}
-              </div>
-            );
-          })}
+          {shown.map((item) =>
+            item.kind === "single" ? renderSingle(item.pick) : renderAcca(item.parlay)
+          )}
         </div>
       )}
 
       {/* Cash-out drawer */}
-      {cashoutPick && typeof document !== "undefined" &&
+      {cashoutTarget && typeof document !== "undefined" &&
         createPortal(
           <div className="fixed inset-0 z-50 flex items-end">
             <button
@@ -371,10 +413,10 @@ export default function MyPicksClient() {
             />
             <div className="relative w-full max-w-sm mx-auto rounded-t-3xl border border-emerald-900/70 bg-[#07301a] px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+20px)]">
               <div className="text-sm font-bold text-[#f5e6b0] mb-0.5 truncate">
-                {cashoutPick.selection_label}
+                {cashoutTarget.title}
               </div>
               <div className="text-[11px] text-emerald-200/60 mb-4 truncate">
-                {cashoutPick.market_label} · staked {cashoutPick.stake} pts, returns {cashoutPick.potential_return} pts
+                {cashoutTarget.subtitle}
               </div>
 
               {cashoutSuccess != null ? (
@@ -424,7 +466,7 @@ export default function MyPicksClient() {
                     onClick={closeCashout}
                     className="w-full py-2 rounded-full border border-emerald-900/60 text-[12px] text-emerald-200/70"
                   >
-                    Keep my pick
+                    {cashoutTarget.kind === "acca" ? `Keep my ${COMBO_BET.short}` : "Keep my pick"}
                   </button>
                 </div>
               ) : (
@@ -438,7 +480,7 @@ export default function MyPicksClient() {
                   )}
                   <button
                     type="button"
-                    onClick={() => requestQuote(cashoutPick)}
+                    onClick={() => requestQuote(cashoutTarget)}
                     className="w-full py-2.5 rounded-full bg-emerald-700 text-sm font-semibold text-white"
                   >
                     {offer ? "Get a new offer" : "Try again"}

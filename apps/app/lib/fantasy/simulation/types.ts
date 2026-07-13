@@ -130,6 +130,16 @@ export type SimPlayerResult = {
   roundNetTotals: Record<number, Int16Array>;
   /** birdieHistogram[c] = iterations with exactly c simulated birdies. */
   birdieHistogram: number[];
+  /**
+   * Per-iteration joint samples of birdie-or-better / eagle-or-better hole
+   * counts (index i = same simulated event as the totals arrays). Retained so
+   * cross-family accas (win × 2+ birdies) price off the TRUE joint. Int8 is
+   * ample — counts are bounded by holes played (≤ 72).
+   */
+  birdieCounts: Int8Array;
+  eagleCounts: Int8Array;
+  /** Per-round per-iteration birdie counts, keyed by round number. */
+  roundBirdieCounts: Record<number, Int8Array>;
   /** P(win) on the ranking basis; ties split evenly. */
   winProb: number;
   /** P(position ≤ N), ties count as in. Keys 3, 5, 10. */
@@ -170,8 +180,9 @@ export type SimulationResult = {
 /**
  * Engine-wide probability clamp: no impossible or infinite odds. The floor
  * pins longshots to the ladder top (1/0.001 → the 1000/1 rung, decimal
- * 1001.00); at 10k iterations that is 10 simulated hits, so floored prices
- * stay deterministic per version rather than tail noise.
+ * 1001.00); at 20k iterations that is 20 simulated hits — the same threshold
+ * as MIN_JOINT_SUPPORT — so floored prices stay deterministic per version
+ * rather than tail noise.
  */
 export const PROBABILITY_FLOOR = 0.001;
 export const PROBABILITY_CEILING = 0.995;

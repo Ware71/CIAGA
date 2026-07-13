@@ -3,16 +3,35 @@ import {
   combinedOdds,
   exclusivitySlot,
   findParlayViolation,
+  isCorrelatedFamily,
+  isMatrixExpressible,
   isPositionFamily,
   marketAllowsMultiple,
   subjectKeysFor,
   type ParlayLeg,
 } from "@/lib/fantasy/parlayRules";
+import type { JointCapabilities } from "@/lib/fantasy/simulation/jointBundle";
 
 const P1 = "11111111-1111-1111-1111-111111111111";
 const P2 = "22222222-2222-2222-2222-222222222222";
 const P3 = "33333333-3333-3333-3333-333333333333";
 const P4 = "44444444-4444-4444-4444-444444444444";
+
+/** A pre-extension row: positions matrix only. */
+const positionsOnly = (): JointCapabilities => ({
+  totals: false,
+  birdies: false,
+  eagles: false,
+  rounds: new Set<number>(),
+});
+/** A fully-extended bundle (multi-round). */
+const fullCaps = (rounds: number[] = [1, 2]): JointCapabilities => ({
+  totals: true,
+  birdies: true,
+  eagles: true,
+  rounds: new Set(rounds),
+});
+const capsE1 = (caps: JointCapabilities) => new Map([["e1", caps]]);
 
 describe("subjectKeysFor", () => {
   it("player markets → the subject (and opponent for h2h)", () => {
@@ -256,21 +275,120 @@ describe("findParlayViolation — new correctness rules", () => {
     expect(findParlayViolation([win(P1), h2h(P1, P2, "a")])).toBeNull();
   });
 
-  it("blocks basis-mismatched or round-scoped h2h overlapping a finishing leg", () => {
-    expect(findParlayViolation([win(P1), h2h(P1, P2, "a", { basis: "gross" })])).not.toBeNull();
-    expect(findParlayViolation([win(P1), h2h(P1, P2, "a", { basis: "net", round: 1 })])).not.toBeNull();
+  it("off-basis / round-scoped h2h overlap: allowed with totals, blocked on positions-only rows", () => {
+    // No caps (client pre-check) → optimistic: totals express any-basis h2h.
+    expect(findParlayViolation([win(P1), h2h(P1, P2, "a", { basis: "gross" })])).toBeNull();
+    expect(findParlayViolation([win(P1), h2h(P1, P2, "a", { basis: "net", round: 1 })])).toBeNull();
+    // Server re-check with extended caps → still allowed (joint-priced).
+    expect(
+      findParlayViolation([win(P1), h2h(P1, P2, "a", { basis: "gross" })], capsE1(fullCaps()))
+    ).toBeNull();
+    // Pre-extension positions-only row → blocked, exactly the old behaviour.
+    expect(
+      findParlayViolation([win(P1), h2h(P1, P2, "a", { basis: "gross" })], capsE1(positionsOnly()))
+    ).not.toBeNull();
+    expect(
+      findParlayViolation(
+        [win(P1), h2h(P1, P2, "a", { basis: "net", round: 1 })],
+        capsE1(positionsOnly())
+      )
+    ).not.toBeNull();
+    // Round-scoped h2h needs that round retained, not just totals.
+    expect(
+      findParlayViolation(
+        [win(P1), h2h(P1, P2, "a", { basis: "net", round: 3 })],
+        capsE1(fullCaps([1, 2]))
+      )
+    ).not.toBeNull();
   });
 
-  it("blocks h2h overlap when the event basis is unknown (stale slip legs)", () => {
+  it("basis-unknown h2h overlap (stale slip legs) is blocked on positions-only rows", () => {
     const leg = h2h(P1, P2, "a");
     delete (leg as Partial<ParlayLeg>).eventRankingBasis;
-    expect(findParlayViolation([win(P1), leg])).not.toBeNull();
+    // Positions-only row can't tell whether the h2h basis matches → blocked.
+    expect(findParlayViolation([win(P1), { ...leg }], capsE1(positionsOnly()))).not.toBeNull();
+    // With totals the basis needn't match the ranking basis → allowed.
+    expect(findParlayViolation([win(P1), { ...leg }], capsE1(fullCaps()))).toBeNull();
   });
 
-  it("stableford events never joint-price h2h — overlaps are blocked", () => {
+  it("stableford events joint-price h2h off totals; blocked on positions-only rows", () => {
     const w = { ...win(P1), eventRankingBasis: "stableford" as const };
     const m = { ...h2h(P1, P2, "a"), eventRankingBasis: "stableford" as const };
-    expect(findParlayViolation([w, m])).not.toBeNull();
+    expect(findParlayViolation([w, m], capsE1(fullCaps()))).toBeNull();
+    expect(findParlayViolation([w, m], capsE1(positionsOnly()))).not.toBeNull();
+  });
+
+  it("own-score legs joined the correlated family", () => {
+    for (const t of ["birdies", "eagle_count", "score_total", "score_band", "h2h"]) {
+      expect(isCorrelatedFamily(t)).toBe(true);
+    }
+    for (const t of ["hole_score", "field_special"]) {
+      expect(isCorrelatedFamily(t)).toBe(false);
+    }
+  });
+
+  it("win + own birdies overlap: allowed when the bundle retains counts, blocked otherwise", () => {
+    const birdie2: ParlayLeg = {
+      eventId: "e1",
+      marketId: "m-birdies-p1",
+      marketType: "birdies",
+      params: { count: 2 },
+      subjectKeys: [P1],
+      selectionKey: "yes",
+      ...basis,
+    };
+    expect(findParlayViolation([win(P1), birdie2])).toBeNull(); // optimistic client
+    expect(findParlayViolation([win(P1), birdie2], capsE1(fullCaps()))).toBeNull();
+    expect(findParlayViolation([win(P1), birdie2], capsE1(positionsOnly()))).not.toBeNull();
+  });
+
+  it("1+ and 2+ birdies on one player: joint-priced with counts, blocked without", () => {
+    const b = (count: number): ParlayLeg => ({
+      eventId: "e1",
+      marketId: `m-birdies-${count}`,
+      marketType: "birdies",
+      params: { count },
+      subjectKeys: [P1],
+      selectionKey: "yes",
+      ...basis,
+    });
+    expect(findParlayViolation([b(1), b(2)], capsE1(fullCaps()))).toBeNull();
+    expect(findParlayViolation([b(1), b(2)], capsE1(positionsOnly()))).not.toBeNull();
+  });
+
+  it("isMatrixExpressible per capability", () => {
+    const netBasis = { eventRankingBasis: "net" as const };
+    const full = fullCaps([1, 2]);
+    const bare = positionsOnly();
+    // Position family event-wide works on any row.
+    expect(isMatrixExpressible({ marketType: "top_n", params: { n: 3 }, ...netBasis }, bare)).toBe(true);
+    // Round winner needs that round's totals.
+    expect(
+      isMatrixExpressible({ marketType: "outright_winner", params: { round: 2 }, ...netBasis }, full)
+    ).toBe(true);
+    expect(
+      isMatrixExpressible({ marketType: "outright_winner", params: { round: 2 }, ...netBasis }, bare)
+    ).toBe(false);
+    // Own-score families need their arrays.
+    expect(isMatrixExpressible({ marketType: "eagle_count", params: {}, ...netBasis }, full)).toBe(true);
+    expect(isMatrixExpressible({ marketType: "eagle_count", params: {}, ...netBasis }, bare)).toBe(false);
+    expect(
+      isMatrixExpressible({ marketType: "score_total", params: { basis: "gross" }, ...netBasis }, full)
+    ).toBe(true);
+    expect(
+      isMatrixExpressible({ marketType: "score_band", params: { basis: "net" }, ...netBasis }, bare)
+    ).toBe(false);
+    // Round-scoped birdies price off the round's birdie array.
+    expect(
+      isMatrixExpressible({ marketType: "birdies", params: { count: 1, round: 1 }, ...netBasis }, full)
+    ).toBe(true);
+    expect(
+      isMatrixExpressible({ marketType: "birdies", params: { count: 1, round: 1 }, ...netBasis }, bare)
+    ).toBe(false);
+    // Ranking-basis h2h stays expressible on a bare row (positions path).
+    expect(
+      isMatrixExpressible({ marketType: "h2h", params: { basis: "net" }, ...netBasis }, bare)
+    ).toBe(true);
   });
 
   it("a lone inexpressible h2h leg is fine — only overlaps need the matrix", () => {
