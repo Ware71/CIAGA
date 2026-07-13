@@ -290,7 +290,10 @@ export async function placeSeasonPick(params: {
 /** Re-price if stale (inline; no debounce). Returns whether fresh odds exist. */
 export async function refreshSeasonIfStale(groupSeasonId: string): Promise<{ refreshed: boolean }> {
   const state = await readSeasonState(groupSeasonId);
-  if (!state || state.is_final || !state.odds_stale) return { refreshed: false };
+  if (!state || state.is_final) return { refreshed: false };
+  // A prior narration failure is swallowed (best-effort) but never marks odds
+  // stale, so retry it here too — otherwise a null narrative is stuck forever.
+  if (!state.odds_stale && state.narrative != null) return { refreshed: false };
 
   const ctx = await loadSeasonContext(groupSeasonId);
   if (!ctx) return { refreshed: false };
