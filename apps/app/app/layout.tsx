@@ -4,6 +4,8 @@ import "./globals.css";
 import { OrientationManager } from "@/components/OrientationManager";
 import { SandboxDevTools } from "@/components/sandbox/SandboxDevTools";
 import { ServiceWorkerRegistrar } from "@/components/ServiceWorkerRegistrar";
+import { CookieConsent } from "@/components/CookieConsent";
+import { AcceptTermsGate } from "@/components/legal/AcceptTermsGate";
 import NextTopLoader from "nextjs-toploader";
 
 const geistSans = Geist({
@@ -82,6 +84,8 @@ export default function RootLayout({
         <ServiceWorkerRegistrar />
         <OrientationManager />
         {children}
+        <AcceptTermsGate />
+        <CookieConsent />
         <SandboxDevTools />
       </body>
     </html>

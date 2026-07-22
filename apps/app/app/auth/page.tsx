@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
+import { LEGAL_LINKS, CURRENT_TERMS_VERSION } from '@/lib/legal';
 
 type Mode = 'sign-in' | 'sign-up' | 'forgot' | 'reset';
 
@@ -23,6 +24,7 @@ function AuthPageContent() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [agreed, setAgreed] = useState(false);
   const [working, setWorking] = useState(false);
   const [msg, setMsg] = useState<{ text: string; isError: boolean } | null>(null);
 
@@ -192,6 +194,13 @@ function AuthPageContent() {
         setMsg({ text: 'Passwords do not match.', isError: true });
         return;
       }
+      if (!agreed) {
+        setMsg({
+          text: 'Please agree to the Terms and Privacy Policy to continue.',
+          isError: true,
+        });
+        return;
+      }
     }
 
     setWorking(true);
@@ -210,6 +219,13 @@ function AuthPageContent() {
           password,
         });
         if (error) throw error;
+        // Remember consent so the in-app terms gate records it silently on first
+        // sign-in (rather than prompting the user to accept a second time).
+        try {
+          localStorage.setItem('ciaga.tos.accepted', CURRENT_TERMS_VERSION);
+        } catch {
+          // ignore storage errors
+        }
         setMsg({
           text: 'Check your email for a confirmation link to complete sign-up.',
           isError: false,
@@ -243,6 +259,7 @@ function AuthPageContent() {
     setMsg(null);
     setPassword('');
     setConfirmPassword('');
+    setAgreed(false);
   }
 
   return (
@@ -353,6 +370,39 @@ function AuthPageContent() {
                 autoComplete="new-password"
                 className="w-full rounded-xl border border-emerald-900/70 bg-[#08341b] px-3 py-2 text-base outline-none placeholder:text-emerald-200/40"
               />
+            )}
+
+            {/* Terms acceptance - sign-up only (clickwrap) */}
+            {mode === 'sign-up' && (
+              <label className="flex items-start gap-2 text-xs text-emerald-100/80">
+                <input
+                  type="checkbox"
+                  checked={agreed}
+                  onChange={(e) => setAgreed(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-emerald-600"
+                />
+                <span>
+                  I agree to the{' '}
+                  <a
+                    href={LEGAL_LINKS.terms}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline text-[#f5e6b0]"
+                  >
+                    Terms
+                  </a>{' '}
+                  and{' '}
+                  <a
+                    href={LEGAL_LINKS.privacy}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline text-[#f5e6b0]"
+                  >
+                    Privacy Policy
+                  </a>
+                  .
+                </span>
+              </label>
             )}
 
             <button

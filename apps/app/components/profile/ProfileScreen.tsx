@@ -16,6 +16,7 @@ import { formatHI, strokesReceivedOnHole } from "@/lib/rounds/handicapUtils";
 import ProfileFeedTab from "@/components/profile/ProfileFeedTab";
 import AcceptableRoundsTab from "@/components/profile/AcceptableRoundsTab";
 import NonAcceptableRoundsTab from "@/components/profile/NonAcceptableRoundsTab";
+import { AccountLegalSection } from "@/components/profile/AccountLegalSection";
 
 type User = {
   id: string; // auth.users.id
@@ -1484,6 +1485,9 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
               )}
             </div>
           </div>
+
+          {/* Legal & privacy + account deletion / export (self-only) */}
+          {isMe && <AccountLegalSection />}
 
           {/* INVITE A FRIEND MODAL (self-only) */}
           {isMe && inviteOpen && (
