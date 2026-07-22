@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { ensureProfile } from '@/lib/profile';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { LEGAL_LINKS } from '@/lib/legal';
 
 type User = {
   id: string;
@@ -306,6 +307,16 @@ export function AuthUser() {
                 Admin
               </button>
             )}
+
+            <a
+              href={LEGAL_LINKS.legal}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block w-full text-left px-3 py-2 hover:bg-emerald-900/60"
+              onClick={() => setMenuOpen(false)}
+            >
+              Privacy &amp; terms
+            </a>
 
             <button
               type="button"

@@ -226,22 +226,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="border-t border-zinc-200">
-        <div className="mx-auto max-w-6xl px-5 py-8">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-zinc-600">© {new Date().getFullYear()} CIAGA</p>
-            <div className="flex gap-4 text-sm">
-              <a className="text-zinc-700 hover:text-zinc-950" href={appUrl}>
-                Open app
-              </a>
-              <a className="text-zinc-700 hover:text-zinc-950" href="#install">
-                Install
-              </a>
-            </div>
-          </div>
-        </div>
-      </footer>
     </main>
   );
 }
