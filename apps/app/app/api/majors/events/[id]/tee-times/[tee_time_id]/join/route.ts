@@ -49,11 +49,17 @@ export async function POST(
     if (!teeTime) return NextResponse.json({ error: "Tee time not found." }, { status: 404 });
     if (!teeTime.round_id) return NextResponse.json({ error: "Tee time has no linked round." }, { status: 400 });
 
-    // Ensure player is not already in another tee time for this event
-    const { data: allTeeTimes } = await supabaseAdmin
+    // Ensure player is not already in another tee time for THIS round of the
+    // event. A player may hold one tee time per round, so scope to the tee
+    // time's event_round_id rather than the whole event.
+    let roundTTQuery = supabaseAdmin
       .from("event_tee_times")
       .select("round_id")
       .eq("event_id", id);
+    roundTTQuery = (teeTime as any).event_round_id
+      ? roundTTQuery.eq("event_round_id", (teeTime as any).event_round_id)
+      : roundTTQuery.is("event_round_id", null);
+    const { data: allTeeTimes } = await roundTTQuery;
 
     const allRoundIds = (allTeeTimes ?? []).map((t: any) => t.round_id).filter(Boolean) as string[];
 
@@ -66,7 +72,7 @@ export async function POST(
         .maybeSingle();
 
       if (existing) {
-        return NextResponse.json({ error: "You are already in a tee time for this event." }, { status: 409 });
+        return NextResponse.json({ error: "You are already in a tee time for this round." }, { status: 409 });
       }
     }
 

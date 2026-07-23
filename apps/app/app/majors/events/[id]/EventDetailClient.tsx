@@ -332,9 +332,12 @@ function AddTeeTimeSheet({
 
   const totalPlayers = selectedPlayers.length + guests.length;
 
-  // Map of profileId → tee time they're currently assigned to (for badge display)
+  // Map of profileId → tee time they're currently assigned to (for badge display).
+  // Scoped to the selected round: a player may hold one tee time per round, so a
+  // tee time in another round must not flag them as "assigned" here.
   const assignedMap = new Map<string, { groupNumber: number | null }>();
   for (const tt of teeTimes) {
+    if (tt.event_round_id !== selectedRoundId) continue;
     for (const p of tt.round?.participants ?? []) {
       if (p.profile_id) assignedMap.set(p.profile_id, { groupNumber: tt.group_number });
     }
@@ -406,6 +409,7 @@ function AddTeeTimeSheet({
 
   const handleSubmit = async () => {
     if (!teeTime) { setError("Please select a tee time"); return; }
+    if (eventRounds.length > 1 && !selectedRoundId) { setError("Please select a round"); return; }
     setSubmitting(true);
     setError(null);
     try {
@@ -685,9 +689,12 @@ function EditTeeTimeSheet({
 
   const totalPlayers = selectedPlayers.length + guestParticipants.length;
 
-  // Map profileId → other tee time they're in (exclude current tee time)
+  // Map profileId → other tee time they're in, within the SAME round as the tee
+  // time being edited (excludes the current tee time via the `teeTimes` prop).
+  // A player may hold one tee time per round, so other rounds must not flag them.
   const assignedMap = new Map<string, { groupNumber: number | null }>();
   for (const other of teeTimes) {
+    if (other.event_round_id !== tt.event_round_id) continue;
     for (const p of other.round?.participants ?? []) {
       if (p.profile_id) assignedMap.set(p.profile_id, { groupNumber: other.group_number });
     }
@@ -2740,15 +2747,27 @@ export default function EventDetailClient({
         )}
 
         {isEntered && (() => {
-          // Is this player's round managed by the event (via a tee time)?
+          // Which of this player's rounds are managed by the event (via a tee time)?
           // If so, their score is submitted automatically when the round finishes —
-          // no manual submit step needed.
-          const myTeeTime = myProfileId
-            ? teeTimes.find((tt) =>
-                tt.round?.participants?.some((p) => p.profile_id === myProfileId)
-              )
-            : null;
-          const eventOwnsRound = !!myTeeTime;
+          // no manual submit step needed. A player may hold one tee time per round,
+          // so collect all of them and list one line per round.
+          const myTeeTimes = myProfileId
+            ? teeTimes
+                .filter((tt) =>
+                  tt.round?.participants?.some((p) => p.profile_id === myProfileId)
+                )
+                .sort(
+                  (a, b) =>
+                    (a.event_round?.round_number ?? 0) - (b.event_round?.round_number ?? 0) ||
+                    new Date(a.tee_time).getTime() - new Date(b.tee_time).getTime()
+                )
+            : [];
+          const eventOwnsRound = myTeeTimes.length > 0;
+          // Once any of the player's rounds is in progress or finished, withdrawing
+          // from the whole event is no longer allowed.
+          const anyRoundInProgressOrDone = myTeeTimes.some((tt) =>
+            ["live", "starting", "finished"].includes(tt.round?.status ?? "")
+          );
 
           return (
           <div className="space-y-2">
@@ -2757,21 +2776,29 @@ export default function EventDetailClient({
                 ✓ Entered
               </div>
             </div>
-            {entryOpen && eventOwnsRound && myTeeTime && (
-              <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 text-[11px] text-emerald-200/60">
-                {myTeeTime.round?.status === "finished"
-                  ? "Your score has been submitted automatically."
-                  : myTeeTime.round?.status === "live"
-                  ? "Round in progress — your score will be submitted when the round is finished."
-                  : `Tee time at ${new Date(myTeeTime.tee_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} — your score will be submitted automatically.`}
+            {entryOpen && eventOwnsRound && (
+              <div className="space-y-2">
+                {myTeeTimes.map((tt) => {
+                  const prefix =
+                    myTeeTimes.length > 1 && tt.event_round ? `${tt.event_round.name} — ` : "";
+                  const body =
+                    tt.round?.status === "finished"
+                      ? "Your score has been submitted automatically."
+                      : tt.round?.status === "live"
+                      ? "Round in progress — your score will be submitted when the round is finished."
+                      : `Tee time at ${new Date(tt.tee_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} — your score will be submitted automatically.`;
+                  return (
+                    <div key={tt.id} className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 text-[11px] text-emerald-200/60">
+                      {prefix}{body}
+                    </div>
+                  );
+                })}
               </div>
             )}
             {/* Withdraw */}
             {event.majors_status !== "live" &&
              event.majors_status !== "completed" &&
-             myTeeTime?.round?.status !== "live" &&
-             myTeeTime?.round?.status !== "starting" &&
-             myTeeTime?.round?.status !== "finished" && (
+             !anyRoundInProgressOrDone && (
               (event as any).allow_self_withdrawal !== false ? (
                 <button type="button" onClick={() => setShowWithdrawConfirm(true)}
                   className="w-full py-2 rounded-full border border-red-900/50 text-sm text-red-400/70 hover:text-red-400 transition-colors">
@@ -3297,12 +3324,16 @@ export default function EventDetailClient({
 
     "tee-times": (() => {
       const isSelfSelect = (event as any)?.tee_time_mode === "self_select";
-      // Which tee time round_id does this player belong to?
-      const myTeeTimeId = isSelfSelect && myProfileId
-        ? teeTimes.find((tt) =>
-            tt.round?.participants?.some((p) => p.profile_id === myProfileId)
-          )?.id ?? null
-        : null;
+      // Which event rounds does this player already hold a tee time in? A player
+      // may hold one tee time per round, so Join is gated per-round (not per-event).
+      const myOccupiedRoundIds = new Set<string | null>();
+      if (isSelfSelect && myProfileId) {
+        for (const tt of teeTimes) {
+          if (tt.round?.participants?.some((p) => p.profile_id === myProfileId)) {
+            myOccupiedRoundIds.add(tt.event_round_id ?? null);
+          }
+        }
+      }
 
       // Group tee times by event_round_id for structured display
       const teeTimesByRound = new Map<string | null, EventTeeTime[]>();
@@ -3315,7 +3346,7 @@ export default function EventDetailClient({
       const renderTeeTimeCard = (tt: EventTeeTime) => {
         const participantCount = tt.round?.participants?.length ?? 0;
         const hasSlot = tt.round?.participants?.some((p) => p.profile_id === myProfileId) ?? false;
-        const canJoin = isSelfSelect && isEntered && myProfileId && !myTeeTimeId && participantCount < 4;
+        const canJoin = isSelfSelect && isEntered && myProfileId && !myOccupiedRoundIds.has(tt.event_round_id ?? null) && participantCount < 4;
         return (
           <div key={tt.id} className="space-y-2">
             {hasSlot && tt.event_round && (
