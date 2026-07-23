@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { AuthUser } from "@/components/ui/auth-user";
 
 import type { FeedItemVM } from "@/lib/feed/types";
-import type { HomeSummary, HomeCore, HomeMiniFeed } from "@/lib/home/getHomeSummary";
+import type { HomeCore, HomeMiniFeed } from "@/lib/home/getHomeSummary";
 
 import { clamp, formatSigned } from "@/lib/feed/feedItemUtils";
 import { formatHI } from "@/lib/rounds/handicapUtils";
@@ -60,25 +60,27 @@ function BellIcon(props: { size?: number; className?: string }) {
   );
 }
 
+/** Server-streamed core result — {ok} shaped so a failure can't reject across the RSC boundary. */
+type CoreResult = { ok: true; data: HomeCore } | { ok: false; error: string };
+
 type Props = {
-  initialData?: HomeSummary;
-  initialMajors?: MajorHubSummary | null;
+  /** Pending promise for the essential (splash-gating) player info, streamed from the server. */
+  initialCore?: Promise<CoreResult>;
+  /** Pending promise for the low-priority feed + Majors hub, streamed behind the splash. */
+  initialRest?: Promise<[HomeMiniFeed | null, MajorHubSummary | null]>;
   /** Server-resolved viewer id — skips the client-side session round trip. */
   initialProfileId?: string | null;
 };
 
-export default function HomeClient({ initialData, initialMajors, initialProfileId }: Props) {
+export default function HomeClient({ initialCore, initialRest, initialProfileId }: Props) {
   const router = useRouter();
-
-  const seed = initialData;
 
   // Show splash on first visit; skip on back navigation (splash_shown persists in sessionStorage).
   // useLayoutEffect runs before paint so returning users never see the overlay flash.
   const [showSplash, setShowSplash] = useState(true);
-  // Server-seeded means there's nothing left to wait for — without this the
-  // splash would never dismiss, because the fetch effect that clears it returns
-  // early when initialData is present.
-  const [dataReady, setDataReady] = useState(!!initialData);
+  // Starts false: the splash waits for the streamed core promise (or the client
+  // fetch) to resolve, so LoadingScreen plays its connection-aware wait.
+  const [dataReady, setDataReady] = useState(false);
   useLayoutEffect(() => {
     if (sessionStorage.getItem("splash_shown") === "1") setShowSplash(false);
   }, []);
@@ -89,12 +91,12 @@ export default function HomeClient({ initialData, initialMajors, initialProfileI
   const [vw, setVw] = useState(390);
   const [vh, setVh] = useState(844);
 
-  const [liveRoundId, setLiveRoundId] = useState<string | null>(seed?.live_round_id ?? null);
+  const [liveRoundId, setLiveRoundId] = useState<string | null>(null);
   const [myProfileId, setMyProfileId] = useState<string | null>(initialProfileId ?? null);
 
-  const [handicapIndex, setHandicapIndex] = useState<number | null>(seed?.handicap?.current ?? null);
-  const [handicapDelta30, setHandicapDelta30] = useState<number>(seed?.handicap?.delta_30d ?? 0);
-  const [roundsPlayed, setRoundsPlayed] = useState<number | null>(seed?.rounds_played ?? null);
+  const [handicapIndex, setHandicapIndex] = useState<number | null>(null);
+  const [handicapDelta30, setHandicapDelta30] = useState<number>(0);
+  const [roundsPlayed, setRoundsPlayed] = useState<number | null>(null);
 
   const [lastRound, setLastRound] = useState<{
     course: string | null;
@@ -103,12 +105,12 @@ export default function HomeClient({ initialData, initialMajors, initialProfileI
     net: number | null;
     diff: number | null;
     played_at: string | null;
-  } | null>(seed?.last_round ?? null);
+  } | null>(null);
 
-  const [miniFeed, setMiniFeed] = useState<FeedItemVM[]>(seed?.mini_feed ?? []);
+  const [miniFeed, setMiniFeed] = useState<FeedItemVM[]>([]);
   const [miniFeedLoading, setMiniFeedLoading] = useState(false);
   const [miniFeedError, setMiniFeedError] = useState<string | null>(null);
-  const [majorsPreload, setMajorsPreload] = useState<MajorHubSummary | null>(initialMajors ?? null);
+  const [majorsPreload, setMajorsPreload] = useState<MajorHubSummary | null>(null);
   const [retryKey, setRetryKey] = useState(0);
   const [showInviteSheet, setShowInviteSheet] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -150,16 +152,15 @@ export default function HomeClient({ initialData, initialMajors, initialProfileI
     };
   }, []);
 
-  // Home data fetch — uses module cache on back navigation, fetches fresh otherwise.
-  // Loads in priority order: essential player info gates the splash; the social
-  // feed + Majors hub stream in afterwards without blocking it.
+  // Home data load. First render consumes the promises the server streamed
+  // (core gates the splash; feed + Majors fill in behind it). On a retry — or
+  // when the promises are absent — it falls back to the original client fetch,
+  // and to the module cache on back navigation.
   useEffect(() => {
-    // Server-seeded: nothing to fetch. Still prime the module cache so a later
-    // client-side return to /home hits the instant path rather than refetching.
-    if (initialData) {
-      setCachedHomeData(initialData, initialMajors ?? null);
-      return;
-    }
+    let cancelled = false;
+    let onlineRetryCleanup: (() => void) | null = null;
+    // Safety net: never spin forever if the essential load wedges entirely.
+    const timeoutId = setTimeout(() => { if (!cancelled) setDataReady(true); }, 10_000);
 
     const applyCore = (data: HomeCore) => {
       setLiveRoundId(data.live_round_id ?? null);
@@ -169,22 +170,6 @@ export default function HomeClient({ initialData, initialMajors, initialProfileI
       setLastRound(data.last_round ?? null);
     };
 
-    // Serve cached data instantly on back navigation (no network, no loading state)
-    const cached = getCachedHomeData();
-    if (cached) {
-      applyCore(cached.home);
-      setMiniFeed((cached.home.mini_feed as FeedItemVM[]) ?? []);
-      setMajorsPreload(cached.majors);
-      setDataReady(true);
-      setMiniFeedLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    let onlineRetryCleanup: (() => void) | null = null;
-    // Safety net: never spin forever if the essential fetch wedges entirely.
-    const timeoutId = setTimeout(() => { if (!cancelled) setDataReady(true); }, 10_000);
-
     const scheduleRetry = () => {
       if (onlineRetryCleanup) return;
       const handler = () => {
@@ -193,6 +178,66 @@ export default function HomeClient({ initialData, initialMajors, initialProfileI
       window.addEventListener("online", handler, { once: true });
       onlineRetryCleanup = () => window.removeEventListener("online", handler);
     };
+
+    // ── Streamed path: consume the server-provided promises (first render only;
+    //    on retry they're stale, so we fall through to a real client fetch). ──
+    if (initialCore && retryKey === 0) {
+      // A promise passed from a Server Component arrives as a React thenable
+      // whose `.then()` isn't a chainable native Promise. Normalise with
+      // Promise.resolve so `.then/.catch/.all` behave.
+      const corePromise = Promise.resolve(initialCore);
+      const restPromise = initialRest ? Promise.resolve(initialRest) : Promise.resolve(null);
+
+      corePromise
+        .then((r) => {
+          if (cancelled) return;
+          if (r.ok) {
+            applyCore(r.data);
+            setMiniFeedLoading(true);
+            setMiniFeedError(null);
+            setDataReady(true); // splash may dismiss now
+          } else {
+            setMiniFeedError(r.error);
+            setDataReady(true);
+            scheduleRetry();
+          }
+        })
+        .catch(() => { if (!cancelled) setDataReady(true); });
+
+      restPromise.then((rest) => {
+        if (cancelled) return;
+        const feed = (rest?.[0]?.mini_feed as FeedItemVM[]) ?? [];
+        setMiniFeed(feed);
+        setMajorsPreload(rest?.[1] ?? null);
+        setMiniFeedLoading(false);
+      });
+
+      // Prime the back-nav module cache once both have settled.
+      Promise.all([corePromise, restPromise]).then(([cr, rest]) => {
+        if (cancelled || !cr.ok) return;
+        const feed = (rest?.[0]?.mini_feed as FeedItemVM[]) ?? [];
+        setCachedHomeData({ ...cr.data, mini_feed: feed }, rest?.[1] ?? null);
+      });
+
+      return () => {
+        cancelled = true;
+        clearTimeout(timeoutId);
+        onlineRetryCleanup?.();
+      };
+    }
+
+    // ── Fallback / retry: client-side fetch (the original path). ──
+    // Serve cached data instantly on back navigation (no network, no loading state).
+    const cached = getCachedHomeData();
+    if (cached) {
+      applyCore(cached.home);
+      setMiniFeed((cached.home.mini_feed as FeedItemVM[]) ?? []);
+      setMajorsPreload(cached.majors);
+      setDataReady(true);
+      setMiniFeedLoading(false);
+      clearTimeout(timeoutId);
+      return () => { cancelled = true; };
+    }
 
     (async () => {
       try {
