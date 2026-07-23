@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Info } from "lucide-react";
 import { getViewerSession } from "@/lib/auth/viewerSession";
+import { requireViewerSession } from "@/lib/auth/requireViewerSession";
 import { supabase } from "@/lib/supabaseClient";
 import { safeJson } from "@/lib/fantasy/safeJson";
 import { marketAllowsMultiple, subjectKeysFor } from "@/lib/fantasy/parlayRules";
@@ -120,7 +121,7 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
   }, []);
 
   const fetchBalance = useCallback(async (groupId: string) => {
-    const session = await getViewerSession();
+    const session = await requireViewerSession();
     if (!session) return;
     const res = await fetch(`/api/fantasy/groups/${groupId}/wallet?event_id=${eventId}`, {
       headers: { Authorization: `Bearer ${session.accessToken}` },
@@ -132,7 +133,7 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
   }, [eventId]);
 
   const fetchBoard = useCallback(async () => {
-    const session = await getViewerSession();
+    const session = await requireViewerSession();
     if (!session) return;
     const res = await fetch(`/api/fantasy/events/${eventId}/odds`, {
       headers: { Authorization: `Bearer ${session.accessToken}` },
@@ -185,7 +186,7 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
     if (!board?.generated || !groupId) return;
     let cancelled = false;
     (async () => {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const res = await fetch(`/api/fantasy/groups/${groupId}/season`, {
         headers: { Authorization: `Bearer ${session.accessToken}` },
@@ -226,7 +227,7 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
     setGenerating(true);
     setGenerateError(null);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const res = await fetch(`/api/fantasy/events/${eventId}/generate`, {
         method: "POST",
@@ -249,7 +250,7 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
     if (refreshingMarkets) return;
     setRefreshingMarkets(true);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const res = await fetch(`/api/fantasy/events/${eventId}/rebuild-profiles`, {
         method: "POST",

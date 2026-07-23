@@ -18,7 +18,7 @@ import {
   searchProfiles,
   type ProfileSearchResult,
 } from "@/lib/calendar/api";
-import { getViewerSession } from "@/lib/auth/viewerSession";
+import { requireViewerSession } from "@/lib/auth/requireViewerSession";
 import { InitialsAvatar } from "./Avatar";
 import { SegmentedControl } from "./SegmentedControl";
 
@@ -74,7 +74,7 @@ export function ScopePicker(props: {
   // Load following for the individuals picker.
   useEffect(() => {
     (async () => {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       try {
         const ids = await fetchFollowingIds(session.profileId);
@@ -91,18 +91,20 @@ export function ScopePicker(props: {
       setResults([]);
       return;
     }
-    let cancelled = false;
+    const controller = new AbortController();
     setSearching(true);
     const t = setTimeout(async () => {
       try {
-        const r = await searchProfiles(q);
-        if (!cancelled) setResults(r);
+        const r = await searchProfiles(q, controller.signal);
+        if (!controller.signal.aborted) setResults(r);
+      } catch {
+        // aborted or offline — keep the previous results
       } finally {
-        if (!cancelled) setSearching(false);
+        if (!controller.signal.aborted) setSearching(false);
       }
     }, 250);
     return () => {
-      cancelled = true;
+      controller.abort();
       clearTimeout(t);
     };
   }, [query]);
@@ -154,8 +156,8 @@ export function ScopePicker(props: {
               <div className="text-sm font-semibold text-emerald-50">
                 {mode === "people" ? "Pick players" : "View calendar"}
               </div>
-              <button onClick={onClose} className="text-emerald-100/70 hover:text-emerald-50">
-                <X size={18} />
+              <button onClick={onClose} className="text-emerald-100/70 hover:text-emerald-50" aria-label="Close">
+                <X size={18} aria-hidden="true" />
               </button>
             </div>
 

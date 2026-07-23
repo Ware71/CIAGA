@@ -71,7 +71,7 @@ function InfoCard({ ann, onDone }: { ann: Announcement; onDone: () => void }) {
   return (
     <div>
       {ann.image_url ? (
-        <img src={ann.image_url} alt="" className="h-40 w-full object-cover" />
+        <img src={ann.image_url} alt="" className="h-40 w-full object-cover" loading="lazy" decoding="async" />
       ) : (
         <div className="grid h-28 w-full place-items-center bg-emerald-900/30">
           <Sparkles className="text-emerald-300" size={32} />

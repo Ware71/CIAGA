@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getViewerSession } from "@/lib/auth/viewerSession";
+import { requireViewerSession } from "@/lib/auth/requireViewerSession";
+import { useDebouncedRefresh } from "@/lib/majors/useDebouncedRefresh";
 import { supabase } from "@/lib/supabaseClient";
 import { InvitePlayerSheet } from "@/app/majors/groups/InvitePlayerSheet";
 import type {
@@ -196,7 +198,7 @@ function MemberDetailDrawer({
         {/* Header */}
         <div className="flex items-center gap-3">
           {member.profile?.avatar_url ? (
-            <img src={member.profile.avatar_url} alt="" className="h-12 w-12 rounded-full object-cover shrink-0" />
+            <img src={member.profile.avatar_url} alt="" className="h-12 w-12 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
           ) : (
             <div className="h-12 w-12 rounded-full bg-emerald-900/60 grid place-items-center text-sm font-bold text-emerald-200 shrink-0">
               {member.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
@@ -370,7 +372,7 @@ function MemberRow({
       >
         <div className="flex items-center gap-3">
           {member.profile?.avatar_url ? (
-            <img src={member.profile.avatar_url} alt="" className="h-9 w-9 rounded-full object-cover shrink-0" />
+            <img src={member.profile.avatar_url} alt="" className="h-9 w-9 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
           ) : (
             <div className="h-9 w-9 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
               {member.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
@@ -528,7 +530,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     if (id === "current") { setStandingsHistoricalData([]); return; }
     setStandingsHistoricalLoading(true);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const res = await fetch(`/api/majors/group-seasons/${id}/standings`, {
         headers: { Authorization: `Bearer ${session.accessToken}` },
@@ -548,7 +550,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     (async () => {
       setLoading(true);
       try {
-        const session = await getViewerSession();
+        const session = await requireViewerSession();
         if (!session || cancelled) return;
         setMyProfileId(session.profileId);
         const headers = { Authorization: `Bearer ${session.accessToken}` };
@@ -618,7 +620,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     if (tab !== "finances") return;
     let cancelled = false;
     (async () => {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session || cancelled) return;
       const headers = { Authorization: `Bearer ${session.accessToken}` };
       const isAdmin = myRole === "owner" || myRole === "admin";
@@ -653,7 +655,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     if (tab !== "settings" || groupChargesLoaded) return;
     let cancelled = false;
     (async () => {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session || cancelled) return;
       const res = await fetch(`/api/majors/groups/${groupId}/group-charges`, {
         headers: { Authorization: `Bearer ${session.accessToken}` },
@@ -677,7 +679,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     (async () => {
       setFantasyWalletLoading(true);
       try {
-        const session = await getViewerSession();
+        const session = await requireViewerSession();
         if (!session || cancelled) return;
         const res = await fetch(`/api/fantasy/groups/${groupId}/wallet`, {
           headers: { Authorization: `Bearer ${session.accessToken}` },
@@ -702,7 +704,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     (async () => {
       setFantasyLeaderboardLoading(true);
       try {
-        const session = await getViewerSession();
+        const session = await requireViewerSession();
         if (!session || cancelled) return;
         const res = await fetch(`/api/fantasy/groups/${groupId}/leaderboard`, {
           headers: { Authorization: `Bearer ${session.accessToken}` },
@@ -726,7 +728,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     if (tab !== "overview" || !group?.fantasy_config) { setSeasonNarrative(null); return; }
     let cancelled = false;
     (async () => {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session || cancelled) return;
       const res = await fetch(`/api/fantasy/groups/${groupId}/season`, {
         headers: { Authorization: `Bearer ${session.accessToken}` },
@@ -743,7 +745,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   }, [tab, groupId, group?.fantasy_config]);
 
   const refreshMembers = async () => {
-    const session = await getViewerSession();
+    const session = await requireViewerSession();
     if (!session) return;
     const res = await fetch(`/api/majors/groups/${groupId}/members`, {
       headers: { Authorization: `Bearer ${session.accessToken}` },
@@ -755,7 +757,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   };
 
   const refreshLiveStandings = async () => {
-    const session = await getViewerSession();
+    const session = await requireViewerSession();
     if (!session) return;
     const res = await fetch(`/api/majors/groups/${groupId}/live-standings`, {
       headers: { Authorization: `Bearer ${session.accessToken}` },
@@ -765,6 +767,10 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       setLiveStandingsData(j);
     }
   };
+
+  // One debouncer for every realtime channel below. Standings recomputes and
+  // leaderboard rewrites both arrive as a burst of per-row events.
+  const debouncedRefreshLiveStandings = useDebouncedRefresh(refreshLiveStandings);
 
   // Realtime: refresh live standings whenever major_group_standings changes
   // (fired by ciaga_compute_group_standings cascade on round finish / competition complete)
@@ -777,26 +783,19 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         schema: "public",
         table: "major_group_standings",
         filter: `group_id=eq.${groupId}`,
-      }, () => { if (!cancelled) refreshLiveStandings(); })
+      }, () => { if (!cancelled) debouncedRefreshLiveStandings(); })
       .subscribe();
 
     return () => {
       cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, [groupId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [groupId, debouncedRefreshLiveStandings]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Realtime: per-hole live updates via round_score_events (debounced 800ms)
   useEffect(() => {
     const ids = liveStandingsData?.liveRoundIds ?? [];
     if (!ids.length) return;
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const debouncedRefresh = () => {
-      if (cancelled) return;
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => { if (!cancelled) refreshLiveStandings(); }, 800);
-    };
     const channels = ids.map((roundId) =>
       supabase
         .channel(`live-scores:${groupId}:${roundId}`)
@@ -805,15 +804,13 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           schema: "public",
           table: "round_score_events",
           filter: `round_id=eq.${roundId}`,
-        }, debouncedRefresh)
+        }, debouncedRefreshLiveStandings)
         .subscribe()
     );
     return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
       channels.forEach((ch) => supabase.removeChannel(ch));
     };
-  }, [liveStandingsData?.liveRoundIds?.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [liveStandingsData?.liveRoundIds?.join(","), debouncedRefreshLiveStandings]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Realtime: event_leaderboard_entries — catches when a round finishes
   // and ciaga_compute_competition_leaderboard() rewrites entries for a live competition
@@ -829,14 +826,14 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           schema: "public",
           table: "event_leaderboard_entries",
           filter: `event_id=eq.${compId}`,
-        }, () => { if (!cancelled) refreshLiveStandings(); })
+        }, () => { if (!cancelled) debouncedRefreshLiveStandings(); })
         .subscribe()
     );
     return () => {
       cancelled = true;
       channels.forEach((ch) => supabase.removeChannel(ch));
     };
-  }, [liveStandingsData?.liveCompetitionIds?.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [liveStandingsData?.liveCompetitionIds?.join(","), debouncedRefreshLiveStandings]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load player breakdown when drawer opens
   useEffect(() => {
@@ -845,7 +842,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     let cancelled = false;
     setPlayerBreakdownLoading(true);
     (async () => {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session || cancelled) return;
       const url = currentSeasonId
         ? `/api/majors/group-seasons/${currentSeasonId}/player-breakdown?profile_id=${profileId}`
@@ -863,7 +860,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   const handleJoin = async () => {
     setJoining(true);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const res = await fetch(`/api/majors/groups/${groupId}/join`, {
         method: "POST",
@@ -881,7 +878,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   };
 
   const handleTournamentIndex = async (profileId: string, index: number | null) => {
-    const session = await getViewerSession();
+    const session = await requireViewerSession();
     if (!session) return;
     await fetch(`/api/majors/groups/${groupId}/members`, {
       method: "PATCH",
@@ -892,7 +889,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   };
 
   const handleMemberAction = async (memberId: string, updates: { status?: string; role?: string }) => {
-    const session = await getViewerSession();
+    const session = await requireViewerSession();
     if (!session) return;
     await fetch(`/api/majors/groups/${groupId}/members/${memberId}`, {
       method: "PATCH",
@@ -903,7 +900,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   };
 
   const handleDeclineMember = async (profileId: string) => {
-    const session = await getViewerSession();
+    const session = await requireViewerSession();
     if (!session) return;
     await fetch(`/api/majors/groups/${groupId}/members?profile_id=${profileId}`, {
       method: "DELETE",
@@ -1349,7 +1346,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
       const avatarEl = (profile: { name: string | null; avatar_url: string | null } | null) =>
         profile?.avatar_url ? (
-          <img src={profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
+          <img src={profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
         ) : (
           <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
             {profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
@@ -1547,7 +1544,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                 .map((w: any) => (
                   <div key={w.profile_id} className="flex items-center gap-3 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/50 px-3 py-2">
                     {w.profile?.avatar_url ? (
-                      <img src={w.profile.avatar_url} alt="" className="h-6 w-6 rounded-full object-cover shrink-0" />
+                      <img src={w.profile.avatar_url} alt="" className="h-6 w-6 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
                     ) : (
                       <div className="h-6 w-6 rounded-full bg-emerald-800 flex items-center justify-center text-[9px] font-bold text-emerald-200 shrink-0">
                         {(w.profile?.name ?? "?").slice(0, 2).toUpperCase()}
@@ -1623,7 +1620,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                   onClick={() => router.push(`/player/${m.profile_id}`)}
                 >
                   {m.profile?.avatar_url ? (
-                    <img src={m.profile.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
+                    <img src={m.profile.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
                   ) : (
                     <div className="h-8 w-8 rounded-full bg-amber-900/60 grid place-items-center text-[10px] font-bold text-amber-200 shrink-0">
                       {m.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
@@ -1676,7 +1673,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                   return (
                     <div key={m.id} className="flex items-center gap-3 py-1">
                       {m.profile?.avatar_url ? (
-                        <img src={m.profile.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
+                        <img src={m.profile.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
                       ) : (
                         <div className="h-8 w-8 rounded-full bg-emerald-900/60 flex items-center justify-center text-[10px] font-bold text-emerald-200 shrink-0">
                           {m.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
@@ -1754,7 +1751,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         if (id === "all") { setSeasonStandings([]); return; }
         setSeasonStandingsLoading(true);
         try {
-          const session = await getViewerSession();
+          const session = await requireViewerSession();
           if (!session) return;
           const res = await fetch(`/api/majors/group-seasons/${id}/standings`, {
             headers: { Authorization: `Bearer ${session.accessToken}` },
@@ -1773,7 +1770,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
       const avatarEl = (profile: { name: string | null; avatar_url: string | null } | null) =>
         profile?.avatar_url ? (
-          <img src={profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
+          <img src={profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
         ) : (
           <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
             {profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
@@ -2042,7 +2039,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       const handleCreateSeason = async () => {
         setCreatingSeason(true); setCreateSeasonError(null);
         try {
-          const session = await getViewerSession();
+          const session = await requireViewerSession();
           if (!session) return;
           const res = await fetch(`/api/majors/groups/${groupId}/seasons`, {
             method: "POST",
@@ -2139,7 +2136,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                   const loadPots = async () => {
                     if (seasonPots[s.id]) return;
                     try {
-                      const session = await getViewerSession();
+                      const session = await requireViewerSession();
                       if (!session) return;
                       const res = await fetch(`/api/majors/group-seasons/${s.id}/prize-pots`, {
                         headers: { Authorization: `Bearer ${session.accessToken}` },
@@ -2165,7 +2162,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                       if (!ok) return;
                     }
                     try {
-                      const session = await getViewerSession();
+                      const session = await requireViewerSession();
                       if (!session) return;
                       const res = await fetch(`/api/majors/prize-pots/${pot.id}`, {
                         method: "DELETE",
@@ -2185,7 +2182,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                     if (!addPotForm.name.trim()) return;
                     setSavingPot(true);
                     try {
-                      const session = await getViewerSession();
+                      const session = await requireViewerSession();
                       if (!session) return;
                       const res = await fetch(`/api/majors/group-seasons/${s.id}/prize-pots`, {
                         method: "POST",
@@ -2366,7 +2363,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                       {s.current_holder ? (
                         <>
                           {s.current_holder.avatar_url ? (
-                            <img src={s.current_holder.avatar_url} alt="" className="h-4 w-4 rounded-full object-cover shrink-0" />
+                            <img src={s.current_holder.avatar_url} alt="" className="h-4 w-4 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
                           ) : (
                             <div className="h-4 w-4 rounded-full bg-emerald-900/60 grid place-items-center text-[8px] font-bold text-emerald-200 shrink-0">
                               {s.current_holder.name?.slice(0, 1).toUpperCase() ?? "?"}
@@ -2518,7 +2515,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                         className="w-full flex items-center gap-3 px-3 py-3 text-left"
                       >
                         {m.profile?.avatar_url ? (
-                          <img src={m.profile.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
+                          <img src={m.profile.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
                         ) : (
                           <div className="h-8 w-8 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
                             {m.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
@@ -2837,7 +2834,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                   type="button"
                   onClick={async () => {
                     if (!group) return;
-                    const session = await getViewerSession();
+                    const session = await requireViewerSession();
                     if (!session) return;
                     const newVal = !((group as any).allow_credit ?? true);
                     await fetch(`/api/majors/groups/${groupId}`, {
@@ -2994,7 +2991,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                   <div key={e.profile_id} className="flex items-center gap-2.5 py-1">
                     <span className="w-5 text-center text-[11px] font-bold text-emerald-200/50">{e.position}</span>
                     {e.avatar_url ? (
-                      <img src={e.avatar_url} alt="" className="h-6 w-6 rounded-full object-cover shrink-0" />
+                      <img src={e.avatar_url} alt="" className="h-6 w-6 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
                     ) : (
                       <div className="h-6 w-6 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
                         {e.name.slice(0, 2).toUpperCase()}
@@ -3088,7 +3085,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                     if (!groupDetailsForm) return;
                     setSavingGroupDetails(true);
                     try {
-                      const session = await getViewerSession();
+                      const session = await requireViewerSession();
                       if (!session) return;
                       const access = ACCESS_OPTIONS.find((a) => a.value === groupDetailsForm.access) ?? ACCESS_OPTIONS[0];
                       const res = await fetch(`/api/majors/groups/${groupId}`, {
@@ -3125,7 +3122,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           <div className="text-[10px] uppercase tracking-wider text-emerald-200/50">Group Image</div>
           <div className="flex items-center gap-3">
             {group.image_url ? (
-              <img src={group.image_url} alt={group.name} className="h-16 w-16 rounded-2xl object-cover border border-emerald-700/40 shrink-0" />
+              <img src={group.image_url} alt={group.name} className="h-16 w-16 rounded-2xl object-cover border border-emerald-700/40 shrink-0" loading="lazy" decoding="async" />
             ) : (
               <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-emerald-800 to-emerald-950 flex items-center justify-center text-xl font-bold text-emerald-200 shrink-0">
                 {group.name.slice(0, 2).toUpperCase()}
@@ -3335,7 +3332,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                     if (!leagueSettingsForm) return;
                     setSavingLeagueSettings(true);
                     try {
-                      const session = await getViewerSession();
+                      const session = await requireViewerSession();
                       if (!session) return;
                       const res = await fetch(`/api/majors/groups/${groupId}`, {
                         method: "PATCH",
@@ -3480,7 +3477,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                     setSavingFantasyConfig(true);
                     setFantasyConfigError(null);
                     try {
-                      const session = await getViewerSession();
+                      const session = await requireViewerSession();
                       if (!session) return;
                       const body = fantasyConfigForm.enabled
                         ? {
@@ -3540,7 +3537,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                     <button
                       type="button"
                       onClick={async () => {
-                        const session = await getViewerSession();
+                        const session = await requireViewerSession();
                         if (!session) return;
                         await fetch(`/api/majors/groups/${groupId}/group-charges/${gc.id}`, {
                           method: "PATCH",
@@ -3556,7 +3553,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                     <button
                       type="button"
                       onClick={async () => {
-                        const session = await getViewerSession();
+                        const session = await requireViewerSession();
                         if (!session) return;
                         await fetch(`/api/majors/groups/${groupId}/group-charges/${gc.id}`, {
                           method: "DELETE",
@@ -3679,7 +3676,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
               type="button"
               onClick={async () => {
                 if (!confirm("Delete this group? This cannot be undone.")) return;
-                const session = await getViewerSession();
+                const session = await requireViewerSession();
                 if (!session) return;
                 await fetch(`/api/majors/groups/${groupId}`, {
                   method: "DELETE",
@@ -3720,7 +3717,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       {/* Group hero */}
       <div className="px-4 mb-4 flex items-start gap-3">
         {group.image_url ? (
-          <img src={group.image_url} alt={group.name} className="h-14 w-14 rounded-2xl object-cover border border-emerald-700/40 shrink-0" />
+          <img src={group.image_url} alt={group.name} className="h-14 w-14 rounded-2xl object-cover border border-emerald-700/40 shrink-0" loading="lazy" decoding="async" />
         ) : (
           <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-emerald-800 to-emerald-950 flex items-center justify-center text-lg font-bold text-emerald-200 shrink-0">
             {group.name.slice(0, 2).toUpperCase()}
@@ -3776,7 +3773,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           >
             <div className="flex items-center gap-3">
               {selectedPlayerForDrawer.avatarUrl ? (
-                <img src={selectedPlayerForDrawer.avatarUrl} alt="" className="h-10 w-10 rounded-full object-cover shrink-0" />
+                <img src={selectedPlayerForDrawer.avatarUrl} alt="" className="h-10 w-10 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
               ) : (
                 <div className="h-10 w-10 rounded-full bg-emerald-900/60 grid place-items-center text-sm font-bold text-emerald-200 shrink-0">
                   {selectedPlayerForDrawer.name.slice(0, 2).toUpperCase()}

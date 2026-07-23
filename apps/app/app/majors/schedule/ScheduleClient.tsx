@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getViewerSession } from "@/lib/auth/viewerSession";
+import { requireViewerSession } from "@/lib/auth/requireViewerSession";
 import type { MajorScheduleItem } from "@/lib/majors/types";
 
 const FILTER_OPTIONS = [
@@ -32,7 +32,7 @@ export default function ScheduleClient() {
     (async () => {
       setLoading(true);
       try {
-        const session = await getViewerSession();
+        const session = await requireViewerSession();
         if (!session || cancelled) return;
         const params = filter ? `?status=${filter}` : "";
         const res = await fetch(`/api/majors/schedule${params}`, {

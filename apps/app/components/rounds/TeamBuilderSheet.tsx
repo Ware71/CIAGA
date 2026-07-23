@@ -351,7 +351,7 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onMutat
                         style={{ userSelect: "none", WebkitUserSelect: "none", touchAction: "none" }}
                       >
                         <div className="h-7 w-7 rounded-full border border-emerald-200/60 bg-[#0b3b21]/60 flex items-center justify-center text-[9px] font-semibold text-emerald-50 shrink-0 overflow-hidden">
-                          {p.avatarUrl ? <img src={p.avatarUrl} alt="" className="w-full h-full object-cover" /> : initialsFrom(p.name)}
+                          {p.avatarUrl ? <img src={p.avatarUrl} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" /> : initialsFrom(p.name)}
                         </div>
                         <div className="text-[12px] font-semibold text-emerald-50 flex-1 truncate">{p.name}</div>
                         <button
@@ -397,7 +397,7 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onMutat
                       style={{ userSelect: "none", WebkitUserSelect: "none", touchAction: "none" }}
                     >
                       <div className="h-7 w-7 rounded-full border border-emerald-200/60 bg-[#0b3b21]/60 flex items-center justify-center text-[9px] font-semibold text-emerald-50 shrink-0 overflow-hidden">
-                        {p.avatarUrl ? <img src={p.avatarUrl} alt="" className="w-full h-full object-cover" /> : initialsFrom(p.name)}
+                        {p.avatarUrl ? <img src={p.avatarUrl} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" /> : initialsFrom(p.name)}
                       </div>
                       <div className="text-[12px] font-semibold text-emerald-50 flex-1 truncate">{p.name}</div>
                     </div>
@@ -434,7 +434,7 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onMutat
         >
           <div className="h-6 w-6 rounded-full border border-emerald-200/60 bg-[#0b3b21]/60 flex items-center justify-center text-[9px] font-semibold text-emerald-50 shrink-0 overflow-hidden">
             {draggingParticipant.avatarUrl
-              ? <img src={draggingParticipant.avatarUrl} alt="" className="w-full h-full object-cover" />
+              ? <img src={draggingParticipant.avatarUrl} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
               : initialsFrom(draggingParticipant.name)}
           </div>
           <span className="text-[12px] font-semibold text-[#f5e6b0] whitespace-nowrap">{draggingParticipant.name}</span>

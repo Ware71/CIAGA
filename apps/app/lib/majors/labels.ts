@@ -1,4 +1,4 @@
-import type { EventWithGroup, EventStructure, MajorGroupType } from "./types";
+import type { EventWithGroup, EventStructure, MajorGroupType, EventTypeV2 } from "./types";
 
 const STRUCTURE_LABELS: Partial<Record<EventStructure, string>> = {
   league_fixture: "League Round",
@@ -47,4 +47,14 @@ export function eventStatusLabel(
   }
 
   return "Tournament Round";
+}
+
+// Matchplay type predicates. Lifted out of EventDetailClient so the server-side
+// snapshot builder decides "is this matchplay?" the same way the client does.
+export function isMatchplayLeague(type: EventTypeV2 | undefined | null) {
+  return type === "matchplay" || type === "matchplay_fixture";
+}
+
+export function isMatchplayKnockout(type: EventTypeV2 | undefined | null) {
+  return type === "matchplay_knockout_match";
 }

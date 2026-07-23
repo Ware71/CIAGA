@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getViewerSession } from "@/lib/auth/viewerSession";
+import { requireViewerSession } from "@/lib/auth/requireViewerSession";
 import type { EventPlayoff, CountbackResult } from "@/lib/majors/types";
 
 type Screen =
@@ -34,7 +35,7 @@ export function TieManagementDrawer({ eventId, initialScreen, onClose, onResolve
   // Load default tee info on mount
   useEffect(() => {
     (async () => {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const res = await fetch(`/api/majors/events/${eventId}/playoff`, {
         headers: { Authorization: `Bearer ${session.accessToken}` },
@@ -113,7 +114,7 @@ export function TieManagementDrawer({ eventId, initialScreen, onClose, onResolve
         final_positions: countbackResult.final_positions,
       });
       // Refresh to get the updated playoff record
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const res = await fetch(`/api/majors/events/${eventId}/playoff`, {
         headers: { Authorization: `Bearer ${session.accessToken}` },

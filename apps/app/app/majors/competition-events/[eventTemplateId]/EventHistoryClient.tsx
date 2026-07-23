@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getViewerSession } from "@/lib/auth/viewerSession";
+import { requireViewerSession } from "@/lib/auth/requireViewerSession";
 import type { EventViewerStats } from "@/lib/majors/types";
 
 type ViewerEntry = {
@@ -36,7 +36,7 @@ export default function EventHistoryClient({ eventTemplateId }: { eventTemplateI
     (async () => {
       setLoading(true);
       try {
-        const session = await getViewerSession();
+        const session = await requireViewerSession();
         if (!session || cancelled) return;
         const headers = { Authorization: `Bearer ${session.accessToken}` };
 
@@ -135,7 +135,7 @@ export default function EventHistoryClient({ eventTemplateId }: { eventTemplateI
               {row.winner ? (
                 <div className="flex items-center gap-2">
                   {row.winner.avatar_url ? (
-                    <img src={row.winner.avatar_url} alt="" className="h-6 w-6 rounded-full object-cover" />
+                    <img src={row.winner.avatar_url} alt="" className="h-6 w-6 rounded-full object-cover" loading="lazy" decoding="async" />
                   ) : (
                     <div className="h-6 w-6 rounded-full bg-emerald-900/60 grid place-items-center text-[9px] font-bold text-emerald-200">
                       {(row.winner.name ?? "?").slice(0, 2).toUpperCase()}

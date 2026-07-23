@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getServerViewer } from "@/lib/supabaseServer";
 import { getSetupSnapshot } from "@/lib/rounds/getSetupSnapshot";
 import SetupClient from "./SetupClient";
+
+export const metadata: Metadata = { title: "Round Setup" };
 
 export default async function SetupPage({
   params,

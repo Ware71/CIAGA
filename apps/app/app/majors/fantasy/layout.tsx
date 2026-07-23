@@ -1,7 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Wallet, Ticket, Trophy } from "lucide-react";
 
 /**
@@ -37,7 +38,6 @@ const TABS = [
 
 export default function FantasyLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
   const hideBar = pathname.includes("/inspector");
 
   return (
@@ -51,17 +51,17 @@ export default function FantasyLayout({ children }: { children: ReactNode }) {
             {TABS.map(({ href, label, Icon, match }) => {
               const active = match(pathname);
               return (
-                <button
+                <Link
                   key={href}
-                  type="button"
-                  onClick={() => router.push(href)}
+                  href={href}
+                  aria-current={active ? "page" : undefined}
                   className={`flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[10px] font-semibold transition-colors ${
                     active ? "text-[#f5e6b0]" : "text-emerald-200/50 hover:text-emerald-100/80"
                   }`}
                 >
                   <Icon className="h-5 w-5" strokeWidth={active ? 2.4 : 1.8} />
                   {label}
-                </button>
+                </Link>
               );
             })}
           </div>

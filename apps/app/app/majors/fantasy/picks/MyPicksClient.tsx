@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
-import { getViewerSession } from "@/lib/auth/viewerSession";
+import { requireViewerSession } from "@/lib/auth/requireViewerSession";
 import { safeJson } from "@/lib/fantasy/safeJson";
 import { COMBO_BET } from "@/lib/fantasy/terminology";
 import { OddsValue } from "@/components/fantasy/OddsValue";
@@ -101,7 +101,7 @@ export default function MyPicksClient() {
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchPicks = useCallback(async () => {
-    const session = await getViewerSession();
+    const session = await requireViewerSession();
     if (!session) return;
     const [picksRes, parlaysRes] = await Promise.all([
       fetch("/api/fantasy/picks", {
@@ -168,7 +168,7 @@ export default function MyPicksClient() {
     setCashoutError(null);
     setOffer(null);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const path =
         target.kind === "single"
@@ -209,7 +209,7 @@ export default function MyPicksClient() {
     setAccepting(true);
     setCashoutError(null);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const res = await fetch(`/api/fantasy/cashout/${offer.id}/accept`, {
         method: "POST",

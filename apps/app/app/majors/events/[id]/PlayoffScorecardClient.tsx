@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { getViewerSession } from "@/lib/auth/viewerSession";
+import { requireViewerSession } from "@/lib/auth/requireViewerSession";
 import { strokesReceivedOnHole } from "@/lib/rounds/handicapUtils";
 import { StrokeDots, PlusIndicator, BadgeWrap, scoreBadgeType } from "@/components/round/ScorecardCells";
 import { CoursePickerModal } from "@/components/rounds/CoursePickerModal";
@@ -56,7 +57,7 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore, scoringMode
   const [cbConfirming, setCbConfirming] = useState(false);
 
   async function load() {
-    const session = await getViewerSession();
+    const session = await requireViewerSession();
     if (!session) return;
     const res = await fetch(`/api/majors/events/${eventId}/playoff`, {
       headers: { Authorization: `Bearer ${session.accessToken}` },
@@ -497,7 +498,7 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore, scoringMode
 
 function PlayerAvatar({ profile }: { profile: Profile | undefined }) {
   if (profile?.avatar_url) {
-    return <img src={profile.avatar_url} alt="" className="h-5 w-5 rounded-full object-cover shrink-0" />;
+    return <img src={profile.avatar_url} alt="" className="h-5 w-5 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />;
   }
   return (
     <div className="h-5 w-5 rounded-full bg-emerald-900/60 grid place-items-center text-[8px] font-bold text-emerald-200 shrink-0">

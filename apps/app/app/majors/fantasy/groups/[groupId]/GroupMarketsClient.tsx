@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
-import { getViewerSession } from "@/lib/auth/viewerSession";
+import { requireViewerSession } from "@/lib/auth/requireViewerSession";
 import { OddsFormatMenu, OddsValue } from "@/components/fantasy/OddsValue";
 import type { FantasyConfig } from "@/lib/fantasy/types";
 import type { PreviewTableModel } from "@/lib/fantasy/board/groupBoard";
@@ -97,7 +97,7 @@ export default function GroupMarketsClient({ groupId }: { groupId: string }) {
   const [refreshingAll, setRefreshingAll] = useState(false);
 
   const load = useCallback(async () => {
-    const session = await getViewerSession();
+    const session = await requireViewerSession();
     if (!session) return;
     const headers = { Authorization: `Bearer ${session.accessToken}` };
     const [meRes, seasonRes] = await Promise.all([
@@ -135,7 +135,7 @@ export default function GroupMarketsClient({ groupId }: { groupId: string }) {
   const handleTopUp = async () => {
     setToppingUp(true);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       await fetch(`/api/fantasy/groups/${groupId}/topup`, {
         method: "POST",
@@ -158,7 +158,7 @@ export default function GroupMarketsClient({ groupId }: { groupId: string }) {
     if (refreshingAll) return;
     setRefreshingAll(true);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       await fetch(`/api/fantasy/groups/${groupId}/refresh`, {
         method: "POST",

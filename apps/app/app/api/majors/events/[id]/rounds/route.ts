@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
+import { getEventRounds } from "@/lib/majors/eventDetailQueries";
 
 export const runtime = "nodejs";
 
@@ -10,20 +11,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     await getAuthedProfileOrThrow(req);
     const { id } = await params;
 
-    const { data, error } = await supabaseAdmin
-      .from("event_rounds")
-      .select(`
-        *,
-        course:courses(id, name),
-        tee_male:course_tee_boxes!event_rounds_default_tee_box_id_male_fkey(id, name),
-        tee_female:course_tee_boxes!event_rounds_default_tee_box_id_female_fkey(id, name)
-      `)
-      .eq("event_id", id)
-      .order("round_number", { ascending: true });
+    const data = await getEventRounds(id);
 
-    if (error) throw error;
-
-    return NextResponse.json({ rounds: data ?? [] }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ rounds: data }, { headers: { "Cache-Control": "no-store" } });
   } catch (e: any) {
     const msg = e?.message ?? "Unknown error";
     const status = String(msg).toLowerCase().includes("auth") ? 401 : 500;

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
+import { getEventLeagueTable } from "@/lib/majors/eventDetailQueries";
 
 export const runtime = "nodejs";
 
@@ -10,19 +10,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     await getAuthedProfileOrThrow(req);
     const { id } = await params;
 
-    const { data, error } = await supabaseAdmin
-      .from("matchplay_league_table_entries")
-      .select(`
-        *,
-        profile:profiles(id, name, avatar_url)
-      `)
-      .eq("event_id", id)
-      .order("position", { ascending: true });
-
-    if (error) throw error;
+    const data = await getEventLeagueTable(id);
 
     return NextResponse.json(
-      { entries: data ?? [] },
+      { entries: data },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (e: any) {

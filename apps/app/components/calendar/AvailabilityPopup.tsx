@@ -49,8 +49,8 @@ export function AvailabilityPopup(props: {
           <div className="mx-auto w-full max-w-[520px] max-h-[85vh] overflow-y-auto rounded-t-3xl border border-emerald-900/70 bg-[#061f12] shadow-2xl">
             <div className="sticky top-0 flex items-center justify-between border-b border-emerald-900/60 bg-[#061f12] p-4">
               <div className="text-sm font-semibold text-emerald-50">{formatDayLabel(day)}</div>
-              <button onClick={onClose} className="text-emerald-100/70 hover:text-emerald-50">
-                <X size={18} />
+              <button onClick={onClose} className="text-emerald-100/70 hover:text-emerald-50" aria-label="Close">
+                <X size={18} aria-hidden="true" />
               </button>
             </div>
 

@@ -61,7 +61,7 @@ function AvatarCircle({
 }) {
   const cls = size === "sm" ? "h-8 w-8 text-[9px]" : size === "lg" ? "h-16 w-16 text-sm" : "h-10 w-10 text-[10px]";
   if (profile?.avatar_url) {
-    return <img src={profile.avatar_url} alt="" className={`${cls} rounded-full object-cover shrink-0`} />;
+    return <img src={profile.avatar_url} alt="" className={`${cls} rounded-full object-cover shrink-0`} loading="lazy" decoding="async" />;
   }
   return (
     <div className={`${cls} rounded-full bg-emerald-900/60 grid place-items-center font-bold text-emerald-200 shrink-0`}>
@@ -367,7 +367,7 @@ const FloatingBubble = memo(function FloatingBubble({
         className="w-full h-full rounded-full border-2 border-emerald-700/50 bg-emerald-900/60 grid place-items-center overflow-hidden shadow-lg"
       >
         {profile?.avatar_url ? (
-          <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
+          <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
         ) : (
           <span className="text-[11px] font-bold text-emerald-200">
             {profile?.name?.slice(0, 2).toUpperCase() ?? "?"}

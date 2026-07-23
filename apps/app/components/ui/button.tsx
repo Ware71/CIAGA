@@ -36,24 +36,72 @@ const buttonVariants = cva(
   }
 )
 
+function Spinner() {
+  return (
+    <svg
+      className="animate-spin size-4"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      data-slot="button-spinner"
+    >
+      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-25" />
+      <path
+        d="M12 2a10 10 0 0 1 10 10"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+        className="opacity-90"
+      />
+    </svg>
+  )
+}
+
 function Button({
   className,
   variant,
   size,
   asChild = false,
+  pending = false,
+  disabled,
+  children,
   ...props
 }: React.ComponentProps<"button"> &
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean
+    /**
+     * In-flight state. Disables the button and swaps in a spinner, so every
+     * action doesn't have to hand-roll `disabled={busy}` + `{busy ? "…" : label}`
+     * — and so the ones that forget don't stay double-tappable.
+     * Ignored when `asChild` is set, since the child owns its own rendering.
+     */
+    pending?: boolean
   }) {
   const Comp = asChild ? Slot : "button"
+
+  if (asChild) {
+    return (
+      <Comp
+        data-slot="button"
+        className={cn(buttonVariants({ variant, size, className }))}
+        {...props}
+      >
+        {children}
+      </Comp>
+    )
+  }
 
   return (
     <Comp
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
+      disabled={disabled || pending}
+      aria-busy={pending || undefined}
       {...props}
-    />
+    >
+      {pending ? <Spinner /> : null}
+      {children}
+    </Comp>
   )
 }
 

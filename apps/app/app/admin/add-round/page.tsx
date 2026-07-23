@@ -264,7 +264,7 @@ export default function AddHistoricalRoundPage() {
       <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8">
         <div className="mx-auto w-full max-w-lg space-y-4">
           <header className="flex items-center justify-between">
-            <BackButton onClick={() => router.push("/admin")} />
+            <BackButton href="/admin" />
             <div className="text-center flex-1">
               <div className="text-lg font-semibold tracking-wide text-[#f5e6b0]">Add Historical Round</div>
             </div>

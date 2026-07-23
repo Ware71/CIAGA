@@ -15,6 +15,7 @@ import { MiniFeedTeaserCard } from "@/components/social/MiniFeedTeaser";
 import { MajorsView } from "@/components/home/MajorsView";
 import type { MajorHubSummary } from "@/lib/majors/types";
 import { getViewerSession } from "@/lib/auth/viewerSession";
+import { requireViewerSession } from "@/lib/auth/requireViewerSession";
 import { LoadingScreen } from "@/components/ui/loading-screen";
 import { getCachedHomeData, setCachedHomeData } from "@/lib/home/homeDataCache";
 import NotificationCenter from "@/components/notifications/NotificationCenter";
@@ -62,9 +63,11 @@ function BellIcon(props: { size?: number; className?: string }) {
 type Props = {
   initialData?: HomeSummary;
   initialMajors?: MajorHubSummary | null;
+  /** Server-resolved viewer id — skips the client-side session round trip. */
+  initialProfileId?: string | null;
 };
 
-export default function HomeClient({ initialData, initialMajors }: Props) {
+export default function HomeClient({ initialData, initialMajors, initialProfileId }: Props) {
   const router = useRouter();
 
   const seed = initialData;
@@ -72,7 +75,10 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
   // Show splash on first visit; skip on back navigation (splash_shown persists in sessionStorage).
   // useLayoutEffect runs before paint so returning users never see the overlay flash.
   const [showSplash, setShowSplash] = useState(true);
-  const [dataReady, setDataReady] = useState(false);
+  // Server-seeded means there's nothing left to wait for — without this the
+  // splash would never dismiss, because the fetch effect that clears it returns
+  // early when initialData is present.
+  const [dataReady, setDataReady] = useState(!!initialData);
   useLayoutEffect(() => {
     if (sessionStorage.getItem("splash_shown") === "1") setShowSplash(false);
   }, []);
@@ -84,7 +90,7 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
   const [vh, setVh] = useState(844);
 
   const [liveRoundId, setLiveRoundId] = useState<string | null>(seed?.live_round_id ?? null);
-  const [myProfileId, setMyProfileId] = useState<string | null>(null);
+  const [myProfileId, setMyProfileId] = useState<string | null>(initialProfileId ?? null);
 
   const [handicapIndex, setHandicapIndex] = useState<number | null>(seed?.handicap?.current ?? null);
   const [handicapDelta30, setHandicapDelta30] = useState<number>(seed?.handicap?.delta_30d ?? 0);
@@ -148,7 +154,12 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
   // Loads in priority order: essential player info gates the splash; the social
   // feed + Majors hub stream in afterwards without blocking it.
   useEffect(() => {
-    if (initialData) return;
+    // Server-seeded: nothing to fetch. Still prime the module cache so a later
+    // client-side return to /home hits the instant path rather than refetching.
+    if (initialData) {
+      setCachedHomeData(initialData, initialMajors ?? null);
+      return;
+    }
 
     const applyCore = (data: HomeCore) => {
       setLiveRoundId(data.live_round_id ?? null);
@@ -445,7 +456,7 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
                       >
                         <div className="h-9 w-9 rounded-full bg-emerald-900/60 grid place-items-center text-[11px] font-bold text-emerald-200 shrink-0 overflow-hidden">
                           {inv.group.image_url
-                            ? <img src={inv.group.image_url} alt="" className="h-full w-full object-cover" />
+                            ? <img src={inv.group.image_url} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" />
                             : inv.group.name.slice(0, 2).toUpperCase()}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -471,7 +482,7 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
                               if (!myProfileId) return;
                               setActioningInvite((prev) => ({ ...prev, [inv.group_id]: "declining" }));
                               try {
-                                const session = await getViewerSession();
+                                const session = await requireViewerSession();
                                 if (!session) return;
                                 await fetch(`/api/majors/groups/${inv.group_id}/members?profile_id=${myProfileId}`, {
                                   method: "DELETE",
@@ -538,7 +549,7 @@ export default function HomeClient({ initialData, initialMajors }: Props) {
                               if (!myProfileId) return;
                               setActioningInvite((prev) => ({ ...prev, [inv.event_id]: "declining" }));
                               try {
-                                const session = await getViewerSession();
+                                const session = await requireViewerSession();
                                 if (!session) return;
                                 await fetch(`/api/majors/events/${inv.event_id}/invitations?profile_id=${myProfileId}`, {
                                   method: "DELETE",

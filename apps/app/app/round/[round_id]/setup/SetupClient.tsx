@@ -48,7 +48,7 @@ function Avatar({
     >
       {url ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={url} alt={name} className="w-full h-full object-cover" />
+        <img src={url} alt={name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
       ) : (
         <div className="text-[11px] font-semibold text-emerald-100/80">{initials}</div>
       )}

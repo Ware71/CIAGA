@@ -2,7 +2,14 @@
 
 import { useState } from "react";
 import type { FeedItemDetail as FeedItemDetailData, MatchplayDetail, HoleStatBlock } from "@/lib/feed/types";
-import RoundProgressionChart from "./RoundProgressionChart";
+import dynamic from "next/dynamic";
+
+// recharts is the single biggest dependency in the app and only ever renders
+// inside an opened feed detail — keep it out of the main bundle.
+const RoundProgressionChart = dynamic(() => import("./RoundProgressionChart"), {
+  ssr: false,
+  loading: () => <div className="h-48 w-full animate-pulse rounded-2xl bg-emerald-900/30" />,
+});
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (

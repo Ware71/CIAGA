@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getViewerSession } from "@/lib/auth/viewerSession";
+import { requireViewerSession } from "@/lib/auth/requireViewerSession";
 import type {
   SeasonFinancialSummary,
   PrizePotWithDetails,
@@ -85,7 +85,7 @@ export default function GroupSeasonDetailClient({ groupSeasonId }: { groupSeason
     (async () => {
       setLoading(true);
       try {
-        const session = await getViewerSession();
+        const session = await requireViewerSession();
         if (!session || cancelled) return;
         const headers = { Authorization: `Bearer ${session.accessToken}` };
 
@@ -117,7 +117,7 @@ export default function GroupSeasonDetailClient({ groupSeasonId }: { groupSeason
     let cancelled = false;
     (async () => {
       setFinancialsError(null);
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session || cancelled) return;
       const headers = { Authorization: `Bearer ${session.accessToken}` };
       const [res, potsRes] = await Promise.all([
@@ -141,7 +141,7 @@ export default function GroupSeasonDetailClient({ groupSeasonId }: { groupSeason
   }, [tab, groupSeasonId]);
 
   const refreshPots = async () => {
-    const session = await getViewerSession();
+    const session = await requireViewerSession();
     if (!session) return;
     const res = await fetch(`/api/majors/group-seasons/${groupSeasonId}/prize-pots`, {
       headers: { Authorization: `Bearer ${session.accessToken}` },
@@ -153,7 +153,7 @@ export default function GroupSeasonDetailClient({ groupSeasonId }: { groupSeason
     if (!addPotForm || !addPotForm.name.trim()) return;
     setAddingPot(true); setPotError(null);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const res = await fetch(`/api/majors/group-seasons/${groupSeasonId}/prize-pots`, {
         method: "POST",
@@ -178,7 +178,7 @@ export default function GroupSeasonDetailClient({ groupSeasonId }: { groupSeason
   const handleProposeDist = async (potId: string) => {
     setPotActionLoading(potId + ":propose"); setPotError(null); setProposedDist(null);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const res = await fetch(`/api/majors/prize-pots/${potId}/distribute`, {
         method: "POST",
@@ -194,7 +194,7 @@ export default function GroupSeasonDetailClient({ groupSeasonId }: { groupSeason
   const handleConfirmDist = async (potId: string) => {
     setPotActionLoading(potId + ":confirm"); setPotError(null);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const res = await fetch(`/api/majors/prize-pots/${potId}/distribute`, {
         method: "POST",
@@ -211,7 +211,7 @@ export default function GroupSeasonDetailClient({ groupSeasonId }: { groupSeason
   const handleDeletePot = async (potId: string) => {
     setPotActionLoading(potId + ":delete"); setPotError(null);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const res = await fetch(`/api/majors/prize-pots/${potId}`, {
         method: "DELETE",
@@ -377,7 +377,7 @@ export default function GroupSeasonDetailClient({ groupSeasonId }: { groupSeason
                     {row.position ?? "—"}
                   </span>
                   {row.profile?.avatar_url ? (
-                    <img src={row.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
+                    <img src={row.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
                   ) : (
                     <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
                       {row.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
@@ -431,7 +431,7 @@ export default function GroupSeasonDetailClient({ groupSeasonId }: { groupSeason
                     financials.per_player.map((p) => (
                       <div key={p.profile_id} className="flex items-center gap-3 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5">
                         {p.profile?.avatar_url ? (
-                          <img src={p.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
+                          <img src={p.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
                         ) : (
                           <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
                             {p.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}

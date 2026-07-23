@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getViewerSession } from "@/lib/auth/viewerSession";
+import { requireViewerSession } from "@/lib/auth/requireViewerSession";
 import type {
   CompetitionWithEventTemplates,
   EventWithGroup,
@@ -90,8 +90,8 @@ function CompetitionEditModal({
     setSaving(true);
     setError(null);
     try {
-      const session = await getViewerSession();
-      if (!session) { setError("Not signed in"); return; }
+      const session = await requireViewerSession();
+      if (!session) return;
 
       const template_settings: Record<string, unknown> = { handicap_mode: handicapRules.mode };
       if (handicapRules.mode === "allowance_pct" || handicapRules.mode === "compare_against_lowest")
@@ -295,8 +295,8 @@ export default function CompetitionDetailClient({ competitionId }: { competition
   const load = async () => {
     setLoading(true);
     try {
-      const session = await getViewerSession();
-      if (!session) { router.push("/login"); return; }
+      const session = await requireViewerSession();
+      if (!session) return;
       const headers = { Authorization: `Bearer ${session.accessToken}` };
 
       const [competitionRes, historyRes] = await Promise.all([

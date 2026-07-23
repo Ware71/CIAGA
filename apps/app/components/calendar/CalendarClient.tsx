@@ -381,7 +381,7 @@ export function CalendarClient() {
       <div className="mx-auto flex w-full min-h-0 max-w-md flex-1 flex-col gap-2.5 landscape:max-w-5xl">
         {/* Centered title; funnel opens the settings sheet (scope + view + filter) */}
         <header className="relative flex shrink-0 items-center">
-          <BackButton onClick={() => router.replace("/round")} />
+          <BackButton href="/round" />
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
             <div className="text-base font-semibold tracking-wide text-[#f5e6b0]">Calendar</div>
             <div className="max-w-[60%] truncate text-[10px] text-emerald-200/60">{scopeLabel}</div>

@@ -61,8 +61,8 @@ export function CircleManager(props: {
         >
           <div className="sticky top-0 flex items-center justify-between border-b border-emerald-900/60 bg-[#061f12] p-4">
             <div className="text-sm font-semibold text-emerald-50">Circles</div>
-            <button onClick={onClose} className="text-emerald-100/70 hover:text-emerald-50">
-              <X size={18} />
+            <button onClick={onClose} className="text-emerald-100/70 hover:text-emerald-50" aria-label="Close">
+              <X size={18} aria-hidden="true" />
             </button>
           </div>
 
@@ -142,20 +142,20 @@ function CircleRow(props: {
       setResults([]);
       return;
     }
-    let cancelled = false;
+    const controller = new AbortController();
     setSearching(true);
     const t = setTimeout(async () => {
       try {
-        const r = await searchProfiles(q);
-        if (!cancelled) setResults(r);
+        const r = await searchProfiles(q, controller.signal);
+        if (!controller.signal.aborted) setResults(r);
       } catch {
-        if (!cancelled) setResults([]);
+        if (!controller.signal.aborted) setResults([]);
       } finally {
-        if (!cancelled) setSearching(false);
+        if (!controller.signal.aborted) setSearching(false);
       }
     }, 250);
     return () => {
-      cancelled = true;
+      controller.abort();
       clearTimeout(t);
     };
   }, [query, expanded]);

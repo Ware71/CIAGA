@@ -133,7 +133,7 @@ export default function ExportRoundsPage() {
 
         {/* Header */}
         <header className="flex items-center justify-between">
-          <BackButton onClick={() => router.push("/admin")} />
+          <BackButton href="/admin" />
           <div className="text-center flex-1">
             <div className="text-lg font-semibold tracking-wide text-[#f5e6b0]">Export Rounds</div>
             <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">Admin · CSV</div>

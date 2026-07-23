@@ -92,8 +92,8 @@ export function RoundInfoSheet(props: { roundId: string; onClose: () => void }) 
                   </div>
                 ) : null}
               </div>
-              <button onClick={onClose} className="ml-2 text-emerald-100/70 hover:text-emerald-50">
-                <X size={18} />
+              <button onClick={onClose} className="ml-2 text-emerald-100/70 hover:text-emerald-50" aria-label="Close">
+                <X size={18} aria-hidden="true" />
               </button>
             </div>
 

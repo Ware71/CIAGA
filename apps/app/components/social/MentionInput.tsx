@@ -10,12 +10,13 @@ type SearchProfile = { id: string; name: string | null; avatar_url: string | nul
 // Active "@token" immediately before the caret (letters/digits/underscore).
 const TOKEN_RE = /(?:^|\s)@([\p{L}0-9_]{0,30})$/u;
 
-async function searchProfiles(q: string): Promise<SearchProfile[]> {
+async function searchProfiles(q: string, signal?: AbortSignal): Promise<SearchProfile[]> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
   if (!token) return [];
   const res = await fetch(`/api/profiles/search?q=${encodeURIComponent(q)}`, {
     headers: { Authorization: `Bearer ${token}` },
+    signal,
   });
   if (!res.ok) return [];
   const json = await res.json();
@@ -61,16 +62,22 @@ export default function MentionInput({
       setOpen(false);
       return;
     }
-    let cancelled = false;
+    // Abort the in-flight request as well as ignoring its result — every
+    // keystroke used to leave its own request running to completion.
+    const controller = new AbortController();
     const t = setTimeout(async () => {
-      const r = await searchProfiles(query);
-      if (!cancelled) {
-        setResults(r);
-        setOpen(r.length > 0);
+      try {
+        const r = await searchProfiles(query, controller.signal);
+        if (!controller.signal.aborted) {
+          setResults(r);
+          setOpen(r.length > 0);
+        }
+      } catch {
+        // aborted or offline — leave the previous suggestions in place
       }
     }, 200);
     return () => {
-      cancelled = true;
+      controller.abort();
       clearTimeout(t);
     };
   }, [query]);

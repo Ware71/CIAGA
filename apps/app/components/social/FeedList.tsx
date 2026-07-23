@@ -77,9 +77,17 @@ export default function FeedList({ refreshKey, focusId, initialData }: Props) {
 
   // The deep-linked card, pinned to the top — fetched separately if it isn't
   // already in the loaded page.
+  //
+  // Keyed on focusId alone. With `items` in the deps this re-fetched the focused
+  // card after every loadMore(), since a card that isn't in page 1 still isn't in
+  // page 2. The membership check is read through a ref so it stays current
+  // without re-triggering.
   const [focusFetched, setFocusFetched] = useState<FeedItemVM | null>(null);
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+
   useEffect(() => {
-    if (!focusId || items.some((it) => it.id === focusId)) {
+    if (!focusId || itemsRef.current.some((it) => it.id === focusId)) {
       setFocusFetched(null);
       return;
     }
@@ -95,7 +103,7 @@ export default function FeedList({ refreshKey, focusId, initialData }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [focusId, items]);
+  }, [focusId]);
 
   const focusItem = useMemo(
     () => items.find((it) => it.id === focusId) ?? focusFetched,
@@ -142,6 +150,27 @@ export default function FeedList({ refreshKey, focusId, initialData }: Props) {
     void loadInitial();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey]);
+
+  // Infinite scroll. Reuses the same IntersectionObserver approach already used
+  // for seen-marking; `rootMargin` starts the next page before the user reaches
+  // the bottom so the list rarely stalls.
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const loadMoreRef = useRef(loadMore);
+  loadMoreRef.current = loadMore;
+
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || !nextCursor) return;
+
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) void loadMoreRef.current();
+      },
+      { rootMargin: "400px 0px" },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [nextCursor]);
 
   // Capture the seen snapshot + initial id set once, after mount (client-only).
   useEffect(() => {
@@ -244,6 +273,11 @@ export default function FeedList({ refreshKey, focusId, initialData }: Props) {
       {seen.map((item) => (
         <SeenCard key={item.id} item={item} />
       ))}
+
+      {/* Auto-load sentinel — the observer below fires loadMore() as it comes
+          into view. The button stays as the manual fallback (and for when the
+          observer can't run), so nothing regresses if IO is unavailable. */}
+      <div ref={sentinelRef} aria-hidden className="h-px w-full" />
 
       <div className="flex justify-center">
         {nextCursor ? (
