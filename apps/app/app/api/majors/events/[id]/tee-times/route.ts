@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 import { getEventById } from "@/lib/majors/queries";
+import { getEventTeeTimes } from "@/lib/majors/eventDetailQueries";
 import { createNotificationsForMany } from "@/lib/notifications/notify";
 
 export const runtime = "nodejs";
@@ -12,76 +13,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     await getAuthedProfileOrThrow(req);
     const { id } = await params;
 
-    const { data: teeTimes, error } = await supabaseAdmin
-      .from("event_tee_times")
-      .select("*")
-      .eq("event_id", id)
-      .order("tee_time", { ascending: true });
-
-    if (error) throw error;
-
-    if (!teeTimes || teeTimes.length === 0) {
-      return NextResponse.json({ tee_times: [] }, { headers: { "Cache-Control": "no-store" } });
-    }
-
-    // Fetch event rounds for grouping context
-    const { data: eventRounds } = await supabaseAdmin
-      .from("event_rounds")
-      .select("id, round_number, name, scheduled_date")
-      .eq("event_id", id);
-
-    const eventRoundById: Record<string, { id: string; round_number: number; name: string; scheduled_date: string | null }> =
-      Object.fromEntries((eventRounds ?? []).map((r: any) => [r.id, r]));
-
-    // Fetch linked rounds with participants + profiles
-    const roundIds = teeTimes.map((t) => t.round_id).filter(Boolean) as string[];
-
-    let roundMap: Record<string, { id: string; status: string; participants: any[] }> = {};
-
-    if (roundIds.length > 0) {
-      const { data: participants } = await supabaseAdmin
-        .from("round_participants")
-        .select(`
-          round_id,
-          profile_id,
-          is_guest,
-          display_name,
-          role,
-          profiles:profile_id (id, name, avatar_url)
-        `)
-        .in("round_id", roundIds);
-
-      const { data: rounds } = await supabaseAdmin
-        .from("rounds")
-        .select("id, status")
-        .in("id", roundIds);
-
-      for (const round of rounds ?? []) {
-        roundMap[round.id] = {
-          id: round.id,
-          status: round.status,
-          participants: [],
-        };
-      }
-
-      for (const p of participants ?? []) {
-        if (roundMap[p.round_id]) {
-          roundMap[p.round_id].participants.push({
-            profile_id: p.profile_id,
-            is_guest: p.is_guest,
-            display_name: p.display_name,
-            role: p.role,
-            profile: p.profiles ?? null,
-          });
-        }
-      }
-    }
-
-    const result = teeTimes.map((t) => ({
-      ...t,
-      event_round: t.event_round_id ? (eventRoundById[t.event_round_id] ?? null) : null,
-      round: t.round_id ? (roundMap[t.round_id] ?? null) : null,
-    }));
+    const result = await getEventTeeTimes(id);
 
     return NextResponse.json({ tee_times: result }, { headers: { "Cache-Control": "no-store" } });
   } catch (e: any) {

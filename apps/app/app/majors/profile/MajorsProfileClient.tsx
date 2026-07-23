@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getViewerSession } from "@/lib/auth/viewerSession";
+import { requireViewerSession } from "@/lib/auth/requireViewerSession";
 import type { MajorProfileData } from "@/lib/majors/types";
 
 export default function MajorsProfileClient() {
@@ -15,7 +15,7 @@ export default function MajorsProfileClient() {
     (async () => {
       setLoading(true);
       try {
-        const session = await getViewerSession();
+        const session = await requireViewerSession();
         if (!session || cancelled) return;
         const res = await fetch("/api/majors/profile", {
           headers: { Authorization: `Bearer ${session.accessToken}` },
@@ -49,7 +49,7 @@ export default function MajorsProfileClient() {
           {/* Profile header */}
           <div className="flex items-center gap-4">
             {data.profile.avatar_url ? (
-              <img src={data.profile.avatar_url} alt="" className="h-14 w-14 rounded-full object-cover border border-emerald-900/60" />
+              <img src={data.profile.avatar_url} alt="" className="h-14 w-14 rounded-full object-cover border border-emerald-900/60" loading="lazy" decoding="async" />
             ) : (
               <div className="h-14 w-14 rounded-full bg-emerald-900/60 grid place-items-center text-xl font-bold text-emerald-200">
                 {data.profile.name?.slice(0, 2).toUpperCase() ?? "?"}

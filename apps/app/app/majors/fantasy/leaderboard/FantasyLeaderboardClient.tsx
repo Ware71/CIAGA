@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getViewerSession } from "@/lib/auth/viewerSession";
+import { requireViewerSession } from "@/lib/auth/requireViewerSession";
 import type { FantasyConfig } from "@/lib/fantasy/types";
 
 type FantasyGroup = {
@@ -39,7 +39,7 @@ export default function FantasyLeaderboardClient() {
     let cancelled = false;
     (async () => {
       try {
-        const session = await getViewerSession();
+        const session = await requireViewerSession();
         if (!session || cancelled) return;
         const res = await fetch("/api/fantasy/me", {
           headers: { Authorization: `Bearer ${session.accessToken}` },
@@ -60,7 +60,7 @@ export default function FantasyLeaderboardClient() {
   const fetchEntries = useCallback(async (gid: string) => {
     setLoadingEntries(true);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const res = await fetch(`/api/fantasy/groups/${gid}/leaderboard`, {
         headers: { Authorization: `Bearer ${session.accessToken}` },
@@ -141,7 +141,7 @@ export default function FantasyLeaderboardClient() {
                     {e.position}
                   </span>
                   {e.avatar_url ? (
-                    <img src={e.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
+                    <img src={e.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
                   ) : (
                     <div className="h-8 w-8 rounded-full bg-emerald-900/60 grid place-items-center text-[11px] font-bold text-emerald-200 shrink-0">
                       {e.name.slice(0, 2).toUpperCase()}

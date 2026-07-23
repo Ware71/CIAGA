@@ -66,13 +66,20 @@ function truncate(s: string, n = 80): string {
   return t.length > n ? `${t.slice(0, n - 1)}…` : t;
 }
 
-/** ISO timestamp → "Jun 30 at 2:30 PM" (viewer's local time on the client).
+// The app is UK-only, so tee times are always in UK local time. This must be
+// pinned explicitly because renderNotification also runs server-side (Vercel
+// Node = UTC) when building push bodies — without it, pushes render in UTC.
+// Europe/London auto-handles BST vs GMT and matches the UK browser output, so
+// the in-app bell (which renders client-side) is unaffected.
+const APP_TIME_ZONE = "Europe/London";
+
+/** ISO timestamp → "Jun 30 at 2:30 PM" in UK local time (Europe/London).
  *  Non-ISO / already-formatted values are returned unchanged. */
 function formatTeeTime(v: string): string {
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return v;
-  const date = d.toLocaleDateString([], { month: "short", day: "numeric" });
-  const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const date = d.toLocaleDateString([], { month: "short", day: "numeric", timeZone: APP_TIME_ZONE });
+  const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", timeZone: APP_TIME_ZONE });
   return `${date} at ${time}`;
 }
 

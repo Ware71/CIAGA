@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getViewerSession } from "@/lib/auth/viewerSession";
+import { requireViewerSession } from "@/lib/auth/requireViewerSession";
 import { supabase } from "@/lib/supabaseClient";
 import type {
   LeaderboardEntryWithProfile,
@@ -12,7 +12,13 @@ import type {
   LeaderboardRevealStyle,
   EventPlayoff,
 } from "@/lib/majors/types";
-import { LeaderboardReveal } from "@/components/majors/LeaderboardReveal";
+import dynamic from "next/dynamic";
+
+// Only mounts when a frozen leaderboard is revealed — a rare, deliberate action.
+const LeaderboardReveal = dynamic(
+  () => import("@/components/majors/LeaderboardReveal").then((m) => m.LeaderboardReveal),
+  { ssr: false }
+);
 import { TieBanner, PlayoffStatusBanner } from "./TieBanner";
 import { TieManagementDrawer } from "./TieManagementDrawer";
 
@@ -87,7 +93,7 @@ export default function LeaderboardClient() {
   const accessTokenRef = useRef<string | null>(null);
 
   async function fetchLeaderboard(id: string, t: Tab) {
-    const session = await getViewerSession();
+    const session = await requireViewerSession();
     if (!session) return;
     accessTokenRef.current = session.accessToken;
 
@@ -189,7 +195,7 @@ export default function LeaderboardClient() {
     if (!competitionId) return;
     setRevealLoading(true);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const res = await fetch(`/api/majors/events/${competitionId}/freeze-control`, {
         method: "POST",
@@ -365,7 +371,7 @@ export default function LeaderboardClient() {
                 onClick={() => router.push(`/player/${row.profile_id}`)}
               >
                 {row.profile?.avatar_url ? (
-                  <img src={row.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
+                  <img src={row.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
                 ) : (
                   <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
                     {row.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}

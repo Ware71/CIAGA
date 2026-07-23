@@ -8,6 +8,7 @@ import type { RoundFormatType } from "@/lib/rounds/hooks/useRoundDetail";
 import type { FormatDisplayData } from "@/lib/rounds/formatScoring";
 import { supabase } from "@/lib/supabaseClient";
 import { getViewerSession } from "@/lib/auth/viewerSession";
+import { requireViewerSession } from "@/lib/auth/requireViewerSession";
 import { FEDEX_POINTS } from "@/lib/events/constants";
 import { formatHI } from "@/lib/rounds/handicapUtils";
 
@@ -227,7 +228,7 @@ export default function RoundMenuSheet(props: {
     if (!roundId || startingHoleSaving) return;
     setStartingHoleSaving(true);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       await fetch(`/api/rounds/${roundId}/starting-hole`, {
         method: "PATCH",

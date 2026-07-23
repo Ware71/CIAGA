@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getViewerSession } from "@/lib/auth/viewerSession";
+import { requireViewerSession } from "@/lib/auth/requireViewerSession";
 import { safeJson } from "@/lib/fantasy/safeJson";
 
 /**
@@ -101,7 +101,7 @@ export default function InspectorClient({ eventId }: { eventId: string }) {
   const isSandbox = process.env.NEXT_PUBLIC_APP_ENV === "sandbox";
 
   const fetchData = useCallback(async () => {
-    const session = await getViewerSession();
+    const session = await requireViewerSession();
     if (!session) return;
     const res = await fetch(`/api/fantasy/events/${eventId}/inspect`, {
       headers: { Authorization: `Bearer ${session.accessToken}` },
@@ -128,7 +128,7 @@ export default function InspectorClient({ eventId }: { eventId: string }) {
   }, [fetchData, isSandbox]);
 
   const exportExcel = useCallback(async () => {
-    const session = await getViewerSession();
+    const session = await requireViewerSession();
     if (!session) return;
     setBusy("export");
     setError(null);
@@ -161,7 +161,7 @@ export default function InspectorClient({ eventId }: { eventId: string }) {
 
   const runAction = useCallback(
     async (label: string, path: string, body?: unknown) => {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       setBusy(label);
       setError(null);

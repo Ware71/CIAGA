@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getViewerSession } from "@/lib/auth/viewerSession";
+import { requireViewerSession } from "@/lib/auth/requireViewerSession";
 import { NumberField } from "@/components/ui/NumberField";
 import { InvitePlayerSheet } from "@/app/majors/groups/InvitePlayerSheet";
 import type {
@@ -27,11 +28,21 @@ import type {
   EventPlayoff,
 } from "@/lib/majors/types";
 import { EVENT_TYPES, SCORING_MODELS, POINTS_MODELS, FEDEX_POINTS, computeFormulaPoints } from "@/lib/events/constants";
+import { isMatchplayLeague, isMatchplayKnockout } from "@/lib/majors/labels";
+import { useDebouncedRefresh } from "@/lib/majors/useDebouncedRefresh";
+import { runGuarded } from "@/lib/guardedAction";
+import type { EventDetailSnapshot } from "@/lib/majors/getEventDetailSnapshot";
 import type { PointsConfig } from "@/lib/majors/types";
 import { HandicapRulesEditor } from "@/components/competitions/HandicapRulesEditor";
 import { CoursePickerModal } from "@/components/rounds/CoursePickerModal";
 import { supabase } from "@/lib/supabaseClient";
-import { LeaderboardReveal } from "@/components/majors/LeaderboardReveal";
+import dynamic from "next/dynamic";
+
+// Only mounts when a frozen leaderboard is revealed — a rare, deliberate action.
+const LeaderboardReveal = dynamic(
+  () => import("@/components/majors/LeaderboardReveal").then((m) => m.LeaderboardReveal),
+  { ssr: false }
+);
 import { TieManagementDrawer } from "../../leaderboard/TieManagementDrawer";
 import { PlayoffStatusBanner } from "../../leaderboard/TieBanner";
 import { PlayoffScorecardClient } from "./PlayoffScorecardClient";
@@ -95,14 +106,6 @@ const MATCHPLAY_KNOCKOUT_TABS: { id: Tab; label: string }[] = [
   { id: "rules", label: "Rules" },
 ];
 
-function isMatchplayLeague(type: EventTypeV2 | undefined | null) {
-  return type === "matchplay" || type === "matchplay_fixture";
-}
-
-function isMatchplayKnockout(type: EventTypeV2 | undefined | null) {
-  return type === "matchplay_knockout_match";
-}
-
 function getTabsForEvent(comp: EventWithGroup | null) {
   if (!comp) return STROKE_TABS;
   if (isMatchplayKnockout(comp.event_type)) return MATCHPLAY_KNOCKOUT_TABS;
@@ -160,7 +163,7 @@ function EditRoundSheet({
     setSaving(true);
     setError(null);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const res = await fetch(`/api/majors/events/${eventId}/rounds/${round.id}`, {
         method: "PATCH",
@@ -329,9 +332,12 @@ function AddTeeTimeSheet({
 
   const totalPlayers = selectedPlayers.length + guests.length;
 
-  // Map of profileId → tee time they're currently assigned to (for badge display)
+  // Map of profileId → tee time they're currently assigned to (for badge display).
+  // Scoped to the selected round: a player may hold one tee time per round, so a
+  // tee time in another round must not flag them as "assigned" here.
   const assignedMap = new Map<string, { groupNumber: number | null }>();
   for (const tt of teeTimes) {
+    if (tt.event_round_id !== selectedRoundId) continue;
     for (const p of tt.round?.participants ?? []) {
       if (p.profile_id) assignedMap.set(p.profile_id, { groupNumber: tt.group_number });
     }
@@ -403,10 +409,11 @@ function AddTeeTimeSheet({
 
   const handleSubmit = async () => {
     if (!teeTime) { setError("Please select a tee time"); return; }
+    if (eventRounds.length > 1 && !selectedRoundId) { setError("Please select a round"); return; }
     setSubmitting(true);
     setError(null);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const players = [
         ...selectedPlayers.map((pid) => ({
@@ -533,7 +540,7 @@ function AddTeeTimeSheet({
                     }`}
                   >
                     {m.profile?.avatar_url ? (
-                      <img src={m.profile.avatar_url} alt="" className="h-6 w-6 rounded-full object-cover" />
+                      <img src={m.profile.avatar_url} alt="" className="h-6 w-6 rounded-full object-cover" loading="lazy" decoding="async" />
                     ) : (
                       <div className="h-6 w-6 rounded-full bg-emerald-900/60 grid place-items-center text-[9px] font-bold text-emerald-200">
                         {m.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
@@ -682,9 +689,12 @@ function EditTeeTimeSheet({
 
   const totalPlayers = selectedPlayers.length + guestParticipants.length;
 
-  // Map profileId → other tee time they're in (exclude current tee time)
+  // Map profileId → other tee time they're in, within the SAME round as the tee
+  // time being edited (excludes the current tee time via the `teeTimes` prop).
+  // A player may hold one tee time per round, so other rounds must not flag them.
   const assignedMap = new Map<string, { groupNumber: number | null }>();
   for (const other of teeTimes) {
+    if (other.event_round_id !== tt.event_round_id) continue;
     for (const p of other.round?.participants ?? []) {
       if (p.profile_id) assignedMap.set(p.profile_id, { groupNumber: other.group_number });
     }
@@ -703,7 +713,7 @@ function EditTeeTimeSheet({
     setSaving(true);
     setError(null);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const players = [
         ...selectedPlayers.map((pid) => ({ profile_id: pid })),
@@ -799,7 +809,7 @@ function EditTeeTimeSheet({
                   }`}
                 >
                   {m.profile?.avatar_url ? (
-                    <img src={m.profile.avatar_url} alt="" className="h-6 w-6 rounded-full object-cover" />
+                    <img src={m.profile.avatar_url} alt="" className="h-6 w-6 rounded-full object-cover" loading="lazy" decoding="async" />
                   ) : (
                     <div className="h-6 w-6 rounded-full bg-emerald-900/60 grid place-items-center text-[9px] font-bold text-emerald-200">
                       {m.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
@@ -939,7 +949,7 @@ function TeeTimeCard({
           p ? (
             <div key={i} className="flex flex-col items-center gap-1">
               {p.profile?.avatar_url ? (
-                <img src={p.profile.avatar_url} alt="" className="h-9 w-9 rounded-full object-cover border border-emerald-700/40" />
+                <img src={p.profile.avatar_url} alt="" className="h-9 w-9 rounded-full object-cover border border-emerald-700/40" loading="lazy" decoding="async" />
               ) : (
                 <div className="h-9 w-9 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200">
                   {(p.display_name ?? p.profile?.name ?? "?").slice(0, 2).toUpperCase()}
@@ -1612,7 +1622,14 @@ function PositionBadge({ position }: { position: number | null }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function EventDetailClient({ eventId }: { eventId: string }) {
+export default function EventDetailClient({
+  eventId,
+  initialSnapshot,
+}: {
+  eventId: string;
+  /** Server-built first-paint payload. Absent → the client fetch path runs. */
+  initialSnapshot?: EventDetailSnapshot | null;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const fromHome = searchParams.get("from") === "home";
@@ -1731,12 +1748,65 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
   } | null>(null);
   const [savingPot, setSavingPot] = useState(false);
 
+  // Applies a server-built snapshot (see lib/majors/getEventDetailSnapshot).
+  // Same shape the fetch path assembles, so the two can't drift.
+  const applyGroupMembers = (members: any[], viewerProfileId: string) => {
+    setGroupMembers(
+      members
+        .filter((m: any) => m.status === "active")
+        .map((m: any) => ({
+          profile_id: m.profile_id,
+          profile: m.profile ?? null,
+          preferred_tee_name: m.preferred_tee_name ?? null,
+        }))
+    );
+    const own = members.find((m: any) => m.profile_id === viewerProfileId);
+    setMyRole(own?.role ?? null);
+  };
+
+  const applyLeaderboardPayload = (j: any) => {
+    setLeaderboard(j.rows ?? []);
+    if (j.freeze) setLeaderboardFreeze(j.freeze);
+    setHasFirstPlaceTie(j.has_first_place_tie ?? false);
+    setAllEntrantsComplete(j.all_entrants_complete ?? false);
+    setActivePlayoff(j.active_playoff ?? null);
+  };
+
   useEffect(() => {
+    // Server-rendered: everything below already arrived with the document.
+    if (initialSnapshot) {
+      const snap = initialSnapshot;
+      setMyProfileId(snap.viewer_profile_id);
+      setCompetition(snap.event);
+      if (snap.leaderboard) applyLeaderboardPayload(snap.leaderboard);
+      setTeeTimes(snap.tee_times ?? []);
+      setWinnings(snap.winnings ?? []);
+      setCompetitionRounds(snap.event_rounds ?? []);
+      if (snap.matchplay) {
+        setMatchplayStages(snap.matchplay.stages ?? []);
+        setMatchplayFixtures(snap.matchplay.fixtures ?? []);
+      }
+      if (snap.league_table) setLeagueTable(snap.league_table);
+      if (snap.group_members) applyGroupMembers(snap.group_members, snap.viewer_profile_id);
+
+      const fetched: Participant[] = snap.participants ?? [];
+      setParticipants(fetched);
+      const entered = fetched.some((p) => p.profile_id === snap.viewer_profile_id);
+      setIsEntered(entered);
+      if (!entered && snap.waitlist) {
+        setWaitlistEntry(
+          snap.waitlist.find((w: any) => w.profile_id === snap.viewer_profile_id) ?? null
+        );
+      }
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
     (async () => {
       setLoading(true);
       try {
-        const session = await getViewerSession();
+        const session = await requireViewerSession();
         if (!session || cancelled) return;
         setMyProfileId(session.profileId);
         const headers = { Authorization: `Bearer ${session.accessToken}` };
@@ -1752,73 +1822,27 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
 
         if (cancelled) return;
 
+        let comp: any = null;
         if (compRes.ok) {
           const j = await compRes.json();
-          const comp = j.event;
+          comp = j.event;
           setCompetition(comp);
-
-          // Load matchplay fixtures if applicable
-          if (isMatchplayLeague(comp?.event_type) || isMatchplayKnockout(comp?.event_type)) {
-            const fixRes = await fetch(`/api/majors/events/${eventId}/fixtures`, { headers });
-            if (!cancelled && fixRes.ok) {
-              const fj = await fixRes.json();
-              setMatchplayStages(fj.stages ?? []);
-              setMatchplayFixtures(fj.fixtures ?? []);
-            }
-            const ltRes = await fetch(`/api/majors/events/${eventId}/league-table`, { headers }).catch(() => null);
-            if (!cancelled && ltRes?.ok) {
-              const lj = await ltRes.json();
-              setLeagueTable(lj.entries ?? []);
-            }
-          }
-
-          // Load group members and my role if event has a group
-          if (j.event?.group_id) {
-            const membersRes = await fetch(`/api/majors/groups/${j.event.group_id}/members`, { headers });
-            if (!cancelled && membersRes.ok) {
-              const mj = await membersRes.json();
-              const members: any[] = mj.members ?? [];
-              setGroupMembers(members.filter((m: any) => m.status === "active").map((m: any) => ({
-                profile_id: m.profile_id,
-                profile: m.profile ?? null,
-                preferred_tee_name: m.preferred_tee_name ?? null,
-              })));
-              const own = members.find((m: any) => m.profile_id === session.profileId);
-              setMyRole(own?.role ?? null);
-            }
-          }
         }
 
-        if (lbRes.ok) {
-          const j = await lbRes.json();
-          setLeaderboard(j.rows ?? []);
-          if (j.freeze) setLeaderboardFreeze(j.freeze);
-          setHasFirstPlaceTie(j.has_first_place_tie ?? false);
-          setAllEntrantsComplete(j.all_entrants_complete ?? false);
-          setActivePlayoff(j.active_playoff ?? null);
-        }
+        if (lbRes.ok) applyLeaderboardPayload(await lbRes.json());
 
         if (teeTimesRes.ok) {
           const j = await teeTimesRes.json();
           setTeeTimes(j.tee_times ?? []);
         }
 
+        let entered = false;
         if (participantsRes.ok) {
           const j = await participantsRes.json();
           const fetched: Participant[] = j.participants ?? [];
           setParticipants(fetched);
-          const entered = fetched.some((p) => p.profile_id === session.profileId);
+          entered = fetched.some((p) => p.profile_id === session.profileId);
           setIsEntered(entered);
-
-          // If not entered, check waitlist status
-          if (!entered) {
-            const wlRes = await fetch(`/api/majors/events/${eventId}/waitlist`, { headers });
-            if (!cancelled && wlRes.ok) {
-              const wj = await wlRes.json();
-              const myEntry = (wj.waitlist ?? []).find((w: any) => w.profile_id === session.profileId);
-              setWaitlistEntry(myEntry ?? null);
-            }
-          }
         }
 
         if (winningsRes.ok) {
@@ -1830,35 +1854,77 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
           const j = await compRoundsRes.json();
           setCompetitionRounds(j.rounds ?? []);
         }
+
+        // Second wave — these depend on the first, but not on each other. They
+        // used to run one after another, four round trips deep.
+        const isMatchplay =
+          isMatchplayLeague(comp?.event_type) || isMatchplayKnockout(comp?.event_type);
+
+        const [fixRes, ltRes, membersRes, wlRes] = await Promise.all([
+          isMatchplay
+            ? fetch(`/api/majors/events/${eventId}/fixtures`, { headers }).catch(() => null)
+            : Promise.resolve(null),
+          isMatchplay
+            ? fetch(`/api/majors/events/${eventId}/league-table`, { headers }).catch(() => null)
+            : Promise.resolve(null),
+          comp?.group_id
+            ? fetch(`/api/majors/groups/${comp.group_id}/members`, { headers }).catch(() => null)
+            : Promise.resolve(null),
+          !entered
+            ? fetch(`/api/majors/events/${eventId}/waitlist`, { headers }).catch(() => null)
+            : Promise.resolve(null),
+        ]);
+
+        if (cancelled) return;
+
+        if (fixRes?.ok) {
+          const fj = await fixRes.json();
+          setMatchplayStages(fj.stages ?? []);
+          setMatchplayFixtures(fj.fixtures ?? []);
+        }
+        if (ltRes?.ok) {
+          const lj = await ltRes.json();
+          setLeagueTable(lj.entries ?? []);
+        }
+        if (membersRes?.ok) {
+          const mj = await membersRes.json();
+          applyGroupMembers(mj.members ?? [], session.profileId);
+        }
+        if (wlRes?.ok) {
+          const wj = await wlRes.json();
+          setWaitlistEntry(
+            (wj.waitlist ?? []).find((w: any) => w.profile_id === session.profileId) ?? null
+          );
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId, initialSnapshot]);
+
+  const fetchLeaderboard = useCallback((): Promise<void> => {
+    return getViewerSession().then((session) => {
+      if (!session) return;
+      return fetch(`/api/majors/leaderboard?event_id=${eventId}`, {
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => {
+          if (j) applyLeaderboardPayload(j);
+        });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId]);
+
+  // A leaderboard recompute rewrites every entry row, and postgres_changes fires
+  // per row — undebounced this was one full refetch per player, mid-round.
+  const debouncedFetchLeaderboard = useDebouncedRefresh(fetchLeaderboard);
 
   // Realtime: recompute leaderboard whenever event_leaderboard_entries changes
   // or the event freeze state transitions.
   useEffect(() => {
-    function fetchLeaderboard(): Promise<void> {
-      return getViewerSession().then((session) => {
-        if (!session) return;
-        return fetch(`/api/majors/leaderboard?event_id=${eventId}`, {
-          headers: { Authorization: `Bearer ${session.accessToken}` },
-        })
-          .then((r) => (r.ok ? r.json() : null))
-          .then((j) => {
-            if (j) {
-              setLeaderboard(j.rows ?? []);
-              if (j.freeze) setLeaderboardFreeze(j.freeze);
-              setHasFirstPlaceTie(j.has_first_place_tie ?? false);
-              setAllEntrantsComplete(j.all_entrants_complete ?? false);
-              setActivePlayoff(j.active_playoff ?? null);
-            }
-          });
-      });
-    }
-
     const channel = supabase
       .channel(`event-lb:${eventId}`)
       .on(
@@ -1869,7 +1935,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
           table: "event_leaderboard_entries",
           filter: `event_id=eq.${eventId}`,
         },
-        fetchLeaderboard
+        debouncedFetchLeaderboard
       )
       .on(
         "postgres_changes",
@@ -1891,7 +1957,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [eventId]);
+  }, [eventId, debouncedFetchLeaderboard, fetchLeaderboard]);
 
   // Lazy-load finances when tab first opens
   useEffect(() => {
@@ -1902,7 +1968,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
   async function handleReveal(force = false) {
     setRevealLoading(true);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const res = await fetch(`/api/majors/events/${eventId}/freeze-control`, {
         method: "POST",
@@ -1940,7 +2006,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
   }
 
   const refreshLeaderboard = async () => {
-    const session = await getViewerSession();
+    const session = await requireViewerSession();
     if (!session) return;
     const res = await fetch(`/api/majors/leaderboard?event_id=${eventId}`, {
       headers: { Authorization: `Bearer ${session.accessToken}` },
@@ -1955,7 +2021,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
   };
 
   const refreshTeeTimes = async () => {
-    const session = await getViewerSession();
+    const session = await requireViewerSession();
     if (!session) return;
     const headers = { Authorization: `Bearer ${session.accessToken}` };
     const [ttRes, crRes] = await Promise.all([
@@ -1973,7 +2039,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
   };
 
   const refreshFinances = async () => {
-    const session = await getViewerSession();
+    const session = await requireViewerSession();
     if (!session) return;
     const headers = { Authorization: `Bearer ${session.accessToken}` };
     const [cRes, pcRes, ppRes] = await Promise.all([
@@ -1994,7 +2060,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
     setSelectedOptionalPotIds([]);
     setSelectedOptionalGroupChargeIds([]);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const res = await fetch(`/api/majors/events/${eventId}/join-preview`, {
         headers: { Authorization: `Bearer ${session.accessToken}` },
@@ -2018,7 +2084,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
     setEntering(true);
     setEnterError(null);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const res = await fetch(`/api/majors/events/${eventId}/enter`, {
         method: "POST",
@@ -2052,7 +2118,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
   const handleWithdraw = async () => {
     setWithdrawing(true);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const res = await fetch(`/api/majors/events/${eventId}/withdraw`, {
         method: "DELETE",
@@ -2079,7 +2145,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
   const handleJoinWaitlist = async () => {
     setJoiningWaitlist(true);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const res = await fetch(`/api/majors/events/${eventId}/waitlist`, {
         method: "POST",
@@ -2096,7 +2162,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
 
   const handleLeaveWaitlist = async () => {
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       await fetch(`/api/majors/events/${eventId}/waitlist`, {
         method: "DELETE",
@@ -2109,7 +2175,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
   const handleProposeWinnings = async () => {
     setProposingWinnings(true);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const res = await fetch(`/api/majors/events/${eventId}/winnings/propose`, {
         method: "POST",
@@ -2126,7 +2192,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
 
   const handleConfirmWinnings = async () => {
     if (!proposedWinnings) return;
-    const session = await getViewerSession();
+    const session = await requireViewerSession();
     if (!session) return;
     for (const pw of proposedWinnings) {
       await fetch(`/api/majors/events/${eventId}/winnings`, {
@@ -2143,7 +2209,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
   };
 
   const handleJoinTeeTimeSlot = async (teeTimeId: string) => {
-    const session = await getViewerSession();
+    const session = await requireViewerSession();
     if (!session) return;
     await fetch(`/api/majors/events/${eventId}/tee-times/${teeTimeId}/join`, {
       method: "POST",
@@ -2153,7 +2219,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
   };
 
   const handleLeaveTeeTimeSlot = async (teeTimeId: string) => {
-    const session = await getViewerSession();
+    const session = await requireViewerSession();
     if (!session) return;
     await fetch(`/api/majors/events/${eventId}/tee-times/${teeTimeId}/leave`, {
       method: "DELETE",
@@ -2163,7 +2229,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
   };
 
   const handleDeleteTeeTime = async (teeTimeId: string) => {
-    const session = await getViewerSession();
+    const session = await requireViewerSession();
     if (!session) return;
     const res = await fetch(`/api/majors/events/${eventId}/tee-times/${teeTimeId}`, {
       method: "DELETE",
@@ -2175,7 +2241,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
   const handleStartRound = async (roundId: string) => {
     setStartingRoundId(roundId);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const res = await fetch("/api/rounds/start", {
         method: "POST",
@@ -2221,7 +2287,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
     if (tab !== "overview") return;
     let cancelled = false;
     (async () => {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session || cancelled) return;
       const res = await fetch(`/api/fantasy/events/${eventId}/narrative`, {
         headers: { Authorization: `Bearer ${session.accessToken}` },
@@ -2406,7 +2472,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                 groupId={event?.group_id ?? undefined}
                 excludedProfileIds={new Set(participants.map((p) => p.profile_id))}
                 onInvite={async (pid) => {
-                  const session = await getViewerSession();
+                  const session = await requireViewerSession();
                   if (!session) return;
                   await fetch(`/api/majors/events/${eventId}/invitations`, {
                     method: "POST",
@@ -2681,15 +2747,27 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
         )}
 
         {isEntered && (() => {
-          // Is this player's round managed by the event (via a tee time)?
+          // Which of this player's rounds are managed by the event (via a tee time)?
           // If so, their score is submitted automatically when the round finishes —
-          // no manual submit step needed.
-          const myTeeTime = myProfileId
-            ? teeTimes.find((tt) =>
-                tt.round?.participants?.some((p) => p.profile_id === myProfileId)
-              )
-            : null;
-          const eventOwnsRound = !!myTeeTime;
+          // no manual submit step needed. A player may hold one tee time per round,
+          // so collect all of them and list one line per round.
+          const myTeeTimes = myProfileId
+            ? teeTimes
+                .filter((tt) =>
+                  tt.round?.participants?.some((p) => p.profile_id === myProfileId)
+                )
+                .sort(
+                  (a, b) =>
+                    (a.event_round?.round_number ?? 0) - (b.event_round?.round_number ?? 0) ||
+                    new Date(a.tee_time).getTime() - new Date(b.tee_time).getTime()
+                )
+            : [];
+          const eventOwnsRound = myTeeTimes.length > 0;
+          // Once any of the player's rounds is in progress or finished, withdrawing
+          // from the whole event is no longer allowed.
+          const anyRoundInProgressOrDone = myTeeTimes.some((tt) =>
+            ["live", "starting", "finished"].includes(tt.round?.status ?? "")
+          );
 
           return (
           <div className="space-y-2">
@@ -2698,21 +2776,29 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                 ✓ Entered
               </div>
             </div>
-            {entryOpen && eventOwnsRound && myTeeTime && (
-              <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 text-[11px] text-emerald-200/60">
-                {myTeeTime.round?.status === "finished"
-                  ? "Your score has been submitted automatically."
-                  : myTeeTime.round?.status === "live"
-                  ? "Round in progress — your score will be submitted when the round is finished."
-                  : `Tee time at ${new Date(myTeeTime.tee_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} — your score will be submitted automatically.`}
+            {entryOpen && eventOwnsRound && (
+              <div className="space-y-2">
+                {myTeeTimes.map((tt) => {
+                  const prefix =
+                    myTeeTimes.length > 1 && tt.event_round ? `${tt.event_round.name} — ` : "";
+                  const body =
+                    tt.round?.status === "finished"
+                      ? "Your score has been submitted automatically."
+                      : tt.round?.status === "live"
+                      ? "Round in progress — your score will be submitted when the round is finished."
+                      : `Tee time at ${new Date(tt.tee_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} — your score will be submitted automatically.`;
+                  return (
+                    <div key={tt.id} className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 text-[11px] text-emerald-200/60">
+                      {prefix}{body}
+                    </div>
+                  );
+                })}
               </div>
             )}
             {/* Withdraw */}
             {event.majors_status !== "live" &&
              event.majors_status !== "completed" &&
-             myTeeTime?.round?.status !== "live" &&
-             myTeeTime?.round?.status !== "starting" &&
-             myTeeTime?.round?.status !== "finished" && (
+             !anyRoundInProgressOrDone && (
               (event as any).allow_self_withdrawal !== false ? (
                 <button type="button" onClick={() => setShowWithdrawConfirm(true)}
                   className="w-full py-2 rounded-full border border-red-900/50 text-sm text-red-400/70 hover:text-red-400 transition-colors">
@@ -2921,7 +3007,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
               <>
                 <PositionBadge position={row.position ?? null} />
                 {row.profile?.avatar_url ? (
-                  <img src={row.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
+                  <img src={row.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
                 ) : (
                   <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
                     {row.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
@@ -3020,7 +3106,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                 >
                   <span className="w-7 text-center text-xs text-emerald-200/30">—</span>
                   {p.profile?.avatar_url ? (
-                    <img src={p.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0 opacity-60" />
+                    <img src={p.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0 opacity-60" loading="lazy" decoding="async" />
                   ) : (
                     <div className="h-7 w-7 rounded-full bg-emerald-900/40 grid place-items-center text-[10px] font-bold text-emerald-200/50 shrink-0">
                       {p.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
@@ -3132,7 +3218,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
               {/* Header */}
               <div className="flex items-center gap-3 mb-4">
                 {detailPlayer.profile?.avatar_url ? (
-                  <img src={detailPlayer.profile.avatar_url} alt="" className="h-10 w-10 rounded-full object-cover shrink-0" />
+                  <img src={detailPlayer.profile.avatar_url} alt="" className="h-10 w-10 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
                 ) : (
                   <div className="h-10 w-10 rounded-full bg-emerald-900/60 grid place-items-center text-sm font-bold text-emerald-200 shrink-0">
                     {detailPlayer.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
@@ -3238,12 +3324,16 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
 
     "tee-times": (() => {
       const isSelfSelect = (event as any)?.tee_time_mode === "self_select";
-      // Which tee time round_id does this player belong to?
-      const myTeeTimeId = isSelfSelect && myProfileId
-        ? teeTimes.find((tt) =>
-            tt.round?.participants?.some((p) => p.profile_id === myProfileId)
-          )?.id ?? null
-        : null;
+      // Which event rounds does this player already hold a tee time in? A player
+      // may hold one tee time per round, so Join is gated per-round (not per-event).
+      const myOccupiedRoundIds = new Set<string | null>();
+      if (isSelfSelect && myProfileId) {
+        for (const tt of teeTimes) {
+          if (tt.round?.participants?.some((p) => p.profile_id === myProfileId)) {
+            myOccupiedRoundIds.add(tt.event_round_id ?? null);
+          }
+        }
+      }
 
       // Group tee times by event_round_id for structured display
       const teeTimesByRound = new Map<string | null, EventTeeTime[]>();
@@ -3256,7 +3346,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
       const renderTeeTimeCard = (tt: EventTeeTime) => {
         const participantCount = tt.round?.participants?.length ?? 0;
         const hasSlot = tt.round?.participants?.some((p) => p.profile_id === myProfileId) ?? false;
-        const canJoin = isSelfSelect && isEntered && myProfileId && !myTeeTimeId && participantCount < 4;
+        const canJoin = isSelfSelect && isEntered && myProfileId && !myOccupiedRoundIds.has(tt.event_round_id ?? null) && participantCount < 4;
         return (
           <div key={tt.id} className="space-y-2">
             {hasSlot && tt.event_round && (
@@ -3313,18 +3403,22 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
               <button
                 type="button"
                 className="text-[11px] font-semibold text-amber-300 hover:text-amber-100 shrink-0"
-                onClick={async () => {
-                  const session = await getViewerSession();
-                  if (!session) return;
-                  for (let i = 1; i <= numRounds; i++) {
-                    await fetch(`/api/majors/events/${eventId}/rounds`, {
-                      method: "POST",
-                      headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
-                      body: JSON.stringify({ round_number: i, name: `Round ${i}` }),
-                    });
-                  }
-                  await refreshTeeTimes();
-                }}
+                onClick={() =>
+                  // Guarded: this POSTs once per round in a loop, so a double-tap
+                  // on a slow connection creates a duplicate set of event rounds.
+                  runGuarded(`init-rounds:${eventId}`, async () => {
+                    const session = await requireViewerSession();
+                    if (!session) return;
+                    for (let i = 1; i <= numRounds; i++) {
+                      await fetch(`/api/majors/events/${eventId}/rounds`, {
+                        method: "POST",
+                        headers: { Authorization: `Bearer ${session.accessToken}`, "Content-Type": "application/json" },
+                        body: JSON.stringify({ round_number: i, name: `Round ${i}` }),
+                      });
+                    }
+                    await refreshTeeTimes();
+                  })
+                }
               >
                 Initialise rounds
               </button>
@@ -3515,7 +3609,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                 <div className="col-span-2 flex items-center gap-2 min-w-0">
                   <span className="text-[11px] text-emerald-200/50 w-4 shrink-0">{row.position ?? "—"}</span>
                   {row.profile?.avatar_url ? (
-                    <img src={row.profile.avatar_url} alt="" className="h-6 w-6 rounded-full object-cover shrink-0" />
+                    <img src={row.profile.avatar_url} alt="" className="h-6 w-6 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
                   ) : (
                     <div className="h-6 w-6 rounded-full bg-emerald-900/60 grid place-items-center text-[9px] font-bold text-emerald-200 shrink-0">
                       {row.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
@@ -3555,7 +3649,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
         setAddingCharge(true);
         setChargeError(null);
         try {
-          const session = await getViewerSession();
+          const session = await requireViewerSession();
           if (!session) return;
           const res = await fetch(`/api/majors/events/${eventId}/charges`, {
             method: "POST",
@@ -3582,7 +3676,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
       };
 
       const handleDeleteCharge = async (chargeId: string) => {
-        const session = await getViewerSession();
+        const session = await requireViewerSession();
         if (!session) return;
         const res = await fetch(`/api/majors/events/${eventId}/charges/${chargeId}`, {
           method: "DELETE",
@@ -3597,7 +3691,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
       };
 
       const handleAssignAll = async (chargeId: string) => {
-        const session = await getViewerSession();
+        const session = await requireViewerSession();
         if (!session) return;
         const res = await fetch(`/api/majors/events/${eventId}/charges/${chargeId}/assign-all`, {
           method: "POST",
@@ -3613,7 +3707,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
       };
 
       const handleMarkPaid = async (playerChargeId: string) => {
-        const session = await getViewerSession();
+        const session = await requireViewerSession();
         if (!session) return;
         const res = await fetch(`/api/majors/events/${eventId}/player-charges/${playerChargeId}/pay`, {
           method: "POST",
@@ -3629,7 +3723,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
       };
 
       const handleRemovePlayerCharge = async (playerChargeId: string) => {
-        const session = await getViewerSession();
+        const session = await requireViewerSession();
         if (!session) return;
         const res = await fetch(`/api/majors/events/${eventId}/player-charges/${playerChargeId}`, {
           method: "DELETE",
@@ -3644,7 +3738,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
       };
 
       const handleAssignToPlayer = async (chargeId: string, profileId: string) => {
-        const session = await getViewerSession();
+        const session = await requireViewerSession();
         if (!session) return;
         const res = await fetch(`/api/majors/events/${eventId}/charges/${chargeId}/assign`, {
           method: "POST",
@@ -3666,7 +3760,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
         setAddingPot(true);
         setPotError(null);
         try {
-          const session = await getViewerSession();
+          const session = await requireViewerSession();
           if (!session) return;
           const res = await fetch(`/api/majors/events/${eventId}/prize-pots`, {
             method: "POST",
@@ -3703,7 +3797,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
         setPotActionLoading(potId + ":delete");
         setPotError(null);
         try {
-          const session = await getViewerSession();
+          const session = await requireViewerSession();
           if (!session) return;
           const res = await fetch(`/api/majors/prize-pots/${potId}`, {
             method: "DELETE",
@@ -3749,7 +3843,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
         setSavingPot(true);
         setPotError(null);
         try {
-          const session = await getViewerSession();
+          const session = await requireViewerSession();
           if (!session) return;
           const res = await fetch(`/api/majors/prize-pots/${editPotId}`, {
             method: "PATCH",
@@ -3787,7 +3881,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
         setPotActionLoading(potId + ":enroll");
         setPotError(null);
         try {
-          const session = await getViewerSession();
+          const session = await requireViewerSession();
           if (!session) return;
           const res = await fetch(`/api/majors/prize-pots/${potId}/enroll`, {
             method: "POST",
@@ -3809,7 +3903,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
         setPotActionLoading(potId + ":compute");
         setPotError(null);
         try {
-          const session = await getViewerSession();
+          const session = await requireViewerSession();
           if (!session) return;
           const res = await fetch(`/api/majors/prize-pots/${potId}/metrics/compute`, {
             method: "POST",
@@ -3832,7 +3926,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
         setPotError(null);
         setProposedDistribution(null);
         try {
-          const session = await getViewerSession();
+          const session = await requireViewerSession();
           if (!session) return;
           const res = await fetch(`/api/majors/prize-pots/${potId}/distribute`, {
             method: "POST",
@@ -3854,7 +3948,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
         setPotActionLoading(potId + ":confirm");
         setPotError(null);
         try {
-          const session = await getViewerSession();
+          const session = await requireViewerSession();
           if (!session) return;
           const res = await fetch(`/api/majors/prize-pots/${potId}/distribute`, {
             method: "POST",
@@ -4178,7 +4272,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
                       <div key={pid} className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/50 px-3 py-3 space-y-2">
                         <div className="flex items-center gap-2">
                           {profileAvatar ? (
-                            <img src={profileAvatar} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
+                            <img src={profileAvatar} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
                           ) : (
                             <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[9px] font-bold text-emerald-200 shrink-0">
                               {profileName.slice(0, 2).toUpperCase()}
@@ -4882,7 +4976,7 @@ export default function EventDetailClient({ eventId }: { eventId: string }) {
               <div key={w.id} className="flex items-center gap-3 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5">
                 <PositionBadge position={w.position ?? null} />
                 {w.profile?.avatar_url ? (
-                  <img src={w.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
+                  <img src={w.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
                 ) : (
                   <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
                     {w.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}

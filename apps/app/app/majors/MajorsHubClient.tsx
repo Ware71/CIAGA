@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { getViewerSession } from "@/lib/auth/viewerSession";
+import { requireViewerSession } from "@/lib/auth/requireViewerSession";
 import { supabase } from "@/lib/supabaseClient";
 import type { MajorGroup } from "@/lib/majors/types";
 
@@ -29,7 +30,7 @@ export default function MajorsHubClient() {
   const [isAdmin, setIsAdmin] = useState(false);
 
   const fetchGroups = useCallback(async () => {
-    const session = await getViewerSession();
+    const session = await requireViewerSession();
     if (!session) return;
     const headers = { Authorization: `Bearer ${session.accessToken}` };
     const [mineRes, discoverRes, invitesRes] = await Promise.all([
@@ -76,7 +77,7 @@ export default function MajorsHubClient() {
   const handleAcceptInvite = async (invite: PendingInvite) => {
     setAcceptingInviteId(invite.id);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const res = await fetch(`/api/majors/groups/${invite.group_id}/join`, {
         method: "POST",
@@ -95,7 +96,7 @@ export default function MajorsHubClient() {
   const handleDeclineInvite = async (invite: PendingInvite) => {
     setDecliningInviteId(invite.id);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       await fetch(`/api/majors/groups/${invite.group_id}/members?profile_id=${session.profileId}`, {
         method: "DELETE",
@@ -110,7 +111,7 @@ export default function MajorsHubClient() {
   const handleJoin = async (group: GroupSummary) => {
     setJoiningId(group.id);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const res = await fetch(`/api/majors/groups/${group.id}/join`, {
         method: "POST",
@@ -252,7 +253,7 @@ export default function MajorsHubClient() {
                     className="w-full flex items-center gap-3 rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-3 hover:brightness-110 transition-all text-left"
                   >
                     {g.image_url ? (
-                      <img src={g.image_url} alt="" className="h-10 w-10 rounded-xl object-cover shrink-0" />
+                      <img src={g.image_url} alt="" className="h-10 w-10 rounded-xl object-cover shrink-0" loading="lazy" decoding="async" />
                     ) : (
                       <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-800 to-emerald-950 flex items-center justify-center text-sm font-bold text-emerald-200 shrink-0">
                         {g.name.slice(0, 2).toUpperCase()}
@@ -303,7 +304,7 @@ export default function MajorsHubClient() {
                       className="flex items-center gap-3 rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-3"
                     >
                       {g.image_url ? (
-                        <img src={g.image_url} alt="" className="h-10 w-10 rounded-xl object-cover shrink-0" />
+                        <img src={g.image_url} alt="" className="h-10 w-10 rounded-xl object-cover shrink-0" loading="lazy" decoding="async" />
                       ) : (
                         <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-800 to-emerald-950 flex items-center justify-center text-sm font-bold text-emerald-200 shrink-0">
                           {g.name.slice(0, 2).toUpperCase()}

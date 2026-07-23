@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 // /app/calendar/page.tsx
 import { Suspense } from "react";
 import { CalendarClient } from "@/components/calendar/CalendarClient";
+
+export const metadata: Metadata = { title: "Calendar" };
 
 export default function CalendarPage() {
   return (

@@ -207,7 +207,7 @@ export default function ScorecardPortrait(props: {
                       {avatarList.slice(0, 4).map((a, i) => (
                         <div key={i} className={i === 0 ? "" : "-ml-1.5"}>
                           {a.url ? (
-                            <img src={a.url} alt="" className="h-5 w-5 rounded-full border border-emerald-200/60 object-cover" />
+                            <img src={a.url} alt="" className="h-5 w-5 rounded-full border border-emerald-200/60 object-cover" loading="lazy" decoding="async" />
                           ) : (
                             <div className="h-5 w-5 rounded-full border border-emerald-200/60 bg-[#0b3b21]/60 flex items-center justify-center text-[8px] font-semibold text-emerald-50">
                               {initialsFrom(a.name)}

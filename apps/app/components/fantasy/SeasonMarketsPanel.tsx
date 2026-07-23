@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { getViewerSession } from "@/lib/auth/viewerSession";
+import { requireViewerSession } from "@/lib/auth/requireViewerSession";
 import { safeJson } from "@/lib/fantasy/safeJson";
 import { OddsValue } from "@/components/fantasy/OddsValue";
 
@@ -39,7 +39,7 @@ export function SeasonMarketsPanel({
   const [msg, setMsg] = useState<string | null>(null);
 
   const fetchBoard = useCallback(async () => {
-    const session = await getViewerSession();
+    const session = await requireViewerSession();
     if (!session) return;
     const res = await fetch(`/api/fantasy/seasons/${seasonId}/odds`, {
       headers: { Authorization: `Bearer ${session.accessToken}` },
@@ -71,7 +71,7 @@ export function SeasonMarketsPanel({
     setPlacing(true);
     setMsg(null);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const res = await fetch(`/api/fantasy/seasons/${seasonId}/pick`, {
         method: "POST",

@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { getServerViewer } from "@/lib/supabaseServer";
 import { getFeedItemById } from "@/lib/feed/queries";
 import { getFeedItemDetail } from "@/lib/feed/detail";
 import SocialDetailClient from "./SocialDetailClient";
+
+export const metadata: Metadata = { title: "Post" };
 
 export default async function SocialDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const [viewerResult, { id }] = await Promise.all([getServerViewer(), params]);

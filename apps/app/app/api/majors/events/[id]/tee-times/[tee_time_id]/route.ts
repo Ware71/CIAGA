@@ -153,14 +153,21 @@ export async function PATCH(
         .filter((p) => !p.is_guest && p.profile_id && p.profile_id !== profileId)
         .map((p) => p.profile_id as string);
       if (toAdd.length > 0) {
-        // Remove any newly-added non-guest players from other tee times in this event
+        // Remove any newly-added non-guest players from other tee times in the
+        // SAME round of this event. A player may hold one tee time per round, so
+        // scoping to event_round_id keeps their tee times in other rounds intact.
         const newNonGuestIds = toAdd.filter((p) => !p.is_guest && p.profile_id).map((p) => p.profile_id as string);
         if (newNonGuestIds.length > 0) {
-          const { data: otherTTs } = await supabaseAdmin
+          const editedRoundId = (teeTime as any).event_round_id as string | null;
+          let otherTTQuery = supabaseAdmin
             .from("event_tee_times")
             .select("round_id")
             .eq("event_id", id)
             .neq("id", tee_time_id);
+          otherTTQuery = editedRoundId
+            ? otherTTQuery.eq("event_round_id", editedRoundId)
+            : otherTTQuery.is("event_round_id", null);
+          const { data: otherTTs } = await otherTTQuery;
           const otherRoundIds = (otherTTs ?? []).map((t) => (t as any).round_id).filter(Boolean) as string[];
           if (otherRoundIds.length > 0) {
             await supabaseAdmin

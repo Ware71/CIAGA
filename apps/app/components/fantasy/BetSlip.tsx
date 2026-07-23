@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
-import { getViewerSession } from "@/lib/auth/viewerSession";
+import { requireViewerSession } from "@/lib/auth/requireViewerSession";
 import { safeJson } from "@/lib/fantasy/safeJson";
 import { useSlip } from "@/lib/fantasy/slipStore";
 import { combinedOdds, findParlayViolation, MAX_LEGS } from "@/lib/fantasy/parlayRules";
@@ -75,7 +75,7 @@ export function BetSlip({ onPlaced }: { onPlaced?: () => void }) {
     if (legs.length < 2 || accaBlockedReason) return;
     (async () => {
       try {
-        const session = await getViewerSession();
+        const session = await requireViewerSession();
         if (!session) return;
         const res = await fetch("/api/fantasy/parlays/price", {
           method: "POST",
@@ -122,7 +122,7 @@ export function BetSlip({ onPlaced }: { onPlaced?: () => void }) {
     setPlacing(true);
     setError(null);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       let placed = 0;
       const failures: string[] = [];
@@ -164,7 +164,7 @@ export function BetSlip({ onPlaced }: { onPlaced?: () => void }) {
     setPlacing(true);
     setError(null);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const res = await fetch("/api/fantasy/parlays", {
         method: "POST",

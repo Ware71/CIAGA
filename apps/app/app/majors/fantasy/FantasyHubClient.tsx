@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
-import { getViewerSession } from "@/lib/auth/viewerSession";
+import { requireViewerSession } from "@/lib/auth/requireViewerSession";
 import type { FantasyConfig } from "@/lib/fantasy/types";
 
 type FantasyGroupSummary = {
@@ -44,7 +44,7 @@ export default function FantasyHubClient() {
 
   /** Returns true when it redirected away (caller should keep loading=true). */
   const fetchGroups = useCallback(async (): Promise<boolean> => {
-    const session = await getViewerSession();
+    const session = await requireViewerSession();
     if (!session) return false;
     const res = await fetch("/api/fantasy/me", {
       headers: { Authorization: `Bearer ${session.accessToken}` },
@@ -95,7 +95,7 @@ export default function FantasyHubClient() {
     setToppingUp(true);
     setTopupError(null);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const res = await fetch(`/api/fantasy/groups/${topupGroup.group.id}/topup`, {
         method: "POST",

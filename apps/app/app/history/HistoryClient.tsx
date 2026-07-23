@@ -3,9 +3,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
-import { getMyProfileIdByAuthUserId } from "@/lib/myProfile";
+import { getViewerSession } from "@/lib/auth/viewerSession";
+import type { HistorySummaryRound } from "@/lib/rounds/historySummary";
 import { Button } from "@/components/ui/button";
 import { BackButton } from "@/components/ui/BackButton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -17,8 +18,6 @@ type ProfileRow = {
   email?: string | null;
   avatar_url?: string | null;
 };
-
-type HandicapHistoryRow = { as_of_date: string; handicap_index: number };
 
 type RoundRow = {
   id: string;
@@ -32,21 +31,9 @@ type RoundRow = {
 
 type TeeSnap = { id: string; name: string | null };
 
-type ParticipantRow = {
-  id: string;
-  round_id: string;
-  tee_snapshot_id: string | null;
-  rounds?: RoundRow[] | RoundRow | null;
-};
-
 function one<T>(v: T | T[] | null | undefined): T | null {
   if (!v) return null;
   return Array.isArray(v) ? (v[0] ?? null) : v;
-}
-
-function isFinishedStatus(s: string | null | undefined) {
-  const v = (s ?? "").toLowerCase();
-  return v === "finished" || v === "completed" || v === "ended";
 }
 
 function parseDateMs(iso: string | null) {
@@ -101,7 +88,6 @@ function usedDifferentialsCount(n: number) {
 const PAGE_SIZE = 25;
 
 export default function RoundsHistoryPage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
 
   const profileFromQuery = (searchParams.get("profile") || "").trim() || null;
@@ -300,14 +286,6 @@ export default function RoundsHistoryPage() {
   useEffect(() => {
     let cancelled = false;
 
-    async function resolveProfileId(): Promise<string | null> {
-      if (profileFromQuery) return profileFromQuery;
-      const { data: authData, error: authErr } = await supabase.auth.getUser();
-      if (authErr || !authData?.user) return null;
-      const pid = await getMyProfileIdByAuthUserId(authData.user.id);
-      return pid ?? null;
-    }
-
     async function load() {
       setLoading(true);
       setError(null);
@@ -315,18 +293,20 @@ export default function RoundsHistoryPage() {
       loadedCountRef.current = 0;
 
       try {
-        const pid = await resolveProfileId();
+        const session = await getViewerSession();
+        const token = session?.accessToken;
 
-        if (!pid) {
-          if (!profileFromQuery) {
-            setError("You must be signed in to view your round history.");
-          } else {
-            setError("Could not load this player's history.");
-          }
+        if (!token) {
+          setError(
+            profileFromQuery
+              ? "Could not load this player's history."
+              : "You must be signed in to view your round history."
+          );
           setLoading(false);
           return;
         }
 
+        const pid = profileFromQuery ?? session.profileId;
         if (!cancelled) setProfileId(pid);
 
         try {
@@ -336,145 +316,72 @@ export default function RoundsHistoryPage() {
           if (!cancelled) setProfileRow(null);
         }
 
-        // 1) All participant rows + round info
-        const { data, error: qErr } = await supabase
-          .from("round_participants")
-          .select(
-            `
-              id,
-              round_id,
-              tee_snapshot_id,
-              rounds:rounds!round_id (
-                id,
-                name,
-                status,
-                started_at,
-                created_at,
-                course_id,
-                courses:courses ( name )
-              )
-            `
-          )
-          .eq("profile_id", pid);
-
-        if (qErr) throw qErr;
-
-        const rows = (data ?? []) as ParticipantRow[];
-
-        const extractedAll: RoundRow[] = rows.map((r) => one(r.rounds)).filter(Boolean) as RoundRow[];
-        const extracted = extractedAll.filter((r) => isFinishedStatus(r.status));
-
-        const pidMap: Record<string, string> = {};
-        const teeSnapIdByRound: Record<string, string> = {};
-
-        for (const pr of rows) {
-          const round = one(pr.rounds);
-          if (!round) continue;
-          if (!isFinishedStatus(round.status)) continue;
-          pidMap[round.id] = pr.id;
-          if (pr.tee_snapshot_id) teeSnapIdByRound[round.id] = pr.tee_snapshot_id;
+        // Whole-career finished-round summary in a single server call. This
+        // replaces three unbounded browser queries — every round_participants
+        // row, a chunked handicap_round_results loop, and the full
+        // handicap_index_history + a per-round binary search — with one request
+        // whose joins run next to Postgres and whose hi_after is precomputed.
+        // The heavy per-hole data stays paginated in loadSupplemental below.
+        const res = await fetch(
+          `/api/history/summary?profile_id=${encodeURIComponent(pid)}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body?.error || `Failed to load history (${res.status})`);
         }
+        const { rounds: summary } = (await res.json()) as { rounds: HistorySummaryRound[] };
 
+        const extracted: RoundRow[] = summary.map((s) => ({
+          id: s.round_id,
+          name: s.name,
+          status: s.status,
+          started_at: s.started_at,
+          created_at: s.created_at,
+          course_id: s.course_id,
+          courses: { name: s.course_name },
+        }));
+
+        // Sort newest-first with the same comparator as before, so window20 /
+        // counting-set selection is independent of the endpoint's row order.
         extracted.sort((a, b) => {
           const ad = parseDateMs(a.started_at ?? a.created_at);
           const bd = parseDateMs(b.started_at ?? b.created_at);
           return bd - ad;
         });
 
+        const pidMap: Record<string, string> = {};
+        const teeSnapIdByRound: Record<string, string> = {};
+        const agsMap: Record<string, number> = {};
+        const sdMap: Record<string, number> = {};
+        const hiUsedMap: Record<string, number> = {};
+        const hiAfterMap: Record<string, number> = {};
+        const courseHcpByPid: Record<string, number> = {};
+
+        for (const s of summary) {
+          pidMap[s.round_id] = s.participant_id;
+          if (s.tee_snapshot_id) teeSnapIdByRound[s.round_id] = s.tee_snapshot_id;
+          if (s.adjusted_gross_score != null) agsMap[s.round_id] = s.adjusted_gross_score;
+          if (s.score_differential != null) sdMap[s.round_id] = s.score_differential;
+          if (s.handicap_index_used != null) hiUsedMap[s.round_id] = s.handicap_index_used;
+          if (s.course_handicap_used != null) courseHcpByPid[s.participant_id] = s.course_handicap_used;
+          if (s.hi_after != null) hiAfterMap[s.round_id] = s.hi_after;
+        }
+
         if (cancelled) return;
 
         allRoundsRef.current = extracted;
         pidMapRef.current = pidMap;
         teeSnapIdByRoundRef.current = teeSnapIdByRound;
-
-        setRounds(extracted);
-        setParticipantIdByRoundId(pidMap);
-
-        // 2) handicap_round_results for ALL participants upfront (drives counting-set decoration)
-        const participantIds = Array.from(new Set(Object.values(pidMap).filter(Boolean)));
-        const agsMap: Record<string, number> = {};
-        const sdMap: Record<string, number> = {};
-        const hiUsedMap: Record<string, number> = {};
-        const courseHcpByPid: Record<string, number> = {};
-
-        if (participantIds.length) {
-          for (const ids of chunk(participantIds, 150)) {
-            const { data: hrr, error: hErr } = await supabase
-              .from("handicap_round_results")
-              .select(
-                "round_id, participant_id, adjusted_gross_score, score_differential, handicap_index_used, course_handicap_used"
-              )
-              .in("participant_id", ids);
-
-            if (hErr) continue;
-            for (const row of (hrr ?? []) as any[]) {
-              const rid = row.round_id as string;
-              const pid2 = row.participant_id as string;
-              const ags = toNumberMaybe(row.adjusted_gross_score);
-              const sd = toNumberMaybe(row.score_differential);
-              const hiUsed = toNumberMaybe(row.handicap_index_used);
-              const chcp = toNumberMaybe(row.course_handicap_used);
-              if (ags != null) agsMap[rid] = ags;
-              if (sd != null) sdMap[rid] = sd;
-              if (hiUsed != null) hiUsedMap[rid] = hiUsed;
-              if (chcp != null) courseHcpByPid[pid2] = chcp;
-            }
-          }
-        }
-
-        if (!cancelled) {
-          setAgsByRoundId(agsMap);
-          setScoreDiffByRoundId(sdMap);
-          setHiUsedByRoundId(hiUsedMap);
-        }
-
         agsMapRef.current = agsMap;
         courseHcpByPidRef.current = courseHcpByPid;
 
-        // 3) Full handicap index history for "HI after" tooltip
-        const { data: hist, error: hErr2 } = await supabase
-          .from("handicap_index_history")
-          .select("as_of_date, handicap_index")
-          .eq("profile_id", pid)
-          .not("handicap_index", "is", null)
-          .order("as_of_date", { ascending: true });
-
-        if (hErr2) throw hErr2;
-
-        const histRows = ((hist ?? []) as any[])
-          .map((r) => ({
-            as_of_date: String(r.as_of_date),
-            handicap_index: Number(r.handicap_index),
-          }))
-          .filter((r) => r.as_of_date && Number.isFinite(r.handicap_index)) as HandicapHistoryRow[];
-
-        function hiAsOfInclusive(dateIso: string | null): number | null {
-          if (!dateIso || !histRows.length) return null;
-          const target = new Date(dateIso).getTime();
-          if (!Number.isFinite(target)) return null;
-
-          let lo = 0;
-          let hi = histRows.length - 1;
-          let bestIdx = -1;
-
-          while (lo <= hi) {
-            const mid = (lo + hi) >> 1;
-            const t = new Date(histRows[mid].as_of_date).getTime();
-            if (!Number.isFinite(t)) { lo = mid + 1; continue; }
-            if (t <= target) { bestIdx = mid; lo = mid + 1; } else { hi = mid - 1; }
-          }
-
-          return bestIdx >= 0 ? histRows[bestIdx].handicap_index : null;
-        }
-
-        const hiAfterMap: Record<string, number> = {};
-        for (const r of extracted) {
-          const dateIso = r.started_at ?? r.created_at;
-          const after = hiAsOfInclusive(dateIso);
-          if (after != null) hiAfterMap[r.id] = after;
-        }
-
-        if (!cancelled) setHiAfterByRoundId(hiAfterMap);
+        setRounds(extracted);
+        setParticipantIdByRoundId(pidMap);
+        setAgsByRoundId(agsMap);
+        setScoreDiffByRoundId(sdMap);
+        setHiUsedByRoundId(hiUsedMap);
+        setHiAfterByRoundId(hiAfterMap);
 
         // 4) Supplemental data for first page only (tee names, scores, WHS penalties)
         if (!cancelled && extracted.length) {
@@ -652,7 +559,7 @@ export default function RoundsHistoryPage() {
       <div className="mx-auto w-full max-w-3xl h-full flex flex-col">
         <header className="sticky top-0 z-20 bg-[#042713] pb-3">
           <div className="flex items-center justify-between gap-2 px-1">
-            <BackButton onClick={() => router.replace("/")} />
+            <BackButton href="/home" />
 
             <div className="text-center flex-1 min-w-0 px-2">
               <div className="text-[15px] sm:text-base font-semibold tracking-wide text-[#f5e6b0] truncate">{title}</div>
@@ -692,7 +599,7 @@ export default function RoundsHistoryPage() {
                     className="border-emerald-900/70 bg-[#0b3b21]/40 text-emerald-50 hover:bg-emerald-900/20"
                     onClick={async () => {
                       await supabase.auth.signOut();
-                      window.location.href = "/login";
+                      window.location.href = "/auth";
                     }}
                   >
                     Sign out

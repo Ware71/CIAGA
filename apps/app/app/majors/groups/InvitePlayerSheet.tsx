@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useMemo } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { getViewerSession } from "@/lib/auth/viewerSession";
+import { requireViewerSession } from "@/lib/auth/requireViewerSession";
 
 type ProfileLite = {
   id: string;
@@ -89,7 +89,7 @@ export function InvitePlayerSheet({ groupId, onInvite, title, excludedProfileIds
   useEffect(() => {
     (async () => {
       try {
-        const session = await getViewerSession();
+        const session = await requireViewerSession();
         if (!session) return;
         setMyProfileId(session.profileId);
         const { data } = await supabase
@@ -112,24 +112,30 @@ export function InvitePlayerSheet({ groupId, onInvite, title, excludedProfileIds
       setSearchResults([]);
       return;
     }
+    const controller = new AbortController();
     debounceRef.current = setTimeout(async () => {
       setSearching(true);
       try {
-        const session = await getViewerSession();
+        const session = await requireViewerSession();
         if (!session) return;
         const res = await fetch(
           `/api/profiles/search?q=${encodeURIComponent(q)}${groupId ? `&exclude_group_id=${groupId}` : ""}`,
-          { headers: { Authorization: `Bearer ${session.accessToken}` } }
+          { headers: { Authorization: `Bearer ${session.accessToken}` }, signal: controller.signal }
         );
         if (res.ok) {
           const j = await res.json();
           setSearchResults(j.profiles ?? []);
         }
+      } catch {
+        // aborted by a newer keystroke, or offline
       } finally {
-        setSearching(false);
+        if (!controller.signal.aborted) setSearching(false);
       }
     }, 300);
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+    return () => {
+      controller.abort();
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
   }, [query, groupId]);
 
   const alreadyExcluded = useMemo(() => {
@@ -163,7 +169,7 @@ export function InvitePlayerSheet({ groupId, onInvite, title, excludedProfileIds
       if (onInvite) {
         await onInvite(profile.id);
       } else if (groupId) {
-        const session = await getViewerSession();
+        const session = await requireViewerSession();
         if (!session) return;
         await fetch(`/api/majors/groups/${groupId}/members`, {
           method: "POST",

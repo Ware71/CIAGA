@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { supabase } from '@/lib/supabaseClient';
 import { LEGAL_LINKS, CURRENT_TERMS_VERSION } from '@/lib/legal';
+import { safeNextPath } from '@/lib/auth/safeNextPath';
 
 type Mode = 'sign-in' | 'sign-up' | 'forgot' | 'reset';
 
@@ -27,6 +28,11 @@ function AuthPageContent() {
   const [agreed, setAgreed] = useState(false);
   const [working, setWorking] = useState(false);
   const [msg, setMsg] = useState<{ text: string; isError: boolean } | null>(null);
+
+  // Where to land after a successful sign-in. Set by useRequireSession() when it
+  // bounces a signed-out viewer off a deep link. Sanitised — `next` must be a
+  // same-origin path, never a full URL, or it's an open redirect.
+  const destination = safeNextPath(searchParams.get('next'), '/');
 
   async function routeAfterRecoveryPasswordSet() {
     const { data: sessionData } = await supabase.auth.getSession();
@@ -100,7 +106,7 @@ function AuthPageContent() {
     // and we must stay on the reset form so the user can set a new password.
     if (!isRecovery) {
       supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session) router.replace('/');
+        if (session) router.replace(destination);
       });
     }
 
@@ -110,14 +116,14 @@ function AuthPageContent() {
         setMsg({ text: 'Enter your new password below.', isError: false });
       }
       if (event === 'SIGNED_IN' && !isRecovery) {
-        router.replace('/');
+        router.replace(destination);
       }
     });
 
     return () => {
       sub.subscription.unsubscribe();
     };
-  }, [searchParams, router]);
+  }, [searchParams, router, destination]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -212,7 +218,7 @@ function AuthPageContent() {
           password,
         });
         if (error) throw error;
-        router.replace('/');
+        router.replace(destination);
       } else {
         const { error } = await supabase.auth.signUp({
           email: trimmedEmail,

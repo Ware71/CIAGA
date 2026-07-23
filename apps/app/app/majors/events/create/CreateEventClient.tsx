@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { getViewerSession } from "@/lib/auth/viewerSession";
+import { requireViewerSession } from "@/lib/auth/requireViewerSession";
 import { NumberField } from "@/components/ui/NumberField";
 import type {
   EventTypeV2,
@@ -974,7 +975,7 @@ export default function CreateEventClient() {
 
   useEffect(() => {
     (async () => {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const res = await fetch("/api/majors/groups?mode=mine", {
         headers: { Authorization: `Bearer ${session.accessToken}` },
@@ -1058,7 +1059,7 @@ export default function CreateEventClient() {
   useEffect(() => {
     if (!preselectedCompetitionId) return;
     (async () => {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const res = await fetch(`/api/majors/competitions/${preselectedCompetitionId}`, {
         headers: { Authorization: `Bearer ${session.accessToken}` },
@@ -1087,7 +1088,7 @@ export default function CreateEventClient() {
     update("competition_event_template_id", "");
     setCompetitionEventTemplates([]);
     if (!competitionId) return;
-    const session = await getViewerSession();
+    const session = await requireViewerSession();
     if (!session) return;
     const res = await fetch(`/api/majors/competitions/${competitionId}`, {
       headers: { Authorization: `Bearer ${session.accessToken}` },
@@ -1141,7 +1142,7 @@ export default function CreateEventClient() {
   useEffect(() => {
     if (!form.group_id) { setGroupCompetitions([]); return; }
     (async () => {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const res = await fetch(`/api/majors/competitions?group_id=${form.group_id}`, {
         headers: { Authorization: `Bearer ${session.accessToken}` },
@@ -1157,7 +1158,7 @@ export default function CreateEventClient() {
   useEffect(() => {
     if (!form.group_id) { setGroupSeasons([]); setForm((prev) => ({ ...prev, season_id: "" })); return; }
     (async () => {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const res = await fetch(`/api/majors/groups/${form.group_id}/seasons`, {
         headers: { Authorization: `Bearer ${session.accessToken}` },
@@ -1248,7 +1249,7 @@ export default function CreateEventClient() {
     if (!newCompetitionName.trim() || !form.group_id) return;
     setCreatingCompetition(true);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const res = await fetch("/api/majors/competitions", {
         method: "POST",

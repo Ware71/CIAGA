@@ -179,14 +179,20 @@ export async function fetchLookingForRound(
 
 export type ProfileSearchResult = { id: string; name: string | null; avatar_url: string | null };
 
-export async function searchProfiles(query: string): Promise<ProfileSearchResult[]> {
+export async function searchProfiles(
+  query: string,
+  signal?: AbortSignal
+): Promise<ProfileSearchResult[]> {
   const q = query.trim();
   if (!q) return [];
-  const { data, error } = await supabase
+  let req = supabase
     .from("profiles")
     .select("id, name, avatar_url")
     .ilike("name", `%${q}%`)
     .limit(20);
+  // Cancel superseded typeahead requests instead of just ignoring their results.
+  if (signal) req = req.abortSignal(signal);
+  const { data, error } = await req;
   if (error) throw error;
   return (data ?? []) as ProfileSearchResult[];
 }

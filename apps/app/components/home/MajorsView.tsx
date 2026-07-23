@@ -6,7 +6,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { AuthUser } from "@/components/ui/auth-user";
-import { getViewerSession } from "@/lib/auth/viewerSession";
+import { requireViewerSession } from "@/lib/auth/requireViewerSession";
 import type { MajorHubSummary, MajorGroupSeasonStats, MajorGroup, EventWithGroup } from "@/lib/majors/types";
 import { eventStatusLabel } from "@/lib/majors/labels";
 
@@ -101,7 +101,7 @@ function GroupCard({ group, onClick }: { group: MajorGroup & { member_count: num
     >
       <div className="flex items-center gap-2.5">
         {group.image_url ? (
-          <img src={group.image_url} alt={group.name} className="h-9 w-9 rounded-full object-cover border border-emerald-700/40 shrink-0" />
+          <img src={group.image_url} alt={group.name} className="h-9 w-9 rounded-full object-cover border border-emerald-700/40 shrink-0" loading="lazy" decoding="async" />
         ) : (
           <div className="h-9 w-9 rounded-full bg-gradient-to-br from-emerald-800 to-emerald-950 flex items-center justify-center text-[11px] font-bold text-emerald-200 shrink-0">
             {group.name.slice(0, 2).toUpperCase()}
@@ -291,7 +291,7 @@ function MajorsHubPreview({ open, initialHub }: { open: boolean; initialHub?: Ma
     let cancelled = false;
     (async () => {
       try {
-        const session = await getViewerSession();
+        const session = await requireViewerSession();
         if (!session || cancelled) return;
         const res = await fetch("/api/majors/hub", {
           headers: { Authorization: `Bearer ${session.accessToken}` },
@@ -480,11 +480,9 @@ function GroupStatRow({ stat }: { stat: MajorGroupSeasonStats }) {
     <div className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/60 p-3 space-y-2.5">
       <div className="flex items-center gap-2">
         {stat.group_image_url ? (
-          <img
-            src={stat.group_image_url}
+          <img             src={stat.group_image_url}
             alt={stat.group_name}
-            className="h-6 w-6 rounded-full object-cover border border-emerald-700/40 shrink-0"
-          />
+            className="h-6 w-6 rounded-full object-cover border border-emerald-700/40 shrink-0" loading="lazy" decoding="async" />
         ) : (
           <div className="h-6 w-6 rounded-full bg-gradient-to-br from-emerald-800 to-emerald-950 flex items-center justify-center text-[9px] font-bold text-emerald-200 shrink-0">
             {stat.group_name.slice(0, 2).toUpperCase()}
@@ -574,7 +572,7 @@ export function MajorsView({
     let cancelled = false;
     (async () => {
       try {
-        const session = await getViewerSession();
+        const session = await requireViewerSession();
         if (!session || cancelled) return;
         const res = await fetch("/api/majors/balance", {
           headers: { Authorization: `Bearer ${session.accessToken}` },

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
+import { getEventFixtures } from "@/lib/majors/eventDetailQueries";
 
 export const runtime = "nodejs";
 
@@ -10,28 +11,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     await getAuthedProfileOrThrow(req);
     const { id } = await params;
 
-    const [stagesResult, fixturesResult] = await Promise.all([
-      supabaseAdmin
-        .from("matchplay_stages")
-        .select("*")
-        .eq("event_id", id)
-        .order("sort_order", { ascending: true }),
-      supabaseAdmin
-        .from("matchplay_fixtures")
-        .select(`
-          *,
-          home_entry:event_entries!home_entry_id(id, profile_id, profile:profiles(id, name, avatar_url)),
-          away_entry:event_entries!away_entry_id(id, profile_id, profile:profiles(id, name, avatar_url))
-        `)
-        .eq("event_id", id)
-        .order("round_number", { ascending: true }),
-    ]);
-
-    if (stagesResult.error) throw stagesResult.error;
-    if (fixturesResult.error) throw fixturesResult.error;
+    const { stages, fixtures } = await getEventFixtures(id);
 
     return NextResponse.json(
-      { stages: stagesResult.data ?? [], fixtures: fixturesResult.data ?? [] },
+      { stages, fixtures },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (e: any) {

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { getViewerSession } from "@/lib/auth/viewerSession";
+import { requireViewerSession } from "@/lib/auth/requireViewerSession";
 import type { MajorHistoryItem } from "@/lib/majors/types";
 
 function finishLabel(pos: number | null): string {
@@ -22,7 +22,7 @@ export default function HistoryClient() {
   const fetchItems = useCallback(async (reset = false) => {
     setLoading(true);
     try {
-      const session = await getViewerSession();
+      const session = await requireViewerSession();
       if (!session) return;
       const res = await fetch("/api/majors/history?limit=20", {
         headers: { Authorization: `Bearer ${session.accessToken}` },

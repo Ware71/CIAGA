@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getServerViewer } from "@/lib/supabaseServer";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import RoundDetailClient from "./RoundDetailClient";
+
+export const metadata: Metadata = { title: "Scorecard" };
 
 export default async function RoundDetailPage({ params }: { params: Promise<{ round_id: string }> }) {
   const [viewerResult, { round_id: roundId }] = await Promise.all([

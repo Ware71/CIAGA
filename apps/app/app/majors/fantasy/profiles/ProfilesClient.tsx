@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getViewerSession } from "@/lib/auth/viewerSession";
+import { requireViewerSession } from "@/lib/auth/requireViewerSession";
 import { supabase } from "@/lib/supabaseClient";
 import type { FantasyConfig } from "@/lib/fantasy/types";
 
@@ -57,7 +57,7 @@ export default function ProfilesClient() {
     let cancelled = false;
     (async () => {
       try {
-        const session = await getViewerSession();
+        const session = await requireViewerSession();
         if (!session || cancelled) return;
         const res = await fetch("/api/fantasy/me", {
           headers: { Authorization: `Bearer ${session.accessToken}` },
@@ -155,7 +155,7 @@ export default function ProfilesClient() {
                   >
                     <div className="flex items-center gap-3">
                       {row.profile?.avatar_url ? (
-                        <img src={row.profile.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
+                        <img src={row.profile.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
                       ) : (
                         <div className="h-8 w-8 rounded-full bg-emerald-900/60 grid place-items-center text-[11px] font-bold text-emerald-200 shrink-0">
                           {name.slice(0, 2).toUpperCase()}

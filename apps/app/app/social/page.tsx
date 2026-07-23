@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getServerViewer } from "@/lib/supabaseServer";
 import { getFeedPage, getLiveRoundsAsFeedItems } from "@/lib/feed/queries";
 import { encodeFeedCursor } from "@/lib/feed/schemas";
 import SocialClient from "./SocialClient";
+
+export const metadata: Metadata = { title: "Social" };
 
 export default async function SocialPage({
   searchParams,
