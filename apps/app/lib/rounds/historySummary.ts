@@ -29,9 +29,6 @@ export type HistorySummaryRound = {
   hi_after: number | null;
 };
 
-// Kept in sync with HistoryClient's FINISHED_STATUSES.
-const FINISHED_STATUSES = ["finished", "completed", "ended"];
-
 function toNum(v: unknown): number | null {
   if (typeof v === "number") return Number.isFinite(v) ? v : null;
   if (typeof v === "string") {
@@ -54,7 +51,12 @@ function chunk<T>(arr: T[], size: number): T[][] {
 
 export async function getRoundHistorySummary(profileId: string): Promise<HistorySummaryRound[]> {
   // 1) Finished rounds for this profile — the finished-only cut is pushed into
-  //    Postgres via !inner + the status filter (same as HistoryClient).
+  //    Postgres via !inner + the status filter.
+  //
+  //    NOTE: the `round_status` enum's only finished value is `finished`. Passing
+  //    a literal that isn't an enum member (e.g. "completed") to `.in()` makes
+  //    Postgres reject the whole list (22P02 invalid input value for enum), so
+  //    filter on the single real value with `.eq`.
   const { data: parts, error } = await supabaseAdmin
     .from("round_participants")
     .select(
@@ -69,7 +71,7 @@ export async function getRoundHistorySummary(profileId: string): Promise<History
       `
     )
     .eq("profile_id", profileId)
-    .in("rounds.status", FINISHED_STATUSES);
+    .eq("rounds.status", "finished");
 
   if (error) throw error;
 
