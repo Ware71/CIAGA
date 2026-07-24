@@ -23,6 +23,13 @@ import { generateSeasonNarrative } from "@/lib/fantasy/seasonNarrative";
 const SEASON_SIM_ITERATIONS = 10_000;
 export const SEASON_TOP_N = 3;
 
+/** Human label for a season market — the single source used by the board and My Picks. */
+export function seasonMarketLabel(type: string, params: Record<string, unknown> | null): string {
+  if (type === "season_outright") return "Season Winner";
+  if (type === "season_top_n") return `Season Top ${Number((params as { n?: unknown })?.n ?? SEASON_TOP_N)}`;
+  return type;
+}
+
 export type SeasonMarketRow = {
   id: string;
   group_id: string;

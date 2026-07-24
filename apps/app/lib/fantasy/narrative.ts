@@ -44,6 +44,8 @@ export type NarrativeInputs = {
     // Optional season/history context — absent (undefined/null) ⇒ the matching
     // angle simply skips, so existing callers/fixtures need not set these.
     avgGross?: number | null;
+    /** Average net (par-72 normalized, i.e. avg_net); avgNet − 72 = net-to-par. */
+    avgNet?: number | null;
     /** Recent handicap-index movement (latest − earliest in window); < 0 = cut. */
     handicapDelta?: number | null;
     seasonPoints?: number | null;
@@ -172,6 +174,29 @@ function favouriteAngle(inputs: NarrativeInputs): Candidate[] {
   return [];
 }
 
+/** Net-to-par as golf prose: "level", "+3", "-2" (rounded to whole shots). */
+function formatToPar(n: number): string {
+  const r = Math.round(n);
+  return r === 0 ? "level" : r > 0 ? `+${r}` : `${r}`;
+}
+
+/**
+ * A recent round's score relative to par, as NET-to-par (handicap-adjusted).
+ * Falls back to gross-to-par for profiles built before net was stored (v4);
+ * rebuilds are atomic, so a given player is consistently all-net or all-gross.
+ * Both gross18 and netToPar are par-72 normalized.
+ */
+function roundToPar(r: RecentRound): number {
+  return r.netToPar != null ? r.netToPar : r.gross18 - 72;
+}
+
+/** A player's average score relative to par, net where available (see roundToPar). */
+function avgToPar(p: NarrativeInputs["players"][number]): number | null {
+  if (p.avgNet != null) return p.avgNet - 72;
+  if (p.avgGross != null) return p.avgGross - 72;
+  return null;
+}
+
 function formStreakAngle(inputs: NarrativeInputs): Candidate[] {
   const out: Candidate[] = [];
   for (const p of inputs.players) {
@@ -180,7 +205,7 @@ function formStreakAngle(inputs: NarrativeInputs): Candidate[] {
     if (magnitude < 1.5) continue;
     const three = (p.recentRounds ?? [])
       .slice(0, 3)
-      .map((r) => Math.round(r.gross18))
+      .map((r) => formatToPar(roundToPar(r)))
       .join(", ");
     const improving = p.recentForm < 0;
     out.push({
@@ -251,11 +276,14 @@ function courseAngle(inputs: NarrativeInputs, courseId: string | null): Candidat
   for (const p of inputs.players) {
     const here = (p.recentRounds ?? []).filter((r) => r.courseId === courseId);
     if (here.length < 2) continue;
-    const best = Math.round(Math.min(...here.map((r) => r.gross18)));
-    const avgHere = Math.round(here.reduce((s, r) => s + r.gross18, 0) / here.length);
-    const avgAll =
-      (p.recentRounds ?? []).reduce((s, r) => s + r.gross18, 0) / (p.recentRounds?.length ?? 1);
-    const delta = avgHere - avgAll;
+    const hereToPar = here.map(roundToPar);
+    const bestNum = Math.min(...hereToPar);
+    const avgHereNum = hereToPar.reduce((s, v) => s + v, 0) / hereToPar.length;
+    const allToPar = (p.recentRounds ?? []).map(roundToPar);
+    const avgAll = allToPar.reduce((s, v) => s + v, 0) / (allToPar.length || 1);
+    const delta = avgHereNum - avgAll;
+    const best = formatToPar(bestNum);
+    const avgHere = formatToPar(avgHereNum);
     if (delta <= -2) {
       out.push({
         score: 18 + Math.abs(delta) * 4,
@@ -265,7 +293,7 @@ function courseAngle(inputs: NarrativeInputs, courseId: string | null): Candidat
           `${course} suits ${firstName(p.name)}, who averages ${avgHere} on it.`,
           `Horses for courses: ${p.name} goes well at ${course} (best ${best}).`,
           `${firstName(p.name)} has history at ${course}, averaging ${avgHere}.`,
-          `${p.name} feels at home on ${course} — a ${best} in the locker.`,
+          `${p.name} feels at home on ${course} — a round of ${best} in the locker.`,
           `Course form favours ${firstName(p.name)} here (${avgHere} average).`,
           `${p.name} knows the way round ${course}; best of ${best}.`,
           `${course} brings out the best in ${firstName(p.name)} (avg ${avgHere}).`,
@@ -563,16 +591,19 @@ function exceptionalScoreAngle(inputs: NarrativeInputs): Candidate[] {
   const out: Candidate[] = [];
   for (const p of inputs.players) {
     const rr = p.recentRounds ?? [];
-    if (rr.length < 3 || p.avgGross == null || p.scoreStddev == null || p.scoreStddev <= 0) continue;
-    const best = Math.min(...rr.map((r) => r.gross18));
-    if (best > p.avgGross - EXCEPTIONAL_STDDEV_BELOW * p.scoreStddev) continue;
-    const sdBelow = (p.avgGross - best) / p.scoreStddev;
-    const bestStr = `${Math.round(best)}`;
+    const baseline = avgToPar(p);
+    if (rr.length < 3 || baseline == null || p.scoreStddev == null || p.scoreStddev <= 0) continue;
+    // Net-to-par (lower = better); score spread is ~identical net vs gross since
+    // a player's handicap is roughly constant across rounds, so scoreStddev holds.
+    const best = Math.min(...rr.map(roundToPar));
+    if (best > baseline - EXCEPTIONAL_STDDEV_BELOW * p.scoreStddev) continue;
+    const sdBelow = (baseline - best) / p.scoreStddev;
+    const bestStr = formatToPar(best);
     out.push({
       score: 22 + sdBelow * 6,
       profileId: p.profileId,
       templates: [
-        `${p.name} has a low ${bestStr} in the bag recently — the ceiling is high.`,
+        `${p.name} has a low round of ${bestStr} in the bag recently — the ceiling is high.`,
         `${firstName(p.name)} carded a sparkling ${bestStr} not long ago.`,
         `${p.name} can go deep: a recent ${bestStr} proves it.`,
         `That ${bestStr} from ${firstName(p.name)} lately turned heads.`,
@@ -581,7 +612,7 @@ function exceptionalScoreAngle(inputs: NarrativeInputs): Candidate[] {
         `${p.name} caught fire for a ${bestStr} not so long ago.`,
         `${firstName(p.name)}'s recent ${bestStr} is the score to fear.`,
         `${p.name} has already gone as low as ${bestStr} of late.`,
-        `Don't forget ${firstName(p.name)}'s ${bestStr} — the potential is there.`,
+        `Don't forget ${firstName(p.name)}'s ${bestStr} round — the potential is there.`,
       ],
     });
   }
@@ -803,13 +834,19 @@ export async function generateNarrative(
 
   const { data: profRows } = await supabaseAdmin
     .from("fantasy_player_profiles")
-    .select("profile_id, sample_size, score_stddev, recent_form, recent_rounds, avg_gross")
+    .select("profile_id, sample_size, score_stddev, recent_form, recent_rounds, avg_gross, avg_net")
     .eq("group_id", ctx.groupId)
     .in("profile_id", fieldIds);
   const stored = new Map(
     ((profRows ?? []) as Pick<
       StoredFantasyProfile,
-      "profile_id" | "sample_size" | "score_stddev" | "recent_form" | "recent_rounds" | "avg_gross"
+      | "profile_id"
+      | "sample_size"
+      | "score_stddev"
+      | "recent_form"
+      | "recent_rounds"
+      | "avg_gross"
+      | "avg_net"
     >[]).map((r) => [r.profile_id, r])
   );
 
@@ -853,6 +890,7 @@ export async function generateNarrative(
         recentForm: row?.recent_form != null ? Number(row.recent_form) : null,
         recentRounds: row?.recent_rounds ?? null,
         avgGross: row?.avg_gross != null ? Number(row.avg_gross) : null,
+        avgNet: row?.avg_net != null ? Number(row.avg_net) : null,
         handicapDelta: handicapDeltas.get(p.profileId) ?? null,
         seasonPoints: season ? season.points : null,
         seasonPosition: season?.position ?? null,

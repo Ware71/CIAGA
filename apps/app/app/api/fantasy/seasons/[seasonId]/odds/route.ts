@@ -1,17 +1,11 @@
 import { NextResponse } from "next/server";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 import { getGroupRole } from "@/lib/fantasy/wallet";
-import { generateSeasonFantasy, refreshSeasonIfStale, SEASON_TOP_N } from "@/lib/fantasy/seasonOdds";
+import { generateSeasonFantasy, refreshSeasonIfStale, seasonMarketLabel } from "@/lib/fantasy/seasonOdds";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
-
-function marketLabel(type: string, params: Record<string, unknown>): string {
-  if (type === "season_outright") return "Season Winner";
-  if (type === "season_top_n") return `Season Top ${Number(params?.n ?? SEASON_TOP_N)}`;
-  return type;
-}
 
 // GET /api/fantasy/seasons/[seasonId]/odds — season markets board (generates on
 // first view for season-budget groups, else re-prices if stale).
@@ -87,7 +81,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ seasonId
     }[]).map((m) => ({
       id: m.id,
       market_type: m.market_type,
-      label: marketLabel(m.market_type, m.params),
+      label: seasonMarketLabel(m.market_type, m.params),
       selections: snaps
         .filter((s) => s.season_market_id === m.id)
         .map((s) => ({

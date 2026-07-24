@@ -9,6 +9,8 @@ function rounds(grosses: number[], birdiesEach = 1, courseId: string | null = nu
     courseId,
     holes: 18,
     gross18: g,
+    // Net-to-par == gross-to-par here (scratch fixture); the narrator prints net.
+    netToPar: g - 72,
     birdies: birdiesEach,
     eagles: 0,
   }));
@@ -84,8 +86,8 @@ describe("composeNarrative", () => {
       null,
       11
     );
-    // Harry's streak (6 strokes of form) makes the cut…
-    expect(text).toContain("78, 79, 80");
+    // Harry's streak (6 strokes of form) makes the cut… (shown net-to-par)
+    expect(text).toContain("+6, +7, +8");
     // …Fred's 1.2 strokes sits below the 1.5 threshold: no mention at all.
     expect(text).not.toContain("Fred");
   });
@@ -210,7 +212,8 @@ describe("composeNarrative", () => {
       null,
       5
     );
-    expect(text).toContain("76");
+    // 76 gross → +4 net-to-par (scratch fixture)
+    expect(text).toContain("+4");
     expect(text).toMatch(/Larry/);
   });
 
