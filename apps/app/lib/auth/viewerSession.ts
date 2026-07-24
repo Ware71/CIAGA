@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabaseClient";
 import { getMyProfileIdByAuthUserId } from "@/lib/myProfile";
+import { clearClientCache, setCacheScope } from "@/lib/cache/clientCache";
 
 export type ViewerSession = {
   authUserId: string;
@@ -44,12 +45,23 @@ async function resolveSession(): Promise<ViewerSession | null> {
   if (!token) return null;
 
   const profileId = await getMyProfileIdByAuthUserId(user.id);
+  // Scope the client data cache to this viewer. setCacheScope wipes the store
+  // if the profile changed, so a snapshot can never cross users on a shared
+  // device.
+  setCacheScope(profileId);
   return { authUserId: user.id, profileId, accessToken: token };
 }
 
 // Invalidate whenever the auth state changes (sign-in, sign-out, token refresh).
 if (typeof window !== "undefined") {
-  supabase.auth.onAuthStateChange(() => {
+  supabase.auth.onAuthStateChange((event) => {
     invalidateViewerSession();
+    // Sign-out drops every cached page snapshot, in memory and in localStorage.
+    // (A switch to a different user is caught by setCacheScope, which wipes on
+    // an identity change. Token refreshes keep the cache — same user, same data.)
+    if (event === "SIGNED_OUT") {
+      setCacheScope(null);
+      clearClientCache();
+    }
   });
 }

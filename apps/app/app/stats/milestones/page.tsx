@@ -12,7 +12,7 @@ import {
   fmtDate, fmtSigned, mean, stdev,
   normalizeTeeName, normalizeHoleNumberForNine,
 } from "@/lib/stats/helpers";
-import { fetchAllHoleScoringSource } from "@/lib/stats/queries";
+import { fetchHoleScoringSourceCached, peekHoleScoringSource } from "@/lib/stats/queries";
 
 // -----------------------------
 // Helpers (page-specific)
@@ -324,7 +324,18 @@ export default function MilestonesPage() {
 
         const pid = await getMyProfileIdByAuthUserId(user.id);
 
-        const data = await fetchAllHoleScoringSource(pid);
+        // Paint the cached career snapshot, then revalidate behind it. This
+        // whole-career hole-level pull was re-run on every visit to each of the
+        // three stats pages that share it.
+        const cached = peekHoleScoringSource(pid);
+        if (cached && alive) {
+          setRows(cached as HoleRow[]);
+          setLoading(false);
+        }
+
+        const data = await fetchHoleScoringSourceCached(pid, (fresh) => {
+          if (alive) setRows(fresh as HoleRow[]);
+        });
         const got = ((data as any) ?? []) as HoleRow[];
 
         if (!alive) return;

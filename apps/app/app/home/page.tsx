@@ -10,16 +10,15 @@ export const metadata: Metadata = { title: "Home" };
 /**
  * Home STREAMS its data rather than blocking on it. The server component awaits
  * only the session (needed for the redirect), then hands HomeClient the home
- * queries as pending promises. React flushes the HTML shell immediately — so the
- * splash mounts right away and plays its connection-aware wait animation (grow →
- * pulse → spin on a slow link, quick grow → exit on a fast one) — while the data
- * streams in behind it. Core gates the splash; feed + Majors fill in after.
+ * queries as pending promises. React flushes the HTML shell immediately, so the
+ * splash (components/ui/SplashHost.tsx, mounted from the root layout) is on
+ * screen and animating while the data streams in behind it. Core releases the
+ * splash; feed + Majors fill in after.
  *
- * This keeps the fetches server-side (one hop from Postgres, no client waterfall)
- * WITHOUT a blocking `await`. Awaiting here froze the splash into an instant
- * grow→exit and dropped its pulse/spin, because the data was already present when
- * LoadingScreen mounted. HomeClient keeps its own client-fetch path as the
- * fallback for when the promises are absent (or a retry).
+ * This keeps the fetches server-side (one hop from Postgres, no client
+ * waterfall) WITHOUT a blocking `await` — awaiting here would delay the shell
+ * flush and with it the first painted frame. HomeClient keeps its own
+ * client-fetch path as the fallback for when the promises are absent (or a retry).
  */
 export default async function HomePage() {
   const viewerResult = await getServerViewer();

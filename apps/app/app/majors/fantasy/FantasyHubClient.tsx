@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { requireViewerSession } from "@/lib/auth/requireViewerSession";
+import { readCache, writeCache, invalidateCache, setCacheScope } from "@/lib/cache/clientCache";
 import type { FantasyConfig } from "@/lib/fantasy/types";
 
 type FantasyGroupSummary = {
@@ -32,6 +33,13 @@ function pnlClass(pnl: number): string {
   return "text-emerald-100/60";
 }
 
+type FantasyPayload = { groups: FantasyGroupSummary[]; events: FantasyEventSummary[] };
+
+const FANTASY_CACHE_KEY = "fantasy:hub";
+// staleTime 0 — the snapshot exists only to avoid a spinner over the wallets;
+// balances are always refetched.
+const FANTASY_CACHE_OPTS = { ttl: 24 * 60 * 60_000, staleTime: 0 };
+
 export default function FantasyHubClient() {
   const router = useRouter();
   const [groups, setGroups] = useState<FantasyGroupSummary[]>([]);
@@ -42,41 +50,58 @@ export default function FantasyHubClient() {
   const [toppingUp, setToppingUp] = useState(false);
   const [topupError, setTopupError] = useState<string | null>(null);
 
+  /** Renders a payload. Returns true when it redirected away. */
+  const applyPayload = useCallback(
+    (payload: FantasyPayload): boolean => {
+      const fetchedGroups = payload.groups;
+      // Exactly one fantasy-enabled wallet — skip straight to it on first entry.
+      // A per-session flag stops this re-firing when the user navigates BACK to
+      // the hub (via "← Wallets" or the New Picks tab): otherwise single-group
+      // users get bounced group → hub → group forever and can never reach the
+      // Home button that lives on this page.
+      if (fetchedGroups.length === 1) {
+        const jumpedKey = "ciaga:fantasy:hub-redirected";
+        const alreadyJumped =
+          typeof sessionStorage !== "undefined" && sessionStorage.getItem(jumpedKey) === "1";
+        if (!alreadyJumped) {
+          if (typeof sessionStorage !== "undefined") sessionStorage.setItem(jumpedKey, "1");
+          router.replace(`/majors/fantasy/groups/${fetchedGroups[0].group.id}`);
+          return true;
+        }
+        // Returning to the hub — render the single wallet (with its Home button).
+      }
+      setGroups(fetchedGroups);
+      setEvents(payload.events);
+      return false;
+    },
+    [router]
+  );
+
   /** Returns true when it redirected away (caller should keep loading=true). */
   const fetchGroups = useCallback(async (): Promise<boolean> => {
+    // Paint the last snapshot so the wallets aren't behind a spinner, but
+    // ALWAYS revalidate (staleTime 0): these are balances, and a stale balance
+    // is worse than a brief one. The fresh copy lands a moment later.
+    const cached = readCache<FantasyPayload>(FANTASY_CACHE_KEY, FANTASY_CACHE_OPTS);
+    if (cached && applyPayload(cached.data)) return true;
+
     const session = await requireViewerSession();
     if (!session) return false;
+    setCacheScope(session.profileId);
     const res = await fetch("/api/fantasy/me", {
       headers: { Authorization: `Bearer ${session.accessToken}` },
     });
     if (!res.ok) return false;
     const j = await res.json();
-    const fetchedGroups: FantasyGroupSummary[] = j.groups ?? [];
-    // Exactly one fantasy-enabled wallet — skip straight to it on first entry.
-    // A per-session flag stops this re-firing when the user navigates BACK to
-    // the hub (via "← Wallets" or the New Picks tab): otherwise single-group
-    // users get bounced group → hub → group forever and can never reach the
-    // Home button that lives on this page.
-    if (fetchedGroups.length === 1) {
-      const jumpedKey = "ciaga:fantasy:hub-redirected";
-      const alreadyJumped =
-        typeof sessionStorage !== "undefined" && sessionStorage.getItem(jumpedKey) === "1";
-      if (!alreadyJumped) {
-        if (typeof sessionStorage !== "undefined") sessionStorage.setItem(jumpedKey, "1");
-        router.replace(`/majors/fantasy/groups/${fetchedGroups[0].group.id}`);
-        return true;
-      }
-      // Returning to the hub — render the single wallet (with its Home button).
-    }
-    setGroups(fetchedGroups);
-    setEvents(j.events ?? []);
-    return false;
-  }, [router]);
+    const payload: FantasyPayload = { groups: j.groups ?? [], events: j.events ?? [] };
+    writeCache(FANTASY_CACHE_KEY, payload, FANTASY_CACHE_OPTS);
+    return applyPayload(payload);
+  }, [applyPayload]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      setLoading(true);
+      setLoading(readCache<FantasyPayload>(FANTASY_CACHE_KEY, FANTASY_CACHE_OPTS) === null);
       let redirected = false;
       try {
         redirected = await fetchGroups();
@@ -109,6 +134,8 @@ export default function FantasyHubClient() {
       }
       setTopupGroup(null);
       setTopupUnits(1);
+      // Balance just changed — don't let the snapshot serve the pre-top-up figure.
+      invalidateCache(FANTASY_CACHE_KEY);
       await fetchGroups();
     } finally {
       setToppingUp(false);

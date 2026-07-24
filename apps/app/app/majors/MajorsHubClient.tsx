@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 import { requireViewerSession } from "@/lib/auth/requireViewerSession";
+import { fetchWithCache, invalidateCache, readCache, writeCache, setCacheScope } from "@/lib/cache/clientCache";
 import { supabase } from "@/lib/supabaseClient";
 import type { MajorGroup } from "@/lib/majors/types";
 
@@ -17,6 +18,15 @@ type PendingInvite = {
   inviter: { id: string; name: string | null } | null;
 };
 
+type HubSnapshot = {
+  myGroups: GroupSummary[];
+  discoverGroups: GroupSummary[];
+  pendingInvites: PendingInvite[];
+};
+
+const HUB_CACHE_KEY = "majors:hub";
+const HUB_CACHE_OPTS = { ttl: 24 * 60 * 60_000, staleTime: 2 * 60_000 };
+
 export default function MajorsHubClient() {
   const router = useRouter();
   const [myGroups, setMyGroups] = useState<GroupSummary[]>([]);
@@ -29,33 +39,55 @@ export default function MajorsHubClient() {
   const [decliningInviteId, setDecliningInviteId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  const fetchGroups = useCallback(async () => {
+  const applyGroups = useCallback((data: HubSnapshot) => {
+    setMyGroups(data.myGroups);
+    setDiscoverGroups(data.discoverGroups);
+    setPendingInvites(data.pendingInvites);
+  }, []);
+
+  /** Always hits the network — used after a join/accept/decline. */
+  const fetchGroupsFresh = useCallback(async (): Promise<HubSnapshot> => {
     const session = await requireViewerSession();
-    if (!session) return;
+    if (!session) return { myGroups: [], discoverGroups: [], pendingInvites: [] };
+    setCacheScope(session.profileId);
     const headers = { Authorization: `Bearer ${session.accessToken}` };
     const [mineRes, discoverRes, invitesRes] = await Promise.all([
       fetch("/api/majors/groups", { headers }),
       fetch("/api/majors/groups?mode=discover", { headers }),
       fetch("/api/majors/groups/invites", { headers }),
     ]);
-    if (mineRes.ok) {
-      const j = await mineRes.json();
-      setMyGroups(j.groups ?? []);
-    }
-    if (discoverRes.ok) {
-      const j = await discoverRes.json();
-      setDiscoverGroups(j.groups ?? []);
-    }
-    if (invitesRes.ok) {
-      const j = await invitesRes.json();
-      setPendingInvites(j.invites ?? []);
-    }
+    return {
+      myGroups: mineRes.ok ? ((await mineRes.json()).groups ?? []) : [],
+      discoverGroups: discoverRes.ok ? ((await discoverRes.json()).groups ?? []) : [],
+      pendingInvites: invitesRes.ok ? ((await invitesRes.json()).invites ?? []) : [],
+    };
   }, []);
+
+  const fetchGroups = useCallback(async () => {
+    // Membership changes are driven from this screen (and refreshed below), so
+    // a repeat visit can paint the last snapshot rather than re-running three
+    // requests behind a spinner.
+    const data = await fetchWithCache<HubSnapshot>(HUB_CACHE_KEY, fetchGroupsFresh, {
+      ...HUB_CACHE_OPTS,
+      onFresh: applyGroups,
+    });
+    applyGroups(data);
+  }, [fetchGroupsFresh, applyGroups]);
+
+  /** Post-mutation: bypass the stale window and re-prime the snapshot. */
+  const refreshGroups = useCallback(async () => {
+    invalidateCache(HUB_CACHE_KEY);
+    const data = await fetchGroupsFresh();
+    writeCache(HUB_CACHE_KEY, data, HUB_CACHE_OPTS);
+    applyGroups(data);
+  }, [fetchGroupsFresh, applyGroups]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      setLoading(true);
+      // Only spin on a genuine cold miss — a cached snapshot paints instantly
+      // and revalidates behind the content.
+      setLoading(readCache<HubSnapshot>(HUB_CACHE_KEY, HUB_CACHE_OPTS) === null);
       try {
         const session = await getViewerSession();
         await fetchGroups();
@@ -86,7 +118,8 @@ export default function MajorsHubClient() {
       });
       if (res.ok) {
         setPendingInvites((prev) => prev.filter((i) => i.id !== invite.id));
-        await fetchGroups();
+        // Membership just changed — the cached hub snapshot is wrong.
+        await refreshGroups();
       }
     } finally {
       setAcceptingInviteId(null);
@@ -103,6 +136,7 @@ export default function MajorsHubClient() {
         headers: { Authorization: `Bearer ${session.accessToken}` },
       });
       setPendingInvites((prev) => prev.filter((i) => i.id !== invite.id));
+      invalidateCache(HUB_CACHE_KEY);
     } finally {
       setDecliningInviteId(null);
     }
@@ -127,6 +161,7 @@ export default function MajorsHubClient() {
           setMyGroups((prev) => [...prev, group]);
           setDiscoverGroups((prev) => prev.filter((g) => g.id !== group.id));
         }
+        invalidateCache(HUB_CACHE_KEY);
       }
     } finally {
       setJoiningId(null);

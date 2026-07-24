@@ -4,6 +4,7 @@ import "./globals.css";
 import { OrientationManager } from "@/components/OrientationManager";
 import { SandboxDevTools } from "@/components/sandbox/SandboxDevTools";
 import { ServiceWorkerRegistrar } from "@/components/ServiceWorkerRegistrar";
+import { SplashHost } from "@/components/ui/SplashHost";
 import { CookieConsent } from "@/components/CookieConsent";
 import { AcceptTermsGate } from "@/components/legal/AcceptTermsGate";
 import NextTopLoader from "nextjs-toploader";
@@ -75,14 +76,22 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // suppressHydrationWarning: SplashHost's pre-paint script stamps data-splash
+  // on <html> before React hydrates, so this element legitimately differs from
+  // the server HTML. Same pattern as a theme-flash script; it only suppresses
+  // the warning for this element's own attributes.
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-[#042713] text-slate-100`}
       >
         <NextTopLoader color="#f5e6b0" height={3} showSpinner={false} shadow="0 0 10px #f5e6b080" />
         <ServiceWorkerRegistrar />
         <OrientationManager />
+        {/* Outside {children} on purpose — route Suspense swaps happen in
+            there, and the splash must own a single DOM node from first paint
+            through to its exit. See components/ui/SplashHost.tsx. */}
+        <SplashHost />
         {children}
         <AcceptTermsGate />
         <CookieConsent />

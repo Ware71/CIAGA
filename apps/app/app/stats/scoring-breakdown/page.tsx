@@ -8,7 +8,7 @@ import { getMyProfileIdByAuthUserId } from "@/lib/myProfile";
 import { Button } from "@/components/ui/button";
 import { BackButton } from "@/components/ui/BackButton";
 import { pct, safeNum, parseYMD, daysAgo, monthsAgo } from "@/lib/stats/helpers";
-import { fetchAllHoleScoringSource } from "@/lib/stats/queries";
+import { fetchHoleScoringSourceCached, peekHoleScoringSource } from "@/lib/stats/queries";
 
 type Option = { id: string; name: string };
 
@@ -78,7 +78,18 @@ export default function ScoringBreakdownPage() {
 
         const pid = await getMyProfileIdByAuthUserId(user.id);
 
-        const data = await fetchAllHoleScoringSource(pid);
+        // Paint the cached career snapshot, then revalidate behind it. This
+        // whole-career hole-level pull was re-run on every visit to each of the
+        // three stats pages that share it.
+        const cached = peekHoleScoringSource(pid);
+        if (cached && alive) {
+          setRows(cached as BreakdownRow[]);
+          setLoading(false);
+        }
+
+        const data = await fetchHoleScoringSourceCached(pid, (fresh) => {
+          if (alive) setRows(fresh as BreakdownRow[]);
+        });
         const got = ((data as any) ?? []) as BreakdownRow[];
 
         if (!alive) return;
