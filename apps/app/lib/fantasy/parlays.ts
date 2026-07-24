@@ -3,6 +3,7 @@ import { parsePointsAmount, readFantasyConfig } from "@/lib/fantasy/config";
 import { getMarketDefinition } from "@/lib/fantasy/markets/registry";
 import type { FantasyMarket } from "@/lib/fantasy/markets/types";
 import { loadPlacementContext } from "@/lib/fantasy/odds";
+import { estimateParlayCashouts } from "@/lib/fantasy/parlayCashout";
 import { PickError } from "@/lib/fantasy/picks";
 import {
   ensureBudgetGrant,
@@ -331,6 +332,8 @@ export type MyParlay = {
   potential_return: number;
   status: "open" | "won" | "lost" | "void" | "cashed_out";
   cashout_value: number | null;
+  /** Indicative on-book cash-out value for open accas; null when not cashable. */
+  cashout_estimate: number | null;
   placed_at: string;
   settled_at: string | null;
   group_name: string;
@@ -369,6 +372,23 @@ export async function getMyParlays(profileId: string): Promise<MyParlay[]> {
     }
   }
 
+  const estimates = await estimateParlayCashouts(
+    rows.map((row) => ({
+      id: row.id,
+      stake: row.stake,
+      potential_return: row.potential_return,
+      joint_priced: !!row.joint_priced,
+      status: row.status,
+      legs: ((row.legs ?? []) as any[]).map((leg) => ({
+        event_id: leg.event_id,
+        market_id: leg.market_id,
+        selection_key: leg.selection_key,
+        decimal_odds: leg.decimal_odds,
+        status: leg.status,
+      })),
+    }))
+  );
+
   return rows.map((row) => ({
     id: row.id,
     group_id: row.group_id,
@@ -377,6 +397,7 @@ export async function getMyParlays(profileId: string): Promise<MyParlay[]> {
     potential_return: Number(row.potential_return),
     status: row.status,
     cashout_value: row.cashout_value == null ? null : Number(row.cashout_value),
+    cashout_estimate: estimates.get(row.id) ?? null,
     placed_at: row.placed_at,
     settled_at: row.settled_at,
     group_name: row.group?.name ?? "",

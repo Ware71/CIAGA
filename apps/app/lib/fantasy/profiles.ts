@@ -41,8 +41,9 @@ export const PROFILE_TTL_HOURS = 24;
  * model change takes effect immediately instead of waiting out the 24h TTL.
  *   v1: gross-average model. v2: WHS score-differential inputs.
  *   v3: shape sample restricted to handicap-acceptable rounds only.
+ *   v4: per-round net-to-par stored on recent rounds (narrative uses net).
  */
-export const PROFILE_MODEL_VERSION = 3;
+export const PROFILE_MODEL_VERSION = 4;
 
 /** One sampled round, kept on the profile for popups/narrative. */
 export type RecentRound = {
@@ -52,6 +53,11 @@ export type RecentRound = {
   holes: number;
   /** 18-hole-equivalent gross (par-72 normalized, matches avg_gross). */
   gross18: number;
+  /**
+   * 18-hole-equivalent net relative to par (par-72 normalized, matches
+   * avg_net − 72). Null when the round has too few net-scored holes.
+   */
+  netToPar: number | null;
   /** Raw counts for the holes actually played. */
   birdies: number;
   eagles: number;
@@ -461,7 +467,8 @@ export async function buildPlayerProfile(
     // 18-hole-equivalent gross assuming par-72 shape for partial rounds.
     const roundGross18 = (grossSum - parSum) * scale + 72;
     gross18.push(roundGross18);
-    if (netHoles >= MIN_HOLES) net18.push((netToParSum / netHoles) * 18 + 72);
+    const roundNet18 = netHoles >= MIN_HOLES ? (netToParSum / netHoles) * 18 + 72 : null;
+    if (roundNet18 != null) net18.push(roundNet18);
     perRound.birdies.push(birdies * scale);
     perRound.eagles.push(eagles * scale);
     perRound.pars.push(pars * scale);
@@ -476,6 +483,7 @@ export async function buildPlayerProfile(
         courseId: courseByRound.get(round.roundId) ?? null,
         holes: holes.length,
         gross18: round2(roundGross18),
+        netToPar: roundNet18 != null ? round2(roundNet18 - 72) : null,
         birdies,
         eagles,
       });

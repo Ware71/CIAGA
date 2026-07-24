@@ -128,11 +128,24 @@ describe("buildCountTable", () => {
     expect(table.rows[0].cells[1]?.selection.probability).toBe(0.6);
   });
 
-  it("leaves a blank cell when a player lacks a count", () => {
+  it("leaves an EDGE gap blank (no neighbour to anchor to)", () => {
     const markets = [birdie("p1", 1, 0.7), birdie("p2", 1, 0.9), birdie("p2", 2, 0.6)];
     const table = buildCountTable(markets, names, "birdies", null, (c) => `${c}+`)!;
     const alice = table.rows.find((r) => r.name === "Alice")!;
     expect(alice.cells[1]).toBeNull();
+  });
+
+  it("fills an INTERNAL count gap with an indicative, non-bettable price", () => {
+    // Alice priced at 1+ and 3+ but missing 2+; Bob supplies the 2+ column.
+    const markets = [birdie("p1", 1, 0.6), birdie("p1", 3, 0.1), birdie("p2", 2, 0.5)];
+    const table = buildCountTable(markets, names, "birdies", null, (c) => `${c}+`)!;
+    expect(table.columns.map((c) => c.label)).toEqual(["1+", "2+", "3+"]);
+    const alice = table.rows.find((r) => r.name === "Alice")!;
+    const gap = alice.cells[1];
+    expect(gap?.placeholder).toBe(true);
+    // Monotone: interpolated 2+ probability sits between 1+ (0.6) and 3+ (0.1).
+    expect(gap!.selection.probability).toBeLessThan(0.6);
+    expect(gap!.selection.probability).toBeGreaterThan(0.1);
   });
 
   it("respects the round filter", () => {

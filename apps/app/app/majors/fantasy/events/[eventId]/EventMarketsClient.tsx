@@ -335,6 +335,19 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
 
   const renderCell = (cell: Cell) => {
     if (!cell) return <OddsBlank />;
+    // Interpolated ladder-gap filler: indicative price, never bettable.
+    if (cell.placeholder) {
+      return (
+        <OddsButton
+          odds={cell.selection.decimal_odds}
+          inSlip={false}
+          canBack={false}
+          stale={false}
+          onClick={() => {}}
+          title="Indicative price — no market currently open at this line"
+        />
+      );
+    }
     const { market, selection } = cell;
     const restricted = selfRestriction(market, selection.key);
     return (

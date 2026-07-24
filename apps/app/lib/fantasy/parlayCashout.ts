@@ -130,6 +130,107 @@ export type ParlayCashoutOffer = {
   status: string;
 };
 
+export type EstimateParlay = {
+  id: string;
+  stake: number | string;
+  potential_return: number | string;
+  joint_priced: boolean;
+  status: string;
+  legs: Pick<ParlayLegRow, "event_id" | "market_id" | "selection_key" | "decimal_odds" | "status">[];
+};
+
+/**
+ * Indicative acca cash-out value per open parlay, priced off the CURRENT book
+ * with NO forced reprice. Uses the INDEPENDENT product of open legs' marginal
+ * probabilities (not the joint bundle) — for positively-correlated legs this
+ * under-quotes, so the button hint is conservative; the firm on-tap offer
+ * prices the joint precisely. Null for anything not cashable right now.
+ */
+export async function estimateParlayCashouts(
+  parlays: EstimateParlay[]
+): Promise<Map<string, number | null>> {
+  const out = new Map<string, number | null>();
+  for (const p of parlays) out.set(p.id, null);
+
+  const openParlays = parlays.filter(
+    (p) =>
+      p.status === "open" &&
+      !p.legs.some((l) => l.status === "lost") &&
+      p.legs.some((l) => l.status === "open")
+  );
+  if (openParlays.length === 0) return out;
+
+  // Which markets we actually need a price for, per event with an open leg.
+  const marketsByEvent = new Map<string, Set<string>>();
+  for (const p of openParlays) {
+    for (const l of p.legs) {
+      if (l.status !== "open") continue;
+      const set = marketsByEvent.get(l.event_id) ?? new Set<string>();
+      set.add(l.market_id);
+      marketsByEvent.set(l.event_id, set);
+    }
+  }
+  const eventIds = [...marketsByEvent.keys()];
+  const { data: stateRows } = await supabaseAdmin
+    .from("fantasy_event_state")
+    .select("event_id, version, is_final")
+    .in("event_id", eventIds);
+  const stateByEvent = new Map(
+    ((stateRows ?? []) as { event_id: string; version: number; is_final: boolean }[]).map((s) => [
+      s.event_id,
+      s,
+    ])
+  );
+
+  // `${event_id}|${market_id}|${selection_key}` → current active probability.
+  const probByKey = new Map<string, number>();
+  for (const eventId of eventIds) {
+    const state = stateByEvent.get(eventId);
+    if (!state || state.is_final) continue;
+    const { data: snaps } = await supabaseAdmin
+      .from("fantasy_odds_snapshots")
+      .select("market_id, selection_key, probability")
+      .eq("event_id", eventId)
+      .eq("event_version", state.version)
+      .eq("status", "active")
+      .in("market_id", [...(marketsByEvent.get(eventId) ?? [])]);
+    for (const s of (snaps ?? []) as {
+      market_id: string; selection_key: string; probability: number;
+    }[]) {
+      probByKey.set(`${eventId}|${s.market_id}|${s.selection_key}`, Number(s.probability));
+    }
+  }
+
+  for (const parlay of openParlays) {
+    let ok = true;
+    let pJoint = 1;
+    for (const leg of parlay.legs.filter((l) => l.status === "open")) {
+      const state = stateByEvent.get(leg.event_id);
+      const prob =
+        state && !state.is_final
+          ? probByKey.get(`${leg.event_id}|${leg.market_id}|${leg.selection_key}`)
+          : undefined;
+      if (prob == null) {
+        ok = false;
+        break;
+      }
+      pJoint *= prob;
+    }
+    if (!ok || pJoint <= PROBABILITY_FLOOR || pJoint >= PROBABILITY_CEILING) continue;
+    const effReturn = effectiveParlayReturn(
+      {
+        stake: Number(parlay.stake),
+        potential_return: Number(parlay.potential_return),
+        joint_priced: parlay.joint_priced,
+      },
+      parlay.legs
+    );
+    const value = computeCashoutValue(pJoint, effReturn);
+    if (value >= 0.01) out.set(parlay.id, value);
+  }
+  return out;
+}
+
 type ParlayRow = {
   id: string;
   group_id: string;

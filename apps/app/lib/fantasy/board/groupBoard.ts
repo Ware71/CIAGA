@@ -30,8 +30,12 @@ export type BoardMarket = {
   selections: Selection[];
 };
 
-/** A table cell: the market to toggle and the player's selection within it. */
-export type Cell = { market: BoardMarket; selection: Selection } | null;
+/**
+ * A table cell: the market to toggle and the player's selection within it.
+ * `placeholder` marks an indicative, non-bettable price filled into an internal
+ * ladder gap (see fillCountGaps) — the UI renders it greyed and disabled.
+ */
+export type Cell = { market: BoardMarket; selection: Selection; placeholder?: boolean } | null;
 export type TableColumn = { id: string; label: string };
 export type TableRow = { profileId: string; name: string; cells: Cell[] };
 export type MarketTableModel = { columns: TableColumn[]; rows: TableRow[] };
@@ -156,14 +160,57 @@ export function buildCountTable(
   const rows: TableRow[] = order.map((pid) => ({
     profileId: pid,
     name: names[pid] ?? "Player",
-    cells: counts.map((c) => {
-      const market = byKey.get(`${pid}|${c}`);
-      const sel = market?.selections.find((s) => s.key === "yes") ?? market?.selections[0];
-      return market && sel ? { market, selection: sel } : null;
-    }),
+    cells: fillCountGaps(
+      counts.map((c) => {
+        const market = byKey.get(`${pid}|${c}`);
+        const sel = market?.selections.find((s) => s.key === "yes") ?? market?.selections[0];
+        return market && sel ? { market, selection: sel } : null;
+      }),
+      counts
+    ),
   }));
   rows.sort((a, b) => rowSortKey(b) - rowSortKey(a));
   return { columns, rows };
+}
+
+/**
+ * Never render a bare "—" for an "N+" count that sits BETWEEN two priced counts
+ * for the same player: since P(≥k) is monotone (a lower count is always at least
+ * as likely), a missing middle line is a data gap, not a real absence. Fill it
+ * with an indicative, non-bettable price log-linearly interpolated from its
+ * nearest priced neighbours so the ladder always reads continuously and
+ * monotonically. Edge gaps (before the first / after the last priced count) are
+ * left blank — there is no lower/upper anchor to interpolate against.
+ */
+function fillCountGaps(cells: Cell[], counts: number[]): Cell[] {
+  const out = cells.slice();
+  for (let i = 0; i < cells.length; i++) {
+    if (cells[i] != null) continue;
+    let l = i - 1;
+    while (l >= 0 && cells[l] == null) l--;
+    let r = i + 1;
+    while (r < cells.length && cells[r] == null) r++;
+    if (l < 0 || r >= cells.length) continue; // edge gap — nothing to anchor to
+    const left = cells[l]!; // lower count → higher prob / shorter odds
+    const right = cells[r]!; // higher count → lower prob / longer odds
+    const t = (counts[i] - counts[l]) / (counts[r] - counts[l]);
+    const odds = Math.exp(
+      Math.log(left.selection.decimal_odds) * (1 - t) + Math.log(right.selection.decimal_odds) * t
+    );
+    out[i] = {
+      market: left.market,
+      placeholder: true,
+      selection: {
+        key: "yes",
+        label: left.selection.label,
+        probability: left.selection.probability * (1 - t) + right.selection.probability * t,
+        decimal_odds: Math.round(odds * 100) / 100,
+        snapshot_id: "",
+        event_version: 0,
+      },
+    };
+  }
+  return out;
 }
 
 /** Field-wide rare specials (HIO / albatross / any eagle) as single-odds rows. */

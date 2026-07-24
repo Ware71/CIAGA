@@ -2,6 +2,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { parsePointsAmount, readFantasyConfig } from "@/lib/fantasy/config";
 import { getMarketDefinition } from "@/lib/fantasy/markets/registry";
 import type { FantasyMarket } from "@/lib/fantasy/markets/types";
+import { estimateSingleCashouts } from "@/lib/fantasy/cashout";
 import { loadPlacementContext } from "@/lib/fantasy/odds";
 import { findSelfRestriction } from "@/lib/fantasy/selfRestriction";
 import {
@@ -88,6 +89,8 @@ export type MyPick = {
   potential_return: number;
   status: "open" | "cashed_out" | "won" | "lost" | "void";
   cashout_value: number | null;
+  /** Indicative on-book cash-out value for open picks; null when not cashable. */
+  cashout_estimate: number | null;
   placed_at: string;
   settled_at: string | null;
   market_label: string;
@@ -127,6 +130,20 @@ export async function getMyPicks(profileId: string): Promise<MyPick[]> {
     }
   }
 
+  const estimates = await estimateSingleCashouts(
+    rows
+      .filter((r) => r.status === "open" && r.market)
+      .map((r) => ({
+        id: r.id,
+        event_id: r.event_id,
+        market_id: r.market_id,
+        selection_key: r.selection_key,
+        profile_id: profileId,
+        potential_return: Number(r.potential_return),
+        market: r.market as FantasyMarket,
+      }))
+  );
+
   return rows.map((row) => {
     const market = row.market as FantasyMarket;
     const def = getMarketDefinition(market.market_type);
@@ -141,6 +158,7 @@ export async function getMyPicks(profileId: string): Promise<MyPick[]> {
       potential_return: Number(row.potential_return),
       status: row.status,
       cashout_value: row.cashout_value != null ? Number(row.cashout_value) : null,
+      cashout_estimate: estimates.get(row.id) ?? null,
       placed_at: row.placed_at,
       settled_at: row.settled_at,
       market_label: def ? def.displayName(market, names) : market.market_type,

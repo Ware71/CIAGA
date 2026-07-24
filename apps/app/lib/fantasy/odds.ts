@@ -483,6 +483,10 @@ async function loadProvisionalPlayers(
   const eventDate = event.event_date ? new Date(event.event_date).getTime() : null;
   if (eventDate == null || eventDate <= now) return [];
   if (["completed", "cancelled"].includes(event.majors_status)) return [];
+  // Entry closed ⇒ the field is fixed: no one else can sign up, so price only
+  // the confirmed entrants (no provisional attendance dilution).
+  const entryEnd = event.entry_window_end ? new Date(event.entry_window_end).getTime() : null;
+  if (entryEnd != null && now > entryEnd) return [];
 
   const { data: memberRows, error: memberErr } = await supabaseAdmin
     .from("major_group_memberships")
@@ -665,6 +669,7 @@ async function writeSnapshots(
   version: number
 ): Promise<void> {
   const rows: Record<string, unknown>[] = [];
+  const writtenMarketIds = new Set<string>();
   for (const market of markets) {
     if (market.status !== "open") continue;
     const def = getMarketDefinition(market.market_type);
@@ -682,6 +687,7 @@ async function writeSnapshots(
         simulation_count: sim.simulationCount,
         status: "active",
       });
+      writtenMarketIds.add(market.id);
     }
   }
 
@@ -692,12 +698,25 @@ async function writeSnapshots(
     if (error) throw error;
   }
 
-  const { error: supersedeErr } = await supabaseAdmin
+  // Supersede prior-version active snapshots — but ONLY for markets we either
+  // just re-priced or that are no longer open. An OPEN market we couldn't price
+  // this version (e.g. its subject was momentarily absent from the field) keeps
+  // its last good snapshot; blanking it would punch a hole in the ladder (the
+  // "1+ shows, 2+ blank, 3+ shows" bug). Settled/suspended markets are not in
+  // writtenMarketIds, so they still get superseded and correctly drop out.
+  const keepMarketIds = markets
+    .filter((m) => m.status === "open" && !writtenMarketIds.has(m.id))
+    .map((m) => m.id);
+  let supersede = supabaseAdmin
     .from("fantasy_odds_snapshots")
     .update({ status: "superseded" })
     .eq("event_id", ctx.event.id)
     .lt("event_version", version)
     .eq("status", "active");
+  if (keepMarketIds.length > 0) {
+    supersede = supersede.not("market_id", "in", `(${keepMarketIds.join(",")})`);
+  }
+  const { error: supersedeErr } = await supersede;
   if (supersedeErr) throw supersedeErr;
 }
 

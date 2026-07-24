@@ -201,6 +201,82 @@ export async function requestCashout(params: {
   return { offer: offerRow as CashoutOffer };
 }
 
+export type EstimatePick = {
+  id: string;
+  event_id: string;
+  market_id: string;
+  selection_key: string;
+  profile_id: string;
+  potential_return: number;
+  market: FantasyMarket;
+};
+
+/**
+ * Indicative cash-out value per open single pick, priced off the CURRENT book
+ * (the active snapshot at the current event version) with NO forced reprice —
+ * that's reserved for the firm, time-limited offer on tap. Mirrors
+ * requestCashout's eligibility gates; anything ineligible maps to null. Batched
+ * per event so a page of picks costs a handful of queries.
+ */
+export async function estimateSingleCashouts(
+  picks: EstimatePick[]
+): Promise<Map<string, number | null>> {
+  const out = new Map<string, number | null>();
+  const byEvent = new Map<string, EstimatePick[]>();
+  for (const p of picks) {
+    out.set(p.id, null);
+    const list = byEvent.get(p.event_id) ?? [];
+    list.push(p);
+    byEvent.set(p.event_id, list);
+  }
+  for (const [eventId, evPicks] of byEvent) {
+    const { data: stateRow } = await supabaseAdmin
+      .from("fantasy_event_state")
+      .select("version, is_final")
+      .eq("event_id", eventId)
+      .maybeSingle();
+    const state = stateRow as { version: number; is_final: boolean } | null;
+    if (!state || state.is_final) continue;
+    const version = state.version;
+
+    let live: Awaited<ReturnType<typeof loadPlacementContext>>["live"];
+    try {
+      ({ live } = await loadPlacementContext(eventId));
+    } catch {
+      continue;
+    }
+
+    const marketIds = [...new Set(evPicks.map((p) => p.market_id))];
+    const { data: snaps } = await supabaseAdmin
+      .from("fantasy_odds_snapshots")
+      .select("market_id, selection_key, probability")
+      .eq("event_id", eventId)
+      .eq("event_version", version)
+      .eq("status", "active")
+      .in("market_id", marketIds);
+    const probByKey = new Map<string, number>();
+    for (const s of (snaps ?? []) as {
+      market_id: string; selection_key: string; probability: number;
+    }[]) {
+      probByKey.set(`${s.market_id}|${s.selection_key}`, Number(s.probability));
+    }
+
+    for (const p of evPicks) {
+      const market = p.market;
+      if (!market || market.status !== "open") continue;
+      const def = getMarketDefinition(market.market_type);
+      if (!def || !def.eligibleForCashout) continue;
+      if (def.isSelfDependent(market, p.selection_key, p.profile_id, live)) continue;
+      if (!def.cashoutCutoff(market, p.selection_key, live).eligible) continue;
+      const prob = probByKey.get(`${p.market_id}|${p.selection_key}`);
+      if (prob == null || prob <= PROBABILITY_FLOOR || prob >= PROBABILITY_CEILING) continue;
+      const value = computeCashoutValue(prob, Number(p.potential_return));
+      if (value >= 0.01) out.set(p.id, value);
+    }
+  }
+  return out;
+}
+
 export async function acceptCashout(params: {
   profileId: string;
   offerId: string;
