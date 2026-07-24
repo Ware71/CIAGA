@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { getViewerSession } from "@/lib/auth/viewerSession";
+import { fetchWithCache, readCache, setCacheScope } from "@/lib/cache/clientCache";
 import type { HistorySummaryRound } from "@/lib/rounds/historySummary";
 import { Button } from "@/components/ui/button";
 import { BackButton } from "@/components/ui/BackButton";
@@ -86,6 +87,10 @@ function usedDifferentialsCount(n: number) {
 }
 
 const PAGE_SIZE = 25;
+
+// A career history only changes when a round is finished, and that path
+// invalidates the "history" prefix — so the stale window can be generous.
+const HISTORY_CACHE_OPTS = { ttl: 24 * 60 * 60_000, staleTime: 5 * 60_000 };
 
 export default function RoundsHistoryPage() {
   const searchParams = useSearchParams();
@@ -286,8 +291,70 @@ export default function RoundsHistoryPage() {
   useEffect(() => {
     let cancelled = false;
 
+    /** Fan the summary rows out into the refs + state the screen renders from. */
+    function applySummary(summary: HistorySummaryRound[]): RoundRow[] {
+      const extracted: RoundRow[] = summary.map((s) => ({
+        id: s.round_id,
+        name: s.name,
+        status: s.status,
+        started_at: s.started_at,
+        created_at: s.created_at,
+        course_id: s.course_id,
+        courses: { name: s.course_name },
+      }));
+
+      // Sort newest-first with the same comparator as before, so window20 /
+      // counting-set selection is independent of the endpoint's row order.
+      extracted.sort((a, b) => {
+        const ad = parseDateMs(a.started_at ?? a.created_at);
+        const bd = parseDateMs(b.started_at ?? b.created_at);
+        return bd - ad;
+      });
+
+      const pidMap: Record<string, string> = {};
+      const teeSnapIdByRound: Record<string, string> = {};
+      const agsMap: Record<string, number> = {};
+      const sdMap: Record<string, number> = {};
+      const hiUsedMap: Record<string, number> = {};
+      const hiAfterMap: Record<string, number> = {};
+      const courseHcpByPid: Record<string, number> = {};
+
+      for (const s of summary) {
+        pidMap[s.round_id] = s.participant_id;
+        if (s.tee_snapshot_id) teeSnapIdByRound[s.round_id] = s.tee_snapshot_id;
+        if (s.adjusted_gross_score != null) agsMap[s.round_id] = s.adjusted_gross_score;
+        if (s.score_differential != null) sdMap[s.round_id] = s.score_differential;
+        if (s.handicap_index_used != null) hiUsedMap[s.round_id] = s.handicap_index_used;
+        if (s.course_handicap_used != null) courseHcpByPid[s.participant_id] = s.course_handicap_used;
+        if (s.hi_after != null) hiAfterMap[s.round_id] = s.hi_after;
+      }
+
+      allRoundsRef.current = extracted;
+      pidMapRef.current = pidMap;
+      teeSnapIdByRoundRef.current = teeSnapIdByRound;
+      agsMapRef.current = agsMap;
+      courseHcpByPidRef.current = courseHcpByPid;
+
+      setRounds(extracted);
+      setParticipantIdByRoundId(pidMap);
+      setAgsByRoundId(agsMap);
+      setScoreDiffByRoundId(sdMap);
+      setHiUsedByRoundId(hiUsedMap);
+      setHiAfterByRoundId(hiAfterMap);
+
+      return extracted;
+    }
+
+    async function loadFirstPage(extracted: RoundRow[]) {
+      if (cancelled || !extracted.length) return;
+      await loadSupplemental(extracted.slice(0, PAGE_SIZE));
+      if (cancelled) return;
+      const initialLoaded = Math.min(PAGE_SIZE, extracted.length);
+      loadedCountRef.current = initialLoaded;
+      setLoadedCount(initialLoaded);
+    }
+
     async function load() {
-      setLoading(true);
       setError(null);
       setLoadedCount(0);
       loadedCountRef.current = 0;
@@ -308,6 +375,7 @@ export default function RoundsHistoryPage() {
 
         const pid = profileFromQuery ?? session.profileId;
         if (!cancelled) setProfileId(pid);
+        setCacheScope(session.profileId);
 
         try {
           const p = await fetchProfilePublic(pid);
@@ -322,78 +390,41 @@ export default function RoundsHistoryPage() {
         // handicap_index_history + a per-round binary search — with one request
         // whose joins run next to Postgres and whose hi_after is precomputed.
         // The heavy per-hole data stays paginated in loadSupplemental below.
-        const res = await fetch(
-          `/api/history/summary?profile_id=${encodeURIComponent(pid)}`,
-          { headers: { Authorization: `Bearer ${token}` } }
+        //
+        // Cached: a career history only changes when a round is finished, and
+        // that path invalidates the "history" prefix (RoundDetailClient).
+        // Revisiting the screen shouldn't re-pull every round the user has ever
+        // played.
+        const cacheKey = `history:summary:${pid}`;
+        const cached = readCache<HistorySummaryRound[]>(cacheKey, HISTORY_CACHE_OPTS);
+        if (cached) applySummary(cached.data);
+        else setLoading(true);
+
+        const summary = await fetchWithCache<HistorySummaryRound[]>(
+          cacheKey,
+          async () => {
+            const res = await fetch(
+              `/api/history/summary?profile_id=${encodeURIComponent(pid)}`,
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+            if (!res.ok) {
+              const body = await res.json().catch(() => ({}));
+              throw new Error(body?.error || `Failed to load history (${res.status})`);
+            }
+            const json = (await res.json()) as { rounds: HistorySummaryRound[] };
+            return json.rounds;
+          },
+          {
+            ...HISTORY_CACHE_OPTS,
+            onFresh: (fresh) => {
+              if (cancelled) return;
+              void loadFirstPage(applySummary(fresh));
+            },
+          }
         );
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          throw new Error(body?.error || `Failed to load history (${res.status})`);
-        }
-        const { rounds: summary } = (await res.json()) as { rounds: HistorySummaryRound[] };
-
-        const extracted: RoundRow[] = summary.map((s) => ({
-          id: s.round_id,
-          name: s.name,
-          status: s.status,
-          started_at: s.started_at,
-          created_at: s.created_at,
-          course_id: s.course_id,
-          courses: { name: s.course_name },
-        }));
-
-        // Sort newest-first with the same comparator as before, so window20 /
-        // counting-set selection is independent of the endpoint's row order.
-        extracted.sort((a, b) => {
-          const ad = parseDateMs(a.started_at ?? a.created_at);
-          const bd = parseDateMs(b.started_at ?? b.created_at);
-          return bd - ad;
-        });
-
-        const pidMap: Record<string, string> = {};
-        const teeSnapIdByRound: Record<string, string> = {};
-        const agsMap: Record<string, number> = {};
-        const sdMap: Record<string, number> = {};
-        const hiUsedMap: Record<string, number> = {};
-        const hiAfterMap: Record<string, number> = {};
-        const courseHcpByPid: Record<string, number> = {};
-
-        for (const s of summary) {
-          pidMap[s.round_id] = s.participant_id;
-          if (s.tee_snapshot_id) teeSnapIdByRound[s.round_id] = s.tee_snapshot_id;
-          if (s.adjusted_gross_score != null) agsMap[s.round_id] = s.adjusted_gross_score;
-          if (s.score_differential != null) sdMap[s.round_id] = s.score_differential;
-          if (s.handicap_index_used != null) hiUsedMap[s.round_id] = s.handicap_index_used;
-          if (s.course_handicap_used != null) courseHcpByPid[s.participant_id] = s.course_handicap_used;
-          if (s.hi_after != null) hiAfterMap[s.round_id] = s.hi_after;
-        }
 
         if (cancelled) return;
-
-        allRoundsRef.current = extracted;
-        pidMapRef.current = pidMap;
-        teeSnapIdByRoundRef.current = teeSnapIdByRound;
-        agsMapRef.current = agsMap;
-        courseHcpByPidRef.current = courseHcpByPid;
-
-        setRounds(extracted);
-        setParticipantIdByRoundId(pidMap);
-        setAgsByRoundId(agsMap);
-        setScoreDiffByRoundId(sdMap);
-        setHiUsedByRoundId(hiUsedMap);
-        setHiAfterByRoundId(hiAfterMap);
-
-        // 4) Supplemental data for first page only (tee names, scores, WHS penalties)
-        if (!cancelled && extracted.length) {
-          const firstSlice = extracted.slice(0, PAGE_SIZE);
-          await loadSupplemental(firstSlice);
-          if (!cancelled) {
-            const initialLoaded = Math.min(PAGE_SIZE, extracted.length);
-            loadedCountRef.current = initialLoaded;
-            setLoadedCount(initialLoaded);
-          }
-        }
-
+        await loadFirstPage(applySummary(summary));
         if (!cancelled) setLoading(false);
       } catch (e: any) {
         console.warn("History load error:", e);

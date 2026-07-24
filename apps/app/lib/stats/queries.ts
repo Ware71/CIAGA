@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabaseClient";
+import { fetchWithCache, readCache, setCacheScope } from "@/lib/cache/clientCache";
 
 /**
  * Paginated fetch from the hole_scoring_source view.
@@ -32,4 +33,34 @@ export async function fetchAllHoleScoringSource(profileId: string) {
   }
 
   return out;
+}
+
+// Whole-career hole-level data, fetched in 1000-row pages. Three stats pages
+// (milestones, hole-scoring, scoring-breakdown) each pulled the entire set on
+// every visit, and it only changes when a round is finished — which invalidates
+// the "stats" prefix (see RoundDetailClient.finishRound).
+const STATS_CACHE_OPTS = { ttl: 24 * 60 * 60_000, staleTime: 5 * 60_000 };
+
+const statsCacheKey = (profileId: string) => `stats:holeScoring:${profileId}`;
+
+/** Cached snapshot if there is one, for painting before the fetch resolves. */
+export function peekHoleScoringSource(profileId: string): any[] | null {
+  return readCache<any[]>(statsCacheKey(profileId), STATS_CACHE_OPTS)?.data ?? null;
+}
+
+/**
+ * Stale-while-revalidate wrapper around fetchAllHoleScoringSource. Resolves
+ * immediately from the snapshot when there is one; `onFresh` fires later if the
+ * background revalidation returns newer rows.
+ */
+export async function fetchHoleScoringSourceCached(
+  profileId: string,
+  onFresh?: (rows: any[]) => void
+): Promise<any[]> {
+  setCacheScope(profileId);
+  return fetchWithCache<any[]>(
+    statsCacheKey(profileId),
+    () => fetchAllHoleScoringSource(profileId),
+    { ...STATS_CACHE_OPTS, onFresh }
+  );
 }

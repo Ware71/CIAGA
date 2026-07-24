@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { cache } from "react";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 /**
@@ -135,26 +136,33 @@ async function resolveOwnedProfileId(user: AuthUserLite): Promise<{
  * - needs_onboarding: signed in but has an unclaimed invite profile
  * - ready: signed in with a resolved owned profile id
  * For use in server components and server actions.
+ *
+ * Wrapped in React `cache()`: this costs a Supabase Auth round trip plus a
+ * `profiles` lookup, and a single render can reach it from several places (a
+ * layout, the page, a nested server component). The memo is per-request, so
+ * there's no cross-request or cross-user sharing.
  */
-export async function getServerViewer(): Promise<ServerViewerResolution> {
-  const supabase = await createSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { status: "signed_out" };
+export const getServerViewer = cache(
+  async function getServerViewer(): Promise<ServerViewerResolution> {
+    const supabase = await createSupabaseServer();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { status: "signed_out" };
 
-  const resolved = await resolveOwnedProfileId({
-    id: user.id,
-    email: user.email,
-    user_metadata: user.user_metadata as Record<string, unknown> | null,
-  });
+    const resolved = await resolveOwnedProfileId({
+      id: user.id,
+      email: user.email,
+      user_metadata: user.user_metadata as Record<string, unknown> | null,
+    });
 
-  if (resolved.needsOnboarding || !resolved.profileId) {
-    return { status: "needs_onboarding" };
+    if (resolved.needsOnboarding || !resolved.profileId) {
+      return { status: "needs_onboarding" };
+    }
+
+    return {
+      status: "ready",
+      viewer: { authUserId: user.id, profileId: resolved.profileId },
+    };
   }
-
-  return {
-    status: "ready",
-    viewer: { authUserId: user.id, profileId: resolved.profileId },
-  };
-}
+);

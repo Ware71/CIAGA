@@ -13,6 +13,15 @@ const securityHeaders = [
 
 const nextConfig = {
   reactStrictMode: true,
+  experimental: {
+    // Client Router Cache. `dynamic` defaults to 0, so before this every
+    // navigation — including back/forward — re-ran the middleware auth hop,
+    // getServerViewer and the page's queries even when the user had just been
+    // there. 30s makes repeat navigation instant; the stale-while-revalidate
+    // layer in lib/cache keeps what's on screen honest, and router.refresh()
+    // is the escape hatch after a mutation.
+    staleTimes: { dynamic: 30, static: 180 },
+  },
   images: {
     // Avatars, group images and post images are Supabase Storage public URLs.
     // Without this, next/image refuses them and every one has to be a raw <img>.
@@ -68,7 +77,9 @@ const runtimeCaching = [
     handler: 'StaleWhileRevalidate',
     options: {
       cacheName: 'static-image-assets',
-      expiration: { maxEntries: 64, maxAgeSeconds: 24 * 60 * 60 },
+      // 30d, not 24h: these are content-stable brand assets, and a 24h window
+      // meant a user who opens the app daily kept re-fetching the splash logo.
+      expiration: { maxEntries: 64, maxAgeSeconds: 30 * 24 * 60 * 60 },
     },
   },
   {

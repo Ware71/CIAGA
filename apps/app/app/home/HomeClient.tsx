@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState, useEffect, useLayoutEffect, useMemo } from "react";
+import { useState, useEffect, useLayoutEffect, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -17,8 +17,8 @@ import { MajorsView } from "@/components/home/MajorsView";
 import type { MajorHubSummary } from "@/lib/majors/types";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 import { requireViewerSession } from "@/lib/auth/requireViewerSession";
-import { LoadingScreen } from "@/components/ui/loading-screen";
-import { getCachedHomeData, setCachedHomeData } from "@/lib/home/homeDataCache";
+import { markSplashReady } from "@/lib/ui/splashReady";
+import { readCache, writeCache, setCacheScope } from "@/lib/cache/clientCache";
 import NotificationCenter from "@/components/notifications/NotificationCenter";
 import { useNotifications } from "@/lib/notifications/useNotifications";
 import { useAppBadge } from "@/lib/notifications/useAppBadge";
@@ -64,6 +64,19 @@ function BellIcon(props: { size?: number; className?: string }) {
 /** Server-streamed core result — {ok} shaped so a failure can't reject across the RSC boundary. */
 type CoreResult = { ok: true; data: HomeCore } | { ok: false; error: string };
 
+/** Snapshot persisted so a cold start paints before Postgres is reached. */
+type CachedHome = {
+  core: HomeCore;
+  mini_feed: FeedItemVM[];
+  majors: MajorHubSummary | null;
+};
+
+const HOME_CACHE_KEY = "home";
+// Worth showing a day-old handicap/last round while the fresh copy loads —
+// it's replaced within a second and never silently: staleTime is 60s, so any
+// visit past a minute revalidates immediately.
+const HOME_CACHE_OPTS = { ttl: 24 * 60 * 60_000, staleTime: 60_000 };
+
 type Props = {
   /** Pending promise for the essential (splash-gating) player info, streamed from the server. */
   initialCore?: Promise<CoreResult>;
@@ -76,15 +89,13 @@ type Props = {
 export default function HomeClient({ initialCore, initialRest, initialProfileId }: Props) {
   const router = useRouter();
 
-  // Show splash on first visit; skip on back navigation (splash_shown persists in sessionStorage).
-  // useLayoutEffect runs before paint so returning users never see the overlay flash.
-  const [showSplash, setShowSplash] = useState(true);
-  // Starts false: the splash waits for the streamed core promise (or the client
-  // fetch) to resolve, so LoadingScreen plays its connection-aware wait.
-  const [dataReady, setDataReady] = useState(false);
-  useLayoutEffect(() => {
-    if (sessionStorage.getItem("splash_shown") === "1") setShowSplash(false);
-  }, []);
+  // The essential player info is on screen. Releases the cold-start splash
+  // (which lives in the root layout — see components/ui/SplashHost.tsx) and
+  // un-gates the low-priority work below.
+  const [coreReady, setCoreReady] = useState(false);
+  // The splash overlay has finished its exit. Modals wait for this so they
+  // can't pop up behind it.
+  const [splashDone, setSplashDone] = useState(false);
 
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<ViewMode>("home");
@@ -119,7 +130,7 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
 
   // Notifications + announcements are the lowest priority — don't let them
   // contend with the essential load. Hold them until the splash has cleared.
-  const lowPriorityProfileId = dataReady ? myProfileId : null;
+  const lowPriorityProfileId = coreReady ? myProfileId : null;
   const notif = useNotifications(lowPriorityProfileId);
   const announcements = useAnnouncements(lowPriorityProfileId);
   const pendingInvitesCount =
@@ -130,6 +141,18 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
   // Mirror unread notifications onto the installed PWA's app-icon badge while
   // the app is open (the service worker sets it on push while it's closed).
   useAppBadge(notif.unreadCount);
+
+  useEffect(() => {
+    const onSplashDone = () => setSplashDone(true);
+    window.addEventListener("splash:done", onSplashDone);
+    try {
+      // Repeat visit this session — SplashHost renders nothing, so no event fires.
+      if (sessionStorage.getItem("splash_shown") === "1") setSplashDone(true);
+    } catch {
+      setSplashDone(true);
+    }
+    return () => window.removeEventListener("splash:done", onSplashDone);
+  }, []);
 
   useEffect(() => {
     const updateViewport = () => {
@@ -153,23 +176,53 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
     };
   }, []);
 
+  const applyCore = useCallback((data: HomeCore) => {
+    setLiveRoundId(data.live_round_id ?? null);
+    setHandicapIndex(data.handicap?.current ?? null);
+    setHandicapDelta30(data.handicap?.delta_30d ?? 0);
+    setRoundsPlayed(data.rounds_played ?? null);
+    setLastRound(data.last_round ?? null);
+  }, []);
+
+  // Paint the last snapshot before anything touches the network, so a PWA cold
+  // start shows the handicap, last round and highlights immediately and the
+  // splash can exit rather than waiting on Postgres. The live data overwrites
+  // this as soon as it streams in.
+  //
+  // Seeded in an effect, not a useState initialiser: the server renders this
+  // page, and returning seeded values from the first client render would be a
+  // hydration mismatch. useLayoutEffect runs before paint, so there's still no
+  // flash of the empty "—" state.
+  useLayoutEffect(() => {
+    if (initialProfileId) setCacheScope(initialProfileId);
+
+    const hit = readCache<CachedHome>(HOME_CACHE_KEY, HOME_CACHE_OPTS);
+    if (!hit) return;
+
+    applyCore(hit.data.core);
+    setMiniFeed(hit.data.mini_feed ?? []);
+    setMajorsPreload(hit.data.majors ?? null);
+    setMiniFeedLoading(false);
+    setCoreReady(true);
+    markSplashReady();
+  }, [initialProfileId, applyCore]);
+
   // Home data load. First render consumes the promises the server streamed
-  // (core gates the splash; feed + Majors fill in behind it). On a retry — or
-  // when the promises are absent — it falls back to the original client fetch,
-  // and to the module cache on back navigation.
+  // (core releases the splash; feed + Majors fill in behind it). On a retry —
+  // or when the promises are absent — it falls back to the client fetch.
   useEffect(() => {
     let cancelled = false;
     let onlineRetryCleanup: (() => void) | null = null;
-    // Safety net: never spin forever if the essential load wedges entirely.
-    const timeoutId = setTimeout(() => { if (!cancelled) setDataReady(true); }, 10_000);
 
-    const applyCore = (data: HomeCore) => {
-      setLiveRoundId(data.live_round_id ?? null);
-      setHandicapIndex(data.handicap?.current ?? null);
-      setHandicapDelta30(data.handicap?.delta_30d ?? 0);
-      setRoundsPlayed(data.rounds_played ?? null);
-      setLastRound(data.last_round ?? null);
+    // The essential info is on screen: release the splash and un-gate the
+    // low-priority work.
+    const releaseCore = () => {
+      setCoreReady(true);
+      markSplashReady();
     };
+
+    // Safety net: never spin forever if the essential load wedges entirely.
+    const timeoutId = setTimeout(() => { if (!cancelled) releaseCore(); }, 10_000);
 
     const scheduleRetry = () => {
       if (onlineRetryCleanup) return;
@@ -196,14 +249,14 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
             applyCore(r.data);
             setMiniFeedLoading(true);
             setMiniFeedError(null);
-            setDataReady(true); // splash may dismiss now
+            releaseCore(); // splash may dismiss now
           } else {
             setMiniFeedError(r.error);
-            setDataReady(true);
+            releaseCore();
             scheduleRetry();
           }
         })
-        .catch(() => { if (!cancelled) setDataReady(true); });
+        .catch(() => { if (!cancelled) releaseCore(); });
 
       restPromise.then((rest) => {
         if (cancelled) return;
@@ -213,11 +266,18 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
         setMiniFeedLoading(false);
       });
 
-      // Prime the back-nav module cache once both have settled.
+      // Persist the snapshot once both have settled, for the next cold start.
       Promise.all([corePromise, restPromise]).then(([cr, rest]) => {
         if (cancelled || !cr.ok) return;
-        const feed = (rest?.[0]?.mini_feed as FeedItemVM[]) ?? [];
-        setCachedHomeData({ ...cr.data, mini_feed: feed }, rest?.[1] ?? null);
+        writeCache<CachedHome>(
+          HOME_CACHE_KEY,
+          {
+            core: cr.data,
+            mini_feed: (rest?.[0]?.mini_feed as FeedItemVM[]) ?? [],
+            majors: rest?.[1] ?? null,
+          },
+          HOME_CACHE_OPTS
+        );
       });
 
       return () => {
@@ -228,14 +288,12 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
     }
 
     // ── Fallback / retry: client-side fetch (the original path). ──
-    // Serve cached data instantly on back navigation (no network, no loading state).
-    const cached = getCachedHomeData();
-    if (cached) {
-      applyCore(cached.home);
-      setMiniFeed((cached.home.mini_feed as FeedItemVM[]) ?? []);
-      setMajorsPreload(cached.majors);
-      setDataReady(true);
-      setMiniFeedLoading(false);
+    // The layout effect above has already painted the snapshot if there was
+    // one; skip the network entirely while it's still inside the stale window.
+    // A retry is an explicit "try again", so it always goes to the network.
+    const cached = retryKey === 0 ? readCache<CachedHome>(HOME_CACHE_KEY, HOME_CACHE_OPTS) : null;
+    if (cached && !cached.isStale) {
+      releaseCore();
       clearTimeout(timeoutId);
       return () => { cancelled = true; };
     }
@@ -246,7 +304,7 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
         if (!session || cancelled) {
           if (!cancelled) {
             setMyProfileId(null);
-            setDataReady(true);
+            releaseCore();
             router.replace("/auth");
           }
           return;
@@ -259,7 +317,7 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
         const coreRes = await fetch("/api/home/summary?part=core", { headers: authHeader });
         if (cancelled) return;
         if (!coreRes.ok) {
-          setDataReady(true);
+          releaseCore();
           scheduleRetry();
           return;
         }
@@ -268,7 +326,7 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
         applyCore(coreData);
         setMiniFeedLoading(true);
         setMiniFeedError(null);
-        setDataReady(true); // splash may dismiss now
+        releaseCore(); // splash may dismiss now
 
         // LOW PRIORITY — background, never blocks the splash. The Majors hub is
         // fetched eagerly so the swipe-up view is hydrated if the user goes
@@ -288,12 +346,16 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
         setMiniFeedLoading(false);
         if (!feedRes.ok) setMiniFeedError("Failed to load");
 
-        setCachedHomeData({ ...coreData, mini_feed: miniFeed }, majorsData);
+        writeCache<CachedHome>(
+          HOME_CACHE_KEY,
+          { core: coreData, mini_feed: miniFeed, majors: majorsData },
+          HOME_CACHE_OPTS
+        );
       } catch (e: any) {
         if (!cancelled) {
           setMiniFeedError(e?.message ?? "Failed to load");
           setMiniFeedLoading(false);
-          setDataReady(true);
+          releaseCore();
           scheduleRetry();
         }
       }
@@ -408,15 +470,6 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
 
   return (
     <>
-      {showSplash && (
-        <LoadingScreen
-          isReady={dataReady}
-          onDone={() => {
-            setShowSplash(false);
-            window.dispatchEvent(new CustomEvent("splash:done"));
-          }}
-        />
-      )}
     <AnimatePresence initial={false} mode="wait">
       {view === "home" ? (
         <motion.div
@@ -647,14 +700,14 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
             />
 
             {/* First-run onboarding + admin announcements (shown once each) */}
-            {dataReady && !showSplash && (
+            {coreReady && splashDone && (
               <AnnouncementModal items={announcements.items} onSeen={announcements.markSeen} />
             )}
 
             {/* Recurring push-permission prompt (3-month cooldown) — only once
                 any pending announcement/onboarding has been cleared. */}
-            {dataReady &&
-              !showSplash &&
+            {coreReady &&
+              splashDone &&
               myProfileId &&
               announcements.loaded &&
               announcements.items.length === 0 && (
@@ -755,9 +808,9 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
             </div>
 
             <div className="mt-3 space-y-2 pr-1 overflow-hidden" style={{ maxHeight: miniFeedMaxH }}>
-              {miniFeedLoading ? (
-                <div className="text-sm font-semibold text-emerald-100/70">Loading…</div>
-              ) : miniFeed.length ? (
+              {/* Cached highlights stay on screen while the fresh ones load —
+                  "Loading…" is only for a genuine cold miss. */}
+              {miniFeed.length ? (
                 miniFeed.map((it) => (
                   <MiniFeedTeaserCard
                     key={it.id}
@@ -765,6 +818,8 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
                     onOpen={() => router.push(`/social?focus=${encodeURIComponent(it.id)}`)}
                   />
                 ))
+              ) : miniFeedLoading ? (
+                <div className="text-sm font-semibold text-emerald-100/70">Loading…</div>
               ) : miniFeedError ? (
                 <div className="text-sm font-semibold text-red-200/90">{miniFeedError}</div>
               ) : (

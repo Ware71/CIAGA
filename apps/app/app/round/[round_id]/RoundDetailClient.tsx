@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
 import { BackButton } from "@/components/ui/BackButton";
 
+import { invalidateCache } from "@/lib/cache/clientCache";
 import { finishRound as finishRoundApi, type RoundResultInput } from "@/lib/rounds/api";
 import { useRoundDetail } from "@/lib/rounds/hooks/useRoundDetail";
 import type { Participant, Hole, HoleState, RoundFormatType, WolfPick } from "@/lib/rounds/hooks/useRoundDetail";
@@ -1276,6 +1277,13 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
       setFinishOpen(false);
       setStatus("finished");
       setEntryOpen(false);
+      // Handicap, rounds played, last round and the feed have all just changed —
+      // don't let the home/history/stats screens show the pre-round snapshot.
+      invalidateCache("home");
+      invalidateCache("history");
+      invalidateCache("stats");
+      invalidateCache("feed");
+      router.refresh();
     } catch (e: any) {
       setErr(e?.message || "Failed to finish round");
     } finally {
