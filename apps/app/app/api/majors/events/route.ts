@@ -165,32 +165,43 @@ export async function POST(req: Request) {
           .map((m: any) => m.profile_id)
           .filter(Boolean) as string[];
 
-        if (recipientIds.length > 0) {
-          const evt = event as any;
-          const basePayload = {
-            event_id: evt.id,
-            event_name: evt.name,
-            group_id,
-            group_name: (grp as any)?.name ?? null,
-          };
+        const evt = event as any;
+        const basePayload = {
+          event_id: evt.id,
+          event_name: evt.name,
+          group_id,
+          group_name: (grp as any)?.name ?? null,
+        };
 
+        // Entry open right now = the window has started (or there isn't one)
+        // AND hasn't already ended. The end check matters for backdated /
+        // imported events, which would otherwise announce a window that's shut.
+        const now = Date.now();
+        const startsAt = evt.entry_window_start
+          ? new Date(evt.entry_window_start).getTime()
+          : null;
+        const endsAt = evt.entry_window_end ? new Date(evt.entry_window_end).getTime() : null;
+        const entryOpen = (startsAt === null || startsAt <= now) && (endsAt === null || endsAt > now);
+
+        if (recipientIds.length > 0) {
           await createNotificationsForMany(recipientIds, "event_created", basePayload);
 
-          // Entry already open (no window, or start time has passed)?
-          const startsAt = evt.entry_window_start
-            ? new Date(evt.entry_window_start).getTime()
-            : null;
-          const entryOpen = startsAt === null || startsAt <= Date.now();
           if (entryOpen) {
             await createNotificationsForMany(recipientIds, "entry_open", {
               ...basePayload,
               entry_window_end: evt.entry_window_end ?? null,
             });
-            await supabaseAdmin
-              .from("events")
-              .update({ entry_open_notified_at: new Date().toISOString() })
-              .eq("id", evt.id);
           }
+        }
+
+        // Stamp outside the recipient check: a group whose only active member is
+        // the creator has nobody to notify now, but leaving it unstamped means
+        // the daily sweep announces "entry is open" to whoever joins later.
+        if (entryOpen) {
+          await supabaseAdmin
+            .from("events")
+            .update({ entry_open_notified_at: new Date().toISOString() })
+            .eq("id", evt.id);
         }
       } catch (notifyErr: any) {
         console.error("[events] notification fan-out failed:", notifyErr?.message);

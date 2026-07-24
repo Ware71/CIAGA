@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Bell, Check, MapPin, Smartphone, Sparkles } from "lucide-react";
@@ -26,7 +27,11 @@ type Props = {
 export default function AnnouncementModal({ items, onSeen }: Props) {
   const current = items[0];
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  // Portalled to <body>: rendered in place it sits inside the home screen's
+  // drag-to-Majors container, so gestures over it would reach that handler.
+  return createPortal(
     <AnimatePresence>
       {current && (
         <motion.div
@@ -60,7 +65,8 @@ export default function AnnouncementModal({ items, onSeen }: Props) {
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }
 

@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { finishRound } from "@/lib/rounds/finishRound";
 import { reconcileEventStatus } from "@/lib/majors/reconcileStatus";
 import { runEntryOpenNotifications } from "@/lib/notifications/entryOpenSweep";
+import { runEntryClosingNotifications } from "@/lib/notifications/entryClosingSweep";
 import { runFantasySweeps } from "@/lib/fantasy/cronSweeps";
 import { safeCompare } from "@/lib/auth/safeCompare";
 
@@ -11,8 +12,14 @@ export const runtime = "nodejs";
 /**
  * GET /api/cron/auto-complete-rounds
  *
- * Called by Vercel Cron every 15 minutes. Finds all live rounds whose
- * auto-complete threshold has elapsed and marks them finished.
+ * The single daily cron (Vercel Hobby limit), scheduled at 08:00 UTC — see
+ * vercel.json. It finds all live rounds whose auto-complete threshold has
+ * elapsed and marks them finished, then piggybacks the event reconcile,
+ * entry-window notifications and fantasy sweeps.
+ *
+ * The 08:00 slot is deliberate: this job sends pushes (round-completed via
+ * finishRound, plus both entry-window sweeps), so it has to land at an hour
+ * people can act on. Nothing here is otherwise clock-sensitive.
  *
  * Threshold = 1h when all holes are done, scaling to 24h when no holes
  * have been scored. See ciaga_get_rounds_for_auto_complete() for the SQL.
@@ -93,13 +100,20 @@ export async function GET(req: Request) {
     );
   }
 
-  // Entry-open notifications run here too — a single daily cron keeps us within
-  // the Vercel Hobby once-per-day cron limit. Best-effort.
+  // Entry-window notifications run here too — a single daily cron keeps us
+  // within the Vercel Hobby once-per-day cron limit. Best-effort.
   let entryOpen: { processed: number; notified: number } | null = null;
   try {
     entryOpen = await runEntryOpenNotifications();
   } catch (e: any) {
     console.error("[auto-complete-rounds] entry-open sweep failed:", e?.message);
+  }
+
+  let entryClosing: { processed: number; notified: number } | null = null;
+  try {
+    entryClosing = await runEntryClosingNotifications();
+  } catch (e: any) {
+    console.error("[auto-complete-rounds] entry-closing sweep failed:", e?.message);
   }
 
   // Fantasy picks sweeps (pre-event market generation + job hygiene). Best-effort.
@@ -114,5 +128,5 @@ export async function GET(req: Request) {
   }
 
   const completed = results.filter((r) => r.status === "ok").length;
-  return NextResponse.json({ ok: true, completed, results, entryOpen, fantasy });
+  return NextResponse.json({ ok: true, completed, results, entryOpen, entryClosing, fantasy });
 }

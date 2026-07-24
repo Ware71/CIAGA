@@ -5,6 +5,7 @@ import {
   type NotificationActor,
   type NotificationType,
 } from "@/lib/notifications/render";
+import { categoryForType } from "@/lib/notifications/preferences";
 
 /**
  * Central notification writer. Inserts an in-app notification row and fires a
@@ -17,7 +18,51 @@ import {
  * recomputed) and it is bumped back to unread instead of inserting a new row.
  * One device push is sent per write, tagged with the groupKey so the OS
  * coalesces repeats.
+ *
+ * Preferences: a recipient who has muted this notification's category still
+ * gets the in-app row (and the unread badge) — only the device push is skipped.
+ * See lib/notifications/preferences.ts.
  */
+
+/**
+ * Of the given recipients, which may receive a PUSH for this notification type.
+ * One query for the whole set — fan-out callers resolve it once and pass the
+ * per-recipient answer into createNotification to avoid an N+1.
+ *
+ * Fails open: on error, or for a type with no category, everyone is allowed.
+ */
+export async function resolvePushRecipients(
+  profileIds: string[],
+  type: NotificationType | string
+): Promise<Set<string>> {
+  const ids = Array.from(new Set(profileIds.filter(Boolean)));
+  const allowed = new Set(ids);
+  const category = categoryForType(type);
+  if (!category || ids.length === 0) return allowed;
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("notification_preferences")
+      .select("profile_id, muted_categories")
+      .in("profile_id", ids);
+
+    if (error) {
+      console.error("[notify] failed to load notification preferences:", error.message);
+      return allowed;
+    }
+
+    for (const row of (data ?? []) as {
+      profile_id: string;
+      muted_categories: string[] | null;
+    }[]) {
+      if ((row.muted_categories ?? []).includes(category)) allowed.delete(row.profile_id);
+    }
+  } catch (e: any) {
+    console.error("[notify] failed to load notification preferences:", e?.message);
+  }
+
+  return allowed;
+}
 
 function mergeActors(
   a: NotificationActor[] | undefined,
@@ -48,8 +93,11 @@ export async function createNotification(params: {
   type: NotificationType | string;
   payload: Record<string, any>;
   groupKey?: string | null;
+  /** Pre-resolved push permission (see resolvePushRecipients). Looked up here
+   *  when omitted — pass it from fan-out callers to avoid a query per recipient. */
+  pushAllowed?: boolean;
 }): Promise<void> {
-  const { recipientProfileId, type, payload, groupKey } = params;
+  const { recipientProfileId, type, payload, groupKey, pushAllowed } = params;
   if (!recipientProfileId) return;
 
   let finalPayload: Record<string, any> = payload ?? {};
@@ -97,7 +145,12 @@ export async function createNotification(params: {
     return;
   }
 
-  // Push delivery (best-effort).
+  // Push delivery (best-effort). The in-app row above is written regardless —
+  // muting a category silences the device, it does not drop the notification.
+  const mayPush =
+    pushAllowed ?? (await resolvePushRecipients([recipientProfileId], type)).has(recipientProfileId);
+  if (!mayPush) return;
+
   try {
     // Current unread count for this recipient — stamped into the push so the
     // service worker can set the app-icon badge while the app is closed.
@@ -112,7 +165,9 @@ export async function createNotification(params: {
       title: rendered.title,
       body: rendered.body,
       url: rendered.url,
-      icon: rendered.icon,
+      // NOTE: rendered.icon is a lucide key ("door-open") for the bell UI, not a
+      // URL — passing it here resolved to a 404 and killed the push icon. Leave
+      // it unset so the service worker falls back to /icons/icon-192.png.
       tag: groupKey ?? undefined,
       badgeCount: unread ?? undefined,
     });
@@ -129,9 +184,15 @@ export async function createNotificationsForMany(
 ): Promise<void> {
   const ids = Array.from(new Set(recipientProfileIds.filter(Boolean)));
   if (ids.length === 0) return;
+  const pushable = await resolvePushRecipients(ids, type);
   await Promise.allSettled(
     ids.map((recipientProfileId) =>
-      createNotification({ recipientProfileId, type, payload })
+      createNotification({
+        recipientProfileId,
+        type,
+        payload,
+        pushAllowed: pushable.has(recipientProfileId),
+      })
     )
   );
 }
