@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Bell, Smartphone } from "lucide-react";
 import { usePushPrompt } from "@/lib/notifications/usePushPrompt";
@@ -50,7 +51,11 @@ export default function PushPermissionPrompt({
     // unsupported: leave the modal so the user can dismiss it
   }
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  // Portalled to <body>: rendered in place it sits inside the home screen's
+  // drag-to-Majors container, so gestures over it would reach that handler.
+  return createPortal(
     <AnimatePresence>
       {show && (
         <motion.div
@@ -140,6 +145,7 @@ export default function PushPermissionPrompt({
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }

@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { createNotification } from "@/lib/notifications/notify";
+import { createNotification, resolvePushRecipients } from "@/lib/notifications/notify";
 import type { NotificationActor } from "@/lib/notifications/render";
 
 /** Best-effort round result, supplied at finish for the completion copy. */
@@ -25,14 +25,19 @@ export type RoundResult = {
  * states the result (winner, or who-beat-who + margin for match play), plus a
  * "🏆 New course record" callout when a player set one.
  *
+ * `actorProfileId` — whoever performed the action — is excluded. They just
+ * tapped the button; telling them their own round started is noise.
+ *
  * Best-effort: never throws — the round start/finish must not fail on this.
  */
 export async function notifyFollowersOfRoundActivity(params: {
   roundId: string;
   kind: "started" | "completed";
   result?: RoundResult;
+  /** Profile that started/finished the round — never notified about their own action. */
+  actorProfileId?: string | null;
 }): Promise<void> {
-  const { roundId, kind, result } = params;
+  const { roundId, kind, result, actorProfileId } = params;
   if (!roundId) return;
 
   try {
@@ -87,6 +92,8 @@ export async function notifyFollowersOfRoundActivity(params: {
       const subject = row.following_id as string;
       if (!follower || !subject) continue;
       if (follower === subject) continue; // safety; constraint should prevent
+      // The person who performed the action doesn't need telling about it.
+      if (actorProfileId && follower === actorProfileId) continue;
       const set = followedByRecipient.get(follower) ?? new Set<string>();
       set.add(subject);
       followedByRecipient.set(follower, set);
@@ -110,6 +117,11 @@ export async function notifyFollowersOfRoundActivity(params: {
           }
         : {};
 
+    const pushable = await resolvePushRecipients(
+      Array.from(followedByRecipient.keys()),
+      type
+    );
+
     await Promise.allSettled(
       Array.from(followedByRecipient.entries()).map(([recipientId, subjects]) => {
         const actors: NotificationActor[] = Array.from(subjects).map((sid) => {
@@ -129,6 +141,7 @@ export async function notifyFollowersOfRoundActivity(params: {
           type,
           payload: { actors, date, round_id: roundId, co_player: coPlayer, ...resultPayload },
           groupKey,
+          pushAllowed: pushable.has(recipientId),
         });
       })
     );

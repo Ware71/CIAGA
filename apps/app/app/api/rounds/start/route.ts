@@ -305,8 +305,13 @@ export async function POST(req: Request) {
     if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 });
 
     // Notify followers of the players that this round has started (grouped,
-    // best-effort — runs only on the request that won the start claim).
-    await notifyFollowersOfRoundActivity({ roundId: round.id, kind: "started" }).catch(() => {});
+    // best-effort — runs only on the request that won the start claim). The
+    // starter is excluded: they just tapped Start, they don't need telling.
+    await notifyFollowersOfRoundActivity({
+      roundId: round.id,
+      kind: "started",
+      actorProfileId: myProfileId,
+    }).catch(() => {});
 
     return NextResponse.json({ ok: true, round_id: round.id, tee_snapshot_id: teeSnapId });
   } catch (e: any) {

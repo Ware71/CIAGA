@@ -2,9 +2,10 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { createNotificationsForMany } from "@/lib/notifications/notify";
 
 /**
- * Finds events whose entry window has opened (entry_window_start <= now) but
- * which haven't had an entry-open notification sent yet, notifies active group
- * members, and stamps entry_open_notified_at so each event fires once.
+ * Finds events whose entry window has opened (entry_window_start <= now) and is
+ * still open, which haven't had an entry-open notification sent yet, notifies
+ * active group members, and stamps entry_open_notified_at so each event fires
+ * once.
  *
  * Runs daily — invoked from the auto-complete-rounds cron (a single daily cron
  * keeps us within Vercel Hobby's once-per-day cron limit) and also available via
@@ -22,6 +23,9 @@ export async function runEntryOpenNotifications(): Promise<{
     .is("entry_open_notified_at", null)
     .not("entry_window_start", "is", null)
     .lte("entry_window_start", nowIso)
+    // …and still open. Without this a backdated/imported event whose window has
+    // already been and gone gets an "Entry is open" push.
+    .or(`entry_window_end.is.null,entry_window_end.gt.${nowIso}`)
     .not("group_id", "is", null)
     .not("majors_status", "in", "(completed,cancelled)")
     .limit(200);

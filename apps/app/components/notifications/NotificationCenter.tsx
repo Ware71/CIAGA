@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -9,9 +10,12 @@ import {
   CalendarPlus,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
   Clock,
   DoorOpen,
   Flag,
+  Settings,
+  Smartphone,
   Ticket,
   Trophy,
   Users,
@@ -21,6 +25,15 @@ import {
   type NotificationActor,
   type UserNotification,
 } from "@/lib/notifications/render";
+import { NOTIFICATION_CATEGORIES } from "@/lib/notifications/preferences";
+import { useNotificationPreferences } from "@/lib/notifications/useNotificationPreferences";
+import {
+  isIOS,
+  isStandalone,
+  notificationPermission,
+  registerPush,
+  unregisterPush,
+} from "@/lib/push/clientPush";
 
 type Props = {
   open: boolean;
@@ -32,6 +45,8 @@ type Props = {
   markAllRead: () => void | Promise<void>;
   pendingInvitesCount?: number;
   onOpenInvites?: () => void;
+  /** Viewer's profile — required for the notification settings pane. */
+  profileId?: string | null;
 };
 
 const ICONS: Record<string, ComponentType<{ size?: number; className?: string }>> = {
@@ -142,6 +157,166 @@ function NotificationCard({
   );
 }
 
+/** Small pill switch — on = notifications delivered, off = muted. */
+function Toggle({
+  on,
+  disabled,
+  onChange,
+  label,
+}: {
+  on: boolean;
+  disabled?: boolean;
+  onChange: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      disabled={disabled}
+      onClick={onChange}
+      className={`relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-40 ${
+        on ? "bg-emerald-400" : "bg-emerald-900/70"
+      }`}
+    >
+      <span
+        className={`absolute top-0.5 h-5 w-5 rounded-full bg-[#071c10] transition-transform ${
+          on ? "translate-x-[22px]" : "translate-x-0.5"
+        }`}
+      />
+    </button>
+  );
+}
+
+/**
+ * Per-category push settings. Muting silences the device only — the
+ * notification still lands in the list above and still counts as unread.
+ */
+function NotificationSettings({ profileId }: { profileId: string | null }) {
+  const { muted, loading, toggle } = useNotificationPreferences(profileId);
+
+  // Push state is device-local (permission + subscription), so it's read from
+  // the browser rather than the database.
+  const [permission, setPermission] = useState<NotificationPermission | "unsupported">(
+    "default"
+  );
+  const [needsInstall, setNeedsInstall] = useState(false);
+  const [working, setWorking] = useState(false);
+  const [stepLabel, setStepLabel] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPermission(notificationPermission());
+    setNeedsInstall(isIOS() && !isStandalone());
+  }, []);
+
+  const pushOn = permission === "granted";
+
+  async function togglePush() {
+    setError(null);
+    setWorking(true);
+    if (pushOn) {
+      await unregisterPush();
+      // Permission itself can only be revoked in browser settings; dropping the
+      // subscription is what actually stops delivery.
+      setPermission(notificationPermission());
+      setWorking(false);
+      return;
+    }
+    const r = await registerPush({ onStep: setStepLabel });
+    setWorking(false);
+    setStepLabel(null);
+    if (r.status === "subscribed") setPermission("granted");
+    else if (r.status === "denied") setPermission("denied");
+    else if (r.status === "needs_install") setNeedsInstall(true);
+    else if (r.status === "error") setError(r.error || "Couldn’t enable notifications.");
+    else if (r.status === "unsupported") setPermission("unsupported");
+  }
+
+  return (
+    <div className="flex-1 space-y-2 overflow-y-auto overscroll-contain">
+      {/* Master push control */}
+      <div className="rounded-2xl border border-emerald-900/50 bg-emerald-950/40 px-3 py-3">
+        {needsInstall ? (
+          <div className="flex items-start gap-3">
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-amber-400/20 text-amber-200">
+              <Smartphone size={18} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-extrabold text-amber-100">Add CIAGA to your Home Screen</div>
+              <div className="mt-0.5 text-xs font-medium text-amber-100/70">
+                On iPhone, push needs the app installed. Tap <b>Share</b> → <b>Add to Home
+                Screen</b>, then open CIAGA from there.
+              </div>
+            </div>
+          </div>
+        ) : permission === "unsupported" ? (
+          <div className="text-xs font-medium text-emerald-100/60">
+            This browser doesn’t support push notifications.
+          </div>
+        ) : permission === "denied" ? (
+          <div className="text-xs font-medium text-emerald-100/70">
+            Notifications are blocked for this site. Enable them for CIAGA in your browser’s
+            site settings, then reopen the app.
+          </div>
+        ) : (
+          <div className="flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-extrabold text-emerald-50">Push notifications</div>
+              <div className="mt-0.5 text-xs font-medium text-emerald-100/60">
+                {working
+                  ? stepLabel ?? "Working…"
+                  : pushOn
+                    ? "Alerts are delivered to this device"
+                    : "Turn on to get alerts on this device"}
+              </div>
+            </div>
+            <Toggle
+              on={pushOn}
+              disabled={working}
+              onChange={() => void togglePush()}
+              label="Push notifications"
+            />
+          </div>
+        )}
+        {error && (
+          <div className="mt-2 text-xs font-medium text-red-300/80">{error}</div>
+        )}
+      </div>
+
+      {/* Per-category toggles */}
+      {NOTIFICATION_CATEGORIES.map((c) => {
+        const on = !muted.has(c.key);
+        return (
+          <div
+            key={c.key}
+            className="flex items-center gap-3 rounded-2xl border border-emerald-900/50 bg-emerald-950/30 px-3 py-3"
+          >
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-extrabold text-emerald-50">{c.label}</div>
+              <div className="mt-0.5 text-xs font-medium text-emerald-100/60">
+                {c.description}
+              </div>
+            </div>
+            <Toggle
+              on={on}
+              disabled={loading || !profileId}
+              onChange={() => void toggle(c.key)}
+              label={c.label}
+            />
+          </div>
+        );
+      })}
+
+      <div className="px-1 pb-2 pt-1 text-[11px] font-medium leading-relaxed text-emerald-200/40">
+        Muted alerts still appear here in your notifications — you just won’t get a push.
+      </div>
+    </div>
+  );
+}
+
 export default function NotificationCenter({
   open,
   onClose,
@@ -152,9 +327,20 @@ export default function NotificationCenter({
   markAllRead,
   pendingInvitesCount = 0,
   onOpenInvites,
+  profileId = null,
 }: Props) {
   const router = useRouter();
-  const [tab, setTab] = useState<"all" | "unread">("all");
+  const [tab, setTab] = useState<"all" | "unread">("unread");
+  const [pane, setPane] = useState<"list" | "settings">("list");
+
+  // The sheet stays mounted between openings, so reset each time it opens —
+  // otherwise it reopens on whatever tab/pane was last left behind.
+  useEffect(() => {
+    if (open) {
+      setTab("unread");
+      setPane("list");
+    }
+  }, [open]);
 
   const visible = tab === "unread" ? items.filter((i) => !i.read) : items;
 
@@ -165,7 +351,12 @@ export default function NotificationCenter({
     if (url) router.push(url);
   }
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  // Portalled to <body>: the bell lives inside the home screen's drag-to-Majors
+  // container, so rendering in place made every touch-drag over the list fire
+  // the parent's drag handler and navigate to Majors instead of scrolling.
+  return createPortal(
     <AnimatePresence>
       {open && (
         <motion.div
@@ -186,78 +377,115 @@ export default function NotificationCenter({
           >
             <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-emerald-800/60" />
 
-            <div className="mb-3 flex items-center justify-between">
-              <div className="text-base font-extrabold text-[#f5e6b0]">Notifications</div>
-              {unreadCount > 0 && (
-                <button
-                  type="button"
-                  onClick={() => void markAllRead()}
-                  className="text-[11px] font-semibold text-emerald-300/80 hover:text-emerald-200"
-                >
-                  Mark all read
-                </button>
-              )}
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-2">
+                {pane === "settings" && (
+                  <button
+                    type="button"
+                    onClick={() => setPane("list")}
+                    className="-ml-1 shrink-0 rounded-full p-1 text-emerald-200/70 hover:bg-emerald-900/40 hover:text-emerald-100"
+                    aria-label="Back to notifications"
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
+                )}
+                <div className="truncate text-base font-extrabold text-[#f5e6b0]">
+                  {pane === "settings" ? "Notification settings" : "Notifications"}
+                </div>
+              </div>
+
+              <div className="flex shrink-0 items-center gap-3">
+                {pane === "list" && unreadCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => void markAllRead()}
+                    className="text-[11px] font-semibold text-emerald-300/80 hover:text-emerald-200"
+                  >
+                    Mark all read
+                  </button>
+                )}
+                {pane === "list" && (
+                  <button
+                    type="button"
+                    onClick={() => setPane("settings")}
+                    className="rounded-full p-1.5 text-emerald-200/70 hover:bg-emerald-900/40 hover:text-emerald-100"
+                    aria-label="Notification settings"
+                    title="Notification settings"
+                  >
+                    <Settings size={18} />
+                  </button>
+                )}
+              </div>
             </div>
 
-            {/* All / Unread toggle */}
-            <div className="mb-3 inline-flex gap-1 rounded-full bg-emerald-950/50 p-1 text-xs font-semibold">
-              <button
-                type="button"
-                onClick={() => setTab("all")}
-                className={`rounded-full px-3 py-1 ${
-                  tab === "all" ? "bg-emerald-400 text-emerald-950" : "text-emerald-200/70"
-                }`}
-              >
-                All
-              </button>
-              <button
-                type="button"
-                onClick={() => setTab("unread")}
-                className={`rounded-full px-3 py-1 ${
-                  tab === "unread" ? "bg-emerald-400 text-emerald-950" : "text-emerald-200/70"
-                }`}
-              >
-                Unread{unreadCount > 0 ? ` (${unreadCount})` : ""}
-              </button>
-            </div>
+            {pane === "settings" ? (
+              <NotificationSettings profileId={profileId} />
+            ) : (
+              <>
+                {/* All / Unread toggle */}
+                <div className="mb-3 inline-flex gap-1 rounded-full bg-emerald-950/50 p-1 text-xs font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => setTab("all")}
+                    className={`rounded-full px-3 py-1 ${
+                      tab === "all" ? "bg-emerald-400 text-emerald-950" : "text-emerald-200/70"
+                    }`}
+                  >
+                    All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTab("unread")}
+                    className={`rounded-full px-3 py-1 ${
+                      tab === "unread" ? "bg-emerald-400 text-emerald-950" : "text-emerald-200/70"
+                    }`}
+                  >
+                    Unread{unreadCount > 0 ? ` (${unreadCount})` : ""}
+                  </button>
+                </div>
 
-            <div className="flex-1 space-y-2 overflow-y-auto">
-              {pendingInvitesCount > 0 && onOpenInvites && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onClose();
-                    onOpenInvites();
-                  }}
-                  className="flex w-full items-center gap-3 rounded-2xl border border-amber-400/40 bg-amber-400/10 px-3 py-3 text-left"
-                >
-                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-amber-400/20 text-amber-200">
-                    <Users size={18} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-extrabold text-amber-100">
-                      {pendingInvitesCount} invite{pendingInvitesCount === 1 ? "" : "s"}
+                <div className="flex-1 space-y-2 overflow-y-auto overscroll-contain">
+                  {pendingInvitesCount > 0 && onOpenInvites && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        onOpenInvites();
+                      }}
+                      className="flex w-full items-center gap-3 rounded-2xl border border-amber-400/40 bg-amber-400/10 px-3 py-3 text-left"
+                    >
+                      <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-amber-400/20 text-amber-200">
+                        <Users size={18} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-extrabold text-amber-100">
+                          {pendingInvitesCount} invite{pendingInvitesCount === 1 ? "" : "s"}
+                        </div>
+                        <div className="text-xs font-medium text-amber-100/70">Tap to review</div>
+                      </div>
+                    </button>
+                  )}
+
+                  {loading && visible.length === 0 ? (
+                    <div className="py-10 text-center text-sm font-semibold text-emerald-100/60">
+                      Loading…
                     </div>
-                    <div className="text-xs font-medium text-amber-100/70">Tap to review</div>
-                  </div>
-                </button>
-              )}
-
-              {loading && visible.length === 0 ? (
-                <div className="py-10 text-center text-sm font-semibold text-emerald-100/60">
-                  Loading…
+                  ) : visible.length === 0 ? (
+                    <div className="py-10 text-center text-sm font-semibold text-emerald-100/60">
+                      {tab === "unread" ? "No unread notifications" : "No notifications yet"}
+                    </div>
+                  ) : (
+                    visible.map((n) => (
+                      <NotificationCard key={n.id} n={n} onActivate={activate} />
+                    ))
+                  )}
                 </div>
-              ) : visible.length === 0 ? (
-                <div className="py-10 text-center text-sm font-semibold text-emerald-100/60">
-                  {tab === "unread" ? "No unread notifications" : "No notifications yet"}
-                </div>
-              ) : (
-                visible.map((n) => <NotificationCard key={n.id} n={n} onActivate={activate} />)
-              )}
-            </div>
+              </>
+            )}
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }

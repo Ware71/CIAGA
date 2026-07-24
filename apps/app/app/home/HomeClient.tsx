@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useState, useEffect, useLayoutEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { AuthUser } from "@/components/ui/auth-user";
@@ -425,7 +426,9 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -16 }}
           transition={{ duration: 0.22 }}
-          drag="y"
+          // Sheets portal out of this container, but disabling drag while one is
+          // open stops an in-flight gesture from throwing us to Majors underneath.
+          drag={showNotifications || showInviteSheet ? false : "y"}
           dragConstraints={{ top: -160, bottom: 0 }}
           dragElastic={0.2}
           onDragEnd={(_, info) => {
@@ -474,11 +477,14 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
               </div>
             </div>
 
-            {/* Invite sheet */}
+            {/* Invite sheet — portalled to <body> so drags inside it don't bubble
+                into this screen's drag-to-Majors handler. */}
             {showInviteSheet &&
+              typeof document !== "undefined" &&
               ((majorsPreload?.pending_invites?.length ?? 0) +
                 (majorsPreload?.pending_event_invites?.length ?? 0)) >
-                0 && (
+                0 &&
+              createPortal(
               <div
                 className="fixed inset-0 z-50 flex items-end"
                 onClick={() => setShowInviteSheet(false)}
@@ -623,7 +629,8 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
                     );
                   })}
                 </div>
-              </div>
+              </div>,
+              document.body
             )}
 
             <NotificationCenter
@@ -636,6 +643,7 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
               markAllRead={notif.markAllRead}
               pendingInvitesCount={pendingInvitesCount}
               onOpenInvites={() => setShowInviteSheet(true)}
+              profileId={myProfileId}
             />
 
             {/* First-run onboarding + admin announcements (shown once each) */}

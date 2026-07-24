@@ -10,6 +10,7 @@ export type NotificationType =
   | "waitlist_offered"
   | "event_created"
   | "entry_open"
+  | "entry_closing"
   | "mention_post"
   | "mention_comment"
   | "follow_round_started"
@@ -71,7 +72,7 @@ function truncate(s: string, n = 80): string {
 // Node = UTC) when building push bodies — without it, pushes render in UTC.
 // Europe/London auto-handles BST vs GMT and matches the UK browser output, so
 // the in-app bell (which renders client-side) is unaffected.
-const APP_TIME_ZONE = "Europe/London";
+export const APP_TIME_ZONE = "Europe/London";
 
 /** ISO timestamp → "Jun 30 at 2:30 PM" in UK local time (Europe/London).
  *  Non-ISO / already-formatted values are returned unchanged. */
@@ -81,6 +82,20 @@ function formatTeeTime(v: string): string {
   const date = d.toLocaleDateString([], { month: "short", day: "numeric", timeZone: APP_TIME_ZONE });
   const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", timeZone: APP_TIME_ZONE });
   return `${date} at ${time}`;
+}
+
+/** ISO timestamp → "Jun 30" in UK local time. Non-ISO values pass through. */
+function formatDay(v: string): string {
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return v;
+  return d.toLocaleDateString([], { month: "short", day: "numeric", timeZone: APP_TIME_ZONE });
+}
+
+/** ISO timestamp → "2:30 PM" in UK local time. Non-ISO values pass through. */
+function formatClock(v: string): string {
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return v;
+  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", timeZone: APP_TIME_ZONE });
 }
 
 export function renderNotification(
@@ -103,9 +118,21 @@ export function renderNotification(
     case "entry_open":
       return {
         title: "Entry is open",
-        body: `Entry is now open for ${p.event_name ?? "an event"}`,
+        body: `Entry is now open for ${p.event_name ?? "an event"}${
+          p.entry_window_end ? ` — closes ${formatDay(p.entry_window_end)}` : ""
+        }`,
         url: p.event_id ? `/majors/events/${p.event_id}` : "/majors",
         icon: "door-open",
+      };
+
+    case "entry_closing":
+      return {
+        title: "Entry closes today",
+        body: `Last chance to enter ${p.event_name ?? "an event"}${
+          p.entry_window_end ? ` — entry closes at ${formatClock(p.entry_window_end)}` : ""
+        }`,
+        url: p.event_id ? `/majors/events/${p.event_id}` : "/majors",
+        icon: "clock",
       };
 
     case "fantasy_pick_won":

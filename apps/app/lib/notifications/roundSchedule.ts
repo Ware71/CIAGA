@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { createNotification } from "@/lib/notifications/notify";
+import { createNotification, resolvePushRecipients } from "@/lib/notifications/notify";
 import type { NotificationActor } from "@/lib/notifications/render";
 
 type RoundScheduleType =
@@ -84,9 +84,17 @@ export async function notifyRoundSchedule(params: {
     };
     const groupKey = `${type}:${roundId}`;
 
+    const pushable = await resolvePushRecipients(recipientIds, type);
+
     await Promise.allSettled(
       recipientIds.map((recipientProfileId) =>
-        createNotification({ recipientProfileId, type, payload, groupKey })
+        createNotification({
+          recipientProfileId,
+          type,
+          payload,
+          groupKey,
+          pushAllowed: pushable.has(recipientProfileId),
+        })
       )
     );
   } catch (e: any) {

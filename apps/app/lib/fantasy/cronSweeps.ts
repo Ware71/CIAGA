@@ -11,7 +11,7 @@ import { settleFantasySeason } from "@/lib/fantasy/seasonSettlement";
  *
  * Sweeps:
  *  1. Pre-event generation — today's events in fantasy-enabled groups that
- *     have no fantasy_event_state yet. (Events created after the 03:00 run
+ *     have no fantasy_event_state yet. (Events created after the daily run
  *     are covered by admin/first-viewer generation instead.)
  *  2. Settlement safety net — completed events whose fantasy is not final
  *     (the primary path is the reconcileEventStatus hook).
