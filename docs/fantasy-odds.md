@@ -222,6 +222,7 @@ The `event_version` on every snapshot is what makes cached odds *safe*:
 | Orchestration (inputs, claim, refresh, generation) | `apps/app/lib/fantasy/odds.ts` |
 | Profiles | `apps/app/lib/fantasy/profiles.ts` |
 | Market pricing/settlement rules | `apps/app/lib/fantasy/markets/*` |
+| Analytic single-player pricing (noise-free convolution) | `apps/app/lib/fantasy/markets/analytic.ts` |
 | Narrative engine (event preview text) | `apps/app/lib/fantasy/narrative.ts` |
 | Accumulators (rules, placement, queries) | `apps/app/lib/fantasy/{parlayRules,parlays}.ts` |
 | Correlated joint pricing (positions + h2h) | `apps/app/lib/fantasy/simulation/jointPricing.ts` + `apps/app/lib/fantasy/jointSamples.ts` |
@@ -539,3 +540,82 @@ Unrestricted: outright, top-N, birdies, eagles, field specials.
   prices (not re-quantized), displayed as decimal in the slip.
 - Migration `20260714000000` marks every unsettled book stale so open events
   reprice under the new constants on next view; open bets keep locked odds.
+
+---
+
+## 13. Variance-faithful model + analytic single-player pricing (2026-07-26)
+
+A statistical audit of the model found the score-diff **estimators** correct
+(recency-weighted mean; reliability-weighted unbiased variance) but four issues
+in how they flow through to prices. This section documents the fixes. Profile
+model version → **v5**; the pricing changes take effect on the next
+generation/refresh (admin "regenerate + reprice" forces it immediately).
+
+### σ_D now measures noise, not the improvement trend
+
+`recencyWeightedDifferentialStats` (`simulation/differentials.ts`) measured
+spread as deviations from the recency-weighted **level**, so an improving (or
+declining) player's old rounds — far from their current mean — inflated σ_D and
+over-widened their simulated distribution. The spread is now the reliability-
+weighted stddev of the **residuals around a weighted-least-squares trend**
+(`x ≈ a + b·r`, recency weights → a local slope), with a proper hat-trace
+degrees-of-freedom correction (`V1 − V2/V1 − Σw²(r−r̄)²/Σw(r−r̄)²`). A trend is
+only fitted with ≥ `MIN_DETREND_SAMPLES` (4) rounds; below that the original
+deviation-from-level estimator stands (a 2-point line has zero residual). The
+level (`avg_differential`) is unchanged. The slope `trendPerRound` is returned
+for the inspector.
+
+### Round variance is honoured, and holes share a "day"
+
+Two coupled changes (`simulation/holeModel.ts`, `simulation/engine.ts`):
+
+1. **Intra-round correlation** `INTRA_ROUND_CORRELATION = ρ (0.06)`. Golf holes
+   are modestly positively correlated (a good/bad day lifts the whole round);
+   independent hole sampling under-disperses count markets (birdies/eagles). The
+   engine now samples each round's holes through a **one-factor Gaussian
+   copula**: a shared per-(player, round) "day" normal `g`, per-hole noise, and
+   `u = Φ(√ρ·g + √(1−ρ)·gₕₒₗₑ)` into the existing inverse-CDF. This adds
+   correlation **without moving any hole's marginal pmf**, so the birdie/eagle
+   and `holeMu` calibration stay exact.
+2. **σ re-solve** so the CORRELATED round total still has variance σ_round². For
+   equal per-hole `s`, `Var(Σ) = s²·n·(1 + (n−1)ρ)`, so per-hole
+   `s = σ_round / √(n·(1 + (n−1)ρ))` (was `σ_round/√n`). Because `s` is smaller,
+   most round variance now rides on the unbounded day factor rather than the
+   grid-bounded per-hole spread, so the per-hole clamp (now `[0.35, 3.0]`)
+   rarely binds and volatile players stay separated.
+
+Only the **mean** was reconciled end-to-end before. `CalibrationMeta.variance`
+(`{ target: Σσ², realized: Σ discrete var, perHole }`) now exposes per-hole
+variance retention, shown in the inspector JSON/UI and the Calibration sheet
+("Round var target / realized / retention %"); the Sim-aggregates sheet's
+"σ round target vs Sim gross SD" checks the correlated round total.
+
+### Bands/totals centre on the model projection
+
+`score_band` / `score_total` centred their ranges on the **handicap-implied**
+score — which fought the differential-first level model (form ≠ handicap), piling
+an in-form player's mass into the bottom band. They now centre on the **model
+projection** (`ctx.projections[id].meanGross/Net` from the preliminary sim;
+handicap-implied is a defensive fallback). `bandsAround` was also made
+symmetric: two 4-stroke inner bands whose junction sits at ≈ the projection
+(`c = round(mean − 0.5)` → `le_(c−4) | (c−3)_c | (c+1)_(c+4) | ge_(c+5)`), a
+gap-free integer partition. Edges can shift slightly between refreshes as form
+updates, like O/U lines. Probabilities are unchanged in method (still the real
+distribution) — only which bands/values are *offered* moved.
+
+### Single-player markets are priced analytically (noise-free)
+
+`score_band`, `score_total`, event-wide `birdies`, `eagle_count` no longer count
+Monte-Carlo samples — they price off an **exact convolution** of the calibrated
+per-hole distributions (`markets/analytic.ts`). Because the copula makes a
+round's holes conditionally independent given the day factor, the exact
+distribution is a **Gauss–Hermite quadrature over the day factor of the
+per-hole convolution** — correlation-correct, seed-independent, and free of the
+~14% relative tail noise the ladder used to lock in per version. The engine
+attaches each player's calibrated `analytic` model (per-hole pmfs, pars, rounds,
+fixed contributions) to `SimulationResult`; markets fall back to the retained MC
+samples only when a player has no holes left (deterministic). `hole_score` stays
+on the per-hole MC marginal (a single Bernoulli — least noisy). The remaining
+multi-player markets (winner, top-N, finish position/range, h2h) keep the joint
+MC engine, now with **antithetic variates** (paired iterations reuse each
+sample's normals negated → `1−u`) to roughly halve their variance.

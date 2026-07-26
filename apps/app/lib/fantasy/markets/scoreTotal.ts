@@ -9,6 +9,7 @@ import type {
 } from "@/lib/fantasy/markets/types";
 import { playerName } from "@/lib/fantasy/markets/types";
 import { handicapImpliedScore } from "@/lib/fantasy/markets/roundUtil";
+import { analyticDistributions, pmfUnderExactOver } from "@/lib/fantasy/markets/analytic";
 import type { SimulationResult } from "@/lib/fantasy/simulation/types";
 
 const SPREAD = 4; // handicap-implied score ± SPREAD score values offered
@@ -36,9 +37,10 @@ function parseKey(selectionKey: string): { side: "u" | "e" | "o"; value: number 
  * values, offers a three-way Under / Exactly / Over split instead of a single
  * fixed .5 line. Selection keys: u_{v} / e_{v} / o_{v}. Event-wide only (no
  * round variant), mirroring the old score_exact. Values are centred on the
- * player's HANDICAP-IMPLIED score (par + playing handicap + POPULATION_GAP
- * from the event setup), not the model's own projection — the actual odds
- * still come from the real simulated distribution.
+ * player's MODEL PROJECTION (the preliminary sim's mean gross/net,
+ * `ctx.projections`), falling back to the handicap-implied score if a
+ * projection is missing. The actual odds still come from the real simulated
+ * distribution.
  */
 export const scoreTotal: MarketDefinition = {
   type: "score_total",
@@ -60,8 +62,10 @@ export const scoreTotal: MarketDefinition = {
   generateMarkets(ctx: GenerateCtx): MarketSpec[] {
     return ctx.players.filter((p) => !p.provisional).flatMap((p) => {
       const specs: MarketSpec[] = [];
+      const proj = ctx.projections[p.profileId];
       for (const basis of ["gross", "net"] as const) {
-        const mean = handicapImpliedScore(ctx, p.playingHandicap, basis);
+        const projected = proj ? (basis === "gross" ? proj.meanGross : proj.meanNet) : null;
+        const mean = projected ?? handicapImpliedScore(ctx, p.playingHandicap, basis);
         if (mean == null) continue;
         const c = Math.round(mean);
         const scores = Array.from({ length: SPREAD * 2 + 1 }, (_, i) => c - SPREAD + i);
@@ -84,6 +88,19 @@ export const scoreTotal: MarketDefinition = {
     const idx = market.subject_profile_id ? sim.playerIndex[market.subject_profile_id] : undefined;
     if (idx === undefined) return out;
     const basis = marketBasis(market);
+    // Exact under/exact/over from the calibrated per-hole model when holes
+    // remain; deterministic (retained MC) fallback once fully played.
+    const analytic = sim.players[idx].analytic;
+    if (analytic) {
+      const pmf = basis === "gross" ? analyticDistributions(analytic).gross : analyticDistributions(analytic).net;
+      for (const v of marketScores(market)) {
+        const { under, exact, over } = pmfUnderExactOver(pmf, v);
+        out.set(`u_${v}`, under);
+        out.set(`e_${v}`, exact);
+        out.set(`o_${v}`, over);
+      }
+      return out;
+    }
     const totals = basis === "gross" ? sim.players[idx].grossTotals : sim.players[idx].netTotals;
     for (const v of marketScores(market)) {
       let under = 0;

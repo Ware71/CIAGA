@@ -8,11 +8,25 @@
  */
 export const DIFFERENTIAL_HALFLIFE_ROUNDS = 20;
 
+/**
+ * Below this many samples we do NOT fit a trend when estimating spread: a
+ * 2-point line has zero residual, and a 3-point fit leaves one noisy residual
+ * DoF. We fall back to deviations from the level instead (see below).
+ */
+export const MIN_DETREND_SAMPLES = 4;
+
 export type WeightedDifferentialStats = {
-  /** Recency-weighted mean differential. */
+  /** Recency-weighted mean differential (the LEVEL — unaffected by detrending). */
   mean: number;
-  /** Reliability-corrected weighted stddev; null with < 2 samples. */
+  /** Reliability-corrected weighted stddev of the round-to-round NOISE; null with < 2 samples. */
   stddev: number | null;
+  /**
+   * Weighted-least-squares slope of differential vs round index (newest = index
+   * 0). Positive ⇒ older rounds scored higher ⇒ the player is improving toward
+   * the present. Informational (inspector / future form cross-check); null when
+   * no trend was fitted.
+   */
+  trendPerRound: number | null;
   /** Effective sample size (Σw)²/Σw² — 1 round ≈ 1, decays as weights spread. */
   effectiveN: number;
   /** Raw count of differentials used. */
@@ -22,6 +36,15 @@ export type WeightedDifferentialStats = {
 /**
  * Exponentially recency-weight a player's differential history.
  * `diffsNewestFirst` must be ordered newest → oldest (index 0 = latest round).
+ *
+ * The LEVEL is the recency-weighted mean. The SPREAD is the reliability-weighted
+ * stddev of the round-to-round noise AROUND A FITTED TREND: an improving (or
+ * declining) player's old rounds sit far from their current mean, so measuring
+ * spread as deviations from that single mean would count their trajectory as
+ * volatility and over-widen their simulated distribution. A weighted-least-
+ * squares detrend (recency weights make it a local, recent-form slope) removes
+ * that trajectory and leaves genuine noise. When there are too few samples to
+ * fit a trend we fall back to deviations from the level.
  */
 export function recencyWeightedDifferentialStats(
   diffsNewestFirst: number[],
@@ -43,16 +66,58 @@ export function recencyWeightedDifferentialStats(
   const effectiveN = (v1 * v1) / v2;
 
   let stddev: number | null = null;
+  let trendPerRound: number | null = null;
+
   if (values.length >= 2) {
-    let num = 0;
-    for (let i = 0; i < values.length; i++) {
-      const d = values[i] - mean;
-      num += weights[i] * d * d;
+    // Detrended path: fit x ≈ a + b·r by WLS, measure spread around the line.
+    if (values.length >= MIN_DETREND_SAMPLES) {
+      let swr = 0; // Σw·r
+      for (let i = 0; i < values.length; i++) swr += weights[i] * i;
+      const rMean = swr / v1;
+
+      let srrW = 0; // Σw·(r−r̄)²
+      let srxW = 0; // Σw·(r−r̄)(x−x̄)
+      let srrW2 = 0; // Σw²·(r−r̄)²  — slope's weighted hat-trace numerator
+      for (let i = 0; i < values.length; i++) {
+        const dr = i - rMean;
+        srrW += weights[i] * dr * dr;
+        srxW += weights[i] * dr * (values[i] - mean);
+        srrW2 += weights[i] * weights[i] * dr * dr;
+      }
+
+      if (srrW > 0) {
+        const slope = srxW / srrW; // b
+        // The WLS line passes through the weighted centroid, so the fit at r is
+        // mean + slope·(r − r̄). Residuals are the noise we want the spread of.
+        let num = 0;
+        for (let i = 0; i < values.length; i++) {
+          const e = values[i] - (mean + slope * (i - rMean));
+          num += weights[i] * e * e;
+        }
+        // Unbiased reliability-weighted denominator, LESS the extra degree of
+        // freedom the slope consumes. The intercept and the centred slope are
+        // W-orthogonal directions; each removes Σw²v²/Σw·v² of the hat trace —
+        // V2/V1 for the constant, srrW2/srrW for the slope.
+        const denom = v1 - v2 / v1 - srrW2 / srrW;
+        if (denom > 0) {
+          stddev = Math.sqrt(num / denom);
+          trendPerRound = slope;
+        }
+      }
     }
-    // Reliability weights → unbiased denominator V1 − V2/V1.
-    const denom = v1 - v2 / v1;
-    if (denom > 0) stddev = Math.sqrt(num / denom);
+
+    // Mean-only fallback (original estimator) — used with < MIN_DETREND_SAMPLES
+    // samples, or if the detrend denominator degenerated.
+    if (stddev === null) {
+      let num = 0;
+      for (let i = 0; i < values.length; i++) {
+        const d = values[i] - mean;
+        num += weights[i] * d * d;
+      }
+      const denom = v1 - v2 / v1;
+      if (denom > 0) stddev = Math.sqrt(num / denom);
+    }
   }
 
-  return { mean, stddev, effectiveN, sampleSize: values.length };
+  return { mean, stddev, trendPerRound, effectiveN, sampleSize: values.length };
 }

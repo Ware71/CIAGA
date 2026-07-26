@@ -92,9 +92,16 @@ describe("live-field calibration regression", () => {
         res.birdieHistogram.reduce((s, count, i) => s + i * count, 0) / sim.simulationCount;
       // MC noise at 10k sims is well under 0.05.
       expect(Math.abs(simBirdies - target)).toBeLessThan(0.05);
-      // The audit's failure signature: simulated ≈ 0.5 × pre-calibration mass.
+      // The audit's failure signature was simulated ≈ 0.5 × pre-calibration
+      // mass. Only a meaningful anti-signature where 0.5×preMass differs from
+      // the target — the narrower per-hole σ (variance re-solve) shrinks preMass
+      // enough that for some players 0.5×preMass ≈ target, and landing on target
+      // (asserted above) already excludes the bug there.
       const { meta } = buildHoleDistributionsDetailed(f.profile, holes, Math.round(f.profile.handicapIndex!));
-      expect(Math.abs(simBirdies - 0.5 * meta.birdie.preMass)).toBeGreaterThan(0.05);
+      const halfPre = 0.5 * meta.birdie.preMass;
+      if (Math.abs(target - halfPre) > 0.05) {
+        expect(Math.abs(simBirdies - halfPre)).toBeGreaterThan(0.05);
+      }
     }
   });
 

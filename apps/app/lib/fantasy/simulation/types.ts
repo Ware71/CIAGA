@@ -156,6 +156,35 @@ export type SimPlayerResult = {
    * hole-specific markets; already-played holes have their real outcome.
    */
   holeOutcomes: number[][];
+  /**
+   * Calibrated per-remaining-hole model, for EXACT (analytic, noise-free)
+   * single-player market pricing via day-factor quadrature + convolution.
+   * Absent when the player has no remaining holes (their totals are
+   * deterministic — callers price off the retained MC samples instead).
+   */
+  analytic?: AnalyticModel;
+};
+
+/**
+ * Everything the analytic single-player pricer needs: the calibrated marginal
+ * pmf of each remaining hole, its par and round (for day-factor grouping), plus
+ * the fixed contributions of already-played holes.
+ */
+export type AnalyticModel = {
+  /** Calibrated pmf over k = 0..OUTCOME_BINS-1 for each remaining hole. */
+  holeDists: number[][];
+  /** Par of each remaining hole (bin k → strokes = par + k − OFFSET). */
+  holePars: number[];
+  /** Round index of each remaining hole (holes sharing one share a day factor). */
+  holeRounds: number[];
+  /** Deterministic gross strokes already banked from played holes. */
+  fixedGross: number;
+  /** Birdie-or-better / eagle-or-better holes already banked. */
+  fixedBirdies: number;
+  fixedEagles: number;
+  /** Event round count (net = gross − playingHandicap × roundCount). */
+  roundCount: number;
+  playingHandicap: number;
 };
 
 export type SimulationResult = {

@@ -46,6 +46,7 @@ type InspectPayload = {
     } | null;
     model: {
       sigmaPerHole: number; sigmaRound: number; sigmaSource: string; sigmaClamped: boolean;
+      roundVarTarget: number; roundVarRealized: number;
       muByHole: number[]; eByHole: number[];
       formStatus: string;
       calibration: {
@@ -60,6 +61,7 @@ type InspectPayload = {
           preMass: number; postMass: number; capped: boolean;
         };
         meanResidual: number; iterations: number;
+        variance: { target: number; realized: number; perHole: { target: number; realized: number }[] };
       };
     };
     sim: {
@@ -487,6 +489,14 @@ function PlayerRows({
                 {p.model.calibration.birdie.capped ? " · CAPPED" : ""} · sim E[brd]{" "}
                 {p.sim.expectedBirdies.toFixed(2)} · mean residual{" "}
                 {p.model.calibration.meanResidual.toFixed(3)} ({p.model.calibration.iterations} passes)
+              </div>
+              <div className="text-[10px] text-emerald-100/60">
+                Variance reconciliation: round σ² target{" "}
+                {p.model.roundVarTarget.toFixed(2)} → realized{" "}
+                {p.model.roundVarRealized.toFixed(2)} ({p.model.roundVarTarget > 0
+                  ? ((p.model.roundVarRealized / p.model.roundVarTarget) * 100).toFixed(0)
+                  : "—"}
+                % retained)
               </div>
               {prof?.recent_rounds && prof.recent_rounds.length > 0 && (
                 <div className="flex flex-wrap gap-1">

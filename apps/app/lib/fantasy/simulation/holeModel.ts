@@ -36,6 +36,18 @@ const SPLIT_MIN_SAMPLE = 4;
 const SPLIT_WEIGHT = 0.6;
 
 /**
+ * Intra-round latent correlation ρ for the engine's one-factor Gaussian copula
+ * (a shared per-player-per-round "day" factor). Real golf holes are modestly
+ * positively correlated — a good/bad day lifts or sinks the whole round — which
+ * INDEPENDENT hole sampling can't reproduce, so count markets (birdies/eagles)
+ * come out under-dispersed. Kept small: the (Σσ)² correlation term scales with
+ * n², so a little ρ moves round variance a lot. Per-hole σ is sized (below) so
+ * the CORRELATED round-total variance still equals σ_round². Tune against the
+ * inspector's realized birdie-count dispersion.
+ */
+export const INTRA_ROUND_CORRELATION = 0.06;
+
+/**
  * Net-consistency anchor for thin/no-history players. With no ability signal we
  * model the player to shoot (playingHandicap + POPULATION_GAP) over par on gross
  * → net ≈ par + POPULATION_GAP, whatever their handicap. This is what stops a
@@ -246,13 +258,20 @@ export function holeSigmaDetailed(profile: SimPlayerProfile, hole?: SimHole): Si
         ? Math.min(9, Math.max(3, 2.6 + 0.13 * Math.max(profile.handicapIndex, 0)))
         : DEFAULT_SIGMA_ROUND);
   const holesInRound = hole?.holesInRound && hole.holesInRound >= 14 ? hole.holesInRound : 18;
-  const perHole = sigmaRound / Math.sqrt(holesInRound);
+  // Size the per-hole (idiosyncratic) σ so that, under the engine's one-factor
+  // intra-round copula (correlation ρ), the CORRELATED round-total variance is
+  // still σ_round². For equal per-hole s: Var(Σ) = s²·n·(1 + (n−1)ρ), so
+  // s = σ_round / √(n·(1 + (n−1)ρ)). At ρ=0 this reduces to the old σ_round/√n.
+  // Because s is now smaller, most round variance rides on the shared day
+  // factor (unbounded by the outcome grid) rather than the clamped per-hole
+  // spread — so the clamp bites far less and volatile players stay separated.
+  const n = holesInRound;
+  const perHole = sigmaRound / Math.sqrt(n * (1 + (n - 1) * INTRA_ROUND_CORRELATION));
   const widened = perHole * CONFIDENCE_SIGMA_FACTOR[profile.confidence];
-  // Wider than V3's [0.7,1.8]: that flattened round σ to ~3–7.6 for everyone, so
-  // a volatile player and a steady one simulated almost identically. [0.5,2.6]
-  // (round σ ≈ 2.1–11) lets σ_D actually separate them; the top of the range is
-  // about all the par−2…par+8 outcome grid can express.
-  const sigma = Math.min(2.6, Math.max(0.5, widened));
+  // Floor lowered (steady players now have a smaller idiosyncratic s) and the
+  // ceiling kept generous; both rarely bind now that the day factor carries the
+  // between-round spread.
+  const sigma = Math.min(3.0, Math.max(0.35, widened));
   return { sigma, sigmaRound, source, clamped: Math.abs(sigma - widened) > 1e-12 };
 }
 
@@ -326,6 +345,22 @@ export type CalibrationMeta = {
   meanResidual: number;
   /** Fixed-point passes run (1 when already converged). */
   iterations: number;
+  /**
+   * Variance reconciliation (parallels the mean's meanResidual): how faithfully
+   * the round-level spread survives discretization + tail-collapse + birdie
+   * calibration. `target` = Σ intended per-hole σ² (the independent round
+   * variance the σ model aims for); `realized` = Σ actual discrete variance of
+   * the calibrated per-hole distributions. A large shortfall means volatile
+   * players are being flattened. (`realized` reflects the INDEPENDENT per-hole
+   * variance; any intra-round correlation added by the engine raises the true
+   * round-total variance above this — the engine sizes σ to account for it.)
+   */
+  variance: {
+    target: number;
+    realized: number;
+    /** Per-hole [intended σ², realized discrete variance]. */
+    perHole: { target: number; realized: number }[];
+  };
 };
 
 const CALIBRATION_EPS = 1e-9;
@@ -486,6 +521,21 @@ export function buildHoleDistributionsDetailed(
   const postMass = dists.reduce((s, d) => s + d[0] + d[1], 0);
   const postEagleMass = dists.reduce((s, d) => s + d[0], 0);
 
+  // Variance reconciliation: intended per-hole σ² vs the realized discrete
+  // variance the calibration actually leaves in each distribution.
+  let varTarget = 0;
+  let varRealized = 0;
+  const perHoleVar: { target: number; realized: number }[] = [];
+  for (let i = 0; i < holes.length; i++) {
+    const target = sigmas[i] * sigmas[i];
+    const m = dists[i].reduce((s, p, k) => s + (k - OUTCOME_OFFSET) * p, 0);
+    const m2 = dists[i].reduce((s, p, k) => s + (k - OUTCOME_OFFSET) * (k - OUTCOME_OFFSET) * p, 0);
+    const realized = Math.max(0, m2 - m * m);
+    varTarget += target;
+    varRealized += realized;
+    perHoleVar.push({ target, realized });
+  }
+
   return {
     dists,
     meta: {
@@ -514,6 +564,7 @@ export function buildHoleDistributionsDetailed(
       },
       meanResidual,
       iterations,
+      variance: { target: varTarget, realized: varRealized, perHole: perHoleVar },
     },
   };
 }

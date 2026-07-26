@@ -14,6 +14,7 @@ import {
   marketRound,
   roundPrefix,
 } from "@/lib/fantasy/markets/roundUtil";
+import { analyticDistributions, pmfCountAtLeast } from "@/lib/fantasy/markets/analytic";
 import type { SimulationResult } from "@/lib/fantasy/simulation/types";
 
 function marketCount(market: FantasyMarket): number {
@@ -74,6 +75,13 @@ export const birdies: MarketDefinition = {
     const count = marketCount(market);
     const round = marketRound(market);
     if (round == null) {
+      // Event-wide: exact P(≥count) from the calibrated per-hole model (the
+      // day-factor quadrature keeps the copula's over-dispersion), noise-free.
+      const analytic = sim.players[idx].analytic;
+      if (analytic) {
+        out.set("yes", pmfCountAtLeast(analyticDistributions(analytic).birdies, count));
+        return out;
+      }
       const histogram = sim.players[idx].birdieHistogram;
       let atLeast = 0;
       for (let c = count; c < histogram.length; c++) atLeast += histogram[c];

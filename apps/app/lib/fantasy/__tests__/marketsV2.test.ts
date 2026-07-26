@@ -283,7 +283,7 @@ describe("score bands and exacts", () => {
   });
 
   it("band settlement pays exactly the covering band", () => {
-    const bands = bandsAround(85); // le_82 | 83_86 | 87_90 | ge_91
+    const bands = bandsAround(85); // le_81 | 82_85 | 86_89 | ge_90
     const m = market({
       market_type: "score_band",
       subject_profile_id: "a",
@@ -294,8 +294,24 @@ describe("score bands and exacts", () => {
       m
     );
     expect([...outcomes.values()].filter((o) => o === "won")).toHaveLength(1);
-    expect(outcomes.get("87_90")).toBe("won");
-    expect(outcomes.get("le_82")).toBe("lost");
+    expect(outcomes.get("86_89")).toBe("won");
+    expect(outcomes.get("le_81")).toBe("lost");
+  });
+
+  it("centres the inner-band junction on the projection with full integer coverage", () => {
+    for (const mean of [72.2, 79.7, 85, 90.5, 66]) {
+      const bands = bandsAround(mean);
+      const inner = bands.filter((b) => b.lo != null && b.hi != null);
+      expect(inner).toHaveLength(2); // two 4-stroke inner bands + two open tails
+      // Junction between the two inner bands should sit within half a stroke of
+      // the projection, so a centred distribution splits evenly across them.
+      const junction = inner[0].hi! + 0.5;
+      expect(Math.abs(junction - mean)).toBeLessThanOrEqual(0.5);
+      // Contiguous partition of the integer line: no gaps, no overlaps.
+      expect(bands[0].hi! + 1).toBe(bands[1].lo);
+      expect(bands[1].hi! + 1).toBe(bands[2].lo);
+      expect(bands[2].hi! + 1).toBe(bands[3].lo);
+    }
   });
 
   it("score totals settle under/exact/over against each value", () => {

@@ -1,9 +1,10 @@
-import { mulberry32 } from "@/lib/fantasy/simulation/rng";
+import { mulberry32, nextNormal, normalCdf } from "@/lib/fantasy/simulation/rng";
 import {
   buildHoleDistributions,
   toCumulative,
   sampleOutcome,
   strokesReceived,
+  INTRA_ROUND_CORRELATION,
   OUTCOME_OFFSET,
   OUTCOME_BINS,
 } from "@/lib/fantasy/simulation/holeModel";
@@ -125,6 +126,20 @@ export function runSimulation(inputs: SimulationInputs): SimulationResult {
       remainingIdx.map((hi) => holes[hi]),
       player.playingHandicap
     );
+    // Expose the calibrated per-hole model for exact single-player pricing
+    // (only when holes remain — a fully-played player's totals are fixed).
+    if (remainingIdx.length > 0) {
+      results[pi].analytic = {
+        holeDists: dists,
+        holePars: remainingIdx.map((hi) => holes[hi].par),
+        holeRounds: remainingIdx.map((hi) => roundOfHole[hi]),
+        fixedGross: fixedRoundGross.reduce((s, x) => s + x, 0),
+        fixedBirdies,
+        fixedEagles,
+        roundCount: roundNumbers.length,
+        playingHandicap: player.playingHandicap,
+      };
+    }
     return {
       remainingIdx,
       fixedRoundGross,
@@ -147,6 +162,35 @@ export function runSimulation(inputs: SimulationInputs): SimulationResult {
   const basisTotals = new Int16Array(playerCount);
   const roundGrossScratch = new Array<number>(roundNumbers.length).fill(0);
   const roundBirdieScratch = new Array<number>(roundNumbers.length).fill(0);
+  // One-factor Gaussian copula: a shared per-(player, round) "day" normal makes
+  // a round's holes positively correlated (ρ) without moving any hole's
+  // marginal pmf — so birdie/eagle counts get realistic over-dispersion while
+  // the level and rare-event calibration stay exact. Per-hole σ is pre-shrunk
+  // (holeSigmaDetailed) so the correlated round total keeps variance σ_round².
+  const SQRT_RHO = Math.sqrt(INTRA_ROUND_CORRELATION);
+  const SQRT_1MRHO = Math.sqrt(1 - INTRA_ROUND_CORRELATION);
+  const dayNormal = new Array<number>(roundNumbers.length).fill(0);
+  // Antithetic variates: draw normals fresh on even iterations into a buffer,
+  // then reuse them NEGATED on the paired odd iteration (a negated normal maps
+  // to 1−u under the copula → the mirror-image round). Roughly halves the MC
+  // variance of the multi-player markets (winner / positions / h2h) and the
+  // fixed-seed noise the odds ladder otherwise locks in. The draw order is
+  // identical across the pair (fields don't change mid-run), so the buffer
+  // cursor stays aligned. Single-player markets are priced analytically and
+  // don't rely on this.
+  const normalsPerIter = prepared.reduce(
+    (s, prep) => s + roundNumbers.length + prep.remainingIdx.length,
+    0
+  );
+  const normalBuf = new Float64Array(Math.max(1, normalsPerIter));
+  let antithetic = false;
+  let nCursor = 0;
+  const drawNormal = (): number => {
+    if (antithetic) return -normalBuf[nCursor++];
+    const g = nextNormal(rand);
+    normalBuf[nCursor++] = g;
+    return g;
+  };
   // Per-iteration finishing positions (1-based; 0 = absent), retained for
   // correlated-acca joint pricing. [pi * simulationCount + iter].
   const positions = new Int8Array(playerCount * simulationCount);
@@ -158,6 +202,8 @@ export function runSimulation(inputs: SimulationInputs): SimulationResult {
   const present = new Uint8Array(playerCount);
 
   for (let iter = 0; iter < simulationCount; iter++) {
+    antithetic = (iter & 1) === 1;
+    nCursor = 0;
     for (let pi = 0; pi < playerCount; pi++) {
       const prep = prepared[pi];
       const res = results[pi];
@@ -169,8 +215,14 @@ export function runSimulation(inputs: SimulationInputs): SimulationResult {
       let eagles = prep.fixedEagles;
       let stableford = prep.fixedStableford;
 
+      // Shared "day" normal per round (correlates this player's holes within it).
+      for (let r = 0; r < roundNumbers.length; r++) dayNormal[r] = drawNormal();
+
       for (let r = 0; r < prep.remainingIdx.length; r++) {
-        const k = sampleOutcome(prep.cumulative[r], rand());
+        // Copula uniform: z = √ρ·day + √(1−ρ)·holeNoise → Φ(z) preserves the
+        // hole's marginal while sharing the round's day factor.
+        const z = SQRT_RHO * dayNormal[prep.rounds[r]] + SQRT_1MRHO * drawNormal();
+        const k = sampleOutcome(prep.cumulative[r], normalCdf(z));
         roundGrossScratch[prep.rounds[r]] += prep.pars[r] + k - OUTCOME_OFFSET;
         if (isBirdieOutcome(k)) {
           birdies += 1;
