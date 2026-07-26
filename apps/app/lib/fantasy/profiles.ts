@@ -42,8 +42,11 @@ export const PROFILE_TTL_HOURS = 24;
  *   v1: gross-average model. v2: WHS score-differential inputs.
  *   v3: shape sample restricted to handicap-acceptable rounds only.
  *   v4: per-round net-to-par stored on recent rounds (narrative uses net).
+ *   v5: differential_stddev is now DETRENDED (spread of the noise around a
+ *       weighted-least-squares trend, not deviations from the level) so an
+ *       improving player isn't modelled as more volatile than they are.
  */
-export const PROFILE_MODEL_VERSION = 4;
+export const PROFILE_MODEL_VERSION = 5;
 
 /** One sampled round, kept on the profile for popups/narrative. */
 export type RecentRound = {

@@ -9,6 +9,7 @@ import type {
 } from "@/lib/fantasy/markets/types";
 import { playerName } from "@/lib/fantasy/markets/types";
 import { handicapImpliedScore } from "@/lib/fantasy/markets/roundUtil";
+import { analyticDistributions, pmfBandProbability } from "@/lib/fantasy/markets/analytic";
 import type { SimulationResult } from "@/lib/fantasy/simulation/types";
 
 export type Band = { key: string; lo: number | null; hi: number | null };
@@ -24,14 +25,21 @@ function marketBands(market: FantasyMarket): Band[] {
   return Array.isArray(bands) ? bands : [];
 }
 
-/** 4-stroke bands centred on the projection, with open tails. */
+/**
+ * Two 4-stroke inner bands with open tails, centred on the projection. The
+ * junction between the two inner bands sits at ≈ `mean`, so a distribution
+ * centred on the projection splits evenly across them (the old `[c−2, c+1]`
+ * anchor put the projection at a band's upper edge, skewing the split).
+ */
 export function bandsAround(mean: number): Band[] {
-  const c = Math.round(mean);
+  // c chosen so the inner region [c−3, c+4] straddles `mean` symmetrically
+  // (its centre c+0.5 ≈ mean); even-width bands can't centre on one integer.
+  const c = Math.round(mean - 0.5);
   return [
-    { key: `le_${c - 3}`, lo: null, hi: c - 3 },
-    { key: `${c - 2}_${c + 1}`, lo: c - 2, hi: c + 1 },
-    { key: `${c + 2}_${c + 5}`, lo: c + 2, hi: c + 5 },
-    { key: `ge_${c + 6}`, lo: c + 6, hi: null },
+    { key: `le_${c - 4}`, lo: null, hi: c - 4 },
+    { key: `${c - 3}_${c}`, lo: c - 3, hi: c },
+    { key: `${c + 1}_${c + 4}`, lo: c + 1, hi: c + 4 },
+    { key: `ge_${c + 5}`, lo: c + 5, hi: null },
   ];
 }
 
@@ -50,10 +58,12 @@ function inBand(score: number, band: Band): boolean {
 /**
  * Score bands — one market per player per basis; selections are the bands
  * (fixed at generation, like O/U lines), so exactly one band wins. Bands are
- * centred on the player's HANDICAP-IMPLIED score (par + playing handicap +
- * POPULATION_GAP from the event setup), not the model's own projection — an
- * intuitive, model-independent anchor. The actual odds still come from the
- * real simulated distribution.
+ * centred on the player's MODEL PROJECTION (the preliminary sim's mean gross/
+ * net, `ctx.projections`), so the four-way split stays balanced around where
+ * the player actually scores — the whole point of the differential-first level
+ * model is that form ≠ handicap. Handicap-implied score is a defensive fallback
+ * if a projection is missing. Edges can shift slightly between refreshes as
+ * form updates (the same property O/U lines already have).
  */
 export const scoreBand: MarketDefinition = {
   type: "score_band",
@@ -72,8 +82,10 @@ export const scoreBand: MarketDefinition = {
   generateMarkets(ctx: GenerateCtx): MarketSpec[] {
     return ctx.players.filter((p) => !p.provisional).flatMap((p) => {
       const specs: MarketSpec[] = [];
+      const proj = ctx.projections[p.profileId];
       for (const basis of ["gross", "net"] as const) {
-        const mean = handicapImpliedScore(ctx, p.playingHandicap, basis);
+        const projected = proj ? (basis === "gross" ? proj.meanGross : proj.meanNet) : null;
+        const mean = projected ?? handicapImpliedScore(ctx, p.playingHandicap, basis);
         if (mean == null) continue;
         specs.push({
           market_type: "score_band",
@@ -94,6 +106,17 @@ export const scoreBand: MarketDefinition = {
     const idx = market.subject_profile_id ? sim.playerIndex[market.subject_profile_id] : undefined;
     if (idx === undefined) return out;
     const basis = marketBasis(market);
+    // Exact (noise-free) pricing from the calibrated per-hole model when holes
+    // remain; otherwise the player's totals are deterministic and the retained
+    // MC samples give the exact answer anyway.
+    const analytic = sim.players[idx].analytic;
+    if (analytic) {
+      const pmf = basis === "gross" ? analyticDistributions(analytic).gross : analyticDistributions(analytic).net;
+      for (const band of marketBands(market)) {
+        out.set(band.key, pmfBandProbability(pmf, band.lo, band.hi));
+      }
+      return out;
+    }
     const totals = basis === "gross" ? sim.players[idx].grossTotals : sim.players[idx].netTotals;
     for (const band of marketBands(market)) {
       let hits = 0;

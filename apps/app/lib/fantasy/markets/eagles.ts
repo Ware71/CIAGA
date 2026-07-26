@@ -9,6 +9,7 @@ import type {
 } from "@/lib/fantasy/markets/types";
 import { playerName } from "@/lib/fantasy/markets/types";
 import { countDistribution } from "@/lib/fantasy/markets/roundUtil";
+import { analyticDistributions, pmfCountAtLeast } from "@/lib/fantasy/markets/analytic";
 import type { SimulationResult } from "@/lib/fantasy/simulation/types";
 
 function marketCount(market: FantasyMarket): number {
@@ -56,8 +57,15 @@ export const eagleCount: MarketDefinition = {
     const idx = market.subject_profile_id ? sim.playerIndex[market.subject_profile_id] : undefined;
     if (idx === undefined) return out;
     const count = marketCount(market);
-    // Holes are independent in the model: P(≥N) from the per-hole eagle-bin
-    // count distribution (same convolution birdies.ts uses for its N+ counts).
+    // Exact P(≥count) from the calibrated per-hole eagle-bin model (day-factor
+    // quadrature; noise-free — critical for such a rare outcome's price).
+    const analytic = sim.players[idx].analytic;
+    if (analytic) {
+      out.set("yes", pmfCountAtLeast(analyticDistributions(analytic).eagles, count));
+      return out;
+    }
+    // Fallback (fully played): independent count distribution over the per-hole
+    // eagle bins — deterministic once every hole is recorded.
     const perHole = sim.players[idx].holeOutcomes.map((bins) => bins[0] / sim.simulationCount);
     const dist = countDistribution(perHole);
     let atLeast = 0;

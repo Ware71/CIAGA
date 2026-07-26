@@ -321,6 +321,45 @@ describe("net-consistency, variance & format (model fixes)", () => {
     );
   });
 
+  it("preserves round-total variance ≈ σ_D under the intra-round copula", () => {
+    const sd = (xs: Int16Array) => {
+      const arr = Array.from(xs);
+      const m = arr.reduce((s, x) => s + x, 0) / arr.length;
+      return Math.sqrt(arr.reduce((s, x) => s + (x - m) * (x - m), 0) / arr.length);
+    };
+    // slope 113 ⇒ σ_round = σ_D. The realized gross SD should track σ_D and
+    // stay within a modest band despite discretization + rare-event calibration
+    // (the per-hole σ is sized so the CORRELATED round total keeps variance σ²).
+    for (const sD of [3, 5, 8]) {
+      const p = makePlayer("p", { playingHandicap: 12 }, {
+        avgDifferential: 15, differentialStddev: sD, differentialEffectiveN: 30,
+      });
+      const r = runSimulation(
+        baseInputs([p, makePlayer("q")], { holes: teeHoles(), simulationCount: 15000 })
+      );
+      const realized = sd(r.players[r.playerIndex["p"]].grossTotals);
+      expect(realized).toBeGreaterThan(sD * 0.7);
+      expect(realized).toBeLessThan(sD * 1.4);
+    }
+  });
+
+  it("intra-round correlation over-disperses birdie counts vs independent holes", () => {
+    const p = makePlayer("hot", {}, { birdiesPerRound: 2.5 });
+    const r = runSimulation(baseInputs([p, makePlayer("b")], { simulationCount: 15000 }));
+    const res = r.players[r.playerIndex["hot"]];
+    const counts = Array.from(res.birdieCounts);
+    const mean = counts.reduce((s, x) => s + x, 0) / counts.length;
+    const simVar = counts.reduce((s, x) => s + (x - mean) * (x - mean), 0) / counts.length;
+    // Independent Poisson-binomial variance from the (copula-preserved) per-hole
+    // birdie frequencies: Σ pᵢ(1−pᵢ). The correlated sim must exceed it.
+    let indepVar = 0;
+    for (const bins of res.holeOutcomes) {
+      const pi = (bins[0] + bins[1]) / r.simulationCount;
+      indepVar += pi * (1 - pi);
+    }
+    expect(simVar).toBeGreaterThan(indepVar);
+  });
+
   it("stableford ranking rewards a volatile player more than net-stroke ranking", () => {
     const shape = { par4AvgVsPar: 1, par3AvgVsPar: 1, par5AvgVsPar: 1, handicapIndex: 18 };
     const steady = makePlayer("steady", { playingHandicap: 18 }, { avgGross: 90, scoreStddev: 2, ...shape });

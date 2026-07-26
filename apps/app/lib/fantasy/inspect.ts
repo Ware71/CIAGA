@@ -111,6 +111,11 @@ export async function inspectEvent(eventId: string) {
         sigmaRound: r3(sigmaDetail.sigmaRound),
         sigmaSource: sigmaDetail.source,
         sigmaClamped: sigmaDetail.clamped,
+        // Variance reconciliation (parallels the mean's Σ eByHole): intended
+        // per-hole σ² summed vs the variance the calibrated distributions
+        // actually retain. A big shortfall = volatile players being flattened.
+        roundVarTarget: r3(detailed.meta.variance.target),
+        roundVarRealized: r3(detailed.meta.variance.realized),
         // Latent normal mean (strokes vs par) — the model's LEVEL per hole…
         muByHole: ctx.holes.map((h) => r3(holeMu(p.profile, h, p.playingHandicap))),
         // …and the expected score of the discretized + calibrated distribution

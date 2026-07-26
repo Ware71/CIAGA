@@ -248,7 +248,8 @@ export async function buildInspectWorkbook(
     ["Player", "Obs brd/rd", "n rounds", "Prior mean", "Prior K", "Target λ* (shrunk)",
      "Model mass (pre-cal)", "Mass after cal", "Factor", "Factor capped?",
      "Sim E[birdies]", "Obs eag/rd", "Eagle prior", "Eagle target", "Eagle mass post", "Eagle capped?",
-     "Mean residual (strokes/hole)", "Passes"],
+     "Mean residual (strokes/hole)", "Passes",
+     "Round var target (Σσ²)", "Round var realized", "Var retention %"],
     ctx.players.map((p) => {
       const meta = detailedByProfile.get(p.profileId)!.meta;
       const res = sim.players[sim.playerIndex[p.profileId]];
@@ -273,6 +274,11 @@ export async function buildInspectWorkbook(
         meta.eagle.capped ? "YES" : "no",
         r3(meta.meanResidual),
         meta.iterations,
+        r3(meta.variance.target),
+        r3(meta.variance.realized),
+        meta.variance.target > 0
+          ? Math.round((meta.variance.realized / meta.variance.target) * 1000) / 10
+          : dash,
       ];
     })
   );

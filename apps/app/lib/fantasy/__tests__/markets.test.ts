@@ -148,7 +148,7 @@ describe("market generation", () => {
     expect(gen(14)).toEqual([3, 5, 10]);
   });
 
-  it("score totals offer a 9-value window (gross + net) centred on the handicap-implied score", () => {
+  it("score totals offer a 9-value window (gross + net) centred on the model projection", () => {
     const specs = MARKET_REGISTRY.score_total.generateMarkets(makeGenerateCtx(3));
     expect(specs).toHaveLength(6); // 3 players × (gross + net)
     for (const s of specs) {
@@ -157,20 +157,20 @@ describe("market generation", () => {
       // Consecutive integers, centred on the middle value.
       for (let i = 1; i < scores.length; i++) expect(scores[i]).toBe(scores[i - 1] + 1);
     }
-    // p0 (18 holes, par 72, playing handicap 10): gross centres on par+PH+4=86,
-    // net on par+4=76 — independent of the model's own projection.
+    // p0 projection (makeGenerateCtx): meanGross 78, meanNet 70 — the windows
+    // centre on the model projection, not the handicap-implied score.
     const p0Gross = specs.find((s) => s.subject_profile_id === "p0" && s.params.basis === "gross")!;
     const p0Net = specs.find((s) => s.subject_profile_id === "p0" && s.params.basis === "net")!;
-    expect((p0Gross.params.scores as number[])[4]).toBe(86);
-    expect((p0Net.params.scores as number[])[4]).toBe(76);
+    expect((p0Gross.params.scores as number[])[4]).toBe(78);
+    expect((p0Net.params.scores as number[])[4]).toBe(70);
   });
 
-  it("score bands are centred on the handicap-implied score", () => {
+  it("score bands are centred on the model projection", () => {
     const specs = MARKET_REGISTRY.score_band.generateMarkets(makeGenerateCtx(2));
     const p1Gross = specs.find((s) => s.subject_profile_id === "p1" && s.params.basis === "gross")!;
-    // p1 playing handicap 11 → gross centre 72+11+4=87 → the 87–90 middle band.
+    // p1 projection meanGross 79.7 → c = round(79.2) = 79 → inner bands 76_79 | 80_83.
     const bands = p1Gross.params.bands as { key: string }[];
-    expect(bands.map((b) => b.key)).toContain("85_88");
+    expect(bands.map((b) => b.key)).toContain("76_79");
   });
 
   it("h2h generates every unique pairing (round-robin), for gross and net", () => {

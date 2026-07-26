@@ -46,4 +46,39 @@ describe("recencyWeightedDifferentialStats", () => {
     expect(s.effectiveN).toBeGreaterThan(45);
     expect(s.effectiveN).toBeLessThan(70);
   });
+
+  it("detrends spread: a pure improvement trajectory is not counted as volatility", () => {
+    // Newest = 10, each older round +1 → a perfect line (older rounds worse).
+    const diffs = Array.from({ length: 20 }, (_, i) => 10 + i);
+    const s = recencyWeightedDifferentialStats(diffs)!;
+    // Around the fitted line the residuals are ~0, so the noise stddev is tiny…
+    expect(s.stddev!).toBeLessThan(0.1);
+    // …even though the raw spread of the values (10..29) is large.
+    expect(s.trendPerRound!).toBeCloseTo(1, 3); // +1 differential per round older
+  });
+
+  it("reports genuine noise, not the trend, for an improving-but-noisy player", () => {
+    // Underlying trend +0.5/round older, with a fixed ±1 sawtooth of noise.
+    const diffs = Array.from({ length: 24 }, (_, i) => 8 + 0.5 * i + (i % 2 === 0 ? 1 : -1));
+    const s = recencyWeightedDifferentialStats(diffs)!;
+    // Residual noise is ~1 stroke; without detrending the spread would be huge
+    // (the values span 8 → ~20). Assert it captures the noise, not the trend.
+    expect(s.stddev!).toBeGreaterThan(0.3);
+    expect(s.stddev!).toBeLessThan(2.5);
+    expect(s.trendPerRound!).toBeCloseTo(0.5, 1);
+  });
+
+  it("does not fit a trend below the minimum sample count (no zero-residual collapse)", () => {
+    // 3 collinear points would fit a line exactly → 0 residual if detrended.
+    const s = recencyWeightedDifferentialStats([10, 12, 14])!;
+    expect(s.trendPerRound).toBeNull();
+    expect(s.stddev!).toBeGreaterThan(0); // mean-based fallback keeps real spread
+  });
+
+  it("trend is null but stddev present for a flat multi-round history", () => {
+    const s = recencyWeightedDifferentialStats([10, 10, 10, 10, 10, 10])!;
+    // Flat line: slope ~0, residuals ~0 → tiny stddev, trend ~0 (not null here).
+    expect(s.trendPerRound!).toBeCloseTo(0, 6);
+    expect(s.stddev!).toBeLessThan(0.001);
+  });
 });
