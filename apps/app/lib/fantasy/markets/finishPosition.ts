@@ -1,6 +1,5 @@
 import type {
   FinalScoringData,
-  FantasyMarket,
   GenerateCtx,
   LiveMarketCtx,
   MarketDefinition,
@@ -14,9 +13,12 @@ import type { SimulationResult } from "@/lib/fantasy/simulation/types";
 const MAX_POSITIONS = 8;
 const MIN_FIELD = 4;
 
-function maxPos(market: FantasyMarket): number {
-  const n = Number((market.params as { maxPos?: unknown }).maxPos);
-  return Number.isInteger(n) && n > 0 ? n : MAX_POSITIONS;
+/** Positions offered = 1 .. min(current field size, MAX_POSITIONS). Derived from
+ * the sim's field, NOT stored in params — the field size drifts as entrants
+ * join/leave, and baking it into params.maxPos spawned a duplicate market each
+ * time it changed (params is part of market identity). */
+function offeredPositions(fieldSize: number): number {
+  return Math.max(0, Math.min(fieldSize, MAX_POSITIONS));
 }
 
 export function ordinal(n: number): string {
@@ -49,20 +51,22 @@ export const finishPosition: MarketDefinition = {
 
   generateMarkets(ctx: GenerateCtx): MarketSpec[] {
     if (ctx.players.length < MIN_FIELD) return [];
-    // Positions offered span the FULL field; per-player markets are confirmed
-    // players only (provisional members appear in field markets, not per-player).
-    const positions = Math.min(ctx.players.length, MAX_POSITIONS);
+    // Per-player markets are confirmed players only (provisional members appear
+    // in field markets). Params carry NO position count — it's derived from the
+    // live field at price time, so a changing field size can't spawn duplicates.
     return ctx.players
       .filter((p) => !p.provisional)
       .map((p) => ({
         market_type: "finish_position" as const,
         subject_profile_id: p.profileId,
-        params: { maxPos: positions },
+        params: {},
       }));
   },
 
-  selections(market): string[] {
-    return Array.from({ length: maxPos(market) }, (_, i) => String(i + 1));
+  selections(): string[] {
+    // The full possible range; the actually-offered subset (1..field) is what
+    // gets priced/snapshotted each refresh.
+    return Array.from({ length: MAX_POSITIONS }, (_, i) => String(i + 1));
   },
 
   simulate(sim: SimulationResult, market): Map<string, number> {
@@ -70,7 +74,8 @@ export const finishPosition: MarketDefinition = {
     const idx = market.subject_profile_id ? sim.playerIndex[market.subject_profile_id] : undefined;
     if (idx === undefined) return out;
     const histogram = sim.players[idx].positionHistogram;
-    for (let pos = 1; pos <= maxPos(market); pos++) {
+    const positions = offeredPositions(sim.players.length);
+    for (let pos = 1; pos <= positions; pos++) {
       out.set(String(pos), histogram[pos - 1] ?? 0);
     }
     return out;
@@ -79,7 +84,9 @@ export const finishPosition: MarketDefinition = {
   settle(final: FinalScoringData, market): Map<string, SettlementOutcome> {
     const out = new Map<string, SettlementOutcome>();
     const player = market.subject_profile_id ? final.players[market.subject_profile_id] : undefined;
-    for (let pos = 1; pos <= maxPos(market); pos++) {
+    // Settle the full possible range — a pick only ever sits on an offered
+    // position (≤ MAX_POSITIONS); extras simply resolve "lost".
+    for (let pos = 1; pos <= MAX_POSITIONS; pos++) {
       if (!player || player.withdrawn || player.position == null) {
         out.set(String(pos), "void");
       } else {

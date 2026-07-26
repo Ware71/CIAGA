@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { readFantasyConfig } from "@/lib/fantasy/config";
 import { ensureProfiles, toSimProfile } from "@/lib/fantasy/profiles";
 import { getMarketDefinition, MARKET_REGISTRY } from "@/lib/fantasy/markets/registry";
+import { analyticDistributions } from "@/lib/fantasy/markets/analytic";
 import type { FantasyMarket, GenerateCtx, LiveMarketCtx, MarketSpec } from "@/lib/fantasy/markets/types";
 import { runSimulation, pickSimulationCount } from "@/lib/fantasy/simulation/engine";
 import { hashSeed } from "@/lib/fantasy/simulation/rng";
@@ -69,7 +70,13 @@ export type EventSimContext = {
   live: LiveMarketCtx;
 };
 
-export const ACTIVE_ENTRY_STATUSES = ["entered", "approved"];
+// Statuses that count as "in the field" for PRICING — must match what
+// settlement grades (settlement.ts WITHDRAWN_STATUSES = withdrawn/no_show/
+// rejected; everything else is graded). Previously only entered/approved were
+// priced, so pending_approval/waitlisted entrants were graded but never priced:
+// they fell through to provisional and lost all their per-player markets
+// (birdies/eagles/bands/finish position) while still showing in field markets.
+export const ACTIVE_ENTRY_STATUSES = ["entered", "approved", "pending_approval", "waitlisted"];
 
 export async function loadEvent(eventId: string): Promise<EventRow> {
   const { data, error } = await supabaseAdmin
@@ -718,6 +725,53 @@ async function writeSnapshots(
   }
   const { error: supersedeErr } = await supersede;
   if (supersedeErr) throw supersedeErr;
+
+  // Persist each player's exact per-score distribution (gross + net) so
+  // score_band / score_total cash-out and settlement can price a pick's OWN
+  // band/value from the current book, independent of the drifting offered set.
+  // Best-effort — a pmf write must never fail the reprice (cash-out falls back
+  // to the snapshot when a pmf row is missing).
+  await writeScorePmfs(ctx, sim, version).catch((e) =>
+    console.error(`[fantasy] writeScorePmfs failed for ${ctx.event.id}`, e)
+  );
+}
+
+/** Round to keep the jsonb compact; well within odds-floor (0.001) resolution. */
+function trimProbs(probs: number[]): number[] {
+  return probs.map((x) => Math.round(x * 1e7) / 1e7);
+}
+
+async function writeScorePmfs(
+  ctx: EventSimContext,
+  sim: SimulationResult,
+  version: number
+): Promise<void> {
+  const rows: Record<string, unknown>[] = [];
+  for (const p of sim.players) {
+    const analytic = p.analytic;
+    const { gross, net } = analytic
+      ? analyticDistributions(analytic)
+      : {
+          // Fully-played (deterministic): a spike at the single realized total.
+          gross: { min: p.grossTotals[0] ?? 0, probs: [1] },
+          net: { min: p.netTotals[0] ?? 0, probs: [1] },
+        };
+    for (const [basis, pmf] of [["gross", gross], ["net", net]] as const) {
+      rows.push({
+        event_id: ctx.event.id,
+        profile_id: p.profileId,
+        basis,
+        pmf_min: pmf.min,
+        pmf_probs: trimProbs(pmf.probs),
+        event_version: version,
+      });
+    }
+  }
+  if (rows.length === 0) return;
+  const { error } = await supabaseAdmin
+    .from("fantasy_score_pmfs")
+    .upsert(rows, { onConflict: "event_id,profile_id,basis" });
+  if (error) throw error;
 }
 
 /**
@@ -909,7 +963,29 @@ export async function refreshIfStale(
   return { refreshed: true, refreshing: false };
 }
 
-/** Shape identity for market dedupe (params entries sorted for stability). */
+/**
+ * Recursively sort object keys so a params value stringifies identically no
+ * matter the key order — matching how Postgres jsonb normalizes. Without this,
+ * a spec's params (generation key order) and the same row read back from jsonb
+ * (jsonb key order) produced DIFFERENT shape keys for nested objects (e.g.
+ * score_band `bands:[{key,lo,hi}]`), so `ensureMarkets` mis-detected existing
+ * markets and re-ran its 23505/per-row fallback every refresh.
+ */
+function canonicalizeJson(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(canonicalizeJson);
+  if (v && typeof v === "object") {
+    const src = v as Record<string, unknown>;
+    return Object.keys(src)
+      .sort()
+      .reduce<Record<string, unknown>>((acc, k) => {
+        acc[k] = canonicalizeJson(src[k]);
+        return acc;
+      }, {});
+  }
+  return v;
+}
+
+/** Shape identity for market dedupe (params canonicalized for stability). */
 function marketShapeKey(m: {
   market_type: string;
   subject_profile_id?: string | null;
@@ -920,7 +996,7 @@ function marketShapeKey(m: {
     m.market_type,
     m.subject_profile_id ?? "",
     m.opponent_profile_id ?? "",
-    JSON.stringify(Object.entries(m.params ?? {}).sort(([a], [b]) => (a < b ? -1 : 1))),
+    JSON.stringify(canonicalizeJson(m.params ?? {})),
   ].join("|");
 }
 

@@ -148,29 +148,33 @@ describe("market generation", () => {
     expect(gen(14)).toEqual([3, 5, 10]);
   });
 
-  it("score totals offer a 9-value window (gross + net) centred on the model projection", () => {
+  it("score totals generate one STABLE {basis} market per player per basis (no drifting scores in params)", () => {
     const specs = MARKET_REGISTRY.score_total.generateMarkets(makeGenerateCtx(3));
     expect(specs).toHaveLength(6); // 3 players × (gross + net)
     for (const s of specs) {
-      const scores = s.params.scores as number[];
-      expect(scores).toHaveLength(9);
-      // Consecutive integers, centred on the middle value.
-      for (let i = 1; i < scores.length; i++) expect(scores[i]).toBe(scores[i - 1] + 1);
+      // Identity is stable — the drifting score window lives in snapshots, not params.
+      expect((s.params as Record<string, unknown>).scores).toBeUndefined();
+      expect(["gross", "net"]).toContain((s.params as { basis: string }).basis);
     }
-    // p0 projection (makeGenerateCtx): meanGross 78, meanNet 70 — the windows
-    // centre on the model projection, not the handicap-implied score.
-    const p0Gross = specs.find((s) => s.subject_profile_id === "p0" && s.params.basis === "gross")!;
-    const p0Net = specs.find((s) => s.subject_profile_id === "p0" && s.params.basis === "net")!;
-    expect((p0Gross.params.scores as number[])[4]).toBe(78);
-    expect((p0Net.params.scores as number[])[4]).toBe(70);
   });
 
-  it("score bands are centred on the model projection", () => {
+  it("score bands generate one STABLE {basis} market per player per basis (no drifting bands in params)", () => {
     const specs = MARKET_REGISTRY.score_band.generateMarkets(makeGenerateCtx(2));
-    const p1Gross = specs.find((s) => s.subject_profile_id === "p1" && s.params.basis === "gross")!;
-    // p1 projection meanGross 79.7 → c = round(79.2) = 79 → inner bands 76_79 | 80_83.
-    const bands = p1Gross.params.bands as { key: string }[];
-    expect(bands.map((b) => b.key)).toContain("76_79");
+    expect(specs).toHaveLength(4); // 2 players × (gross + net)
+    for (const s of specs) {
+      expect((s.params as Record<string, unknown>).bands).toBeUndefined();
+      expect(["gross", "net"]).toContain((s.params as { basis: string }).basis);
+    }
+  });
+
+  it("score_total simulate offers a 9-value window centred on the sim projection", () => {
+    const sim = simFor([{ profileId: "a" }, { profileId: "b" }]);
+    const m = makeMarket({ market_type: "score_total", subject_profile_id: "a", params: { basis: "gross" } });
+    const probs = MARKET_REGISTRY.score_total.simulate(sim, m);
+    const values = [...new Set([...probs.keys()].map((k) => Number(k.slice(2))))].sort((a, b) => a - b);
+    expect(values).toHaveLength(9);
+    for (let i = 1; i < values.length; i++) expect(values[i]).toBe(values[i - 1] + 1);
+    expect(values[4]).toBe(Math.round(sim.players[sim.playerIndex["a"]].meanGross));
   });
 
   it("h2h generates every unique pairing (round-robin), for gross and net", () => {
@@ -294,18 +298,19 @@ describe("settlement truth tables", () => {
     expect(outcomes.get("b")).toBe("lost");
   });
 
-  it("gross score total: exact comparisons per value, missing score voids all three", () => {
-    const market = makeMarket({ market_type: "score_total", subject_profile_id: "a", params: { basis: "gross", scores: [82] } });
-    const under = MARKET_REGISTRY.score_total.settle(finalData({ a: score("a", { grossScore: 80 }) }), market);
-    expect(under.get("u_82")).toBe("won");
-    expect(under.get("e_82")).toBe("lost");
-    expect(under.get("o_82")).toBe("lost");
-    const exact = MARKET_REGISTRY.score_total.settle(finalData({ a: score("a", { grossScore: 82 }) }), market);
-    expect(exact.get("e_82")).toBe("won");
-    const voided = MARKET_REGISTRY.score_total.settle(finalData({ a: score("a", { grossScore: null }) }), market);
-    expect(voided.get("u_82")).toBe("void");
-    expect(voided.get("e_82")).toBe("void");
-    expect(voided.get("o_82")).toBe("void");
+  it("gross score total: exact comparisons per value via settleKey, missing score voids all three", () => {
+    const market = makeMarket({ market_type: "score_total", subject_profile_id: "a", params: { basis: "gross" } });
+    const sk = MARKET_REGISTRY.score_total.settleKey!;
+    const under = finalData({ a: score("a", { grossScore: 80 }) });
+    expect(sk(under, market, "u_82")).toBe("won");
+    expect(sk(under, market, "e_82")).toBe("lost");
+    expect(sk(under, market, "o_82")).toBe("lost");
+    const exact = finalData({ a: score("a", { grossScore: 82 }) });
+    expect(sk(exact, market, "e_82")).toBe("won");
+    const voided = finalData({ a: score("a", { grossScore: null }) });
+    expect(sk(voided, market, "u_82")).toBe("void");
+    expect(sk(voided, market, "e_82")).toBe("void");
+    expect(sk(voided, market, "o_82")).toBe("void");
   });
 
   it("birdies: achieved count wins even after withdrawal; unknown voids", () => {

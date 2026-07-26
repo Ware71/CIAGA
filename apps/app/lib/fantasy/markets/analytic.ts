@@ -209,3 +209,34 @@ export function pmfCountAtLeast(pmf: number[], n: number): number {
   for (let c = n; c < pmf.length; c++) sum += pmf[c];
   return sum;
 }
+
+/**
+ * Current probability of a score_band / score_total selection from the exact
+ * per-score pmf — the "cumulative of the exact scores". The selection key is
+ * self-describing, so this prices a pick's OWN band/value regardless of what's
+ * currently offered (used by cash-out to track drift). Key parsing is inlined
+ * here so this stays in the pmf-math layer with no market-definition import.
+ * Null for other market types or an unparseable key.
+ */
+export function scoreSelectionProbability(
+  marketType: string,
+  selectionKey: string,
+  pmf: AnalyticPmf
+): number | null {
+  if (marketType === "score_band") {
+    let m = /^le_(-?\d+)$/.exec(selectionKey);
+    if (m) return pmfBandProbability(pmf, null, Number(m[1]));
+    m = /^ge_(-?\d+)$/.exec(selectionKey);
+    if (m) return pmfBandProbability(pmf, Number(m[1]), null);
+    m = /^(-?\d+)_(-?\d+)$/.exec(selectionKey);
+    if (m) return pmfBandProbability(pmf, Number(m[1]), Number(m[2]));
+    return null;
+  }
+  if (marketType === "score_total") {
+    const m = /^(u|e|o)_(-?\d+)$/.exec(selectionKey);
+    if (!m) return null;
+    const { under, exact, over } = pmfUnderExactOver(pmf, Number(m[2]));
+    return m[1] === "u" ? under : m[1] === "o" ? over : exact;
+  }
+  return null;
+}

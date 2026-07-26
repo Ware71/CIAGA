@@ -225,7 +225,7 @@ describe("finish markets", () => {
   ]);
 
   it("finish_position probabilities come from the histogram", () => {
-    const m = market({ market_type: "finish_position", subject_profile_id: "a", params: { maxPos: 4 } });
+    const m = market({ market_type: "finish_position", subject_profile_id: "a", params: {} });
     const probs = finishPosition.simulate(sim, m);
     const sum = [...probs.values()].reduce((s, p) => s + p, 0);
     expect(sum).toBeCloseTo(1, 5); // maxPos = field → full distribution
@@ -233,7 +233,7 @@ describe("finish markets", () => {
   });
 
   it("finish_position settles exactly one winner", () => {
-    const m = market({ market_type: "finish_position", subject_profile_id: "a", params: { maxPos: 4 } });
+    const m = market({ market_type: "finish_position", subject_profile_id: "a", params: {} });
     const outcomes = finishPosition.settle(
       finalData([finalPlayer({ profileId: "a", position: 2 })]),
       m
@@ -282,20 +282,15 @@ describe("score bands and exacts", () => {
     expect(sum).toBeCloseTo(1, 6);
   });
 
-  it("band settlement pays exactly the covering band", () => {
-    const bands = bandsAround(85); // le_81 | 82_85 | 86_89 | ge_90
-    const m = market({
-      market_type: "score_band",
-      subject_profile_id: "a",
-      params: { basis: "gross", bands },
-    });
-    const outcomes = scoreBand.settle(
-      finalData([finalPlayer({ profileId: "a", grossScore: 88 })]),
-      m
-    );
-    expect([...outcomes.values()].filter((o) => o === "won")).toHaveLength(1);
-    expect(outcomes.get("86_89")).toBe("won");
-    expect(outcomes.get("le_81")).toBe("lost");
+  it("band settlement pays exactly the covering band via settleKey", () => {
+    // Bands are dynamic/self-describing, so a placed pick settles on its OWN key.
+    const m = market({ market_type: "score_band", subject_profile_id: "a", params: { basis: "gross" } });
+    const final = finalData([finalPlayer({ profileId: "a", grossScore: 88 })]);
+    const sk = scoreBand.settleKey!;
+    expect(sk(final, m, "86_89")).toBe("won"); // 88 ∈ [86,89]
+    expect(sk(final, m, "82_85")).toBe("lost");
+    expect(sk(final, m, "le_81")).toBe("lost");
+    expect(sk(final, m, "ge_90")).toBe("lost");
   });
 
   it("centres the inner-band junction on the projection with full integer coverage", () => {
@@ -314,21 +309,15 @@ describe("score bands and exacts", () => {
     }
   });
 
-  it("score totals settle under/exact/over against each value", () => {
-    const m = market({
-      market_type: "score_total",
-      subject_profile_id: "a",
-      params: { basis: "gross", scores: [83, 84, 85] },
-    });
-    const outcomes = scoreTotal.settle(
-      finalData([finalPlayer({ profileId: "a", grossScore: 84 })]),
-      m
-    );
-    expect(outcomes.get("e_84")).toBe("won");
-    expect(outcomes.get("u_84")).toBe("lost");
-    expect(outcomes.get("o_84")).toBe("lost");
-    expect(outcomes.get("o_83")).toBe("won");
-    expect(outcomes.get("u_85")).toBe("won");
+  it("score totals settle under/exact/over against each value via settleKey", () => {
+    const m = market({ market_type: "score_total", subject_profile_id: "a", params: { basis: "gross" } });
+    const final = finalData([finalPlayer({ profileId: "a", grossScore: 84 })]);
+    const sk = scoreTotal.settleKey!;
+    expect(sk(final, m, "e_84")).toBe("won");
+    expect(sk(final, m, "u_84")).toBe("lost");
+    expect(sk(final, m, "o_84")).toBe("lost");
+    expect(sk(final, m, "o_83")).toBe("won");
+    expect(sk(final, m, "u_85")).toBe("won");
   });
 });
 

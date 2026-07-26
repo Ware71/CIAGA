@@ -111,7 +111,6 @@ function compileLeg(
     count?: unknown;
     basis?: unknown;
     resolvedBasis?: unknown;
-    bands?: unknown;
   };
   const round = params.round != null ? Number(params.round) : null;
   const base = idx * s;
@@ -232,13 +231,19 @@ function compileLeg(
     }
     case "score_band": {
       if (round != null) return null;
-      const bands = Array.isArray(params.bands)
-        ? (params.bands as { key?: unknown; lo?: unknown; hi?: unknown }[])
-        : [];
-      const band = bands.find((b) => b.key === leg.selectionKey);
-      if (!band) return null;
-      const lo = band.lo == null ? null : Number(band.lo);
-      const hi = band.hi == null ? null : Number(band.hi);
+      // The band key is self-describing (`le_<hi>` / `<lo>_<hi>` / `ge_<lo>`) —
+      // bands drift and no longer live in params, so parse the leg's key
+      // (inlined like score_total above to keep this in the simulation layer).
+      const key = leg.selectionKey;
+      let lo: number | null = null;
+      let hi: number | null = null;
+      let bm = /^le_(-?\d+)$/.exec(key);
+      if (bm) hi = Number(bm[1]);
+      else if ((bm = /^ge_(-?\d+)$/.exec(key))) lo = Number(bm[1]);
+      else if ((bm = /^(-?\d+)_(-?\d+)$/.exec(key))) {
+        lo = Number(bm[1]);
+        hi = Number(bm[2]);
+      } else return null;
       const totals = totalsArray(bundle, scoreBasisOf(params), null);
       if (!totals) return null;
       return {
