@@ -148,6 +148,15 @@ export interface MarketDefinition {
   simulate(sim: SimulationResult, market: FantasyMarket): Map<string, number>;
   /** selection_key → outcome, only called when scoring data exists. */
   settle(final: FinalScoringData, market: FantasyMarket): Map<string, SettlementOutcome>;
+  /**
+   * Settle ONE selection by its self-describing key, for markets whose offered
+   * selections drift between refreshes (score_band / score_total). A placed pick
+   * must settle against the exact band/value it backed — which may no longer be
+   * an offered selection — so settlement resolves each pick/leg through this when
+   * present, instead of the batch `settle()` map (which can only cover the
+   * current offered set).
+   */
+  settleKey?(final: FinalScoringData, market: FantasyMarket, selectionKey: string): SettlementOutcome;
   /** May a new pick be placed on this selection right now? */
   placementAllowed(market: FantasyMarket, selectionKey: string, ctx: LiveMarketCtx): boolean;
   /**

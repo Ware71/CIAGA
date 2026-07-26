@@ -5,6 +5,7 @@ import {
   pmfBandProbability,
   pmfUnderExactOver,
   pmfCountAtLeast,
+  scoreSelectionProbability,
 } from "@/lib/fantasy/markets/analytic";
 import type { SimHole, SimPlayer, SimPlayerProfile } from "@/lib/fantasy/simulation/types";
 
@@ -106,6 +107,31 @@ describe("analytic single-player pricing", () => {
     for (let i = 0; i < r1.gross.probs.length; i++) {
       expect(r1.gross.probs[i]).toBeCloseTo(r2.gross.probs[i], 12);
     }
+  });
+
+  it("scoreSelectionProbability = cumulative of exact scores for band/total keys", () => {
+    // scores 80..84 with these masses.
+    const pmf = { min: 80, probs: [0.1, 0.2, 0.3, 0.25, 0.15] };
+    // Band = sum of the exact scores it covers.
+    expect(scoreSelectionProbability("score_band", "81_83", pmf)!).toBeCloseTo(0.2 + 0.3 + 0.25, 9);
+    expect(scoreSelectionProbability("score_band", "le_81", pmf)!).toBeCloseTo(0.1 + 0.2, 9);
+    expect(scoreSelectionProbability("score_band", "ge_83", pmf)!).toBeCloseTo(0.25 + 0.15, 9);
+    // Totals: under/exactly/over a value.
+    expect(scoreSelectionProbability("score_total", "u_82", pmf)!).toBeCloseTo(0.1 + 0.2, 9);
+    expect(scoreSelectionProbability("score_total", "e_82", pmf)!).toBeCloseTo(0.3, 9);
+    expect(scoreSelectionProbability("score_total", "o_82", pmf)!).toBeCloseTo(0.25 + 0.15, 9);
+    // Not a drift market / bad key → null.
+    expect(scoreSelectionProbability("birdies", "yes", pmf)).toBeNull();
+    expect(scoreSelectionProbability("score_band", "nonsense", pmf)).toBeNull();
+    // Consistency with the underlying helpers.
+    expect(scoreSelectionProbability("score_band", "81_83", pmf)!).toBeCloseTo(
+      pmfBandProbability(pmf, 81, 83),
+      12
+    );
+    expect(scoreSelectionProbability("score_total", "o_82", pmf)!).toBeCloseTo(
+      pmfUnderExactOver(pmf, 82).over,
+      12
+    );
   });
 
   it("accounts for already-played holes deterministically (fixed offset)", () => {

@@ -176,31 +176,57 @@ async function loadFinalScoringData(eventId: string): Promise<FinalScoringData> 
   };
 }
 
+type OutcomeResolver = (marketId: string, selectionKey: string) => SettlementOutcome;
+
+/**
+ * Resolve any (market, selection) → outcome. Markets whose offered selections
+ * drift (score_band / score_total) expose `settleKey`, which settles a pick's
+ * OWN self-describing key regardless of what's currently offered; everything
+ * else uses the market's batch `settle()` map (computed once, lazily). A
+ * selection the settler can't resolve voids rather than loses.
+ */
+function makeOutcomeResolver(markets: FantasyMarket[], final: FinalScoringData): OutcomeResolver {
+  const marketById = new Map(markets.map((m) => [m.id, m]));
+  const batchByMarket = new Map<string, Map<string, SettlementOutcome>>();
+  return (marketId, selectionKey) => {
+    const market = marketById.get(marketId);
+    if (!market) return "void";
+    const def = getMarketDefinition(market.market_type);
+    if (!def) return "void";
+    if (def.settleKey) {
+      try {
+        return def.settleKey(final, market, selectionKey);
+      } catch {
+        return "void";
+      }
+    }
+    let batch = batchByMarket.get(marketId);
+    if (!batch) {
+      try {
+        batch = def.settle(final, market);
+      } catch {
+        batch = new Map();
+      }
+      batchByMarket.set(marketId, batch);
+    }
+    return batch.get(selectionKey) ?? "void";
+  };
+}
+
 function computeOutcomes(
   markets: FantasyMarket[],
   final: FinalScoringData,
   picks: { id: string; market_id: string; selection_key: string }[]
 ): {
   pickOutcomes: { pick_id: string; outcome: SettlementOutcome }[];
-  outcomesByMarket: Map<string, Map<string, SettlementOutcome>>;
+  resolve: OutcomeResolver;
 } {
-  const outcomesByMarket = new Map<string, Map<string, SettlementOutcome>>();
-  for (const market of markets) {
-    const def = getMarketDefinition(market.market_type);
-    if (!def) continue;
-    try {
-      outcomesByMarket.set(market.id, def.settle(final, market));
-    } catch {
-      outcomesByMarket.set(market.id, new Map());
-    }
-  }
+  const resolve = makeOutcomeResolver(markets, final);
   const pickOutcomes = picks.map((pick) => ({
     pick_id: pick.id,
-    // A selection the settler can't resolve (e.g. player missing from final
-    // data) voids rather than loses — spec: void invalid picks.
-    outcome: outcomesByMarket.get(pick.market_id)?.get(pick.selection_key) ?? "void",
+    outcome: resolve(pick.market_id, pick.selection_key),
   }));
-  return { pickOutcomes, outcomesByMarket };
+  return { pickOutcomes, resolve };
 }
 
 /**
@@ -210,7 +236,7 @@ function computeOutcomes(
 async function settleParlayLegs(
   eventId: string,
   marketIds: string[],
-  outcomesByMarket: Map<string, Map<string, SettlementOutcome>>
+  resolve: OutcomeResolver
 ): Promise<void> {
   if (marketIds.length === 0) return;
   const { data: legData, error: legErr } = await supabaseAdmin
@@ -225,7 +251,7 @@ async function settleParlayLegs(
 
   const legOutcomes = legs.map((leg) => ({
     leg_id: leg.id,
-    outcome: outcomesByMarket.get(leg.market_id)?.get(leg.selection_key) ?? "void",
+    outcome: resolve(leg.market_id, leg.selection_key),
   }));
 
   const { data: result, error: rpcErr } = await supabaseAdmin.rpc(
@@ -301,7 +327,7 @@ export async function settleFantasyEvent(
   }[];
 
   const final = await loadFinalScoringData(eventId);
-  const { pickOutcomes, outcomesByMarket } = computeOutcomes(markets, final, picks);
+  const { pickOutcomes, resolve } = computeOutcomes(markets, final, picks);
 
   const { data: counts, error: applyErr } = await supabaseAdmin.rpc(
     "ciaga_fantasy_apply_settlement",
@@ -314,7 +340,7 @@ export async function settleFantasyEvent(
   );
   if (applyErr) throw applyErr;
 
-  await settleParlayLegs(eventId, markets.map((m) => m.id), outcomesByMarket).catch(() => {});
+  await settleParlayLegs(eventId, markets.map((m) => m.id), resolve).catch(() => {});
   await notifySettledPicks(eventId, event.name, picks.map((p) => p.id));
 
   // Cascade to season markets: this result shifts the standings, so re-price the
@@ -403,7 +429,7 @@ export async function settleFantasyRoundMarkets(
   }[];
 
   const final = await loadFinalScoringData(eventId);
-  const { pickOutcomes, outcomesByMarket } = computeOutcomes(roundMarkets, final, picks);
+  const { pickOutcomes, resolve } = computeOutcomes(roundMarkets, final, picks);
 
   const { error: applyErr } = await supabaseAdmin.rpc("ciaga_fantasy_apply_settlement", {
     p_event_id: eventId,
@@ -413,7 +439,7 @@ export async function settleFantasyRoundMarkets(
   });
   if (applyErr) throw applyErr;
 
-  await settleParlayLegs(eventId, marketIds, outcomesByMarket).catch(() => {});
+  await settleParlayLegs(eventId, marketIds, resolve).catch(() => {});
   await notifySettledPicks(eventId, event.name, picks.map((p) => p.id));
   return { settled: roundMarkets.length };
 }

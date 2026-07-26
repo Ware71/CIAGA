@@ -619,3 +619,50 @@ on the per-hole MC marginal (a single Bernoulli — least noisy). The remaining
 multi-player markets (winner, top-N, finish position/range, h2h) keep the joint
 MC engine, now with **antithetic variates** (paired iterations reuse each
 sample's normals negated → `1−u`) to roughly halve their variance.
+
+---
+
+## 14. Stable market identity + drifting bands + responsive cash-out (2026-07-26)
+
+§13 (V5) centred `score_band`/`score_total` on the model projection. But the band
+edges lived in `fantasy_markets.params`, and `params` is part of market
+**identity** (`marketShapeKey` + the `uq_fantasy_markets_shape` index). Since
+`ensureMarkets` is insert-only, every time the projection drifted enough to
+re-centre, a **new** market row appeared and the old one lingered — duplicate
+markets, and cash-out reading a pick's frozen line while a re-centred duplicate
+carried the board's fresh price. `finish_position` had the same disease via
+`params.maxPos = min(fieldSize, 8)` (drifts as entrants join/leave).
+
+**Fix — identity carries only stable discriminators; drifting data is
+per-refresh.**
+
+- `score_band` / `score_total`: `params` = just `{ basis }`. The offered
+  bands/values are recomputed each refresh in `simulate` from the player's
+  projection (`sim.players[idx].meanGross/Net`), priced by summing the exact
+  per-score pmf over each range (`pmfBandProbability` / `pmfUnderExactOver`).
+  `finish_position`: `params = {}`, positions `1..min(fieldSize, 8)` derived from
+  the sim. So the offered set drifts with form/field while the row never
+  duplicates.
+- `marketShapeKey` now canonicalizes `params` recursively (sorted keys) to match
+  Postgres jsonb, so the TS dedup and the DB index agree.
+- **Self-describing keys.** A band/value key (`le_<hi>` / `<lo>_<hi>` /
+  `ge_<lo>`, `u_/e_/o_<v>`) fully describes what was backed, so a placed pick
+  settles/prices independent of the currently-offered set:
+  `MarketDefinition.settleKey` settles ONE key (settlement resolves each
+  pick/leg through it — `settlement.ts` resolver); acca joint-pricing
+  (`jointPricing.ts compileLeg`) parses the leg key instead of `params`.
+- **Responsive cash-out (the "cumulative of the exact scores").** Each refresh
+  persists every player's exact per-score pmf (gross+net) to
+  `fantasy_score_pmfs` (migration `20260726000000`). Cash-out of a
+  `score_band`/`score_total` pick (`cashout.ts`, `parlayCashout.ts`) prices the
+  pick's OWN band/value from that pmf via `scoreSelectionProbability` — so the
+  value tracks drift and works even for a band no longer offered — falling back
+  to the snapshot for other markets.
+- **Migration `20260726000001`** collapses the duplicate score_band/score_total/
+  finish_position rows already in prod: it repoints open picks + parlay legs onto
+  the canonical sibling (bets preserved — the key is self-describing), drops the
+  duplicates (snapshots cascade), and normalizes survivors' params to the stable
+  shape so generation stops re-duplicating them.
+
+The board reads the current-version snapshots as before; `buildScoreBandTable`
+orders its four columns by parsing the selection keys instead of `params.bands`.

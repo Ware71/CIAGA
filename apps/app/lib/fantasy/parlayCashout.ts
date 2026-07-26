@@ -4,9 +4,46 @@ import {
   CASHOUT_DISCOUNT,
   CASHOUT_OFFER_TTL_MS,
   computeCashoutValue,
+  DRIFT_MARKETS,
+  pmfBasis,
 } from "@/lib/fantasy/cashout";
 import { getMarketDefinition } from "@/lib/fantasy/markets/registry";
+import { scoreSelectionProbability } from "@/lib/fantasy/markets/analytic";
 import type { FantasyMarket } from "@/lib/fantasy/markets/types";
+
+/** Batch-load the current exact-score pmfs for the given events → keyed by
+ * `${eventId}|${profileId}|${basis}`. Used to price score_band/score_total legs
+ * whose band/value may no longer be an offered snapshot. */
+async function loadScorePmfs(
+  eventVersionByEvent: Map<string, number>
+): Promise<Map<string, { min: number; probs: number[] }>> {
+  const out = new Map<string, { min: number; probs: number[] }>();
+  for (const [eventId, version] of eventVersionByEvent) {
+    const { data } = await supabaseAdmin
+      .from("fantasy_score_pmfs")
+      .select("profile_id, basis, pmf_min, pmf_probs")
+      .eq("event_id", eventId)
+      .eq("event_version", version);
+    for (const r of (data ?? []) as {
+      profile_id: string; basis: string; pmf_min: number; pmf_probs: number[];
+    }[]) {
+      out.set(`${eventId}|${r.profile_id}|${r.basis}`, { min: r.pmf_min, probs: r.pmf_probs });
+    }
+  }
+  return out;
+}
+
+/** A drift-market leg's current probability from its pmf, or null. */
+function legPmfProbability(
+  market: FantasyMarket | undefined,
+  eventId: string,
+  selectionKey: string,
+  pmfByKey: Map<string, { min: number; probs: number[] }>
+): number | null {
+  if (!market || !DRIFT_MARKETS.has(market.market_type) || !market.subject_profile_id) return null;
+  const pmf = pmfByKey.get(`${eventId}|${market.subject_profile_id}|${pmfBasis(market)}`);
+  return pmf ? scoreSelectionProbability(market.market_type, selectionKey, pmf) : null;
+}
 import { loadPlacementContext, refreshIfStale } from "@/lib/fantasy/odds";
 import { matrixLegFor } from "@/lib/fantasy/parlays";
 import { rankingBasisFromScoringModel } from "@/lib/fantasy/parlayRules";
@@ -201,15 +238,40 @@ export async function estimateParlayCashouts(
     }
   }
 
+  // Load leg markets (to detect drift markets) and their exact-score pmfs.
+  const allMarketIds = [...new Set([...marketsByEvent.values()].flatMap((s) => [...s]))];
+  const marketById = new Map<string, FantasyMarket>();
+  if (allMarketIds.length > 0) {
+    const { data: mkts } = await supabaseAdmin.from("fantasy_markets").select("*").in("id", allMarketIds);
+    for (const m of (mkts ?? []) as FantasyMarket[]) marketById.set(m.id, m);
+  }
+  const driftEventVersions = new Map<string, number>();
+  for (const p of openParlays) {
+    for (const l of p.legs) {
+      if (l.status !== "open") continue;
+      const m = marketById.get(l.market_id);
+      const state = stateByEvent.get(l.event_id);
+      if (m && DRIFT_MARKETS.has(m.market_type) && state && !state.is_final) {
+        driftEventVersions.set(l.event_id, state.version);
+      }
+    }
+  }
+  const pmfByKey = await loadScorePmfs(driftEventVersions);
+
   for (const parlay of openParlays) {
     let ok = true;
     let pJoint = 1;
     for (const leg of parlay.legs.filter((l) => l.status === "open")) {
       const state = stateByEvent.get(leg.event_id);
-      const prob =
-        state && !state.is_final
-          ? probByKey.get(`${leg.event_id}|${leg.market_id}|${leg.selection_key}`)
-          : undefined;
+      if (!state || state.is_final) {
+        ok = false;
+        break;
+      }
+      let prob: number | null =
+        legPmfProbability(marketById.get(leg.market_id), leg.event_id, leg.selection_key, pmfByKey);
+      if (prob == null) {
+        prob = probByKey.get(`${leg.event_id}|${leg.market_id}|${leg.selection_key}`) ?? null;
+      }
       if (prob == null) {
         ok = false;
         break;
@@ -385,22 +447,36 @@ export async function requestParlayCashout(params: {
     if (sameVersions) return { offer: existing as ParlayCashoutOffer };
   }
 
-  // Fresh snapshot probability per open leg at its pinned version.
+  // Drift-market legs (score_band/score_total) price the leg's OWN band/value
+  // from the exact-score pmf; everything else reads the leg's snapshot.
+  const driftEventVersions = new Map<string, number>();
+  for (const leg of openLegs) {
+    const m = markets.get(leg.market_id);
+    if (m && DRIFT_MARKETS.has(m.market_type)) {
+      driftEventVersions.set(leg.event_id, eventVersions[leg.event_id]);
+    }
+  }
+  const pmfByKey = await loadScorePmfs(driftEventVersions);
+
   const legProbabilities = new Map<string, number>();
   for (const leg of openLegs) {
-    const { data: snapRow, error: snapErr } = await supabaseAdmin
-      .from("fantasy_odds_snapshots")
-      .select("probability")
-      .eq("market_id", leg.market_id)
-      .eq("selection_key", leg.selection_key)
-      .eq("event_version", eventVersions[leg.event_id])
-      .eq("status", "active")
-      .maybeSingle();
-    if (snapErr) throw snapErr;
-    if (!snapRow) {
-      throw new PickError("No current odds for a leg — try again shortly", 409);
+    let prob = legPmfProbability(markets.get(leg.market_id), leg.event_id, leg.selection_key, pmfByKey);
+    if (prob == null) {
+      const { data: snapRow, error: snapErr } = await supabaseAdmin
+        .from("fantasy_odds_snapshots")
+        .select("probability")
+        .eq("market_id", leg.market_id)
+        .eq("selection_key", leg.selection_key)
+        .eq("event_version", eventVersions[leg.event_id])
+        .eq("status", "active")
+        .maybeSingle();
+      if (snapErr) throw snapErr;
+      if (!snapRow) {
+        throw new PickError("No current odds for a leg — try again shortly", 409);
+      }
+      prob = Number((snapRow as { probability: number }).probability);
     }
-    legProbabilities.set(leg.id, Number((snapRow as { probability: number }).probability));
+    legProbabilities.set(leg.id, prob);
   }
 
   // Joint bundles — each must match the version we just pinned (a mismatch

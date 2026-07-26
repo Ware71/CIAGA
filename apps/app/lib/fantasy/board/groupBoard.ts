@@ -305,18 +305,22 @@ function bandBasisOf(m: Pick<BoardMarket, "params">): "gross" | "net" {
   return (m.params as { basis?: unknown }).basis === "net" ? "net" : "gross";
 }
 
-function bandKeysInOrder(m: Pick<BoardMarket, "params">): string[] {
-  const bands = (m.params as { bands?: { key: string }[] }).bands;
-  return Array.isArray(bands) ? bands.map((b) => b.key) : [];
+/** Order bands by lower edge: `le_<hi>` first (open low tail), then ranges by
+ * lo ascending, then `ge_<lo>` last (open high tail). Bands are self-describing
+ * in the key, so ordering no longer needs the (now absent) params.bands. */
+function bandSortKey(key: string): number {
+  if (/^le_/.test(key)) return -Infinity;
+  const m = /^(?:ge_)?(-?\d+)/.exec(key);
+  return m ? Number(m[1]) : 0;
 }
 
 /**
  * Score-bands matrix, one basis at a time. Bands are computed per-player
- * relative to that player's own projection (bandsAround in scoreBand.ts), so
- * the actual numeric range differs across players — but bandsAround always
- * builds exactly 4 bands in fixed [≤low, mid-low, mid-high, ≥high] order, so
- * array position is a safe, universal column index. The real range still
- * lives on each cell's selection.label for the caller to render.
+ * relative to that player's own projection (bandsAround in scoreBand.ts) and
+ * drift between refreshes, so their numeric ranges differ across players and
+ * over time — but there are always exactly 4, ordered [≤low, mid-low, mid-high,
+ * ≥high] by their self-describing keys, so array position is a safe column
+ * index. The real range still lives on each cell's selection.label.
  */
 export function buildScoreBandTable(
   markets: BoardMarket[],
@@ -339,12 +343,12 @@ export function buildScoreBandTable(
 
   const rows: TableRow[] = order.map((pid) => {
     const m = byPlayer.get(pid) as BoardMarket;
-    const keys = bandKeysInOrder(m);
+    const sorted = [...m.selections].sort((a, b) => bandSortKey(a.key) - bandSortKey(b.key));
     return {
       profileId: pid,
       name: names[pid] ?? "Player",
       cells: columns.map((_, i) => {
-        const sel = keys[i] ? m.selections.find((s) => s.key === keys[i]) : undefined;
+        const sel = sorted[i];
         return sel ? { market: m, selection: sel } : null;
       }),
     };

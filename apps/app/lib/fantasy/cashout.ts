@@ -5,10 +5,46 @@ import type { FantasyMarket } from "@/lib/fantasy/markets/types";
 import { loadPlacementContext, refreshIfStale } from "@/lib/fantasy/odds";
 import { PickError } from "@/lib/fantasy/picks";
 import { getGroupFantasyContext } from "@/lib/fantasy/wallet";
+import { scoreSelectionProbability } from "@/lib/fantasy/markets/analytic";
 import {
   PROBABILITY_CEILING,
   PROBABILITY_FLOOR,
 } from "@/lib/fantasy/simulation/types";
+
+/**
+ * Markets whose offered selections drift each refresh (score_band / score_total):
+ * a placed pick's band/value may no longer be an offered snapshot, so its current
+ * probability is priced from the persisted exact-score pmf (`fantasy_score_pmfs`)
+ * — the "cumulative of the exact scores" — which also makes cash-out track drift.
+ */
+export const DRIFT_MARKETS = new Set(["score_band", "score_total"]);
+
+export function pmfBasis(market: FantasyMarket): "gross" | "net" {
+  return (market.params as { basis?: unknown }).basis === "net" ? "net" : "gross";
+}
+
+/** Current probability of a drift-market pick from its own pmf row, or null. */
+async function driftPickProbability(
+  eventId: string,
+  market: FantasyMarket,
+  selectionKey: string,
+  version: number
+): Promise<number | null> {
+  if (!DRIFT_MARKETS.has(market.market_type) || !market.subject_profile_id) return null;
+  const { data } = await supabaseAdmin
+    .from("fantasy_score_pmfs")
+    .select("pmf_min, pmf_probs, event_version")
+    .eq("event_id", eventId)
+    .eq("profile_id", market.subject_profile_id)
+    .eq("basis", pmfBasis(market))
+    .maybeSingle();
+  const row = data as { pmf_min: number; pmf_probs: number[]; event_version: number } | null;
+  if (!row || row.event_version !== version) return null;
+  return scoreSelectionProbability(market.market_type, selectionKey, {
+    min: row.pmf_min,
+    probs: row.pmf_probs,
+  });
+}
 
 /**
  * Cash-out (spec §4): quote = CurrentProbability × PotentialReturn × 0.90,
@@ -159,18 +195,22 @@ export async function requestCashout(params: {
     return { offer: existing as CashoutOffer };
   }
 
-  const { data: snapRow, error: snapErr } = await supabaseAdmin
-    .from("fantasy_odds_snapshots")
-    .select("probability")
-    .eq("market_id", pick.market_id)
-    .eq("selection_key", pick.selection_key)
-    .eq("event_version", version)
-    .eq("status", "active")
-    .maybeSingle();
-  if (snapErr) throw snapErr;
-  if (!snapRow) throw new PickError("No current odds for this pick — try again shortly", 409);
-
-  const probability = Number((snapRow as { probability: number }).probability);
+  // Drift markets (score_band/score_total) price the pick's OWN band/value from
+  // the current exact-score pmf; everything else reads the pick's snapshot.
+  let probability = await driftPickProbability(pick.event_id, market, pick.selection_key, version);
+  if (probability == null) {
+    const { data: snapRow, error: snapErr } = await supabaseAdmin
+      .from("fantasy_odds_snapshots")
+      .select("probability")
+      .eq("market_id", pick.market_id)
+      .eq("selection_key", pick.selection_key)
+      .eq("event_version", version)
+      .eq("status", "active")
+      .maybeSingle();
+    if (snapErr) throw snapErr;
+    if (!snapRow) throw new PickError("No current odds for this pick — try again shortly", 409);
+    probability = Number((snapRow as { probability: number }).probability);
+  }
   if (probability <= PROBABILITY_FLOOR || probability >= PROBABILITY_CEILING) {
     throw new PickError("Cash-out is unavailable — market is already decided");
   }
@@ -261,6 +301,23 @@ export async function estimateSingleCashouts(
       probByKey.set(`${s.market_id}|${s.selection_key}`, Number(s.probability));
     }
 
+    // Drift-market picks price off the exact-score pmf (their band/value may not
+    // be an offered snapshot). Batch-load the event's current pmfs once.
+    const hasDrift = evPicks.some((p) => p.market && DRIFT_MARKETS.has(p.market.market_type));
+    const pmfByKey = new Map<string, { min: number; probs: number[] }>();
+    if (hasDrift) {
+      const { data: pmfs } = await supabaseAdmin
+        .from("fantasy_score_pmfs")
+        .select("profile_id, basis, pmf_min, pmf_probs")
+        .eq("event_id", eventId)
+        .eq("event_version", version);
+      for (const r of (pmfs ?? []) as {
+        profile_id: string; basis: string; pmf_min: number; pmf_probs: number[];
+      }[]) {
+        pmfByKey.set(`${r.profile_id}|${r.basis}`, { min: r.pmf_min, probs: r.pmf_probs });
+      }
+    }
+
     for (const p of evPicks) {
       const market = p.market;
       if (!market || market.status !== "open") continue;
@@ -268,7 +325,12 @@ export async function estimateSingleCashouts(
       if (!def || !def.eligibleForCashout) continue;
       if (def.isSelfDependent(market, p.selection_key, p.profile_id, live)) continue;
       if (!def.cashoutCutoff(market, p.selection_key, live).eligible) continue;
-      const prob = probByKey.get(`${p.market_id}|${p.selection_key}`);
+      let prob: number | null | undefined;
+      if (DRIFT_MARKETS.has(market.market_type) && market.subject_profile_id) {
+        const pmf = pmfByKey.get(`${market.subject_profile_id}|${pmfBasis(market)}`);
+        prob = pmf ? scoreSelectionProbability(market.market_type, p.selection_key, pmf) : null;
+      }
+      if (prob == null) prob = probByKey.get(`${p.market_id}|${p.selection_key}`);
       if (prob == null || prob <= PROBABILITY_FLOOR || prob >= PROBABILITY_CEILING) continue;
       const value = computeCashoutValue(prob, Number(p.potential_return));
       if (value >= 0.01) out.set(p.id, value);
