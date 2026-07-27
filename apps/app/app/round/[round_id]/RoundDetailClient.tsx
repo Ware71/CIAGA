@@ -9,8 +9,10 @@ import { BackButton } from "@/components/ui/BackButton";
 import { invalidateCache } from "@/lib/cache/clientCache";
 import { finishRound as finishRoundApi, type RoundResultInput } from "@/lib/rounds/api";
 import { useRoundDetail } from "@/lib/rounds/hooks/useRoundDetail";
-import type { Participant, Hole, HoleState, RoundFormatType, WolfPick } from "@/lib/rounds/hooks/useRoundDetail";
+import type { Participant, Hole, HoleState, RoundFormatType, WolfPick, HoleDetail } from "@/lib/rounds/hooks/useRoundDetail";
+import { isEmptyHoleDetail } from "@/lib/rounds/hooks/useRoundDetail";
 import WolfHoleDetails from "@/components/round/WolfHoleDetails";
+import HoleDetailPanel from "@/components/round/HoleDetailPanel";
 import { strokesReceivedOnHole, netFromGross, netDoubleBogeyGross } from "@/lib/rounds/handicapUtils";
 import { computeFormatDisplay, computeSideGameDisplays, isFormatView, formatViewIndex, type FormatScoreView, type FormatDisplayData } from "@/lib/rounds/formatScoring";
 import { useOrientationLock } from "@/lib/useOrientationLock";
@@ -289,6 +291,8 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     setHoleStatesByKey,
     wolfPicksByHole,
     setWolfPicksByHole,
+    holeDetailsByKey,
+    setHoleDetailsByKey,
     canScore,
     fetchAll,
   } = useRoundDetail(roundId, initialSnapshot);
@@ -341,8 +345,12 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
   const [menuOpen, setMenuOpen] = useState(false);
 
   // ── Offline queue helpers ──────────────────────────────────────────────
+  // Two kinds of op share one queue: a score (strokes + hole status) and a shot
+  // tracking detail. `kind` is optional because ops queued by an older build
+  // predate it — those are always scores.
   type PendingOp = {
     key: string;
+    kind?: "score" | "detail";
     roundId: string;
     participantId: string;
     holeNumber: number;
@@ -350,7 +358,10 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     enteredBy: string;
     holeStatus: HoleState | null;
     timestamp: number;
+    detail?: HoleDetail;
   };
+
+  const opKind = (op: PendingOp): "score" | "detail" => op.kind ?? "score";
 
   const queueStorageKey = `ciaga:pendingOps:${roundId}`;
 
@@ -880,7 +891,9 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     if (!ops.length) return;
 
     // A queued first score must start the round before its events are synced.
-    if (status !== "live" && !isFinished) {
+    // Detail-only ops must NOT do this: logging a putt is not a scoring action
+    // and should never flip a draft round live.
+    if (status !== "live" && !isFinished && ops.some((o) => opKind(o) === "score")) {
       const ok = await activateRound();
       if (!ok) return; // still can't start — retry on the next "online" event
     }
@@ -888,6 +901,28 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     const flushed: string[] = [];
     for (const op of ops) {
       try {
+        if (opKind(op) === "detail") {
+          if (!op.detail) {
+            removeQueueOp(op.key);
+            continue;
+          }
+          const { error: detailErr } = await supabase.from("round_hole_details").upsert(
+            {
+              round_id: op.roundId,
+              participant_id: op.participantId,
+              hole_number: op.holeNumber,
+              ...op.detail,
+              updated_at: new Date().toISOString(),
+              updated_by: op.enteredBy,
+            },
+            { onConflict: "participant_id,hole_number" }
+          );
+          if (detailErr) throw detailErr;
+          flushed.push(op.key);
+          removeQueueOp(op.key);
+          continue;
+        }
+
         if (op.strokes !== undefined) {
           const { error: scoreErr } = await supabase.from("round_score_events").insert({
             round_id: op.roundId,
@@ -929,6 +964,101 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     window.addEventListener("online", flushPendingOps);
     return () => window.removeEventListener("online", flushPendingOps);
   }, [flushPendingOps]);
+
+  // ── Shot tracking (optional per-hole detail) ───────────────────────────
+  // Writes are whole-row upserts, debounced per hole, so a burst of chip taps
+  // becomes one request and the last write always carries the complete state.
+  const holeDetailTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const holeDetailPendingRef = useRef<Record<string, HoleDetail>>({});
+
+  const holeDetailFor = useCallback(
+    (participantId: string, holeNumber: number): HoleDetail | null =>
+      holeDetailsByKey[`${participantId}:${holeNumber}`] ?? null,
+    [holeDetailsByKey]
+  );
+
+  async function writeHoleDetail(key: string) {
+    const detail = holeDetailPendingRef.current[key];
+    if (!detail || !meId) return;
+
+    delete holeDetailPendingRef.current[key];
+    const timer = holeDetailTimersRef.current[key];
+    if (timer) {
+      clearTimeout(timer);
+      delete holeDetailTimersRef.current[key];
+    }
+
+    const [participantId, holeStr] = key.split(":");
+    const holeNumber = Number(holeStr);
+    if (!participantId || !Number.isFinite(holeNumber)) return;
+
+    const queueOp = () =>
+      upsertQueueOp({
+        key: `detail:${key}`,
+        kind: "detail",
+        roundId,
+        participantId,
+        holeNumber,
+        strokes: null,
+        enteredBy: meId,
+        holeStatus: null,
+        detail,
+        timestamp: Date.now(),
+      });
+
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      queueOp();
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from("round_hole_details").upsert(
+        {
+          round_id: roundId,
+          participant_id: participantId,
+          hole_number: holeNumber,
+          ...detail,
+          updated_at: new Date().toISOString(),
+          updated_by: meId,
+        },
+        { onConflict: "participant_id,hole_number" }
+      );
+      if (error) throw error;
+      removeQueueOp(`detail:${key}`);
+    } catch (e: any) {
+      if (isNetworkError(e)) {
+        queueOp();
+        return;
+      }
+      setErr(e?.message || "Failed to save shot tracking");
+    }
+  }
+
+  function flushPendingHoleDetails() {
+    for (const key of Object.keys(holeDetailPendingRef.current)) void writeHoleDetail(key);
+  }
+
+  function saveHoleDetail(participantId: string, holeNumber: number, next: HoleDetail) {
+    if (!meId || !canScore || isFinished) return;
+
+    const key = `${participantId}:${holeNumber}`;
+    // Nothing recorded and nothing stored: a tap-then-untap shouldn't create a row.
+    if (isEmptyHoleDetail(next) && !holeDetailsByKey[key]) return;
+
+    setHoleDetailsByKey((prev) => ({ ...prev, [key]: next }));
+    holeDetailPendingRef.current[key] = next;
+
+    const existing = holeDetailTimersRef.current[key];
+    if (existing) clearTimeout(existing);
+    holeDetailTimersRef.current[key] = setTimeout(() => void writeHoleDetail(key), 400);
+  }
+
+  // Flush the debounce when the sheet moves to another player/hole or closes, so
+  // a tap is never lost to a fast "Done for now".
+  useEffect(() => {
+    return () => flushPendingHoleDetails();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entryPid, entryHole, entryOpen]);
 
   async function setHoleState(participantId: string, holeNumber: number, nextState: HoleState) {
     if (!canScore || isFinished) return false;
@@ -1768,17 +1898,27 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
             getParticipantLabel={getParticipantLabel}
             getParticipantAvatar={getParticipantAvatar}
             aboveContent={
-              wolfActive && entryHole != null ? (
-                <WolfHoleDetails
-                  participants={participants}
+              <div className="space-y-2">
+                {wolfActive && entryHole != null ? (
+                  <WolfHoleDetails
+                    participants={participants}
+                    holeNumber={entryHole}
+                    pick={wolfPicksByHole[entryHole] ?? null}
+                    rotationWolfId={rotationWolfForHole(entryHole)}
+                    getParticipantLabel={getParticipantLabel}
+                    onChange={(pick) => saveWolfPick(entryHole, pick)}
+                    disabled={!canScore || isFinished}
+                  />
+                ) : null}
+
+                <HoleDetailPanel
+                  detail={holeDetailFor(entryPid, entryHole)}
                   holeNumber={entryHole}
-                  pick={wolfPicksByHole[entryHole] ?? null}
-                  rotationWolfId={rotationWolfForHole(entryHole)}
-                  getParticipantLabel={getParticipantLabel}
-                  onChange={(pick) => saveWolfPick(entryHole, pick)}
+                  par={holesList.find((h) => h.hole_number === entryHole)?.par ?? null}
                   disabled={!canScore || isFinished}
+                  onChange={(next) => saveHoleDetail(entryPid, entryHole, next)}
                 />
-              ) : undefined
+              </div>
             }
           />
         ) : null}
