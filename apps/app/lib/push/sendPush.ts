@@ -111,6 +111,10 @@ export async function sendPushToProfiles(
     return { configured: true, total: 0, sent: 0, failed: 0, results: [] };
   }
   if (!subs || subs.length === 0) {
+    // A real outcome, not a success: the recipient has push off, never enabled it
+    // on any device, or their last subscription was pruned as dead. Silence here
+    // is indistinguishable from a delivered push when diagnosing "no notification".
+    console.warn(`[push] no subscriptions for profile(s) ${ids.join(", ")} — nothing sent`);
     return { configured: true, total: 0, sent: 0, failed: 0, results: [] };
   }
 
