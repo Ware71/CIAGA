@@ -161,7 +161,7 @@ export async function createNotification(params: {
       .eq("read", false);
 
     const rendered = renderNotification(type, finalPayload);
-    await sendPushToProfiles([recipientProfileId], {
+    const result = await sendPushToProfiles([recipientProfileId], {
       title: rendered.title,
       body: rendered.body,
       url: rendered.url,
@@ -171,6 +171,18 @@ export async function createNotification(params: {
       tag: groupKey ?? undefined,
       badgeCount: unread ?? undefined,
     });
+
+    // The result carries the only evidence of why a push didn't arrive; it used
+    // to be discarded, which made "bell row but no buzz" undiagnosable.
+    if (!result.configured) {
+      console.error(
+        `[notify] push not configured for ${type} → ${recipientProfileId} (missing: ${(result.missingEnv ?? []).join(", ") || "?"})`
+      );
+    } else if (result.sent === 0) {
+      console.warn(
+        `[notify] push delivered to 0 devices for ${type} → ${recipientProfileId} (subscriptions=${result.total}, failed=${result.failed})`
+      );
+    }
   } catch (e: any) {
     console.error("[notify] push failed:", e?.message);
   }

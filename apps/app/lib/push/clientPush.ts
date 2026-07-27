@@ -120,6 +120,38 @@ export type RegisterPushResult =
   | { status: "error"; error: string };
 
 /**
+ * Whether pushes can actually reach this device — as opposed to whether the user
+ * once granted permission. `Notification.permission` stays "granted" forever, but
+ * the server prunes a subscription after a 404/410 (endpoint rotation, PWA
+ * reinstall, SW replacement), which silently ends delivery. Checking both the
+ * local subscription and the server row is the only way to tell.
+ *
+ * Best-effort: on any failure returns `unknown` so callers fall back to
+ * permission rather than claiming push is broken.
+ */
+export async function getPushDeliveryState(): Promise<"delivering" | "not_registered" | "unknown"> {
+  if (!isPushSupported()) return "unknown";
+  try {
+    const reg = await withTimeout(
+      navigator.serviceWorker.getRegistration(),
+      8000,
+      "Could not read service worker registration"
+    );
+    const sub = reg ? await withTimeout(reg.pushManager.getSubscription(), 8000, "Could not read subscription") : null;
+    if (!sub) return "not_registered";
+
+    const res = await authedFetch(
+      `/api/push/status?endpoint=${encodeURIComponent(sub.endpoint)}`
+    );
+    if (!res.ok) return "unknown";
+    const json = (await res.json()) as { registered?: boolean };
+    return json?.registered ? "delivering" : "not_registered";
+  } catch {
+    return "unknown";
+  }
+}
+
+/**
  * Request permission (must be called from a user gesture) and register a push
  * subscription. Returns a status the UI can react to.
  *

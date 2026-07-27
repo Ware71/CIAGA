@@ -28,6 +28,7 @@ import {
 import { NOTIFICATION_CATEGORIES } from "@/lib/notifications/preferences";
 import { useNotificationPreferences } from "@/lib/notifications/useNotificationPreferences";
 import {
+  getPushDeliveryState,
   isIOS,
   isStandalone,
   notificationPermission,
@@ -197,10 +198,14 @@ function Toggle({
 function NotificationSettings({ profileId }: { profileId: string | null }) {
   const { muted, loading, toggle } = useNotificationPreferences(profileId);
 
-  // Push state is device-local (permission + subscription), so it's read from
-  // the browser rather than the database.
+  // Permission is device-local, but it is NOT proof of delivery: it stays
+  // "granted" after the server prunes a dead subscription. Delivery state is
+  // checked separately so the toggle can't claim push works when it doesn't.
   const [permission, setPermission] = useState<NotificationPermission | "unsupported">(
     "default"
+  );
+  const [delivery, setDelivery] = useState<"delivering" | "not_registered" | "unknown">(
+    "unknown"
   );
   const [needsInstall, setNeedsInstall] = useState(false);
   const [working, setWorking] = useState(false);
@@ -208,28 +213,43 @@ function NotificationSettings({ profileId }: { profileId: string | null }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setPermission(notificationPermission());
+    const perm = notificationPermission();
+    setPermission(perm);
     setNeedsInstall(isIOS() && !isStandalone());
+    if (perm !== "granted") return;
+    let cancelled = false;
+    void getPushDeliveryState().then((s) => {
+      if (!cancelled) setDelivery(s);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const pushOn = permission === "granted";
+  // Permission granted but the server can't reach this device — the case that
+  // silently swallowed pushes while the pane insisted they were on.
+  const needsRepair = pushOn && delivery === "not_registered";
 
   async function togglePush() {
     setError(null);
     setWorking(true);
-    if (pushOn) {
+    if (pushOn && !needsRepair) {
       await unregisterPush();
       // Permission itself can only be revoked in browser settings; dropping the
       // subscription is what actually stops delivery.
       setPermission(notificationPermission());
+      setDelivery("not_registered");
       setWorking(false);
       return;
     }
     const r = await registerPush({ onStep: setStepLabel });
     setWorking(false);
     setStepLabel(null);
-    if (r.status === "subscribed") setPermission("granted");
-    else if (r.status === "denied") setPermission("denied");
+    if (r.status === "subscribed") {
+      setPermission("granted");
+      setDelivery("delivering");
+    } else if (r.status === "denied") setPermission("denied");
     else if (r.status === "needs_install") setNeedsInstall(true);
     else if (r.status === "error") setError(r.error || "Couldn’t enable notifications.");
     else if (r.status === "unsupported") setPermission("unsupported");
@@ -265,16 +285,20 @@ function NotificationSettings({ profileId }: { profileId: string | null }) {
           <div className="flex items-center gap-3">
             <div className="min-w-0 flex-1">
               <div className="text-sm font-extrabold text-emerald-50">Push notifications</div>
-              <div className="mt-0.5 text-xs font-medium text-emerald-100/60">
+              <div
+                className={`mt-0.5 text-xs font-medium ${needsRepair && !working ? "text-amber-200/80" : "text-emerald-100/60"}`}
+              >
                 {working
                   ? stepLabel ?? "Working…"
-                  : pushOn
-                    ? "Alerts are delivered to this device"
-                    : "Turn on to get alerts on this device"}
+                  : needsRepair
+                    ? "Not registered on this device — turn on to start receiving alerts again"
+                    : pushOn
+                      ? "Alerts are delivered to this device"
+                      : "Turn on to get alerts on this device"}
               </div>
             </div>
             <Toggle
-              on={pushOn}
+              on={pushOn && !needsRepair}
               disabled={working}
               onChange={() => void togglePush()}
               label="Push notifications"

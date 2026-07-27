@@ -3,7 +3,11 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { parseFeedPayload } from "@/lib/feed/schemas";
 import { fanOutFeedItemToSubjectsAndFollowers } from "@/lib/feed/fanout";
 import { computeFormatSummaryForFeed } from "@/lib/feed/helpers/formatSummary";
-import { netDoubleBogeyGross } from "@/lib/rounds/handicapUtils";
+import {
+  tallyHolesPlayed,
+  type PickedUpRow,
+  type ScoreRow,
+} from "@/lib/feed/helpers/holesPlayed";
 
 /**
  * Emits a round_played feed item for a completed round.
@@ -117,28 +121,40 @@ export async function emitRoundPlayedFeedItem(params: {
   }
   const profileIds = Array.from(new Set((participants ?? []).map((r: any) => r.profile_id as string).filter(Boolean)));
 
-  // --- FIX: TRUE gross strokes from round_current_scores ----------------------
-  // We compute gross_total = SUM(strokes) and holes_completed = COUNT(rows) per participant.
-  const grossByParticipantId = new Map<string, number>();
-  const holesCompletedByParticipantId = new Map<string, number>();
-
+  // TRUE gross strokes from round_current_scores. Scores and pick-ups are tallied
+  // together (see lib/feed/helpers/holesPlayed.ts) because they overlap: a
+  // picked-up hole appears in BOTH, and counting them independently is what made
+  // an 18-hole round with 3 pick-ups read "Thru 21".
+  let scoreRows: ScoreRow[] = [];
   if (participantIds.length) {
     const { data: scores, error: scErr } = await supabaseAdmin
       .from("round_current_scores")
-      .select("participant_id, strokes")
+      .select("participant_id, hole_number, strokes")
       .eq("round_id", roundId)
       .in("participant_id", participantIds);
     if (scErr) throw scErr;
+    scoreRows = (scores ?? []) as ScoreRow[];
+  }
 
-    for (const row of scores ?? []) {
-      const pid = (row as any).participant_id as string;
-      const strokes = (row as any).strokes;
-      const n = typeof strokes === "number" ? strokes : Number(strokes);
-      if (!pid || !Number.isFinite(n)) continue;
-      grossByParticipantId.set(pid, (grossByParticipantId.get(pid) ?? 0) + n);
-      holesCompletedByParticipantId.set(pid, (holesCompletedByParticipantId.get(pid) ?? 0) + 1);
+  // Hole snapshots for the round's tees. Needed for the pick-up NDB penalty below
+  // AND for the round's real hole count, which the freeze math must not assume.
+  const teeSnapIds = Array.from(
+    new Set((participants ?? []).map((r: any) => r.tee_snapshot_id).filter(Boolean)),
+  ) as string[];
+
+  const holeByNumber = new Map<number, { par: number | null; stroke_index: number | null }>();
+  if (teeSnapIds.length) {
+    const { data: holeRows } = await supabaseAdmin
+      .from("round_hole_snapshots")
+      .select("hole_number, par, stroke_index")
+      .in("round_tee_snapshot_id", teeSnapIds);
+    for (const h of (holeRows ?? []) as any[]) {
+      if (!holeByNumber.has(h.hole_number)) {
+        holeByNumber.set(h.hole_number, { par: h.par ?? null, stroke_index: h.stroke_index ?? null });
+      }
     }
   }
+  const roundHoleCount = holeByNumber.size || 18;
 
   // Look up event freeze state if this round is part of an event
   let competitionHolesShown: number | null = null;
@@ -158,7 +174,8 @@ export async function emitRoundPlayedFeedItem(params: {
           .maybeSingle();
         if (evt && (evt as any).leaderboard_freeze_state === "frozen" && (evt as any).leaderboard_freeze_last_holes != null) {
           const numRounds = (evt as any).num_rounds ?? 1;
-          competitionHolesShown = numRounds * 18 - (evt as any).leaderboard_freeze_last_holes;
+          // Use the round's actual hole count — a 9-hole event round is not 18.
+          competitionHolesShown = numRounds * roundHoleCount - (evt as any).leaderboard_freeze_last_holes;
         }
       }
     } catch {
@@ -183,45 +200,27 @@ export async function emitRoundPlayedFeedItem(params: {
     courseHandicapByParticipantId.set(pid, Number.isFinite(ch) ? ch : null);
   }
 
-  // --- FIX: picked-up holes must count as WHS net double bogey, not be dropped ----
-  // A picked-up hole has no numeric strokes row, so the loop above silently skips it.
-  // Credit it the same NDB penalty the in-round leaderboard already applies.
+  // Picked-up holes must count as WHS net double bogey, not be dropped: they have
+  // no numeric strokes row, so the score pass alone would skip them. Credit them
+  // the same NDB penalty the in-round leaderboard already applies.
+  let pickedUpRows: PickedUpRow[] = [];
   if (participantIds.length) {
-    const teeSnapIds = Array.from(
-      new Set((participants ?? []).map((r: any) => r.tee_snapshot_id).filter(Boolean)),
-    ) as string[];
-
-    const [{ data: holeStateRows }, { data: holeRows }] = await Promise.all([
-      supabaseAdmin
-        .from("round_hole_states")
-        .select("participant_id, hole_number, status")
-        .eq("round_id", roundId)
-        .eq("status", "picked_up")
-        .in("participant_id", participantIds),
-      teeSnapIds.length
-        ? supabaseAdmin
-            .from("round_hole_snapshots")
-            .select("hole_number, par, stroke_index")
-            .in("round_tee_snapshot_id", teeSnapIds)
-        : Promise.resolve({ data: [] as any[] }),
-    ]);
-
-    const holeByNumber = new Map<number, { par: number | null; stroke_index: number | null }>();
-    for (const h of (holeRows ?? []) as any[]) {
-      if (!holeByNumber.has(h.hole_number)) {
-        holeByNumber.set(h.hole_number, { par: h.par ?? null, stroke_index: h.stroke_index ?? null });
-      }
-    }
-
-    for (const row of (holeStateRows ?? []) as any[]) {
-      const pid = row.participant_id as string;
-      const hole = holeByNumber.get(row.hole_number);
-      if (!pid || !hole || typeof hole.par !== "number") continue;
-      const penalty = netDoubleBogeyGross(hole.par, courseHandicapByParticipantId.get(pid) ?? null, hole.stroke_index);
-      grossByParticipantId.set(pid, (grossByParticipantId.get(pid) ?? 0) + penalty);
-      holesCompletedByParticipantId.set(pid, (holesCompletedByParticipantId.get(pid) ?? 0) + 1);
-    }
+    const { data: holeStateRows } = await supabaseAdmin
+      .from("round_hole_states")
+      .select("participant_id, hole_number, status")
+      .eq("round_id", roundId)
+      .eq("status", "picked_up")
+      .in("participant_id", participantIds);
+    pickedUpRows = (holeStateRows ?? []) as PickedUpRow[];
   }
+
+  const { grossByParticipantId, holesPlayedByParticipantId } = tallyHolesPlayed({
+    scores: scoreRows,
+    pickedUp: pickedUpRows,
+    holeByNumber,
+    courseHandicapByParticipantId,
+    holeCount: roundHoleCount,
+  });
 
   // Profile embeds
   const { data: profs, error: profErr } = await supabaseAdmin
@@ -270,7 +269,7 @@ export async function emitRoundPlayedFeedItem(params: {
     const net_to_par = typeof net_total === "number" && typeof parTotal === "number" ? net_total - parTotal : null;
 
     const format_score = formatSummary?.player_scores.get(pid) ?? null;
-    const holes_completed = holesCompletedByParticipantId.get(pid) ?? null;
+    const holes_completed = holesPlayedByParticipantId.get(pid)?.size ?? null;
 
     return {
       profile_id,
@@ -294,6 +293,10 @@ export async function emitRoundPlayedFeedItem(params: {
     // Gross total = first member's gross (single-ball team shares one score)
     const gross_total = firstMember ? (grossByParticipantId.get(firstMember.id) ?? null) : null;
     const gross_to_par = typeof gross_total === "number" && typeof parTotal === "number" ? gross_total - parTotal : null;
+    // Thru comes from the same member, so team cards show it like the live path does.
+    const holes_completed = firstMember
+      ? (holesPlayedByParticipantId.get(firstMember.id)?.size ?? null)
+      : null;
 
     return {
       profile_id: null as string | null,
@@ -304,6 +307,7 @@ export async function emitRoundPlayedFeedItem(params: {
       gross_to_par,
       net_to_par: null as number | null,
       par_total: parTotal,
+      holes_completed,
       format_score: formatSummary?.player_scores.get(t.id) ?? null,
     };
   });

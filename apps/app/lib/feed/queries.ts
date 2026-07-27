@@ -563,9 +563,12 @@ export async function getLiveRoundsAsFeedItems(params: { viewerProfileId: string
     }
 
     const holeStatesByKey: Record<string, HoleState> = {};
-    // Picked-up holes never get a numeric strokes row, so scoreMap alone
+    // A picked-up hole should have no numeric strokes row, so scoreMap alone
     // underreports gross/net/holes-completed. Track them separately per
     // participant so the totals below can credit the WHS NDB penalty.
+    // The totals do NOT assume that invariant holds — markPickedUp can commit the
+    // 'picked_up' state and then fail to clear the score — so each loop below
+    // skips a picked-up hole that already carries a score, counting it once.
     const pickedUpHolesByParticipant = new Map<string, Set<number>>();
     for (const hs of (rd.hole_states ?? []) as any[]) {
       const key = `${hs.participant_id}:${hs.hole_number}`;
@@ -628,6 +631,7 @@ export async function getLiveRoundsAsFeedItems(params: { viewerProfileId: string
         for (const holeNum of (firstMember && pickedUpHolesByParticipant.get(firstMember.id)) || []) {
           const hole = holeMap.get(holeNum);
           if (hole?.par == null) continue;
+          if (scoreMap?.has(holeNum)) continue; // already counted above
           grossTotal += netDoubleBogeyGross(hole.par, null, hole.stroke_index);
           holesCompleted++;
           parPlayed += hole.par;
@@ -657,11 +661,16 @@ export async function getLiveRoundsAsFeedItems(params: { viewerProfileId: string
       const prof = rp.profile_id ? profMap.get(rp.profile_id) : null;
       const scoreMap = scoresByParticipant.get(rp.id);
 
+      // Prefer the course handicap locked in at round start. The slope/rating
+      // computation below is only a fallback: the participant mapper above does
+      // not carry handicap_index, so it alone left net blank on every live card.
       const hi = rp.handicap_index != null ? Number(rp.handicap_index) : null;
       const courseHcp =
-        hi != null && slope != null && rating != null && parTot != null
-          ? Math.round(hi * (slope / 113) + (rating - parTot))
-          : null;
+        rp.course_handicap_used != null
+          ? rp.course_handicap_used
+          : hi != null && slope != null && rating != null && parTot != null
+            ? Math.round(hi * (slope / 113) + (rating - parTot))
+            : null;
 
       let grossTotal = 0;
       let netAdjustment = 0;
@@ -683,6 +692,7 @@ export async function getLiveRoundsAsFeedItems(params: { viewerProfileId: string
       for (const holeNum of pickedUpHolesByParticipant.get(rp.id) || []) {
         const hole = holeMap.get(holeNum);
         if (hole?.par == null) continue;
+        if (scoreMap?.has(holeNum)) continue; // already counted above
         const recv = strokesReceivedOnHole(courseHcp, hole.stroke_index, holeMap.size || 18);
         grossTotal += netDoubleBogeyGross(hole.par, courseHcp, hole.stroke_index, holeMap.size || 18);
         holesCompleted++;
