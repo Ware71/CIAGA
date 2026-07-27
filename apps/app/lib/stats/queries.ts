@@ -17,7 +17,7 @@ export async function fetchAllHoleScoringSource(profileId: string) {
     const { data, error } = await supabase
       .from("hole_scoring_source")
       .select(
-        "profile_id, round_id, played_at, course_id, course_name, tee_box_id, tee_name, hole_number, par, yardage, stroke_index, strokes, to_par, net_strokes, net_to_par, strokes_received, is_double_plus, is_triple_plus"
+        "profile_id, round_id, played_at, course_id, course_name, tee_box_id, tee_name, hole_number, par, yardage, stroke_index, strokes, to_par, net_strokes, net_to_par, strokes_received, is_double_plus, is_triple_plus, putts, fairway, approach_green, approach_miss_v, approach_miss_h, bunker, penalties"
       )
       .eq("profile_id", profileId)
       .order("played_at", { ascending: false })
@@ -41,7 +41,10 @@ export async function fetchAllHoleScoringSource(profileId: string) {
 // the "stats" prefix (see RoundDetailClient.finishRound).
 const STATS_CACHE_OPTS = { ttl: 24 * 60 * 60_000, staleTime: 5 * 60_000 };
 
-const statsCacheKey = (profileId: string) => `stats:holeScoring:${profileId}`;
+// v2: added the shot-tracking detail columns. Bumping the key rather than
+// reusing it means the first visit after deploy can't paint from a pre-deploy
+// snapshot that has none of them (which would look like "no data recorded").
+const statsCacheKey = (profileId: string) => `stats:holeScoring:v2:${profileId}`;
 
 /** Cached snapshot if there is one, for painting before the fetch resolves. */
 export function peekHoleScoringSource(profileId: string): any[] | null {

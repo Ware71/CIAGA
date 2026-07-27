@@ -104,14 +104,33 @@ export default function ScoreEntrySheet(props: {
       <button className="absolute inset-0 bg-black/60" onClick={onClose} aria-label="Close" />
 
       <div
-        className={`absolute left-0 right-0 bottom-0 px-3 pb-[env(safe-area-inset-bottom)] ${isPortrait ? "max-h-[100dvh] overflow-y-auto" : "overflow-hidden"}`}
-        style={!isPortrait ? { transform: "scale(0.8)", transformOrigin: "bottom center" } : undefined}
+        // Landscape used to be overflow-hidden, so anything taller than the
+        // viewport was unreachable. It scrolls now as a safety net — with the
+        // side-by-side layout below it shouldn't normally engage, but a very
+        // short viewport or a tall aboveContent (Wolf with four players) must
+        // never be clipped away.
+        className={`absolute left-0 right-0 bottom-0 px-3 pb-[env(safe-area-inset-bottom)] max-h-[100dvh] overflow-y-auto ${isPortrait ? "" : "overscroll-contain"}`}
       >
-        {aboveContent ? (
-          <div className="mx-auto w-full max-w-[520px] mb-2">{aboveContent}</div>
-        ) : null}
+        {/* Portrait stacks (height to spare, width tight). Landscape is the
+            reverse, so the extras sit beside the card and nothing scrolls.
+            Landscape shrinks with `zoom`, not `transform: scale` — a transform
+            leaves the layout box at full size, so the scroll container still
+            believed it overflowed and clipped the bottom off both columns. */}
+        <div
+          className={isPortrait ? "" : "flex items-end justify-center gap-3"}
+          style={isPortrait ? undefined : ({ zoom: 0.8 } as React.CSSProperties)}
+        >
+          {aboveContent ? (
+            <div className={isPortrait ? "mx-auto w-full max-w-[520px] mb-2" : "w-[360px] shrink-0"}>
+              {aboveContent}
+            </div>
+          ) : null}
 
-        <div className="mx-auto w-full max-w-[520px] rounded-t-3xl border border-emerald-900/70 bg-[#061f12] shadow-2xl overflow-hidden">
+          <div
+            className={`${
+              isPortrait ? "mx-auto w-full max-w-[520px]" : "w-[440px] shrink-0"
+            } rounded-t-3xl border border-emerald-900/70 bg-[#061f12] shadow-2xl overflow-hidden`}
+          >
           <div className="p-3 border-b border-emerald-900/60 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5 min-w-0">
               <Avatar className="h-10 w-10 border border-emerald-200/70">
@@ -243,6 +262,7 @@ export default function ScoreEntrySheet(props: {
             {isFinished ? (
               <div className="mt-3 text-[11px] text-amber-200/80">This round is finished. Editing is disabled.</div>
             ) : null}
+            </div>
           </div>
         </div>
       </div>

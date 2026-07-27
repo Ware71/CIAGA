@@ -161,6 +161,31 @@ function IconSpark() {
   );
 }
 
+function IconPin() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M12 3v13"
+        stroke="rgba(226,252,231,0.80)"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <path
+        d="M12 3l6 2.5L12 8"
+        stroke="rgba(245,230,176,0.95)"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M5 19c1.8-1.6 4.2-2.4 7-2.4s5.2.8 7 2.4"
+        stroke="rgba(226,252,231,0.80)"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 export default function StatsHomePage() {
   const router = useRouter();
 
@@ -198,6 +223,13 @@ export default function StatsHomePage() {
       subtitle: "Best stretch of rounds, consistency, firsts and goals hit",
       href: "/stats/milestones",
       icon: <IconSpark />,
+    },
+    {
+      title: "Shot tracking",
+      subtitle: "Putting, GIR, fairways, scrambling and sand saves",
+      href: "/stats/shot-tracking",
+      icon: <IconPin />,
+      badge: "Opt-in",
     },
   ];
 

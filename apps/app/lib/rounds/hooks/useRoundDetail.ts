@@ -28,8 +28,13 @@ function subscribeWithChannelRetry(opts: {
         retryCount = 0;
         opts.onReconciled();
       } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
-        if (current) supabase.removeChannel(current);
+        // Clear `current` BEFORE removing: removeChannel() unsubscribes
+        // synchronously, which re-fires this same callback with "CLOSED". If
+        // `current` were still set we'd remove it again, and again, until the
+        // stack overflowed (RangeError on every websocket drop).
+        const dead = current;
         current = null;
+        if (dead) supabase.removeChannel(dead);
         if (disposed) return;
         const delay = Math.min(1000 * 2 ** retryCount, 30000);
         retryCount += 1;
@@ -46,7 +51,9 @@ function subscribeWithChannelRetry(opts: {
   return () => {
     disposed = true;
     if (retryTimer) clearTimeout(retryTimer);
-    if (current) supabase.removeChannel(current);
+    const dead = current;
+    current = null;
+    if (dead) supabase.removeChannel(dead);
   };
 }
 
@@ -100,6 +107,60 @@ export type WolfPick = {
   wolf_mode: WolfMode;
 };
 
+// Optional shot tracking (round_hole_details). null in any field means "not
+// recorded" and must never be treated as a zero — the stats layer counts only
+// what the player actually tapped.
+export type FairwayResult = "hit" | "left" | "right";
+export type ApproachMissV = "short" | "long";
+export type ApproachMissH = "left" | "right";
+export type HoleDetail = {
+  putts: number | null;
+  fairway: FairwayResult | null;
+  approach_green: boolean | null;
+  approach_miss_v: ApproachMissV | null;
+  approach_miss_h: ApproachMissH | null;
+  bunker: boolean | null;
+  penalties: number | null;
+};
+
+export const EMPTY_HOLE_DETAIL: HoleDetail = {
+  putts: null,
+  fairway: null,
+  approach_green: null,
+  approach_miss_v: null,
+  approach_miss_h: null,
+  bunker: null,
+  penalties: null,
+};
+
+/** True when nothing at all is recorded — used to skip pointless writes. */
+export function isEmptyHoleDetail(d: HoleDetail): boolean {
+  return (
+    d.putts == null &&
+    d.fairway == null &&
+    d.approach_green == null &&
+    d.approach_miss_v == null &&
+    d.approach_miss_h == null &&
+    d.bunker == null &&
+    d.penalties == null
+  );
+}
+
+export const HOLE_DETAIL_COLUMNS =
+  "participant_id, hole_number, putts, fairway, approach_green, approach_miss_v, approach_miss_h, bunker, penalties";
+
+export function holeDetailFromRow(row: any): HoleDetail {
+  return {
+    putts: row.putts ?? null,
+    fairway: (row.fairway as FairwayResult) ?? null,
+    approach_green: row.approach_green ?? null,
+    approach_miss_v: (row.approach_miss_v as ApproachMissV) ?? null,
+    approach_miss_h: (row.approach_miss_h as ApproachMissH) ?? null,
+    bunker: row.bunker ?? null,
+    penalties: row.penalties ?? null,
+  };
+}
+
 export function useRoundDetail(roundId: string, initialSnapshot?: any) {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -148,6 +209,9 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
 
   // Wolf game: per-hole picks keyed by hole_number
   const [wolfPicksByHole, setWolfPicksByHole] = useState<Record<number, WolfPick>>({});
+
+  // Shot tracking: optional per-hole detail keyed by `${participant_id}:${hole_number}`
+  const [holeDetailsByKey, setHoleDetailsByKey] = useState<Record<string, HoleDetail>>({});
 
   const toNumOrNull = (v: any) => {
     if (v == null) return null;
@@ -491,6 +555,61 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
     };
   }, [roundId, debouncedFetchAll]);
 
+  // Shot tracking details: initial load + realtime. Like wolf picks, this table
+  // post-dates the snapshot RPC, so it's fetched directly rather than widening
+  // get_round_detail_snapshot.
+  useEffect(() => {
+    if (!roundId) return;
+    let cancelled = false;
+
+    const fetchDetails = async () => {
+      const { data } = await supabase
+        .from("round_hole_details")
+        .select(HOLE_DETAIL_COLUMNS)
+        .eq("round_id", roundId);
+      if (cancelled || !data) return;
+      const map: Record<string, HoleDetail> = {};
+      for (const row of data as any[]) {
+        map[`${row.participant_id}:${row.hole_number}`] = holeDetailFromRow(row);
+      }
+      // Merge rather than replace: an in-flight optimistic tap must survive a
+      // reconcile that raced it (same rule as scoresByKey in hydrateFromSnapshot).
+      setHoleDetailsByKey((prev) => ({ ...prev, ...map }));
+    };
+
+    void fetchDetails();
+
+    const dispose = subscribeWithChannelRetry({
+      makeChannel: () =>
+        supabase
+          .channel(`round-hole-details:${roundId}`)
+          .on(
+            "postgres_changes",
+            { event: "*", schema: "public", table: "round_hole_details", filter: `round_id=eq.${roundId}` },
+            (payload) => {
+              const row: any = payload.eventType === "DELETE" ? payload.old : payload.new;
+              if (row?.participant_id == null || row?.hole_number == null) return;
+              const key = `${row.participant_id}:${row.hole_number}`;
+              if (payload.eventType === "DELETE") {
+                setHoleDetailsByKey((prev) => {
+                  const next = { ...prev };
+                  delete next[key];
+                  return next;
+                });
+                return;
+              }
+              setHoleDetailsByKey((prev) => ({ ...prev, [key]: holeDetailFromRow(row) }));
+            }
+          ),
+      onReconciled: () => void fetchDetails(),
+    });
+
+    return () => {
+      cancelled = true;
+      dispose();
+    };
+  }, [roundId]);
+
   // realtime: meta changes (refetch all, debounced to prevent burst reloads)
   useEffect(() => {
     if (!roundId) return;
@@ -733,6 +852,10 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
     // Wolf
     wolfPicksByHole,
     setWolfPicksByHole,
+
+    // Shot tracking
+    holeDetailsByKey,
+    setHoleDetailsByKey,
 
     fetchAll,
     canScore,
