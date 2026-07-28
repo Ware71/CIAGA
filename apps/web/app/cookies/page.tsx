@@ -3,10 +3,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { LegalPage } from "@/components/legal/LegalPage";
 import { SITE_NAME, CONTACT_EMAIL } from "@/lib/legal";
+import { CookiePreferencesButton } from "@/components/site/CookiePreferencesButton";
 
 export const metadata: Metadata = {
   title: "Cookie Policy",
   description: `The cookies and local storage ${SITE_NAME} uses, and how to manage them.`,
+  alternates: { canonical: "/cookies" },
 };
 
 export default function CookiesPage() {
@@ -81,6 +83,11 @@ export default function CookiesPage() {
         <li>block or delete cookies in your browser settings (note that blocking the essential sign-in cookie will stop you being able to log in);</li>
         <li>manage notifications and clear cached data from your browser or device settings.</li>
       </ul>
+      {/* A control, not prose — the document text above is unchanged, so the
+          LEGAL_VERSION / CURRENT_TERMS_VERSION lockstep is unaffected. */}
+      <p>
+        <CookiePreferencesButton className="rounded-xl border border-emerald-900/70 bg-[#0b3b21]/70 px-4 py-2 text-sm font-medium text-[#f5e6b0] transition-colors hover:bg-[#0b3b21]" />
+      </p>
 
       <h2>5. If this changes</h2>
       <p>

@@ -25,9 +25,16 @@ export const CONTACT_EMAIL = "privacy@ciagagolf.com"; // TODO: confirm
 /** Geographic address for service. Leave "" to fall back to "available on request". */
 export const POSTAL_ADDRESS = ""; // TODO: supply before launch (see note above)
 
-/** Marketing site + app URLs. */
+/**
+ * Marketing site + app URLs. APP_URL is the single source of truth for the
+ * "open the app" links — previously it was duplicated as a local const in
+ * page.tsx and Footer.tsx, which is why a misplaced .env.local went unnoticed
+ * (all three fallbacks happened to agree).
+ */
 export const WEB_URL = "https://ciagagolf.com";
-export const APP_URL = "https://app.ciagagolf.com";
+export const APP_URL = (
+  process.env.NEXT_PUBLIC_APP_URL || "https://app.ciagagolf.com"
+).replace(/\/+$/, "");
 
 /** Governing law / jurisdiction. */
 export const GOVERNING_LAW = "England and Wales";

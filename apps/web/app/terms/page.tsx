@@ -14,6 +14,7 @@ import {
 export const metadata: Metadata = {
   title: "Terms of Use",
   description: `The terms governing your use of ${SITE_NAME}.`,
+  alternates: { canonical: "/terms" },
 };
 
 export default function TermsPage() {

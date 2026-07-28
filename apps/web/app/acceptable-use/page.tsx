@@ -7,6 +7,7 @@ import { SITE_NAME, CONTACT_EMAIL } from "@/lib/legal";
 export const metadata: Metadata = {
   title: "Acceptable Use Policy",
   description: `The rules for content and conduct on ${SITE_NAME}.`,
+  alternates: { canonical: "/acceptable-use" },
 };
 
 export default function AcceptableUsePage() {
