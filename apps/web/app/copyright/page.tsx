@@ -7,6 +7,7 @@ import { SITE_NAME, OPERATOR_NAME, CONTACT_EMAIL } from "@/lib/legal";
 export const metadata: Metadata = {
   title: "Copyright & Takedown Policy",
   description: `How to report copyright infringement on ${SITE_NAME} (DMCA and UK notice-and-takedown).`,
+  alternates: { canonical: "/copyright" },
 };
 
 export default function CopyrightPage() {

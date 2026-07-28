@@ -1,7 +1,6 @@
 /* eslint-disable react/no-unescaped-entities */
 import type { Metadata } from "next";
 import Link from "next/link";
-import Image from "next/image";
 import {
   SITE_NAME,
   OPERATOR_NAME,
@@ -10,10 +9,12 @@ import {
   POSTAL_ADDRESS,
   LAST_UPDATED,
 } from "@/lib/legal";
+import { SiteHeader } from "@/components/site/SiteHeader";
 
 export const metadata: Metadata = {
   title: "Legal",
   description: `Legal policies and operator information for ${SITE_NAME}.`,
+  alternates: { canonical: "/legal" },
 };
 
 const docs = [
@@ -26,21 +27,19 @@ const docs = [
 
 export default function LegalIndexPage() {
   return (
-    <main className="min-h-screen bg-white text-zinc-900">
-      <header className="sticky top-0 z-10 border-b border-zinc-200 bg-white/80 backdrop-blur">
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-5 py-3">
-          <Link href="/" className="flex items-center gap-3">
-            <Image src="/ciaga-logo.png" alt="CIAGA" width={30} height={30} className="rounded" />
-            <span className="text-sm font-semibold tracking-wide">CIAGA</span>
-          </Link>
-        </div>
-      </header>
+    <main id="main" className="min-h-screen bg-[#042713] text-emerald-50">
+      <SiteHeader variant="legal" />
 
       <div className="mx-auto max-w-3xl px-5 py-10">
-        <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">Legal</h1>
-        <p className="mt-2 text-sm text-zinc-500">Last updated: {LAST_UPDATED}</p>
-        <p className="mt-4 text-pretty text-lg text-zinc-700">
-          Our policies and the information you're entitled to about who runs {SITE_NAME}.
+        <h1 className="text-3xl font-extrabold tracking-tight text-[#f5e6b0] sm:text-4xl">
+          Legal
+        </h1>
+        <p className="mt-2 text-sm text-emerald-200/80">
+          Last updated: {LAST_UPDATED}
+        </p>
+        <p className="mt-4 text-pretty text-lg text-emerald-100/80">
+          Our policies and the information you're entitled to about who runs{" "}
+          {SITE_NAME}.
         </p>
 
         <div className="mt-8 grid gap-4 sm:grid-cols-2">
@@ -48,31 +47,36 @@ export default function LegalIndexPage() {
             <Link
               key={d.href}
               href={d.href}
-              className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm transition-colors hover:border-zinc-300 hover:bg-zinc-50"
+              className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-5 transition-colors hover:border-emerald-800/70 hover:bg-[#0b3b21]"
             >
-              <p className="text-sm font-semibold">{d.title}</p>
-              <p className="mt-2 text-sm text-zinc-700">{d.desc}</p>
+              <p className="text-sm font-extrabold text-[#f5e6b0]">{d.title}</p>
+              <p className="mt-2 text-sm text-emerald-100/75">{d.desc}</p>
             </Link>
           ))}
         </div>
 
-        <div className="mt-10 rounded-2xl border border-zinc-200 bg-zinc-50 p-6">
-          <h2 className="text-lg font-bold">Who operates {SITE_NAME}</h2>
-          <p className="mt-3 text-sm text-zinc-700">
-            {SITE_NAME} is operated by <strong>{OPERATOR_NAME}</strong>,{" "}
+        <div className="mt-10 rounded-2xl border border-emerald-900/60 bg-gradient-to-br from-[#0b3b21]/90 to-[#07301a]/90 p-6">
+          <h2 className="text-lg font-bold text-[#f5e6b0]">
+            Who operates {SITE_NAME}
+          </h2>
+          <p className="mt-3 text-sm text-emerald-100/80">
+            {SITE_NAME} is operated by <strong className="font-semibold text-[#f5e6b0]">{OPERATOR_NAME}</strong>,{" "}
             {OPERATOR_DESCRIPTOR}.
           </p>
-          <dl className="mt-4 space-y-2 text-sm text-zinc-700">
+          <dl className="mt-4 space-y-2 text-sm text-emerald-100/80">
             <div>
-              <dt className="inline font-semibold">Contact: </dt>
+              <dt className="inline font-semibold text-emerald-50">Contact: </dt>
               <dd className="inline">
-                <a className="text-emerald-700 underline" href={`mailto:${CONTACT_EMAIL}`}>
+                <a
+                  className="text-[#f5e6b0] underline underline-offset-2 transition-colors hover:text-[#e9d79c]"
+                  href={`mailto:${CONTACT_EMAIL}`}
+                >
                   {CONTACT_EMAIL}
                 </a>
               </dd>
             </div>
             <div>
-              <dt className="inline font-semibold">Address: </dt>
+              <dt className="inline font-semibold text-emerald-50">Address: </dt>
               <dd className="inline">
                 {POSTAL_ADDRESS ? POSTAL_ADDRESS : "Available on written request to the contact email above."}
               </dd>
