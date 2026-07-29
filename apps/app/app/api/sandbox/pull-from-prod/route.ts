@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getProductionReaderClient } from "@/lib/supabaseProductionReader";
+import {
+  applyStepTransform,
+  planCopy,
+  type CopyPlan,
+  type CopyStep,
+  type SchemaGraph,
+} from "@/lib/sandbox/tableGraph";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 type ProductionReaderClient = ReturnType<typeof getProductionReaderClient>;
@@ -34,35 +41,65 @@ function isFKViolation(error: any): boolean {
   );
 }
 
+function isTableNotFound(e: any): boolean {
+  const msg = (e?.message ?? "").toLowerCase();
+  return (
+    e?.code === "42P01" ||
+    msg.includes("does not exist") ||
+    msg.includes("schema cache")
+  );
+}
+
+/** Best-effort constraint name out of a PostgREST error, for the orphan report. */
+function constraintOf(error: any): string {
+  const direct = error?.details ?? error?.message ?? "";
+  const m = /constraint "([^"]+)"/.exec(direct);
+  return m?.[1] ?? "unknown constraint";
+}
+
+type SkippedRow = { row: any; constraint: string };
+
+type InsertResult = {
+  inserted: number;
+  skipped: SkippedRow[];
+};
+
 async function insertRows(
   client: SupabaseClient,
   table: string,
   rows: any[],
-  transform?: (row: any) => any,
-  onConflict: string = "id"
-): Promise<{ inserted: number; skipped: number }> {
-  if (rows.length === 0) return { inserted: 0, skipped: 0 };
-  const prepared = transform ? rows.map(transform) : rows;
+  onConflict: string | null
+): Promise<InsertResult> {
+  if (rows.length === 0) return { inserted: 0, skipped: [] };
   const chunkSize = 500;
   let inserted = 0;
-  let skipped = 0;
+  const skipped: SkippedRow[] = [];
 
-  for (let i = 0; i < prepared.length; i += chunkSize) {
-    const chunk = prepared.slice(i, i + chunkSize);
+  // Tables without a primary key can't be upserted on a conflict target; they
+  // are only ever written into a freshly truncated database, so a plain insert
+  // is correct there.
+  const write = (payload: any) =>
+    onConflict
+      ? client.from(table).upsert(payload, { onConflict })
+      : client.from(table).insert(payload);
+
+  for (let i = 0; i < rows.length; i += chunkSize) {
+    const chunk = rows.slice(i, i + chunkSize);
     // Upsert so trigger-created rows (e.g. round_hole_states created when rounds
     // are inserted) get overwritten with production data rather than causing
     // duplicate key violations.
-    const { error } = await client.from(table).upsert(chunk, { onConflict });
+    const { error } = await write(chunk);
     if (!error) {
       inserted += chunk.length;
     } else if (isFKViolation(error)) {
-      // Chunk contains orphaned rows — fall back to row-by-row and skip bad rows
+      // Chunk contains rows whose parent isn't in place yet — fall back to
+      // row-by-row and hold the failures for the re-drive pass.
       for (const row of chunk) {
-        const { error: rowErr } = await client.from(table).upsert(row, { onConflict });
+        const { error: rowErr } = await write(row);
         if (!rowErr) {
           inserted++;
         } else if (isFKViolation(rowErr)) {
-          skipped++;
+          skipped.push({ row, constraint: constraintOf(rowErr) });
         } else {
           throw Object.assign(new Error(rowErr.message), { code: rowErr.code });
         }
@@ -75,86 +112,11 @@ async function insertRows(
   return { inserted, skipped };
 }
 
-function isTableNotFound(e: any): boolean {
-  const msg = (e?.message ?? "").toLowerCase();
-  return (
-    e?.code === "42P01" ||
-    msg.includes("does not exist") ||
-    msg.includes("schema cache")
-  );
+/** Identify a row in the orphan report without dumping the whole thing. */
+function rowKey(row: any, onConflict: string | null): string {
+  const cols = onConflict ? onConflict.split(",") : ["id"];
+  return cols.map((c) => `${c}=${row?.[c] ?? "?"}`).join(" ");
 }
-
-// Tables in FK-safe insertion order (dependencies before dependents)
-const TABLE_PLAN: Array<{ table: string; transform?: (row: any) => any; onConflict?: string }> = [
-  { table: "courses" },
-  { table: "course_tee_boxes" },
-  { table: "course_tee_holes" },
-  // Null out owner_user_id — auth.users from prod don't exist in staging.
-  // The impersonation feature creates sandbox auth users on demand.
-  { table: "profiles", transform: (row) => ({ ...row, owner_user_id: null }) },
-  // event_tee_time_id is a circular FK (event_tee_times.round_id points back here);
-  // nulled on insert and restored in Phase 4 once event_tee_times exist.
-  { table: "rounds", transform: (row) => ({ ...row, event_tee_time_id: null }) },
-  // Snapshots reference rounds and must precede round_participants (which FK to tee_snapshots)
-  { table: "round_course_snapshots", transform: (row) => ({ ...row, source_course_id: null }) },
-  { table: "round_tee_snapshots", transform: (row) => ({ ...row, source_tee_box_id: null }) },
-  // round_teams must precede round_participants: participants have a nullable FK to teams
-  { table: "round_teams" },
-  { table: "round_participants" },
-  { table: "round_hole_states", onConflict: "participant_id,hole_number" },
-  { table: "round_score_events" },
-  { table: "round_hole_snapshots" },
-  { table: "round_format_results" },
-  { table: "round_sidegame_results" },
-  { table: "follows" },
-  { table: "feed_items" },
-  { table: "feed_comments" },
-  { table: "feed_reactions" },
-  { table: "feed_reports" },
-  { table: "feed_item_subjects" },
-  { table: "feed_item_targets" },
-  { table: "feed_comment_votes" },
-  { table: "invites" },
-  { table: "handicap_index_history" },
-  { table: "handicap_round_results", transform: (row) => ({ ...row, tee_snapshot_id: null }) },
-  { table: "major_groups" },
-  { table: "major_group_memberships" },
-  { table: "major_group_standings" },
-  { table: "group_seasons" },
-  { table: "group_charges", transform: (row) => ({ ...row, created_by: null }) },
-  { table: "group_balance_transactions" },
-  { table: "group_season_standings_entries", onConflict: "group_season_id,profile_id" },
-  { table: "competitions" },
-  { table: "competition_event_templates" },
-  // event_rules_versions is not in TABLE_PLAN — null out FKs that reference it
-  { table: "events", transform: (row) => ({ ...row, published_rules_version_id: null }) },
-  { table: "event_entries" },
-  // event_rounds must precede event_tee_times: tee times FK to event_rounds
-  { table: "event_rounds" },
-  { table: "event_tee_times" },
-  { table: "event_charges" },
-  { table: "event_player_charges" },
-  { table: "event_round_submissions" },
-  { table: "event_leaderboard_entries" },
-  { table: "event_audit_log" },
-  { table: "event_extras" },
-  { table: "event_waitlist" },
-  { table: "event_winnings" },
-  { table: "event_player_freeze_snapshots", onConflict: "event_id,profile_id" },
-  { table: "event_playoffs" },
-  { table: "event_playoff_holes" },
-  { table: "event_playoff_scores" },
-  { table: "prize_pots" },
-  { table: "prize_pot_entries" },
-  { table: "prize_pot_payouts" },
-  { table: "matchplay_stages" },
-  { table: "matchplay_fixtures" },
-  { table: "matchplay_bracket_slots" },
-  { table: "matchplay_league_table_entries" },
-  { table: "event_history_summaries" },
-  { table: "profile_event_stats" },
-  { table: "user_notifications" },
-];
 
 export async function POST(req: Request) {
   if (process.env.NEXT_PUBLIC_APP_ENV !== "sandbox") {
@@ -169,6 +131,9 @@ export async function POST(req: Request) {
   if (userErr || !userData?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  // A real staging auth.users id — the substitute for NOT NULL references into
+  // auth that production values can never satisfy here.
+  const operatorAuthUid = userData.user.id;
 
   let prodClient: ProductionReaderClient;
   try {
@@ -176,6 +141,20 @@ export async function POST(req: Request) {
   } catch (e: any) {
     return NextResponse.json(
       { error: `Production credentials not configured: ${e.message}` },
+      { status: 500 }
+    );
+  }
+
+  // Phase 0: derive the copy plan from staging's live schema. Done before the
+  // stream opens so a planning failure is a plain error response.
+  let plan: CopyPlan;
+  try {
+    const { data, error } = await supabaseAdmin.rpc("sandbox_schema_graph");
+    if (error) throw new Error(error.message);
+    plan = planCopy(data as SchemaGraph);
+  } catch (e: any) {
+    return NextResponse.json(
+      { error: `Could not read the staging schema graph: ${e?.message ?? "unknown error"}` },
       { status: 500 }
     );
   }
@@ -188,10 +167,21 @@ export async function POST(req: Request) {
       };
 
       try {
-        // Phase 1: read all tables from production.
-        // Tables that don't exist in production yet (new in develop) are skipped.
+        send({
+          type: "plan",
+          discovered: plan.discovered,
+          copying: plan.steps.length,
+          denied: plan.denied,
+          blocked: plan.blocked,
+          preserved: plan.preserved,
+          uncovered: plan.uncovered,
+          cycleBreaks: plan.fixups,
+        });
+
+        // Phase 1: read every planned table from production.
+        // Tables that don't exist in production yet (new on develop) are skipped.
         const snapshot: Record<string, any[]> = {};
-        for (const { table } of TABLE_PLAN) {
+        for (const { table } of plan.steps) {
           try {
             const rows = await readAllRows(prodClient, table);
             snapshot[table] = rows;
@@ -215,49 +205,125 @@ export async function POST(req: Request) {
         // Phase 3: write production data into staging.
         // Per-table errors (schema mismatch, column drift) are reported but don't
         // abort the rest — staging will simply be missing that table's data.
+        const stepByTable = new Map<string, CopyStep>(plan.steps.map((s) => [s.table, s]));
+        const pending = new Map<string, SkippedRow[]>();
         let totalRows = 0;
         let tablesCopied = 0;
-        for (const { table, transform, onConflict } of TABLE_PLAN) {
+
+        for (const step of plan.steps) {
           try {
+            const prepared = (snapshot[step.table] ?? []).map((row) =>
+              applyStepTransform(step, row, operatorAuthUid)
+            );
             const { inserted, skipped } = await insertRows(
               supabaseAdmin as any,
-              table,
-              snapshot[table],
-              transform,
-              onConflict
+              step.table,
+              prepared,
+              step.onConflict
             );
             totalRows += inserted;
             if (inserted > 0) tablesCopied++;
-            send({ type: "write", table, rows: inserted, skipped });
+            if (skipped.length > 0) pending.set(step.table, skipped);
+            send({ type: "write", table: step.table, rows: inserted, skipped: skipped.length });
           } catch (e: any) {
-            send({ type: "write_error", table, message: e?.message ?? "Insert failed" });
+            send({ type: "write_error", table: step.table, message: e?.message ?? "Insert failed" });
           }
         }
 
-        // Phase 4: restore the circular rounds → event_tee_times FK that was
-        // nulled on insert. Full-row upsert overwrites all columns, so the
-        // original event_tee_time_id values come back.
-        const linkedRounds = (snapshot["rounds"] ?? []).filter(
-          (r) => r.event_tee_time_id != null
-        );
-        if (linkedRounds.length > 0) {
+        // Phase 4: restore the columns that were nulled to break FK cycles
+        // (rounds ↔ event_tee_times, events ↔ event_rules_versions). A full-row
+        // upsert overwrites every column, so the original values come back.
+        for (const fixup of plan.fixups) {
+          const step = stepByTable.get(fixup.table);
+          if (!step) continue;
+          const rows = (snapshot[fixup.table] ?? []).filter((r) =>
+            fixup.columns.some((c) => r?.[c] != null)
+          );
+          if (rows.length === 0) continue;
+          // A full-row rewrite needs a conflict target; without a PK it would
+          // duplicate every row instead of updating it.
+          if (!step.onConflict) {
+            send({
+              type: "write_error",
+              table: fixup.table,
+              message: `cannot restore ${fixup.columns.join(", ")} — table has no primary key`,
+            });
+            continue;
+          }
           try {
             const { inserted, skipped } = await insertRows(
               supabaseAdmin as any,
-              "rounds",
-              linkedRounds
+              fixup.table,
+              // Restore the cycle columns; permanent nulls and operator
+              // remaps stay as they were on the first pass.
+              rows.map((row) => applyStepTransform(step, row, operatorAuthUid, "fixup")),
+              step.onConflict
             );
-            send({ type: "write", table: "rounds ← event_tee_times", rows: inserted, skipped });
+            if (skipped.length > 0) {
+              pending.set(fixup.table, [...(pending.get(fixup.table) ?? []), ...skipped]);
+            }
+            send({
+              type: "write",
+              table: `${fixup.table} ← ${fixup.columns.join(", ")}`,
+              rows: inserted,
+              skipped: skipped.length,
+            });
           } catch (e: any) {
             send({
               type: "write_error",
-              table: "rounds ← event_tee_times",
+              table: `${fixup.table} ← ${fixup.columns.join(", ")}`,
               message: e?.message ?? "Restore failed",
             });
           }
         }
 
-        send({ type: "done", tablesCopied, rowsCopied: totalRows });
+        // Phase 5: re-drive every row that was skipped on the way through. Most
+        // skips are ordering artefacts — a self-referencing FK (profiles.created_by,
+        // feed_comments.parent_comment_id) whose parent came later in the same
+        // table, or a row that landed before a cycle fixup. Now that everything is
+        // in place, retry once. Only rows that fail twice are genuine orphans.
+        let orphanTotal = 0;
+        for (const step of plan.steps) {
+          const skipped = pending.get(step.table);
+          if (!skipped || skipped.length === 0) continue;
+
+          let recovered = 0;
+          const stillFailing: SkippedRow[] = [];
+          for (const entry of skipped) {
+            const { error } = step.onConflict
+              ? await (supabaseAdmin as any)
+                  .from(step.table)
+                  .upsert(entry.row, { onConflict: step.onConflict })
+              : await (supabaseAdmin as any).from(step.table).insert(entry.row);
+            if (!error) recovered++;
+            else stillFailing.push({ row: entry.row, constraint: constraintOf(error) });
+          }
+
+          totalRows += recovered;
+          if (recovered > 0) {
+            send({ type: "recovered", table: step.table, rows: recovered });
+          }
+          if (stillFailing.length > 0) {
+            orphanTotal += stillFailing.length;
+            const byConstraint = new Map<string, string[]>();
+            for (const f of stillFailing) {
+              const keys = byConstraint.get(f.constraint) ?? [];
+              if (keys.length < 5) keys.push(rowKey(f.row, step.onConflict));
+              byConstraint.set(f.constraint, keys);
+            }
+            send({
+              type: "orphan",
+              table: step.table,
+              rows: stillFailing.length,
+              constraints: [...byConstraint.entries()].map(([constraint, samples]) => ({
+                constraint,
+                samples,
+              })),
+            });
+          }
+        }
+
+        send({ type: "done", tablesCopied, rowsCopied: totalRows, orphans: orphanTotal });
       } catch (e: any) {
         send({ type: "error", message: e?.message ?? "Server error" });
       } finally {
