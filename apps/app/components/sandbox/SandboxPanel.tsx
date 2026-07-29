@@ -13,13 +13,32 @@ type ProfileItem = {
   owner_user_id: string | null;
 };
 
+type BlockedTable = { table: string; reason: string };
+
 type PullEvent =
+  | {
+      type: "plan";
+      discovered: number;
+      copying: number;
+      denied: BlockedTable[];
+      blocked: BlockedTable[];
+      preserved: string[];
+      uncovered: string[];
+      cycleBreaks: Array<{ table: string; columns: string[] }>;
+    }
   | { type: "read"; table: string; rows: number }
   | { type: "skip"; table: string }
   | { type: "wipe" }
   | { type: "write"; table: string; rows: number; skipped: number }
   | { type: "write_error"; table: string; message: string }
-  | { type: "done"; tablesCopied: number; rowsCopied: number }
+  | { type: "recovered"; table: string; rows: number }
+  | {
+      type: "orphan";
+      table: string;
+      rows: number;
+      constraints: Array<{ constraint: string; samples: string[] }>;
+    }
+  | { type: "done"; tablesCopied: number; rowsCopied: number; orphans: number }
   | { type: "error"; message: string };
 
 const PANEL_WIDTH = 312;
@@ -213,6 +232,12 @@ export function SandboxPanel() {
   const doneEvent = pullLog.find((e) => e.type === "done") as
     | Extract<PullEvent, { type: "done" }>
     | undefined;
+  const planEvent = pullLog.find((e) => e.type === "plan") as
+    | Extract<PullEvent, { type: "plan" }>
+    | undefined;
+  const orphanEvents = pullLog.filter((e) => e.type === "orphan") as Array<
+    Extract<PullEvent, { type: "orphan" }>
+  >;
   const showLog = pulling || pullLog.length > 0;
 
   return (
@@ -418,13 +443,56 @@ export function SandboxPanel() {
                 Pull from Production
               </p>
               <p className="mb-3 text-[10px] leading-relaxed text-slate-400">
-                Replaces all staging data with a live snapshot from production. Auth accounts are
-                stripped — use Switch Profile to sign in as any user.
+                Replaces all staging data with a live snapshot from production. The table list is
+                read from the live schema, so it covers everything. Auth accounts are stripped —
+                use Switch Profile to sign in as any user. Push subscriptions and derived fantasy
+                pricing caches are never copied.
               </p>
 
               {/* Live log — shown while pulling and after completion */}
               {showLog && (
-                <div className="mb-3 max-h-48 overflow-y-auto rounded-md bg-black/40 p-2 font-mono text-[9px]">
+                <div className="mb-3 max-h-64 overflow-y-auto rounded-md bg-black/40 p-2 font-mono text-[9px]">
+                  {planEvent && (
+                    <div className="mb-1.5 border-b border-white/5 pb-1.5">
+                      <p className="text-[#f5e6b0]/40">
+                        {planEvent.discovered} tables discovered ·{" "}
+                        <span className="text-slate-400">{planEvent.copying} copying</span> ·{" "}
+                        <span className="text-slate-500">{planEvent.denied.length} denied</span>
+                        {planEvent.blocked.length > 0 && (
+                          <>
+                            {" "}·{" "}
+                            <span className="text-red-400">
+                              {planEvent.blocked.length} blocked
+                            </span>
+                          </>
+                        )}
+                        {" "}·{" "}
+                        <span
+                          className={
+                            planEvent.uncovered.length > 0 ? "text-red-400" : "text-emerald-600"
+                          }
+                        >
+                          {planEvent.uncovered.length} uncovered
+                        </span>
+                      </p>
+                      {planEvent.denied.map((d) => (
+                        <div key={d.table} className="pl-2 text-slate-600">
+                          <span className="text-slate-500">{d.table}</span> — {d.reason}
+                        </div>
+                      ))}
+                      {planEvent.blocked.map((b) => (
+                        <div key={b.table} className="pl-2 text-red-500/80">
+                          <span className="text-red-400">{b.table}</span> — {b.reason}
+                        </div>
+                      ))}
+                      {planEvent.uncovered.map((t) => (
+                        <div key={t} className="pl-2 text-red-400">
+                          {t} — not covered by the planner
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   {hasReadEvents && (
                     <p className="mb-0.5 text-[#f5e6b0]/40">Reading from production</p>
                   )}
@@ -475,13 +543,54 @@ export function SandboxPanel() {
                           <span className="ml-2 shrink-0 text-emerald-600">
                             ✓{ev.skipped > 0 && (
                               <span className="ml-1 text-amber-600/70">
-                                ({ev.skipped} orphaned)
+                                ({ev.skipped} deferred)
                               </span>
                             )}
                           </span>
                         </div>
                       );
                     })}
+
+                  {/* Rows that failed on the way through and succeeded on retry
+                      once every table was in place — ordering artefacts, not orphans. */}
+                  {pullLog
+                    .filter((e) => e.type === "recovered")
+                    .map((e, i) => {
+                      const ev = e as Extract<PullEvent, { type: "recovered" }>;
+                      return (
+                        <div key={i} className="flex justify-between pl-2">
+                          <span className="truncate text-slate-600">↻ {ev.table}</span>
+                          <span className="ml-2 shrink-0 text-emerald-700">
+                            +{ev.rows.toLocaleString()}
+                          </span>
+                        </div>
+                      );
+                    })}
+
+                  {orphanEvents.length > 0 && (
+                    <div className="mt-1.5 rounded border border-red-800/50 bg-red-950/40 p-1.5">
+                      <p className="mb-1 font-semibold text-red-400">
+                        {orphanEvents.reduce((n, e) => n + e.rows, 0).toLocaleString()} orphaned
+                        rows dropped
+                      </p>
+                      {orphanEvents.map((ev) => (
+                        <div key={ev.table} className="mb-1">
+                          <span className="text-red-300">{ev.table}</span>
+                          <span className="ml-1 text-red-500/70">({ev.rows})</span>
+                          {ev.constraints.map((c) => (
+                            <div key={c.constraint} className="pl-2 text-red-600/80">
+                              {c.constraint}
+                              {c.samples.map((s) => (
+                                <div key={s} className="pl-2 text-red-700/70">
+                                  {s}
+                                </div>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   {pullLog
                     .filter((e) => e.type === "error")
@@ -495,9 +604,15 @@ export function SandboxPanel() {
                     })}
 
                   {doneEvent && (
-                    <p className="mt-1 text-emerald-400">
+                    <p
+                      className={`mt-1 ${
+                        doneEvent.orphans > 0 ? "text-amber-400" : "text-emerald-400"
+                      }`}
+                    >
                       Done — {doneEvent.tablesCopied} tables,{" "}
                       {doneEvent.rowsCopied.toLocaleString()} rows
+                      {doneEvent.orphans > 0 &&
+                        `, ${doneEvent.orphans.toLocaleString()} orphaned`}
                     </p>
                   )}
 
