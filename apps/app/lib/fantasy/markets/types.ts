@@ -78,8 +78,20 @@ export type GenerateCtx = {
 
 export type FinalPlayerScore = {
   profileId: string;
-  /** Final leaderboard position (countback/playoff resolved); null = no result. */
+  /**
+   * Leaderboard position with TIES INTACT (standard 1224 competition ranking) —
+   * two players level on net both hold position 1. Position markets settle on
+   * this: backing a finish of 1st and finishing T1 pays out, regardless of any
+   * subsequent playoff.
+   */
   position: number | null;
+  /**
+   * Position after the tie-break, from event_leaderboard_entries.playoff_final_position.
+   * Only the OUTRIGHT WINNER market uses this — the trophy is decided by the
+   * playoff or countback, so exactly one player can have won it. Falls back to
+   * `position` when no tie-break was run.
+   */
+  resolvedPosition: number | null;
   grossScore: number | null;
   netScore: number | null;
   /** Birdie-or-better holes; null = unknown. */
@@ -111,6 +123,12 @@ export type FinalScoringData = {
  */
 export type LiveMarketCtx = {
   eventCompleted: boolean;
+  /**
+   * The player's leaderboard row is frozen for the ceremony. Their remaining
+   * holes are hidden from everyone, so their markets must not be backable or
+   * cashable — the outcome may already be decided behind the freeze.
+   */
+  frozen: (profileId: string) => boolean;
   /** All the player's rounds finished (or the given round finished). */
   roundComplete: (profileId: string, round?: number) => boolean;
   /** Holes left to play (event-wide or within the round); Infinity if not started. */
@@ -175,4 +193,30 @@ export interface MarketDefinition {
 export function playerName(names: Record<string, string>, profileId: string | null): string {
   if (!profileId) return "Unknown";
   return names[profileId] ?? "Unknown";
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Every player a selection's outcome depends on: the market's subject and
+ * opponent, plus the selection key itself when it names a player (outright,
+ * top-N and finish-range key on a profile id). Event-wide markets — the field
+ * specials — depend on nobody in particular and return empty.
+ *
+ * Used to apply the ceremony-freeze lock uniformly rather than repeating it in
+ * all eleven market definitions.
+ */
+export function selectionSubjects(market: FantasyMarket, selectionKey: string): string[] {
+  const ids = [market.subject_profile_id, market.opponent_profile_id];
+  if (UUID_RE.test(selectionKey)) ids.push(selectionKey);
+  return ids.filter((id): id is string => !!id);
+}
+
+/** True when the ceremony freeze hides any player this selection depends on. */
+export function selectionIsFrozen(
+  market: FantasyMarket,
+  selectionKey: string,
+  ctx: LiveMarketCtx
+): boolean {
+  return selectionSubjects(market, selectionKey).some((id) => ctx.frozen(id));
 }

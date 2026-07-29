@@ -9,7 +9,7 @@ import {
 } from "@/lib/fantasy/cashout";
 import { getMarketDefinition } from "@/lib/fantasy/markets/registry";
 import { scoreSelectionProbability } from "@/lib/fantasy/markets/analytic";
-import type { FantasyMarket } from "@/lib/fantasy/markets/types";
+import { selectionIsFrozen, type FantasyMarket } from "@/lib/fantasy/markets/types";
 
 /** Batch-load the current exact-score pmfs for the given events → keyed by
  * `${eventId}|${profileId}|${basis}`. Used to price score_band/score_total legs
@@ -387,6 +387,11 @@ export async function requestParlayCashout(params: {
       throw new PickError("A market in this acca doesn't support cash-out");
     }
     const { live } = liveByEvent.get(leg.event_id)!;
+    if (selectionIsFrozen(market, leg.selection_key, live)) {
+      throw new PickError(
+        "Cash-out is unavailable — a player in this acca is frozen for the ceremony"
+      );
+    }
     if (def.isSelfDependent(market, leg.selection_key, params.profileId, live)) {
       throw new PickError(
         "Cash-out is unavailable — your own next score could decide a leg"

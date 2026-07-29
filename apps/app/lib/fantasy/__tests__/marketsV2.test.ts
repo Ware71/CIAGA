@@ -94,8 +94,9 @@ function market(overrides: Partial<FantasyMarket>): FantasyMarket {
 }
 
 function finalPlayer(overrides: Partial<FinalPlayerScore> & { profileId: string }): FinalPlayerScore {
-  return {
+  const base = {
     position: null,
+    resolvedPosition: null,
     grossScore: null,
     netScore: null,
     birdieCount: null,
@@ -105,6 +106,9 @@ function finalPlayer(overrides: Partial<FinalPlayerScore> & { profileId: string 
     withdrawn: false,
     ...overrides,
   };
+  // No tie-break unless a test says so: the resolved position mirrors the tied
+  // one, which is what a playoff-free event looks like.
+  return { ...base, resolvedPosition: overrides.resolvedPosition ?? base.position };
 }
 
 function finalData(

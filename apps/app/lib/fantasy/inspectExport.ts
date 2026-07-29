@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import {
   ACTIVE_ENTRY_STATUSES,
   allowancePct,
+  conversionFromHoles,
   loadSimInputs,
   resolvePlayingHandicapDetails,
   simulateEvent,
@@ -123,7 +124,7 @@ export async function buildInspectWorkbook(
 
   const profileHi = new Map<string, number | null>();
   for (const r of stored) profileHi.set(r.profile_id, r.handicap_index);
-  const phDetails = resolvePlayingHandicapDetails(ctx.event, entries, profileHi);
+  const phDetails = resolvePlayingHandicapDetails(ctx.event, entries, profileHi, conversionFromHoles(ctx.holes));
 
   const sim = simulateEvent(ctx, version);
   const seed = hashSeed(ctx.event.id, version);

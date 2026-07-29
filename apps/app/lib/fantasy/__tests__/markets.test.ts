@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MARKET_REGISTRY } from "@/lib/fantasy/markets/registry";
+import { selectionIsFrozen } from "@/lib/fantasy/markets/types";
 import type {
   FantasyMarket,
   FinalScoringData,
@@ -42,9 +43,10 @@ function score(
   profileId: string,
   overrides: Partial<FinalScoringData["players"][string]> = {}
 ): FinalScoringData["players"][string] {
-  return {
+  const base = {
     profileId,
     position: 1,
+    resolvedPosition: 1,
     grossScore: 85,
     netScore: 72,
     birdieCount: 1,
@@ -54,11 +56,15 @@ function score(
     withdrawn: false,
     ...overrides,
   };
+  // No tie-break unless a test says so: the resolved position mirrors the tied
+  // one, which is what a playoff-free event looks like.
+  return { ...base, resolvedPosition: overrides.resolvedPosition ?? base.position };
 }
 
 function liveCtx(overrides: Partial<LiveMarketCtx> = {}): LiveMarketCtx {
   return {
     eventCompleted: false,
+    frozen: () => false,
     roundComplete: () => false,
     holesRemaining: () => 18,
     currentBirdies: () => 0,
@@ -271,6 +277,37 @@ describe("pricing", () => {
   });
 });
 
+describe("ceremony freeze locks the affected selections", () => {
+  const FROZEN = "11111111-1111-4111-8111-111111111111";
+  const OPEN = "22222222-2222-4222-8222-222222222222";
+  const ctx = liveCtx({ frozen: (id: string) => id === FROZEN });
+
+  it("locks a market whose subject is frozen", () => {
+    const m = makeMarket({ market_type: "score_band", subject_profile_id: FROZEN });
+    expect(selectionIsFrozen(m, "le_75", ctx)).toBe(true);
+  });
+
+  it("locks a head-to-head when EITHER side is frozen", () => {
+    const m = makeMarket({
+      market_type: "h2h",
+      subject_profile_id: OPEN,
+      opponent_profile_id: FROZEN,
+    });
+    expect(selectionIsFrozen(m, "a", ctx)).toBe(true);
+  });
+
+  it("locks a field-wide market only for the frozen player's selection", () => {
+    const m = makeMarket({ market_type: "outright_winner" });
+    expect(selectionIsFrozen(m, FROZEN, ctx)).toBe(true);
+    expect(selectionIsFrozen(m, OPEN, ctx)).toBe(false);
+  });
+
+  it("leaves event-wide specials alone — they depend on nobody in particular", () => {
+    const m = makeMarket({ market_type: "field_special", params: { kind: "hio" } });
+    expect(selectionIsFrozen(m, "yes", ctx)).toBe(false);
+  });
+});
+
 describe("settlement truth tables", () => {
   it("outright winner: position 1 wins, others lose, withdrawn voids", () => {
     const outcomes = MARKET_REGISTRY.outright_winner.settle(
@@ -284,6 +321,47 @@ describe("settlement truth tables", () => {
     expect(outcomes.get("a")).toBe("won");
     expect(outcomes.get("b")).toBe("lost");
     expect(outcomes.get("c")).toBe("void");
+  });
+
+  // The two halves of the tie rule: the trophy is decided by the playoff, but
+  // a finishing-position bet pays on the tied position regardless.
+  it("outright winner: a playoff decides it — the loser of a T1 is graded lost", () => {
+    const outcomes = MARKET_REGISTRY.outright_winner.settle(
+      finalData({
+        a: score("a", { position: 1, resolvedPosition: 1 }),
+        b: score("b", { position: 1, resolvedPosition: 2 }),
+      }),
+      makeMarket({})
+    );
+    expect(outcomes.get("a")).toBe("won");
+    expect(outcomes.get("b")).toBe("lost");
+  });
+
+  it("finish position: T1 pays 1st for BOTH players, playoff notwithstanding", () => {
+    const final = finalData({
+      a: score("a", { position: 1, resolvedPosition: 1 }),
+      b: score("b", { position: 1, resolvedPosition: 2 }),
+    });
+    for (const pid of ["a", "b"]) {
+      const outcomes = MARKET_REGISTRY.finish_position.settle(
+        final,
+        makeMarket({ market_type: "finish_position", subject_profile_id: pid })
+      );
+      expect(outcomes.get("1")).toBe("won");
+      expect(outcomes.get("2")).toBe("lost");
+    }
+  });
+
+  it("top-3: a T3 finish pays, playoff notwithstanding", () => {
+    const outcomes = MARKET_REGISTRY.top_n.settle(
+      finalData({
+        a: score("a", { position: 3, resolvedPosition: 4 }),
+        b: score("b", { position: 4, resolvedPosition: 3 }),
+      }),
+      makeMarket({ market_type: "top_n", params: { n: 3 } })
+    );
+    expect(outcomes.get("a")).toBe("won");
+    expect(outcomes.get("b")).toBe("lost");
   });
 
   it("top-3: position ≤ n wins", () => {

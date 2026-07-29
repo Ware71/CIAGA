@@ -1,7 +1,7 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { parsePointsAmount, readFantasyConfig } from "@/lib/fantasy/config";
 import { getMarketDefinition } from "@/lib/fantasy/markets/registry";
-import type { FantasyMarket } from "@/lib/fantasy/markets/types";
+import { selectionIsFrozen, type FantasyMarket } from "@/lib/fantasy/markets/types";
 import { estimateSingleCashouts } from "@/lib/fantasy/cashout";
 import { loadPlacementContext } from "@/lib/fantasy/odds";
 import { findSelfRestriction } from "@/lib/fantasy/selfRestriction";
@@ -51,6 +51,12 @@ export async function placePick(params: {
   if (!config) throw new PickError("Fantasy picks are not enabled for this group");
 
   const { live } = await loadPlacementContext(market.event_id);
+  // Ceremony freeze first: a frozen player's remaining holes are hidden from
+  // everyone, so the outcome may already be decided behind the freeze. Checked
+  // centrally rather than in each market definition.
+  if (selectionIsFrozen(market, params.selectionKey, live)) {
+    throw new PickError("That player's leaderboard is frozen for the ceremony");
+  }
   if (!def.placementAllowed(market, params.selectionKey, live)) {
     throw new PickError("This selection can no longer be backed");
   }
