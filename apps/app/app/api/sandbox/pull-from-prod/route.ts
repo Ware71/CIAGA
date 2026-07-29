@@ -323,6 +323,47 @@ export async function POST(req: Request) {
           }
         }
 
+        // The fantasy price caches (fantasy_odds_snapshots, fantasy_score_pmfs,
+        // fantasy_joint_samples) are denylisted from the copy as "regenerated on
+        // odds refresh" — but fantasy_event_state IS copied, carrying
+        // odds_stale = false. Since the lazy refresh only runs for a STALE
+        // event, nothing ever regenerated them and every board on staging came
+        // up permanently empty ("No open markets in this category") until an
+        // admin force-repriced each event by hand.
+        //
+        // Mark every unsettled event and season stale so the first board view
+        // reprices it. Same call the migrations use.
+        let marked = 0;
+        try {
+          const { data: states } = await supabaseAdmin
+            .from("fantasy_event_state")
+            .select("event_id")
+            .eq("is_final", false);
+          for (const s of (states ?? []) as { event_id: string }[]) {
+            await supabaseAdmin.rpc("ciaga_fantasy_mark_stale", {
+              p_event_id: s.event_id,
+              p_reason: "sandbox_pull_from_prod",
+            });
+            marked += 1;
+          }
+          const { data: seasonStates } = await supabaseAdmin
+            .from("fantasy_season_state")
+            .select("group_season_id")
+            .eq("is_final", false);
+          for (const s of (seasonStates ?? []) as { group_season_id: string }[]) {
+            await supabaseAdmin.rpc("ciaga_fantasy_mark_season_stale", {
+              p_group_season_id: s.group_season_id,
+              p_reason: "sandbox_pull_from_prod",
+            });
+            marked += 1;
+          }
+          send({ type: "reprice_queued", count: marked });
+        } catch (e: any) {
+          // Never fail the pull over this — the boards can still be repriced by
+          // hand from the event's Refresh button.
+          send({ type: "reprice_failed", message: e?.message ?? "mark stale failed" });
+        }
+
         send({ type: "done", tablesCopied, rowsCopied: totalRows, orphans: orphanTotal });
       } catch (e: any) {
         send({ type: "error", message: e?.message ?? "Server error" });

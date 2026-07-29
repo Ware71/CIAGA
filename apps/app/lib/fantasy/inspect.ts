@@ -2,6 +2,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import {
   ACTIVE_ENTRY_STATUSES,
   allowancePct,
+  conversionFromHoles,
   loadSimInputs,
   resolvePlayingHandicapDetails,
   simulateEvent,
@@ -73,7 +74,7 @@ export async function inspectEvent(eventId: string) {
 
   const profileHi = new Map<string, number | null>();
   for (const r of stored) profileHi.set(r.profile_id, r.handicap_index);
-  const phDetails = resolvePlayingHandicapDetails(ctx.event, entries, profileHi);
+  const phDetails = resolvePlayingHandicapDetails(ctx.event, entries, profileHi, conversionFromHoles(ctx.holes));
 
   // Same seed the live refresh used for this version → identical numbers.
   const sim = simulateEvent(ctx, version);

@@ -146,7 +146,11 @@ export type SimPlayerResult = {
   topNProb: Record<number, number>;
   /** P(finishing exactly position i+1) under "1224" ranking; ties share the tied position. */
   positionHistogram: number[];
-  /** P(finishing last); ties at the bottom split evenly (mirrors winProb). */
+  /**
+   * P(finishing last), ties all counted in — a wooden spoon shared three ways
+   * pays all three, so this must NOT split the way winProb does. Mirrors how
+   * finishRange settles `position === worst`.
+   */
   lastProb: number;
   meanGross: number;
   meanNet: number;

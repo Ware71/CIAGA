@@ -285,8 +285,12 @@ export function runSimulation(inputs: SimulationInputs): SimulationResult {
     for (let pi = 0; pi < playerCount; pi++) {
       if (!present[pi]) continue;
       const mine = basisTotals[pi];
+      // winProb SPLITS a tie: the outright is decided by a playoff/countback, so
+      // exactly one of the tied players takes it. lastProb does NOT split —
+      // finishRange settles the wooden spoon on `position === worst`, which pays
+      // every tied player, so splitting here priced it systematically too long.
       if (mine === best) results[pi].winProb += 1 / tiedForBest;
-      if (mine === worst) results[pi].lastProb += 1 / tiedForWorst;
+      if (mine === worst) results[pi].lastProb += 1;
       let strictlyBetter = 0;
       for (let pj = 0; pj < playerCount; pj++) {
         if (present[pj] && basisTotals[pj] < mine) strictlyBetter += 1;

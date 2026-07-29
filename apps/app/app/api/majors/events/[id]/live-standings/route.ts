@@ -13,6 +13,28 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     await getAuthedProfileOrThrow(req);
     const { id: eventId } = await params;
 
+    // 0. Ceremony freeze. This endpoint reads round_current_scores hole by hole
+    // with no threshold, so it would hand back every hidden hole to any
+    // authenticated caller. It has no client consumer today — the freeze-aware
+    // GET /api/majors/leaderboard?event_id= is what the UI uses — so rather
+    // than duplicate the masking logic here, refuse while a ceremony is live.
+    const { data: evt, error: evtErr } = await supabaseAdmin
+      .from("events")
+      .select("leaderboard_freeze_state")
+      .eq("id", eventId)
+      .maybeSingle();
+    if (evtErr) throw evtErr;
+    if ((evt as any)?.leaderboard_freeze_state === "frozen") {
+      return NextResponse.json(
+        {
+          standings: [],
+          frozen: true,
+          error: "Leaderboard is frozen for the ceremony — use /api/majors/leaderboard?event_id=",
+        },
+        { status: 409, headers: { "Cache-Control": "no-store" } }
+      );
+    }
+
     // 1. Get all tee times with their linked round IDs
     const { data: teeTimes, error: ttErr } = await supabaseAdmin
       .from("event_tee_times")

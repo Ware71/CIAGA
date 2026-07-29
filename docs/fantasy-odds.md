@@ -35,7 +35,7 @@ new entrants, never duplicates):
 
 - **Group admin** taps *Generate Markets* on the event's market board
   (`POST /api/fantasy/events/[eventId]/generate`).
-- **Daily cron** (03:00, `runFantasySweeps` in `lib/fantasy/cronSweeps.ts`):
+- **Daily cron** (08:00 UTC, `runFantasySweeps` in `lib/fantasy/cronSweeps.ts`):
   pre-generates for any event dated *today* in a fantasy-enabled group that
   has no state row yet. Events created later the same day rely on the admin
   button.
@@ -122,7 +122,7 @@ rather than quoting stale numbers.
 
 ### 4c. Daily cron (safety nets only)
 
-The 03:00 sweep never re-simulates healthy events. It:
+The 08:00 UTC sweep (`apps/app/vercel.json`) never re-simulates healthy events. It:
 - pre-generates today's events (§2),
 - settles completed events whose fantasy never settled,
 - fails `running` jobs locked > 10 minutes (crashed executor) and expires
@@ -666,3 +666,61 @@ per-refresh.**
 
 The board reads the current-version snapshots as before; `buildScoreBandTable`
 orders its four columns by parsing the selection keys instead of `params.bands`.
+
+---
+
+## 15. The ceremony freeze, and tie semantics (2026-07-29)
+
+Found by playing The CiaGA Championship 2026 end-to-end on staging.
+
+### The freeze must not leak through the board
+
+`events.leaderboard_freeze_state = 'frozen'` hides each player's last N holes on
+the leaderboard once they cross `num_rounds*18 − leaderboard_freeze_last_holes`.
+Nothing in `lib/fantasy` read that, and `loadLiveRoundData` pinned **every**
+completed hole into the sim — so the board published the hidden score. Measured
+while the leaderboard showed "thru 12": an outright drifting 4.50 → **51.00**,
+another to the 1001 cap, a gross band re-centring from "91–94" to "95–98", and
+`score_total` bracketing a player to 93–96 at ~1.01.
+
+Two-part fix, both in `lib/fantasy/odds.ts`:
+
+1. **Clipping at the source.** When the event is frozen, `loadLiveRoundData`
+   truncates each frozen player's `completedByProfile` to their snapshot's
+   `holes_shown` (in play order, so multi-round and non-1st-tee starts work) and
+   reports their round as *not* finished — their completion is itself hidden.
+   Everything downstream (markets, cash-out, narrative) is leak-proof by
+   construction.
+2. **Locking the selections.** `LiveMarketCtx.frozen(profileId)` plus
+   `selectionIsFrozen(market, key, ctx)` (`markets/types.ts`), enforced centrally
+   in `picks.ts`, `parlays.ts`, `cashout.ts` and `parlayCashout.ts` rather than in
+   all eleven market definitions. A market locks when any player it depends on is
+   frozen — for h2h, either side. Event-wide specials are unaffected.
+
+Related: `reconcileEventStatus` no longer completes an event while it is frozen,
+so settlement (and the season standings publish) waits for **Reveal Results**.
+
+### Playing handicap is COURSE handicap × allowance
+
+`resolvePlayingHandicapDetails` multiplied the allowance straight onto a handicap
+**index**, skipping the slope/rating conversion — because
+`event_entries.assigned_course_handicap` is never written, so every entry took
+the index branch. Measured gap: HI 22.1 → 15 on the leaderboard vs 23 in fantasy;
+45.2 → 36 vs 43; 48.3 → 39 vs 46. Now converted via the tee's slope/rating/par
+(which already ride on `SimHole`), with the 9-hole halving the round SQL applies.
+Pricing and settlement share the resolver, so both moved together.
+
+### Tie semantics, per market
+
+| Market | Settles on | Rule |
+|---|---|---|
+| `outright_winner` | `resolvedPosition` (`playoff_final_position ?? position`) | The trophy is decided by the playoff/countback — exactly one winner. Priced with ties SPLIT (`winProb`). |
+| `finish_position` | `position` (tied 1224 rank) | **Ties count**: backing 1st and finishing T1 pays, whatever the playoff decides. Labelled "(ties count)". |
+| `top_n` | `position` | Ties all in — a T3 pays a top-3 bet. Labelled "(ties count)". |
+| `finish_range` | `position` | Ties all in, including the wooden spoon. |
+| `h2h` | scores, not positions | `draw` is a real backable outcome. |
+
+`lastProb` in the engine no longer splits bottom ties: `finishRange` settles
+`position === worst`, which pays every tied player, so splitting priced the
+wooden spoon systematically too long. `winProb` still splits — that one *is*
+resolved by a playoff.

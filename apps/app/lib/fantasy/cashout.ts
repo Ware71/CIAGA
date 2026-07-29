@@ -1,7 +1,7 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { readFantasyConfig } from "@/lib/fantasy/config";
 import { getMarketDefinition } from "@/lib/fantasy/markets/registry";
-import type { FantasyMarket } from "@/lib/fantasy/markets/types";
+import { selectionIsFrozen, type FantasyMarket } from "@/lib/fantasy/markets/types";
 import { loadPlacementContext, refreshIfStale } from "@/lib/fantasy/odds";
 import { PickError } from "@/lib/fantasy/picks";
 import { getGroupFantasyContext } from "@/lib/fantasy/wallet";
@@ -143,6 +143,13 @@ export async function requestCashout(params: {
   }
 
   const { live } = await loadPlacementContext(pick.event_id);
+  // Quoting a frozen player would price off holes the ceremony is hiding — and
+  // the quote itself would tell the punter how those holes went.
+  if (selectionIsFrozen(market, pick.selection_key, live)) {
+    throw new PickError(
+      "Cash-out is unavailable — that player's leaderboard is frozen for the ceremony"
+    );
+  }
   if (def.isSelfDependent(market, pick.selection_key, params.profileId, live)) {
     throw new PickError(
       "Cash-out is unavailable — your own next score could decide this market"
@@ -287,17 +294,25 @@ export async function estimateSingleCashouts(
     }
 
     const marketIds = [...new Set(evPicks.map((p) => p.market_id))];
+    // Pinning event_version exactly used to blank every button mid-round: each
+    // score bumps the version, so between the bump and the next reprice NO
+    // snapshot matched and the whole board's estimates went null — while the
+    // firm quote (which force-refreshes) still priced fine. The estimate is
+    // indicative only, so serve the freshest snapshot available and let the
+    // firm quote be the one that insists on the current version.
     const { data: snaps } = await supabaseAdmin
       .from("fantasy_odds_snapshots")
-      .select("market_id, selection_key, probability")
+      .select("market_id, selection_key, probability, event_version")
       .eq("event_id", eventId)
-      .eq("event_version", version)
+      .lte("event_version", version)
       .eq("status", "active")
-      .in("market_id", marketIds);
+      .in("market_id", marketIds)
+      .order("event_version", { ascending: true });
     const probByKey = new Map<string, number>();
     for (const s of (snaps ?? []) as {
-      market_id: string; selection_key: string; probability: number;
+      market_id: string; selection_key: string; probability: number; event_version: number;
     }[]) {
+      // Ascending version order → the last write per key is the newest.
       probByKey.set(`${s.market_id}|${s.selection_key}`, Number(s.probability));
     }
 
@@ -306,11 +321,13 @@ export async function estimateSingleCashouts(
     const hasDrift = evPicks.some((p) => p.market && DRIFT_MARKETS.has(p.market.market_type));
     const pmfByKey = new Map<string, { min: number; probs: number[] }>();
     if (hasDrift) {
+      // Same relaxation as the snapshots above — freshest available, not exact.
       const { data: pmfs } = await supabaseAdmin
         .from("fantasy_score_pmfs")
-        .select("profile_id, basis, pmf_min, pmf_probs")
+        .select("profile_id, basis, pmf_min, pmf_probs, event_version")
         .eq("event_id", eventId)
-        .eq("event_version", version);
+        .lte("event_version", version)
+        .order("event_version", { ascending: true });
       for (const r of (pmfs ?? []) as {
         profile_id: string; basis: string; pmf_min: number; pmf_probs: number[];
       }[]) {
@@ -323,6 +340,7 @@ export async function estimateSingleCashouts(
       if (!market || market.status !== "open") continue;
       const def = getMarketDefinition(market.market_type);
       if (!def || !def.eligibleForCashout) continue;
+      if (selectionIsFrozen(market, p.selection_key, live)) continue;
       if (def.isSelfDependent(market, p.selection_key, p.profile_id, live)) continue;
       if (!def.cashoutCutoff(market, p.selection_key, live).eligible) continue;
       let prob: number | null | undefined;

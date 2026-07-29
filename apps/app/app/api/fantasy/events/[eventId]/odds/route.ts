@@ -67,24 +67,50 @@ export async function GET(req: Request, { params }: { params: Promise<{ eventId:
       refreshing = !result.refreshed && result.refreshing;
     }
 
-    const [{ data: freshState }, { data: marketData, error: marketErr }, { data: snapData, error: snapErr }] =
-      await Promise.all([
-        supabaseAdmin.from("fantasy_event_state").select("*").eq("event_id", eventId).single(),
-        supabaseAdmin.from("fantasy_markets").select("*").eq("event_id", eventId),
-        supabaseAdmin
+    // State first: the snapshot read needs the current version to filter on.
+    const { data: freshState } = await supabaseAdmin
+      .from("fantasy_event_state")
+      .select("*")
+      .eq("event_id", eventId)
+      .single();
+    const currentVersion = (freshState as { version: number } | null)?.version ?? null;
+
+    type SnapshotRow = {
+      id: string; market_id: string; selection_key: string;
+      probability: number; decimal_odds: number; event_version: number; computed_at: string;
+    };
+
+    // This read used to be unfiltered by version and unpaginated, so PostgREST's
+    // 1000-row cap silently truncated it: The International 2026 (236 markets,
+    // 2 rounds) came back with 182 markets priced and 54 arbitrarily blank.
+    // Filtering to the current version cuts the volume, and paging removes the
+    // ceiling entirely.
+    const readSnapshots = async (): Promise<SnapshotRow[]> => {
+      const rows: SnapshotRow[] = [];
+      const pageSize = 1000;
+      for (let from = 0; ; from += pageSize) {
+        let q = supabaseAdmin
           .from("fantasy_odds_snapshots")
           .select("id, market_id, selection_key, probability, decimal_odds, event_version, computed_at")
           .eq("event_id", eventId)
-          .eq("status", "active"),
-      ]);
+          .eq("status", "active");
+        if (currentVersion != null) q = q.eq("event_version", currentVersion);
+        const { data, error } = await q.range(from, from + pageSize - 1);
+        if (error) throw error;
+        const page = (data ?? []) as SnapshotRow[];
+        rows.push(...page);
+        if (page.length < pageSize) break;
+      }
+      return rows;
+    };
+
+    const [{ data: marketData, error: marketErr }, snapshots] = await Promise.all([
+      supabaseAdmin.from("fantasy_markets").select("*").eq("event_id", eventId),
+      readSnapshots(),
+    ]);
     if (marketErr) throw marketErr;
-    if (snapErr) throw snapErr;
 
     const markets = (marketData ?? []) as FantasyMarket[];
-    const snapshots = (snapData ?? []) as {
-      id: string; market_id: string; selection_key: string;
-      probability: number; decimal_odds: number; event_version: number; computed_at: string;
-    }[];
 
     // Names for player-scoped markets and player selection keys.
     const nameIds = new Set<string>();

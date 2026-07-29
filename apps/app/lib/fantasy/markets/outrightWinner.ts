@@ -73,10 +73,14 @@ export const outrightWinner: MarketDefinition = {
     const out = new Map<string, SettlementOutcome>();
     const round = marketRound(market);
     if (round == null) {
+      // resolvedPosition, NOT position: the trophy is decided by the playoff or
+      // countback, so exactly one player can win the outright. Position markets
+      // deliberately do the opposite and settle on the tied position — see
+      // finishPosition.settle.
       for (const p of Object.values(final.players)) {
         if (p.withdrawn) out.set(p.profileId, "void");
-        else if (p.position == null) out.set(p.profileId, "void");
-        else out.set(p.profileId, p.position === 1 ? "won" : "lost");
+        else if (p.resolvedPosition == null) out.set(p.profileId, "void");
+        else out.set(p.profileId, p.resolvedPosition === 1 ? "won" : "lost");
       }
       return out;
     }

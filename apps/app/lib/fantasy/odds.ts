@@ -111,20 +111,52 @@ export type PlayingHandicapDetail = {
     | "no_data";
 };
 
+/** Tee ratings needed to turn a handicap index into a course handicap. */
+export type CourseConversion = {
+  slope: number | null;
+  rating: number | null;
+  parTotal: number | null;
+  holesInRound: number | null;
+};
+
 /**
- * Event playing handicap per player. Uses the same source as the leaderboard
- * (event_entries assigned values), so net market pricing matches settlement:
- * assigned_playing_handicap → CH × allowance → HI × allowance → profile HI.
- * compare_against_lowest mode nets everyone against the field's lowest.
+ * Event playing handicap per player: PLAYING HANDICAP = COURSE HANDICAP ×
+ * allowance, matching round_participants and therefore the leaderboard.
+ *
+ * The trap this function used to fall into: event_entries.assigned_course_handicap
+ * and .assigned_playing_handicap are never written by the app — only
+ * assigned_handicap_index is (see events/[id]/enter) — so every entry landed on
+ * the index branch, and the index was then multiplied by the allowance AS IF it
+ * were a course handicap. That skipped the slope/rating conversion entirely and
+ * priced every net market off a handicap ~7-8 strokes too generous (measured on
+ * the CiaGA Championship 2026: HI 22.1 → 15 on the leaderboard, 23 in fantasy).
+ *
+ * `conversion` supplies the tee's slope/rating/par so an index can be converted
+ * properly. Without it we can only fall back to treating the index as a course
+ * handicap — the old behaviour — so callers that can supply it should.
  */
 export function resolvePlayingHandicapDetails(
   event: EventRow,
   entries: EntryRow[],
-  profileHi: Map<string, number | null>
+  profileHi: Map<string, number | null>,
+  conversion?: CourseConversion | null
 ): Map<string, PlayingHandicapDetail> {
   const rules = event.handicap_rules as { mode?: string } | null;
   const pct = allowancePct(event);
   const out = new Map<string, PlayingHandicapDetail>();
+
+  const slope = conversion?.slope ?? null;
+  const rating = conversion?.rating ?? null;
+  const parTotal = conversion?.parTotal ?? null;
+  const holesInRound = conversion?.holesInRound ?? 18;
+
+  /** WHS course handicap from an index, mirroring calcCourseHandicap plus the
+   *  9-hole halving the round SQL applies (20260717000000). */
+  const indexToCourseHandicap = (hi: number): number => {
+    if (slope == null || rating == null || parTotal == null) return hi;
+    const effectiveHi = holesInRound === 9 ? hi / 2 : hi;
+    return Math.round(effectiveHi * (slope / 113) + (rating - parTotal));
+  };
 
   const courseHandicap = (
     e: EntryRow
@@ -132,9 +164,13 @@ export function resolvePlayingHandicapDetails(
     if (e.assigned_course_handicap != null)
       return { value: Number(e.assigned_course_handicap), src: "assigned_course_handicap" };
     if (e.assigned_handicap_index != null)
-      return { value: Number(e.assigned_handicap_index), src: "assigned_handicap_index" };
+      return {
+        value: indexToCourseHandicap(Number(e.assigned_handicap_index)),
+        src: "assigned_handicap_index",
+      };
     const hi = profileHi.get(e.profile_id);
-    if (hi != null) return { value: hi, src: "profile_handicap_index" };
+    if (hi != null)
+      return { value: indexToCourseHandicap(hi), src: "profile_handicap_index" };
     return null;
   };
 
@@ -175,13 +211,26 @@ export function resolvePlayingHandicapDetails(
 function resolvePlayingHandicaps(
   event: EventRow,
   entries: EntryRow[],
-  profileHi: Map<string, number | null>
+  profileHi: Map<string, number | null>,
+  conversion?: CourseConversion | null
 ): Map<string, number> {
   const out = new Map<string, number>();
-  for (const [pid, d] of resolvePlayingHandicapDetails(event, entries, profileHi)) {
+  for (const [pid, d] of resolvePlayingHandicapDetails(event, entries, profileHi, conversion)) {
     out.set(pid, d.value);
   }
   return out;
+}
+
+/** Tee conversion inputs ride on every SimHole; round 1's tee is the basis. */
+export function conversionFromHoles(holes: SimHole[]): CourseConversion | null {
+  const h = holes.find((x) => (x.round ?? 1) === 1) ?? holes[0];
+  if (!h) return null;
+  return {
+    slope: h.slope ?? null,
+    rating: h.rating ?? null,
+    parTotal: h.parTotal ?? null,
+    holesInRound: h.holesInRound ?? null,
+  };
 }
 
 /** One tee's holes for a course; empty when unresolvable. */
@@ -299,6 +348,12 @@ export type LiveRoundData = {
   profileRoundStatus: Map<string, Map<number, { finished: boolean; holesInRound: number }>>;
   /** profile → holeKey(round, hole) → latest strokes. */
   completedByProfile: Map<string, Record<number, number>>;
+  /**
+   * Players whose leaderboard row is frozen for the ceremony. Their holes above
+   * the freeze threshold have already been stripped from completedByProfile, so
+   * the model can only see what a spectator sees.
+   */
+  frozenProfiles: Set<string>;
 };
 
 /** Live in-event rounds: per-player per-event-round status + latest scores. */
@@ -323,7 +378,11 @@ async function loadLiveRoundData(eventId: string, fallbackHoleCount: number): Pr
   );
 
   if (teeTimeIds.length === 0) {
-    return { profileRoundStatus: new Map(), completedByProfile: new Map() };
+    return {
+      profileRoundStatus: new Map(),
+      completedByProfile: new Map(),
+      frozenProfiles: new Set(),
+    };
   }
 
   // Plain queries, no embed: rounds ↔ round_participants embeds are ambiguous
@@ -387,7 +446,58 @@ async function loadLiveRoundData(eventId: string, fallbackHoleCount: number): Pr
     }
   }
 
-  return { profileRoundStatus, completedByProfile };
+  // ── Ceremony freeze ────────────────────────────────────────────────────
+  // The leaderboard hides a frozen player's last N holes, but the model was
+  // still pricing off every one of them — so the board published, to within a
+  // stroke, the score the ceremony was hiding (measured: an outright drifting
+  // 4.50 → 51.00 while the leaderboard showed "thru 12"). Strip the hidden
+  // holes here, at the single point where live scores enter the engine, so
+  // every market, cash-out quote and narrative downstream is leak-proof by
+  // construction.
+  const frozenProfiles = new Set<string>();
+  const { data: freezeEvent } = await supabaseAdmin
+    .from("events")
+    .select("leaderboard_freeze_state")
+    .eq("id", eventId)
+    .maybeSingle();
+
+  if ((freezeEvent as any)?.leaderboard_freeze_state === "frozen") {
+    const { data: snaps } = await supabaseAdmin
+      .from("event_player_freeze_snapshots")
+      .select("profile_id, holes_shown")
+      .eq("event_id", eventId);
+
+    for (const s of (snaps ?? []) as { profile_id: string; holes_shown: number | null }[]) {
+      if (!s.profile_id) continue;
+      frozenProfiles.add(s.profile_id);
+      const shown = s.holes_shown ?? 0;
+
+      // holes_shown counts holes across the whole event, so keep the first N in
+      // play order rather than filtering on hole number (which would be wrong
+      // for a multi-round event, and for anyone starting on the 10th).
+      const completed = completedByProfile.get(s.profile_id);
+      if (completed) {
+        const kept: Record<number, number> = {};
+        const orderedKeys = Object.keys(completed)
+          .map(Number)
+          .sort((a, b) => a - b)
+          .slice(0, shown);
+        for (const k of orderedKeys) kept[k] = completed[k];
+        completedByProfile.set(s.profile_id, kept);
+      }
+
+      // Their round being finished is itself part of what's hidden — leaving it
+      // true would close their markets at exactly the moment they hole out.
+      const perRound = profileRoundStatus.get(s.profile_id);
+      if (perRound) {
+        for (const [round, st] of perRound) {
+          perRound.set(round, { ...st, finished: false });
+        }
+      }
+    }
+  }
+
+  return { profileRoundStatus, completedByProfile, frozenProfiles };
 }
 
 function makeLiveCtx(event: EventRow, holes: SimHole[], liveData: LiveRoundData): LiveMarketCtx {
@@ -420,6 +530,7 @@ function makeLiveCtx(event: EventRow, holes: SimHole[], liveData: LiveRoundData)
 
   return {
     eventCompleted: ["completed", "cancelled"].includes(event.majors_status),
+    frozen: (profileId) => liveData.frozenProfiles.has(profileId),
     roundComplete: (profileId, round) => {
       if (round != null) return profileRoundStatus.get(profileId)?.get(round)?.finished ?? false;
       const perRound = profileRoundStatus.get(profileId);
@@ -589,10 +700,18 @@ export async function loadSimInputs(eventId: string): Promise<EventSimContext> {
     assigned_playing_handicap: null,
   }));
   const allEntries = [...entries, ...provisionalEntries];
-  const playingHandicaps = resolvePlayingHandicaps(event, allEntries, profileHi);
 
   let holes = await loadHoles(event);
   if (holes.length === 0) holes = fallbackHoles();
+
+  // Handicaps resolve AFTER the holes load: converting a handicap index into a
+  // course handicap needs the tee's slope/rating/par, which ride on SimHole.
+  const playingHandicaps = resolvePlayingHandicaps(
+    event,
+    allEntries,
+    profileHi,
+    conversionFromHoles(holes)
+  );
 
   const liveData = await loadLiveRoundData(eventId, holes.length);
   const { profileRoundStatus, completedByProfile } = liveData;

@@ -134,7 +134,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     // If we have a current season, filter by season_id; otherwise fall back to group_id
     let liveQuery = supabaseAdmin
       .from("events")
-      .select("id, points_model, points_table, scoring_model, num_rounds")
+      .select("id, points_model, points_table, scoring_model, num_rounds, leaderboard_freeze_state")
       .eq("majors_status", "live")
       .in("standings_contribution", ["season", "both"]);
 
@@ -261,6 +261,28 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         { netScore: number | null; holesCompleted: number }
       >();
 
+      // 3b-i. Ceremony freeze: a frozen player's season contribution must be the
+      // same thru-N picture the event leaderboard shows, not their real score.
+      // Seed them from the snapshot first, then keep every later block off them.
+      // Players below the threshold have no snapshot and stay live, matching the
+      // event leaderboard exactly.
+      const frozenProfiles = new Set<string>();
+      if ((comp as any).leaderboard_freeze_state === "frozen") {
+        const { data: snaps, error: snapErr } = await supabaseAdmin
+          .from("event_player_freeze_snapshots")
+          .select("profile_id, net_score, holes_shown")
+          .eq("event_id", comp.id);
+        if (snapErr) throw snapErr;
+        for (const s of snaps ?? []) {
+          if (!s.profile_id) continue;
+          frozenProfiles.add(s.profile_id);
+          competitionPlayerScores.set(s.profile_id, {
+            netScore: s.net_score ?? null,
+            holesCompleted: s.holes_shown ?? 0,
+          });
+        }
+      }
+
       // 3c. Finished rounds in this live competition: read from leaderboard entries
       if (finishedRoundIdsForComp.length > 0) {
         const { data: finParticipants, error: fpErr } = await supabaseAdmin
@@ -283,6 +305,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
           for (const le of leaderEntries ?? []) {
             if (!le.profile_id || !finProfileIds.has(le.profile_id)) continue;
+            // A finished round still belongs to a frozen player — their real
+            // total is exactly what the ceremony is hiding.
+            if (frozenProfiles.has(le.profile_id)) continue;
             competitionPlayerScores.set(le.profile_id, {
               netScore: le.net_score ?? null,
               holesCompleted: le.holes_completed ?? 18,
@@ -294,10 +319,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       // 3d. Live rounds: aggregate from round_current_scores
       if (liveRoundIdsForComp.length > 0) {
         const [scoresRes, participantsRes] = await Promise.all([
+          // round_effective_scores, not round_current_scores: a picked-up hole
+          // has strokes = NULL and would otherwise vanish from both gross and
+          // thru. The view resolves it to net double bogey.
           supabaseAdmin
-            .from("round_current_scores")
-            .select("round_id, participant_id, hole_number, strokes")
-            .in("round_id", liveRoundIdsForComp),
+            .from("round_effective_scores")
+            .select("round_id, participant_id, hole_number, effective_strokes")
+            .in("round_id", liveRoundIdsForComp)
+            .eq("counts_as_played", true),
           supabaseAdmin
             .from("round_participants")
             .select("id, profile_id, course_handicap_used, playing_handicap_used, round_id")
@@ -321,12 +350,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
         const scoreAgg = new Map<string, { gross: number; holes: Set<number> }>();
         for (const s of scoresRes.data ?? []) {
-          if (typeof s.strokes !== "number") continue;
+          const strokes = (s as any).effective_strokes;
+          if (typeof strokes !== "number") continue;
           if (!scoreAgg.has(s.participant_id)) {
             scoreAgg.set(s.participant_id, { gross: 0, holes: new Set() });
           }
           const agg = scoreAgg.get(s.participant_id)!;
-          agg.gross += s.strokes;
+          agg.gross += strokes;
           agg.holes.add(s.hole_number);
         }
 

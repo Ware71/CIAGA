@@ -8,6 +8,7 @@ import type {
 } from "@/lib/fantasy/markets/types";
 import { marketRound } from "@/lib/fantasy/markets/roundUtil";
 import {
+  conversionFromHoles,
   loadPlacementContext,
   resolvePlayingHandicapDetails,
   type EntryRow,
@@ -43,7 +44,7 @@ async function loadFinalScoringData(eventId: string): Promise<FinalScoringData> 
         .eq("event_id", eventId),
       supabaseAdmin
         .from("event_leaderboard_entries")
-        .select("profile_id, position, gross_score, net_score")
+        .select("profile_id, position, playoff_final_position, gross_score, net_score")
         .eq("event_id", eventId),
       loadPlacementContext(eventId),
     ]);
@@ -65,7 +66,15 @@ async function loadFinalScoringData(eventId: string): Promise<FinalScoringData> 
       profileHi.set(r.profile_id, r.handicap_index != null ? Number(r.handicap_index) : null);
     }
   }
-  const phDetails = resolvePlayingHandicapDetails(placement.event, entries, profileHi);
+  // Same conversion the pricing uses (tee slope/rating/par off the loaded
+  // holes), so a net market settles on the handicap it was priced with — and
+  // on the same one the leaderboard ranked with.
+  const phDetails = resolvePlayingHandicapDetails(
+    placement.event,
+    entries,
+    profileHi,
+    conversionFromHoles(placement.holes)
+  );
 
   const holes = placement.holes.map((h) => ({
     holeNumber: h.holeNumber,
@@ -133,6 +142,7 @@ async function loadFinalScoringData(eventId: string): Promise<FinalScoringData> 
     players[e.profile_id] = {
       profileId: e.profile_id,
       position: null,
+      resolvedPosition: null,
       grossScore: null,
       netScore: null,
       birdieCount: counts.birdies,
@@ -143,7 +153,8 @@ async function loadFinalScoringData(eventId: string): Promise<FinalScoringData> 
     };
   }
   for (const lb of (lbData ?? []) as {
-    profile_id: string; position: number | null; gross_score: number | null; net_score: number | null;
+    profile_id: string; position: number | null; playoff_final_position: number | null;
+    gross_score: number | null; net_score: number | null;
   }[]) {
     let player = players[lb.profile_id];
     if (!player) {
@@ -151,6 +162,7 @@ async function loadFinalScoringData(eventId: string): Promise<FinalScoringData> 
       player = {
         profileId: lb.profile_id,
         position: null,
+        resolvedPosition: null,
         grossScore: null,
         netScore: null,
         birdieCount: counts.birdies,
@@ -161,6 +173,7 @@ async function loadFinalScoringData(eventId: string): Promise<FinalScoringData> 
       };
     }
     player.position = lb.position;
+    player.resolvedPosition = lb.playoff_final_position ?? lb.position;
     player.grossScore = lb.gross_score;
     player.netScore = lb.net_score;
     players[lb.profile_id] = player;
