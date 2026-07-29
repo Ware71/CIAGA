@@ -97,6 +97,44 @@ describe("resolvePlayingHandicapDetails", () => {
     expect(out.get("ware")?.source).toBe("assigned_playing_handicap");
   });
 
+  // The player's real handicap governs, not the one frozen at entry. Ware
+  // entered off 24.6 and now plays off 22.1; the leaderboard settles on 22.1,
+  // so the board must price on 22.1 too.
+  it("uses the player's CURRENT index, not the entry snapshot", () => {
+    const live = new Map<string, number | null>([["ware", 22.1]]);
+    const out = resolvePlayingHandicapDetails(event(), [entry("ware", 24.6)], live, WIDNEY);
+    expect(out.get("ware")?.source).toBe("profile_handicap_index_x_pct");
+    expect(out.get("ware")?.value).toBe(14); // CH 15 x 95%
+  });
+
+  it("falls back to the entry snapshot only when there is no live index", () => {
+    const out = resolvePlayingHandicapDetails(event(), [entry("ware", 24.6)], new Map(), WIDNEY);
+    expect(out.get("ware")?.source).toBe("assigned_handicap_index_x_pct");
+  });
+
+  it("matches the leaderboard for the whole real field on live indexes", () => {
+    // handicap index -> playing handicap the leaderboard settled on in pass 1.
+    const field: [string, number, number][] = [
+      ["ware", 22.1, 14],
+      ["jack", 7.9, 1],
+      ["ciaran", 45.2, 34],
+      ["harper", 48.3, 37],
+      ["linehan", 31.8, 23],
+      ["liaga", 54.0, 43],
+    ];
+    const live = new Map<string, number | null>(field.map(([id, hi]) => [id, hi]));
+    const out = resolvePlayingHandicapDetails(
+      event(),
+      // Entry snapshots deliberately wrong, to prove they are ignored.
+      field.map(([id]) => entry(id, 99)),
+      live,
+      WIDNEY
+    );
+    for (const [id, , expected] of field) {
+      expect(out.get(id)?.value, id).toBe(expected);
+    }
+  });
+
   it("returns zero for every player when the event has no handicap rules", () => {
     const out = resolvePlayingHandicapDetails(
       event({ handicap_rules: { mode: "none" } }),

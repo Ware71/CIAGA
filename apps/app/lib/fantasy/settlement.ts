@@ -9,6 +9,7 @@ import type {
 import { marketRound } from "@/lib/fantasy/markets/roundUtil";
 import {
   conversionFromHoles,
+  loadCurrentHandicapIndexes,
   loadPlacementContext,
   resolvePlayingHandicapDetails,
   type EntryRow,
@@ -54,8 +55,9 @@ async function loadFinalScoringData(eventId: string): Promise<FinalScoringData> 
   const entries = (entryData ?? []) as (EntryRow & { entry_status: string })[];
 
   // Playing handicaps (per round) — same resolution the pricing uses, so
-  // round nets match the leaderboard's per-submission handicap sum.
-  const profileHi = new Map<string, number | null>();
+  // round nets match the leaderboard's per-submission handicap sum. The cached
+  // fantasy profile is only a fallback; the real current index wins.
+  const cachedHi = new Map<string, { handicap_index: number | null }>();
   if (placement.event.group_id && entries.length > 0) {
     const { data: hiRows } = await supabaseAdmin
       .from("fantasy_player_profiles")
@@ -63,9 +65,15 @@ async function loadFinalScoringData(eventId: string): Promise<FinalScoringData> 
       .eq("group_id", placement.event.group_id)
       .in("profile_id", entries.map((e) => e.profile_id));
     for (const r of (hiRows ?? []) as { profile_id: string; handicap_index: number | null }[]) {
-      profileHi.set(r.profile_id, r.handicap_index != null ? Number(r.handicap_index) : null);
+      cachedHi.set(r.profile_id, {
+        handicap_index: r.handicap_index != null ? Number(r.handicap_index) : null,
+      });
     }
   }
+  const profileHi = await loadCurrentHandicapIndexes(
+    entries.map((e) => e.profile_id),
+    cachedHi
+  );
   // Same conversion the pricing uses (tee slope/rating/par off the loaded
   // holes), so a net market settles on the handicap it was priced with — and
   // on the same one the leaderboard ranked with.

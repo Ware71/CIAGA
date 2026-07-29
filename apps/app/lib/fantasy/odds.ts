@@ -161,16 +161,25 @@ export function resolvePlayingHandicapDetails(
   const courseHandicap = (
     e: EntryRow
   ): { value: number; src: "assigned_course_handicap" | "assigned_handicap_index" | "profile_handicap_index" } | null => {
+    // An explicitly assigned course handicap is deliberate organiser intent and
+    // still wins (nothing writes it today, but if something does, honour it).
     if (e.assigned_course_handicap != null)
       return { value: Number(e.assigned_course_handicap), src: "assigned_course_handicap" };
+    // The player's REAL, current handicap index — the same value the round and
+    // the leaderboard compute from. Deliberately preferred over
+    // event_entries.assigned_handicap_index, which is a snapshot frozen at entry
+    // time and drifts away from reality as the player's index moves: Ware
+    // entered off ~24.6 but plays off 22.1, so the entry snapshot priced him two
+    // strokes too generously while the leaderboard settled on the live figure.
+    const hi = profileHi.get(e.profile_id);
+    if (hi != null)
+      return { value: indexToCourseHandicap(hi), src: "profile_handicap_index" };
+    // Only when there is no live index at all (e.g. a historical import).
     if (e.assigned_handicap_index != null)
       return {
         value: indexToCourseHandicap(Number(e.assigned_handicap_index)),
         src: "assigned_handicap_index",
       };
-    const hi = profileHi.get(e.profile_id);
-    if (hi != null)
-      return { value: indexToCourseHandicap(hi), src: "profile_handicap_index" };
     return null;
   };
 
@@ -217,6 +226,39 @@ function resolvePlayingHandicaps(
   const out = new Map<string, number>();
   for (const [pid, d] of resolvePlayingHandicapDetails(event, entries, profileHi, conversion)) {
     out.set(pid, d.value);
+  }
+  return out;
+}
+
+/**
+ * Each player's REAL, current handicap index — the latest handicap_index_history
+ * row, which is exactly what ciaga_current_true_hi() returns and therefore what
+ * the round and the leaderboard compute their course handicaps from.
+ *
+ * fantasy_player_profiles.handicap_index is a rebuilt cache with a 24h TTL, so it
+ * can lag a handicap that moved this morning; it stays as the fallback for
+ * players with no history rows at all.
+ */
+export async function loadCurrentHandicapIndexes(
+  profileIds: string[],
+  cached?: Map<string, { handicap_index: number | null }>
+): Promise<Map<string, number | null>> {
+  const out = new Map<string, number | null>();
+  if (cached) for (const [pid, row] of cached) out.set(pid, row.handicap_index);
+  if (profileIds.length === 0) return out;
+
+  const { data } = await supabaseAdmin
+    .from("handicap_index_history")
+    .select("profile_id, handicap_index, as_of_date")
+    .in("profile_id", profileIds)
+    .not("handicap_index", "is", null)
+    .order("as_of_date", { ascending: true });
+
+  // Ascending → the last write per player is their newest index.
+  for (const r of (data ?? []) as {
+    profile_id: string; handicap_index: number | string;
+  }[]) {
+    out.set(r.profile_id, Number(r.handicap_index));
   }
   return out;
 }
@@ -687,8 +729,7 @@ export async function loadSimInputs(eventId: string): Promise<EventSimContext> {
     loadNames(fieldIds),
   ]);
 
-  const profileHi = new Map<string, number | null>();
-  for (const [pid, row] of profiles) profileHi.set(pid, row.handicap_index);
+  const profileHi = await loadCurrentHandicapIndexes(fieldIds, profiles);
 
   // Provisional players get a synthetic entry (no assigned values) so their PH
   // resolves from profile HI × allowance — the same path the leaderboard uses.

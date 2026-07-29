@@ -710,6 +710,13 @@ the index branch. Measured gap: HI 22.1 → 15 on the leaderboard vs 23 in fanta
 (which already ride on `SimHole`), with the 9-hole halving the round SQL applies.
 Pricing and settlement share the resolver, so both moved together.
 
+The basis is the player's REAL, current index — the latest `handicap_index_history`
+row, i.e. what `ciaga_current_true_hi()` returns and what the round computes from.
+`event_entries.assigned_handicap_index` is a snapshot frozen at entry and drifts
+(Ware entered off ~24.6 but plays off 22.1), so it is now only a fallback for
+players with no history at all. `fantasy_player_profiles.handicap_index` has a 24h
+TTL and is likewise only a fallback.
+
 ### Tie semantics, per market
 
 | Market | Settles on | Rule |
