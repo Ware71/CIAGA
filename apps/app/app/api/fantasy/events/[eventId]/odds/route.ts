@@ -73,29 +73,33 @@ export async function GET(req: Request, { params }: { params: Promise<{ eventId:
       .select("*")
       .eq("event_id", eventId)
       .single();
-    const currentVersion = (freshState as { version: number } | null)?.version ?? null;
 
     type SnapshotRow = {
       id: string; market_id: string; selection_key: string;
       probability: number; decimal_odds: number; event_version: number; computed_at: string;
     };
 
-    // This read used to be unfiltered by version and unpaginated, so PostgREST's
-    // 1000-row cap silently truncated it: The International 2026 (236 markets,
-    // 2 rounds) came back with 182 markets priced and 54 arbitrarily blank.
-    // Filtering to the current version cuts the volume, and paging removes the
-    // ceiling entirely.
+    // This read was unpaginated, so PostgREST's 1000-row cap silently truncated
+    // it: The International 2026 (236 markets over 2 rounds) came back with 182
+    // markets priced and 54 arbitrarily blank.
+    //
+    // Page it, but do NOT also filter to the current event_version. `status =
+    // 'active'` is the selector on purpose: writeSnapshots deliberately leaves a
+    // market's previous snapshot active when it wasn't re-priced this version
+    // (e.g. its subject was briefly out of the field), because blanking it
+    // punches a hole in the ladder — the "1+ shows, 2+ blank, 3+ shows" bug.
+    // Markets that WERE re-priced have their older rows superseded, so there is
+    // no double-counting.
     const readSnapshots = async (): Promise<SnapshotRow[]> => {
       const rows: SnapshotRow[] = [];
       const pageSize = 1000;
       for (let from = 0; ; from += pageSize) {
-        let q = supabaseAdmin
+        const { data, error } = await supabaseAdmin
           .from("fantasy_odds_snapshots")
           .select("id, market_id, selection_key, probability, decimal_odds, event_version, computed_at")
           .eq("event_id", eventId)
-          .eq("status", "active");
-        if (currentVersion != null) q = q.eq("event_version", currentVersion);
-        const { data, error } = await q.range(from, from + pageSize - 1);
+          .eq("status", "active")
+          .range(from, from + pageSize - 1);
         if (error) throw error;
         const page = (data ?? []) as SnapshotRow[];
         rows.push(...page);
