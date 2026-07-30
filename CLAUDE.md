@@ -35,6 +35,10 @@ Rules (also in `.claude/db-environments.json`):
 
 Deploy = merge `develop` into `main` and push. **Never** push `develop:main` directly. Use the `/deploy` skill, which encodes the full ritual including migration ordering.
 
+## Workflow
+
+- `docs/linear-agent-workflow.md` — **proposal, not yet implemented**: driving Claude Code agents from Linear issues (MCP, cloud routines, PRs + CI).
+
 ## Rules
 
 - Don't touch `.env` files or secrets without asking.
@@ -43,3 +47,5 @@ Deploy = merge `develop` into `main` and push. **Never** push `develop:main` dir
 ## Gotchas
 
 - Postgres: `DROP FUNCTION` + recreate resets EXECUTE grants — re-grant after replacing any function that non-default roles call (bit us in the 2026-07 security audit).
+- The DEV panel's **Pull from Production** derives its table list from the live schema (`sandbox_schema_graph()`), so it never needs updating when a table is added. But `sandbox_full_reset_database()` is gated on a `ciaga_system_settings.sandbox_reset_enabled` flag that the migration deliberately does **not** insert — production is inert by design. Arm a new/reset staging database with `node scripts/enable-sandbox-reset.mjs --apply`, or the pull fails with "disabled on this database".
+- The pull needs `NEXT_PUBLIC_APP_ENV=sandbox` plus `PROD_SUPABASE_URL` / `PROD_SUPABASE_SERVICE_ROLE_KEY`. `apps/app/.env.local` carries none of them, so it only works on the deployed sandbox, not locally.

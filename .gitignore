@@ -53,5 +53,10 @@ next-env.d.ts
 # Windows artifacts
 nul
 
+# Browser verification scratch output (the /verify skill writes these to the
+# repo root). Evidence for a single session, not repo content.
+/verify-*.png
+/.playwright-mcp/
+
 .vercel
 .env*
