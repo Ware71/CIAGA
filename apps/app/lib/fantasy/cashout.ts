@@ -2,7 +2,12 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { readFantasyConfig } from "@/lib/fantasy/config";
 import { getMarketDefinition } from "@/lib/fantasy/markets/registry";
 import { selectionIsFrozen, type FantasyMarket } from "@/lib/fantasy/markets/types";
-import { loadPlacementContext, refreshIfStale } from "@/lib/fantasy/odds";
+import {
+  loadPlacementContext,
+  refreshIfStale,
+  type PlacementContextCache,
+} from "@/lib/fantasy/odds";
+import { readAllPages } from "@/lib/fantasy/paginate";
 import { PickError } from "@/lib/fantasy/picks";
 import { getGroupFantasyContext } from "@/lib/fantasy/wallet";
 import { scoreSelectionProbability } from "@/lib/fantasy/markets/analytic";
@@ -21,6 +26,23 @@ export const DRIFT_MARKETS = new Set(["score_band", "score_total"]);
 
 export function pmfBasis(market: FantasyMarket): "gross" | "net" {
   return (market.params as { basis?: unknown }).basis === "net" ? "net" : "gross";
+}
+
+/**
+ * The cash-out gates that need NO live context: the market is open and its type
+ * supports cash-out at all. Split out so both estimators can tell, BEFORE paying
+ * for a placement context, whether an event has any pick or leg that could use
+ * one — an event whose markets all fail here was costing a full context load
+ * (several round trips) to learn nothing.
+ *
+ * This narrows only WHICH events get a context, never which gates run: anything
+ * passing here still goes through the full live gate chain (frozen /
+ * self-dependent / cutoff) exactly as before.
+ */
+export function legCouldBeCashable(market: FantasyMarket | undefined): boolean {
+  if (!market || market.status !== "open") return false;
+  const def = getMarketDefinition(market.market_type);
+  return !!def && def.eligibleForCashout;
 }
 
 /** Current probability of a drift-market pick from its own pmf row, or null. */
@@ -266,7 +288,8 @@ export type EstimatePick = {
  * per event so a page of picks costs a handful of queries.
  */
 export async function estimateSingleCashouts(
-  picks: EstimatePick[]
+  picks: EstimatePick[],
+  contextCache?: PlacementContextCache
 ): Promise<Map<string, number | null>> {
   const out = new Map<string, number | null>();
   const byEvent = new Map<string, EstimatePick[]>();
@@ -286,9 +309,15 @@ export async function estimateSingleCashouts(
     if (!state || state.is_final) continue;
     const version = state.version;
 
+    // Skip the context entirely when no pick on this event could use it — the
+    // open-market and cash-out-eligible gates need no live data, and an event
+    // failing them for every pick was costing a full placement context to learn
+    // nothing. Picks that pass still run every live gate below, unchanged.
+    if (!evPicks.some((p) => legCouldBeCashable(p.market))) continue;
+
     let live: Awaited<ReturnType<typeof loadPlacementContext>>["live"];
     try {
-      ({ live } = await loadPlacementContext(eventId));
+      ({ live } = await loadPlacementContext(eventId, contextCache));
     } catch {
       continue;
     }
@@ -300,18 +329,27 @@ export async function estimateSingleCashouts(
     // firm quote (which force-refreshes) still priced fine. The estimate is
     // indicative only, so serve the freshest snapshot available and let the
     // firm quote be the one that insists on the current version.
-    const { data: snaps } = await supabaseAdmin
-      .from("fantasy_odds_snapshots")
-      .select("market_id, selection_key, probability, event_version")
-      .eq("event_id", eventId)
-      .lte("event_version", version)
-      .eq("status", "active")
-      .in("market_id", marketIds)
-      .order("event_version", { ascending: true });
-    const probByKey = new Map<string, number>();
-    for (const s of (snaps ?? []) as {
+    //
+    // Paginated, and ordered by (event_version, id): 777 active rows already
+    // come back for a 120-market event, so a bigger board clears PostgREST's
+    // 1000-row cap and the unpaginated read silently blanked estimates. `id`
+    // breaks the version tie — ordering by the repeated event_version alone
+    // leaves page boundaries undefined, which drops or duplicates rows.
+    const snaps = await readAllPages<{
       market_id: string; selection_key: string; probability: number; event_version: number;
-    }[]) {
+    }>(() =>
+      supabaseAdmin
+        .from("fantasy_odds_snapshots")
+        .select("market_id, selection_key, probability, event_version")
+        .eq("event_id", eventId)
+        .lte("event_version", version)
+        .eq("status", "active")
+        .in("market_id", marketIds)
+        .order("event_version", { ascending: true })
+        .order("id", { ascending: true })
+    );
+    const probByKey = new Map<string, number>();
+    for (const s of snaps) {
       // Ascending version order → the last write per key is the newest.
       probByKey.set(`${s.market_id}|${s.selection_key}`, Number(s.probability));
     }
@@ -321,16 +359,20 @@ export async function estimateSingleCashouts(
     const hasDrift = evPicks.some((p) => p.market && DRIFT_MARKETS.has(p.market.market_type));
     const pmfByKey = new Map<string, { min: number; probs: number[] }>();
     if (hasDrift) {
-      // Same relaxation as the snapshots above — freshest available, not exact.
-      const { data: pmfs } = await supabaseAdmin
-        .from("fantasy_score_pmfs")
-        .select("profile_id, basis, pmf_min, pmf_probs, event_version")
-        .eq("event_id", eventId)
-        .lte("event_version", version)
-        .order("event_version", { ascending: true });
-      for (const r of (pmfs ?? []) as {
+      // Same relaxation as the snapshots above — freshest available, not exact,
+      // and paginated on the same total order for the same reason.
+      const pmfs = await readAllPages<{
         profile_id: string; basis: string; pmf_min: number; pmf_probs: number[];
-      }[]) {
+      }>(() =>
+        supabaseAdmin
+          .from("fantasy_score_pmfs")
+          .select("profile_id, basis, pmf_min, pmf_probs, event_version")
+          .eq("event_id", eventId)
+          .lte("event_version", version)
+          .order("event_version", { ascending: true })
+          .order("id", { ascending: true })
+      );
+      for (const r of pmfs) {
         pmfByKey.set(`${r.profile_id}|${r.basis}`, { min: r.pmf_min, probs: r.pmf_probs });
       }
     }

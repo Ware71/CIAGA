@@ -168,23 +168,14 @@ export default function MyPicksClient() {
     const session = await requireViewerSession();
     if (!session) return;
     const headers = { Authorization: `Bearer ${session.accessToken}` };
-    const [picksRes, parlaysRes, seasonRes] = await Promise.all([
-      fetch("/api/fantasy/picks", { headers }),
-      fetch("/api/fantasy/parlays", { headers }),
-      fetch("/api/fantasy/seasons/picks", { headers }),
-    ]);
-    if (picksRes.ok) {
-      const j = await picksRes.json();
-      setPicks(j.picks ?? []);
-    }
-    if (parlaysRes.ok) {
-      const j = await parlaysRes.json();
-      setParlays(j.parlays ?? []);
-    }
-    if (seasonRes.ok) {
-      const j = await seasonRes.json();
-      setSeasonPicks(j.picks ?? []);
-    }
+    // One request, not three: the server resolves auth once and prices singles
+    // and accas off a single placement context per event.
+    const res = await fetch("/api/fantasy/my-picks", { headers });
+    if (!res.ok) return;
+    const j = await res.json();
+    setPicks(j.picks ?? []);
+    setParlays(j.parlays ?? []);
+    setSeasonPicks(j.seasonPicks ?? []);
   }, []);
 
   useEffect(() => {

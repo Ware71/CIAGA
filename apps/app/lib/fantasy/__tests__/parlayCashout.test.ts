@@ -5,7 +5,7 @@ import {
   legIsCashable,
   type OpenLegForPricing,
 } from "@/lib/fantasy/parlayCashout";
-import { computeCashoutValue } from "@/lib/fantasy/cashout";
+import { computeCashoutValue, legCouldBeCashable } from "@/lib/fantasy/cashout";
 import type { FantasyMarket, LiveMarketCtx } from "@/lib/fantasy/markets/types";
 import { MIN_JOINT_SUPPORT, type MatrixLeg } from "@/lib/fantasy/simulation/jointPricing";
 import type { JointBundle } from "@/lib/fantasy/simulation/jointBundle";
@@ -247,5 +247,42 @@ describe("legIsCashable", () => {
 
   it("refuses once the event is completed", () => {
     expect(legIsCashable(market(), SUBJECT, BETTOR, ctx({ eventCompleted: true }))).toBe(false);
+  });
+
+  describe("legCouldBeCashable — the context-free prefilter", () => {
+    // The estimators use this to decide which events are worth a placement
+    // context. It must never pass something legIsCashable would refuse for a
+    // context-free reason, or an event gets skipped that had cashable picks.
+    it("passes exactly the markets that can reach the live gates", () => {
+      expect(legCouldBeCashable(market())).toBe(true);
+      expect(legCouldBeCashable(undefined)).toBe(false);
+      expect(legCouldBeCashable(market({ status: "settled" }))).toBe(false);
+      expect(legCouldBeCashable(market({ status: "suspended" }))).toBe(false);
+      expect(legCouldBeCashable(market({ status: "void" }))).toBe(false);
+      expect(
+        legCouldBeCashable(market({ market_type: "field_special", params: { kind: "field_eagle" } }))
+      ).toBe(false);
+      expect(
+        legCouldBeCashable(market({ market_type: "nonsense" as FantasyMarket["market_type"] }))
+      ).toBe(false);
+    });
+
+    it("never rejects a market that legIsCashable would accept", () => {
+      // The safety property the skip depends on: prefilter false ⇒ full gate
+      // false, for every market shape we know about. If this ever inverts, an
+      // event with live cashable picks would silently lose its estimates.
+      const shapes: FantasyMarket[] = [
+        market(),
+        market({ status: "settled" }),
+        market({ status: "suspended" }),
+        market({ market_type: "field_special", params: { kind: "field_eagle" } }),
+        market({ market_type: "nonsense" as FantasyMarket["market_type"] }),
+      ];
+      for (const m of shapes) {
+        if (legIsCashable(m, SUBJECT, BETTOR, ctx())) {
+          expect(legCouldBeCashable(m)).toBe(true);
+        }
+      }
+    });
   });
 });

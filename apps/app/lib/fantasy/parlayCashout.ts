@@ -5,6 +5,7 @@ import {
   CASHOUT_OFFER_TTL_MS,
   computeCashoutValue,
   DRIFT_MARKETS,
+  legCouldBeCashable,
   pmfBasis,
 } from "@/lib/fantasy/cashout";
 import { getMarketDefinition } from "@/lib/fantasy/markets/registry";
@@ -29,18 +30,23 @@ async function loadScorePmfs(
 ): Promise<Map<string, { min: number; probs: number[] }>> {
   const out = new Map<string, { min: number; probs: number[] }>();
   for (const [eventId, version] of eventVersionByEvent) {
-    let q = supabaseAdmin
-      .from("fantasy_score_pmfs")
-      .select("profile_id, basis, pmf_min, pmf_probs")
-      .eq("event_id", eventId);
-    // Ascending version order → the last write per key is the newest.
-    q = opts.tolerant
-      ? q.lte("event_version", version).order("event_version", { ascending: true })
-      : q.eq("event_version", version);
-    const { data } = await q;
-    for (const r of (data ?? []) as {
+    const rows = await readAllPages<{
       profile_id: string; basis: string; pmf_min: number; pmf_probs: number[];
-    }[]) {
+    }>(() => {
+      const q = supabaseAdmin
+        .from("fantasy_score_pmfs")
+        .select("profile_id, basis, pmf_min, pmf_probs")
+        .eq("event_id", eventId);
+      // Ascending version order → the last write per key is the newest; `id`
+      // makes that order total, which is what keeps paging sound.
+      return opts.tolerant
+        ? q
+            .lte("event_version", version)
+            .order("event_version", { ascending: true })
+            .order("id", { ascending: true })
+        : q.eq("event_version", version).order("id", { ascending: true });
+    });
+    for (const r of rows) {
       out.set(`${eventId}|${r.profile_id}|${r.basis}`, { min: r.pmf_min, probs: r.pmf_probs });
     }
   }
@@ -59,9 +65,9 @@ export function legIsCashable(
   bettorProfileId: string,
   live: LiveMarketCtx | undefined
 ): boolean {
-  if (!market || market.status !== "open" || !live) return false;
+  if (!market || !live || !legCouldBeCashable(market)) return false;
   const def = getMarketDefinition(market.market_type);
-  if (!def || !def.eligibleForCashout) return false;
+  if (!def) return false;
   if (selectionIsFrozen(market, selectionKey, live)) return false;
   if (def.isSelfDependent(market, selectionKey, bettorProfileId, live)) return false;
   return def.cashoutCutoff(market, selectionKey, live).eligible;
@@ -78,7 +84,12 @@ function legPmfProbability(
   const pmf = pmfByKey.get(`${eventId}|${market.subject_profile_id}|${pmfBasis(market)}`);
   return pmf ? scoreSelectionProbability(market.market_type, selectionKey, pmf) : null;
 }
-import { loadPlacementContext, refreshIfStale } from "@/lib/fantasy/odds";
+import {
+  loadPlacementContext,
+  refreshIfStale,
+  type PlacementContextCache,
+} from "@/lib/fantasy/odds";
+import { readAllPages } from "@/lib/fantasy/paginate";
 import { matrixLegFor } from "@/lib/fantasy/parlays";
 import { rankingBasisFromScoringModel } from "@/lib/fantasy/parlayRules";
 import { PickError } from "@/lib/fantasy/picks";
@@ -220,7 +231,8 @@ export type EstimateParlay = {
  * prices the joint precisely. Null for anything not cashable right now.
  */
 export async function estimateParlayCashouts(
-  parlays: EstimateParlay[]
+  parlays: EstimateParlay[],
+  contextCache?: PlacementContextCache
 ): Promise<Map<string, number | null>> {
   const out = new Map<string, number | null>();
   for (const p of parlays) out.set(p.id, null);
@@ -266,17 +278,23 @@ export async function estimateParlayCashouts(
   for (const eventId of eventIds) {
     const state = stateByEvent.get(eventId);
     if (!state || state.is_final) continue;
-    const { data: snaps } = await supabaseAdmin
-      .from("fantasy_odds_snapshots")
-      .select("market_id, selection_key, probability, event_version")
-      .eq("event_id", eventId)
-      .lte("event_version", state.version)
-      .eq("status", "active")
-      .in("market_id", [...(marketsByEvent.get(eventId) ?? [])])
-      .order("event_version", { ascending: true });
-    for (const s of (snaps ?? []) as {
+    // Paginated on a total order for the same reason as the singles estimator:
+    // the unpaginated read truncated at 1000 rows and silently blanked every
+    // acca on a big board.
+    const snaps = await readAllPages<{
       market_id: string; selection_key: string; probability: number; event_version: number;
-    }[]) {
+    }>(() =>
+      supabaseAdmin
+        .from("fantasy_odds_snapshots")
+        .select("market_id, selection_key, probability, event_version")
+        .eq("event_id", eventId)
+        .lte("event_version", state.version)
+        .eq("status", "active")
+        .in("market_id", [...(marketsByEvent.get(eventId) ?? [])])
+        .order("event_version", { ascending: true })
+        .order("id", { ascending: true })
+    );
+    for (const s of snaps) {
       // Ascending version order → the last write per key is the newest.
       probByKey.set(`${eventId}|${s.market_id}|${s.selection_key}`, Number(s.probability));
     }
@@ -306,16 +324,28 @@ export async function estimateParlayCashouts(
   // firm quote does. Without this the acca cards advertised a live value for
   // legs whose players were frozen for the ceremony — a number the quote then
   // refused, and one that had no business being on screen mid-ceremony.
-  const liveByEvent = new Map<string, Awaited<ReturnType<typeof loadPlacementContext>>["live"]>();
-  for (const eventId of eventIds) {
+  //
+  // Only events with at least one leg that clears the context-free gates are
+  // worth loading: an event whose markets are all settled or non-cashable used
+  // to pay a full placement context to discover that. Contexts load in parallel
+  // — they're independent per event and each is several round trips deep.
+  const contextEventIds = eventIds.filter((eventId) => {
     const state = stateByEvent.get(eventId);
-    if (!state || state.is_final) continue;
-    try {
-      liveByEvent.set(eventId, (await loadPlacementContext(eventId)).live);
-    } catch {
-      // No context ⇒ no estimate for that event's parlays (handled below).
-    }
-  }
+    if (!state || state.is_final) return false;
+    return [...(marketsByEvent.get(eventId) ?? [])].some((marketId) =>
+      legCouldBeCashable(marketById.get(marketId))
+    );
+  });
+  const liveByEvent = new Map<string, Awaited<ReturnType<typeof loadPlacementContext>>["live"]>();
+  await Promise.all(
+    contextEventIds.map(async (eventId) => {
+      try {
+        liveByEvent.set(eventId, (await loadPlacementContext(eventId, contextCache)).live);
+      } catch {
+        // No context ⇒ no estimate for that event's parlays (handled below).
+      }
+    })
+  );
 
   for (const parlay of openParlays) {
     let ok = true;
