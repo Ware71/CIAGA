@@ -3,7 +3,7 @@ import { parsePointsAmount, readFantasyConfig } from "@/lib/fantasy/config";
 import { getMarketDefinition } from "@/lib/fantasy/markets/registry";
 import { selectionIsFrozen, type FantasyMarket } from "@/lib/fantasy/markets/types";
 import { estimateSingleCashouts } from "@/lib/fantasy/cashout";
-import { loadPlacementContext } from "@/lib/fantasy/odds";
+import { loadPlacementContext, type PlacementContextCache } from "@/lib/fantasy/odds";
 import { findSelfRestriction } from "@/lib/fantasy/selfRestriction";
 import {
   ensureBudgetGrant,
@@ -106,7 +106,10 @@ export type MyPick = {
   group_name: string;
 };
 
-export async function getMyPicks(profileId: string): Promise<MyPick[]> {
+export async function getMyPicks(
+  profileId: string,
+  contextCache?: PlacementContextCache
+): Promise<MyPick[]> {
   const { data, error } = await supabaseAdmin
     .from("fantasy_picks")
     .select(
@@ -147,7 +150,8 @@ export async function getMyPicks(profileId: string): Promise<MyPick[]> {
         profile_id: profileId,
         potential_return: Number(r.potential_return),
         market: r.market as FantasyMarket,
-      }))
+      })),
+    contextCache
   );
 
   return rows.map((row) => {

@@ -2,7 +2,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { parsePointsAmount, readFantasyConfig } from "@/lib/fantasy/config";
 import { getMarketDefinition } from "@/lib/fantasy/markets/registry";
 import { selectionIsFrozen, type FantasyMarket } from "@/lib/fantasy/markets/types";
-import { loadPlacementContext } from "@/lib/fantasy/odds";
+import { loadPlacementContext, type PlacementContextCache } from "@/lib/fantasy/odds";
 import { estimateParlayCashouts } from "@/lib/fantasy/parlayCashout";
 import { PickError } from "@/lib/fantasy/picks";
 import {
@@ -343,7 +343,10 @@ export type MyParlay = {
   legs: MyParlayLeg[];
 };
 
-export async function getMyParlays(profileId: string): Promise<MyParlay[]> {
+export async function getMyParlays(
+  profileId: string,
+  contextCache?: PlacementContextCache
+): Promise<MyParlay[]> {
   const { data, error } = await supabaseAdmin
     .from("fantasy_parlays")
     .select(
@@ -390,7 +393,8 @@ export async function getMyParlays(profileId: string): Promise<MyParlay[]> {
         decimal_odds: leg.decimal_odds,
         status: leg.status,
       })),
-    }))
+    })),
+    contextCache
   );
 
   return rows.map((row) => ({

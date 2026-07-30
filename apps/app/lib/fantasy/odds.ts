@@ -50,7 +50,26 @@ export type EventRow = {
   competition_id: string | null;
   competition_event_template_id: string | null;
   event_year: number | null;
+  /**
+   * Carried on the event row so the live-data load doesn't have to re-read the
+   * SAME `events` row just for this column — that was a whole round trip on
+   * every placement-context load.
+   */
+  leaderboard_freeze_state: string | null;
 };
+
+/** The event's rounds — one read, shared by the hole load and the live-data load. */
+export type EventRoundRow = {
+  id: string;
+  round_number: number;
+  status: string;
+  course_id: string | null;
+  default_tee_box_id_male: string | null;
+  default_tee_box_id_female: string | null;
+};
+
+/** A tee-time slot, resolved up front so the rounds read doesn't wait on it. */
+type TeeTimeRow = { id: string; event_round_id: string | null };
 
 export type EntryRow = {
   profile_id: string;
@@ -82,12 +101,32 @@ export async function loadEvent(eventId: string): Promise<EventRow> {
   const { data, error } = await supabaseAdmin
     .from("events")
     .select(
-      "id, name, group_id, course_id, event_date, majors_status, scoring_model, scoring_basis, handicap_rules, num_rounds, entry_window_start, entry_window_end, group_season_id, competition_id, competition_event_template_id, event_year"
+      "id, name, group_id, course_id, event_date, majors_status, scoring_model, scoring_basis, handicap_rules, num_rounds, entry_window_start, entry_window_end, group_season_id, competition_id, competition_event_template_id, event_year, leaderboard_freeze_state"
     )
     .eq("id", eventId)
     .single();
   if (error) throw error;
   return data as EventRow;
+}
+
+/** The event's rounds. Both `loadHoles` and `loadLiveRoundData` need these; they
+ *  used to fetch them independently, twice per placement-context load. */
+export async function loadEventRounds(eventId: string): Promise<EventRoundRow[]> {
+  const { data } = await supabaseAdmin
+    .from("event_rounds")
+    .select("id, round_number, status, course_id, default_tee_box_id_male, default_tee_box_id_female")
+    .eq("event_id", eventId)
+    .order("round_number", { ascending: true });
+  return (data ?? []) as EventRoundRow[];
+}
+
+async function loadEventTeeTimes(eventId: string): Promise<TeeTimeRow[]> {
+  const { data, error } = await supabaseAdmin
+    .from("event_tee_times")
+    .select("id, event_round_id")
+    .eq("event_id", eventId);
+  if (error) throw error;
+  return (data ?? []) as TeeTimeRow[];
 }
 
 export function allowancePct(event: EventRow): number {
@@ -342,21 +381,8 @@ function fallbackHoles(round = 1): SimHole[] {
  * own course/tee (falling back to the event course, then to a standard-par
  * layout), so a 2-round event across two courses simulates both correctly.
  */
-async function loadHoles(event: EventRow): Promise<SimHole[]> {
+async function loadHoles(event: EventRow, eventRounds: EventRoundRow[]): Promise<SimHole[]> {
   const numRounds = Math.max(1, event.num_rounds ?? 1);
-
-  const { data: roundRows } = await supabaseAdmin
-    .from("event_rounds")
-    .select("round_number, status, course_id, default_tee_box_id_male, default_tee_box_id_female")
-    .eq("event_id", event.id)
-    .order("round_number", { ascending: true });
-  const eventRounds = (roundRows ?? []) as {
-    round_number: number;
-    status: string;
-    course_id: string | null;
-    default_tee_box_id_male: string | null;
-    default_tee_box_id_female: string | null;
-  }[];
 
   const defs: { round: number; courseId: string | null; preferredTee: string | null }[] = [];
   for (let r = 1; r <= numRounds; r++) {
@@ -424,19 +450,96 @@ export function clipToShownHoles(
   return kept;
 }
 
-/** Live in-event rounds: per-player per-event-round status + latest scores. */
-async function loadLiveRoundData(eventId: string, fallbackHoleCount: number): Promise<LiveRoundData> {
-  // rounds ↔ event_tee_times are related in both directions, which makes a
-  // PostgREST embed ambiguous — resolve the tee times first, then the rounds.
-  const [{ data: teeTimes, error: ttErr }, { data: erRows }] = await Promise.all([
-    supabaseAdmin.from("event_tee_times").select("id, event_round_id").eq("event_id", eventId),
-    supabaseAdmin.from("event_rounds").select("id, round_number").eq("event_id", eventId),
-  ]);
-  if (ttErr) throw ttErr;
+type RoundParticipantRow = { id: string; round_id: string; profile_id: string | null };
+
+async function loadRoundParticipants(roundIds: string[]): Promise<RoundParticipantRow[]> {
+  const { data, error } = await supabaseAdmin
+    .from("round_participants")
+    .select("id, round_id, profile_id")
+    .in("round_id", roundIds);
+  if (error) throw error;
+  return (data ?? []) as RoundParticipantRow[];
+}
+
+async function loadFreezeSnapshots(
+  eventId: string
+): Promise<{ profile_id: string; holes_shown: number | null }[]> {
+  const { data } = await supabaseAdmin
+    .from("event_player_freeze_snapshots")
+    .select("profile_id, holes_shown")
+    .eq("event_id", eventId);
+  return (data ?? []) as { profile_id: string; holes_shown: number | null }[];
+}
+
+type EffectiveScoreRow = {
+  participant_id: string; hole_number: number;
+  effective_strokes: number | null; ndb_strokes: number | null; counts_as_played: boolean;
+};
+
+/**
+ * Every effective score for the given rounds, from `round_effective_scores` —
+ * the same view both leaderboard functions read, rather than raw
+ * round_score_events. That view resolves the latest event per hole AND applies
+ * WHS net double bogey to a picked-up hole off `course_handicap_used` — the
+ * identical basis the scorecard uses — so the model, the leaderboard and
+ * settlement cannot disagree about a pick-up.
+ *
+ * Reading the raw table instead cost us twice: a picked-up hole (strokes NULL)
+ * vanished from the map, which (a) understated the player's gross by the whole
+ * net double bogey, and (b) shortened their key list, so the freeze clip —
+ * which keeps the first `holes_shown` ENTRIES — reached one hole PAST the
+ * threshold and published a hidden score. Measured on a real card: the model
+ * priced a 115 round as 107 and leaked hole 13 while the board showed thru 12.
+ *
+ * Paginated: the view emits a row per snapshot hole — including holes not yet
+ * played, which the old round_score_events read filtered out — so a big
+ * multi-round field clears PostgREST's 1000-row cap and would silently lose
+ * scores. (Exactly how The International lost 54 markets before F8.) The ORDER
+ * BY is what makes that pagination sound: `range()` over an unordered select
+ * has no defined row-to-page assignment, so a row could be served twice or
+ * skipped entirely once the field passes 1000 — which is precisely how
+ * completedByProfile would lose the one-entry-per-played-hole invariant that
+ * `clipToShownHoles` slices on.
+ */
+async function loadEffectiveScores(roundIds: string[]): Promise<EffectiveScoreRow[]> {
+  const rows: EffectiveScoreRow[] = [];
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabaseAdmin
+      .from("round_effective_scores")
+      .select("participant_id, hole_number, effective_strokes, ndb_strokes, counts_as_played")
+      .in("round_id", roundIds)
+      .order("participant_id", { ascending: true })
+      .order("hole_number", { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    const page = (data ?? []) as EffectiveScoreRow[];
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+  return rows;
+}
+
+/**
+ * Live in-event rounds: per-player per-event-round status + latest scores.
+ *
+ * `eventRounds` and `teeTimes` are resolved by the caller (rounds ↔
+ * event_tee_times are related in both directions, which makes a PostgREST embed
+ * ambiguous), and the freeze state rides on `event` — so this does no redundant
+ * reads of its own. `holesPromise` is awaited only at the one point the per-round
+ * hole-count fallback needs it, which lets the hole load overlap the score read
+ * instead of blocking it.
+ */
+async function loadLiveRoundData(
+  event: EventRow,
+  holesPromise: Promise<SimHole[]>,
+  prefetched: { eventRounds: EventRoundRow[]; teeTimes: TeeTimeRow[] }
+): Promise<LiveRoundData> {
+  const eventId = event.id;
   const roundNumberByEventRoundId = new Map(
-    ((erRows ?? []) as { id: string; round_number: number }[]).map((r) => [r.id, r.round_number])
+    prefetched.eventRounds.map((r) => [r.id, r.round_number])
   );
-  const slots = (teeTimes ?? []) as { id: string; event_round_id: string | null }[];
+  const slots = prefetched.teeTimes;
   const teeTimeIds = slots.map((t) => t.id);
   const eventRoundOfTeeTime = new Map(
     slots.map((t) => [
@@ -467,17 +570,25 @@ async function loadLiveRoundData(eventId: string, fallbackHoleCount: number): Pr
   const roundIds = rounds.map((r) => r.id);
   const roundById = new Map(rounds.map((r) => [r.id, r]));
 
+  // Participants, scores and the freeze snapshots depend only on ids we already
+  // hold, so they go out together instead of in series. Processing still happens
+  // in order below — the score loop needs the participant → profile mapping.
+  const isFrozen = event.leaderboard_freeze_state === "frozen";
+  const [partRows, scoreRows, freezeSnapshots] = await Promise.all([
+    roundIds.length > 0 ? loadRoundParticipants(roundIds) : Promise.resolve([]),
+    roundIds.length > 0 ? loadEffectiveScores(roundIds) : Promise.resolve([]),
+    isFrozen ? loadFreezeSnapshots(eventId) : Promise.resolve([]),
+  ]);
+
   const participantToProfile = new Map<string, string>();
   const participantEventRound = new Map<string, number>();
   const participantRoundFinished = new Map<string, boolean>();
   const profileRoundStatus = new Map<string, Map<number, { finished: boolean; holesInRound: number }>>();
   if (roundIds.length > 0) {
-    const { data: partData, error: partErr } = await supabaseAdmin
-      .from("round_participants")
-      .select("id, round_id, profile_id")
-      .in("round_id", roundIds);
-    if (partErr) throw partErr;
-    for (const p of (partData ?? []) as { id: string; round_id: string; profile_id: string | null }[]) {
+    // Awaited here and only here: the per-round hole count falls back to the
+    // event's hole set, but nothing above this point needs it.
+    const fallbackHoleCount = (await holesPromise).length;
+    for (const p of partRows) {
       if (!p.profile_id) continue;
       const round = roundById.get(p.round_id);
       if (!round) continue;
@@ -496,42 +607,11 @@ async function loadLiveRoundData(eventId: string, fallbackHoleCount: number): Pr
     }
   }
 
-  // Scores come from round_effective_scores, the same view both leaderboard
-  // functions read, rather than raw round_score_events. That view resolves the
-  // latest event per hole AND applies WHS net double bogey to a picked-up hole
-  // off `course_handicap_used` — the identical basis the scorecard uses — so the
-  // model, the leaderboard and settlement cannot disagree about a pick-up.
-  //
-  // Reading the raw table instead cost us twice: a picked-up hole (strokes NULL)
-  // vanished from the map, which (a) understated the player's gross by the whole
-  // net double bogey, and (b) shortened their key list, so the freeze clip below
-  // — which keeps the first `holes_shown` ENTRIES — reached one hole PAST the
-  // threshold and published a hidden score. Measured on a real card: the model
-  // priced a 115 round as 107 and leaked hole 13 while the board showed thru 12.
-  type EffectiveScoreRow = {
-    participant_id: string; hole_number: number;
-    effective_strokes: number | null; ndb_strokes: number | null; counts_as_played: boolean;
-  };
+  // See loadEffectiveScores for why these rows come from the view and why the
+  // map must hold one entry per played hole, pick-ups included.
   const completedByProfile = new Map<string, Record<number, number>>();
-  if (roundIds.length > 0) {
-    // Paginate: the view emits a row per snapshot hole — including holes not yet
-    // played, which the old round_score_events read filtered out — so a big
-    // multi-round field clears PostgREST's 1000-row cap and would silently lose
-    // scores. (Exactly how The International lost 54 markets before F8.)
-    const rows: EffectiveScoreRow[] = [];
-    const pageSize = 1000;
-    for (let from = 0; ; from += pageSize) {
-      const { data, error: scoreErr } = await supabaseAdmin
-        .from("round_effective_scores")
-        .select("participant_id, hole_number, effective_strokes, ndb_strokes, counts_as_played")
-        .in("round_id", roundIds)
-        .range(from, from + pageSize - 1);
-      if (scoreErr) throw scoreErr;
-      const page = (data ?? []) as EffectiveScoreRow[];
-      rows.push(...page);
-      if (page.length < pageSize) break;
-    }
-    for (const row of rows) {
+  {
+    for (const row of scoreRows) {
       const profileId = participantToProfile.get(row.participant_id);
       if (!profileId) continue;
       // A hole not yet played contributes nothing WHILE the round is live, but a
@@ -561,20 +641,13 @@ async function loadLiveRoundData(eventId: string, fallbackHoleCount: number): Pr
   // holes here, at the single point where live scores enter the engine, so
   // every market, cash-out quote and narrative downstream is leak-proof by
   // construction.
+  //
+  // The freeze state now rides on the event row loaded up front, and the
+  // snapshots were fetched alongside the scores — same reads, one round trip
+  // deep instead of three.
   const frozenProfiles = new Set<string>();
-  const { data: freezeEvent } = await supabaseAdmin
-    .from("events")
-    .select("leaderboard_freeze_state")
-    .eq("id", eventId)
-    .maybeSingle();
-
-  if ((freezeEvent as any)?.leaderboard_freeze_state === "frozen") {
-    const { data: snaps } = await supabaseAdmin
-      .from("event_player_freeze_snapshots")
-      .select("profile_id, holes_shown")
-      .eq("event_id", eventId);
-
-    for (const s of (snaps ?? []) as { profile_id: string; holes_shown: number | null }[]) {
+  if (isFrozen) {
+    for (const s of freezeSnapshots) {
       if (!s.profile_id) continue;
       frozenProfiles.add(s.profile_id);
       const shown = s.holes_shown ?? 0;
@@ -668,17 +741,71 @@ function makeLiveCtx(event: EventRow, holes: SimHole[], liveData: LiveRoundData)
  * Lightweight context for placement / cash-out eligibility checks — no
  * profile rebuilds or handicap resolution, just event status + live scores.
  */
-export async function loadPlacementContext(eventId: string): Promise<{
+export type PlacementContext = {
   event: EventRow;
   holes: SimHole[];
   live: LiveMarketCtx;
   liveData: LiveRoundData;
-}> {
-  const event = await loadEvent(eventId);
-  let holes = await loadHoles(event);
-  if (holes.length === 0) holes = fallbackHoles();
-  const liveData = await loadLiveRoundData(eventId, holes.length);
+};
+
+async function loadPlacementContextUncached(eventId: string): Promise<PlacementContext> {
+  // Three independent head reads, then two independent branches — four round
+  // trips deep instead of the ten this used to serialise. Nothing here loads
+  // more than it did; it just stops waiting on itself. (Handicap resolution
+  // still deliberately does NOT happen on this path — that's what keeps the
+  // placement/cash-out context cheap.)
+  const [event, eventRounds, teeTimes] = await Promise.all([
+    loadEvent(eventId),
+    loadEventRounds(eventId),
+    loadEventTeeTimes(eventId),
+  ]);
+  const holesPromise = loadHoles(event, eventRounds).then((h) =>
+    h.length === 0 ? fallbackHoles() : h
+  );
+  const liveData = await loadLiveRoundData(event, holesPromise, { eventRounds, teeTimes });
+  const holes = await holesPromise;
   return { event, holes, live: makeLiveCtx(event, holes, liveData), liveData };
+}
+
+/**
+ * An explicit per-request memo, created by the caller and passed down.
+ *
+ * React's `cache()` was the obvious choice here — it's what `getServerViewer`
+ * uses (lib/supabaseServer.ts). It does NOT work in a Route Handler: measured on
+ * a production build, a second `loadPlacementContext` for the same event inside
+ * one request cost 178ms against the first call's 181ms, i.e. no memoisation at
+ * all. React's cache store is established for the RSC render scope, and a route
+ * handler doesn't run inside one. So the memo is threaded explicitly.
+ *
+ * Scope is deliberately one request. This context carries
+ * `leaderboard_freeze_state` and the clipped score map, so a TTL or module-level
+ * cache could hand a caller a pre-freeze view of a now-frozen event — exactly
+ * the ceremony leak the freeze gate exists to stop.
+ */
+export type PlacementContextCache = Map<string, Promise<PlacementContext>>;
+
+export function newPlacementContextCache(): PlacementContextCache {
+  return new Map();
+}
+
+/**
+ * Lightweight context for placement / cash-out eligibility checks.
+ *
+ * Pass a `cache` when one request will ask for the same event more than once —
+ * the My Picks endpoint prices singles and accas over an overlapping event set,
+ * and each miss is four round trips. The PROMISE is memoised, not the resolved
+ * value, so concurrent callers share one in-flight load rather than racing two.
+ */
+export function loadPlacementContext(
+  eventId: string,
+  cache?: PlacementContextCache
+): Promise<PlacementContext> {
+  if (!cache) return loadPlacementContextUncached(eventId);
+  const inFlight = cache.get(eventId);
+  if (inFlight) return inFlight;
+  const pending = loadPlacementContextUncached(eventId);
+  cache.set(eventId, pending);
+  return pending;
 }
 
 type ProvisionalPlayer = { profileId: string; attendanceProb: number };
@@ -756,7 +883,14 @@ async function loadProvisionalPlayers(
 }
 
 export async function loadSimInputs(eventId: string): Promise<EventSimContext> {
-  const event = await loadEvent(eventId);
+  // event_rounds and event_tee_times are needed further down by loadHoles and
+  // loadLiveRoundData respectively; fetching them alongside the event costs
+  // nothing extra and removes two serial hops from the refresh path.
+  const [event, eventRounds, teeTimes] = await Promise.all([
+    loadEvent(eventId),
+    loadEventRounds(eventId),
+    loadEventTeeTimes(eventId),
+  ]);
   if (!event.group_id) throw new Error("Event has no group");
   const groupId = event.group_id;
 
@@ -796,7 +930,7 @@ export async function loadSimInputs(eventId: string): Promise<EventSimContext> {
   }));
   const allEntries = [...entries, ...provisionalEntries];
 
-  let holes = await loadHoles(event);
+  let holes = await loadHoles(event, eventRounds);
   if (holes.length === 0) holes = fallbackHoles();
 
   // Handicaps resolve AFTER the holes load: converting a handicap index into a
@@ -808,7 +942,10 @@ export async function loadSimInputs(eventId: string): Promise<EventSimContext> {
     conversionFromHoles(holes)
   );
 
-  const liveData = await loadLiveRoundData(eventId, holes.length);
+  const liveData = await loadLiveRoundData(event, Promise.resolve(holes), {
+    eventRounds,
+    teeTimes,
+  });
   const { profileRoundStatus, completedByProfile } = liveData;
 
   const roundNumbers = [...new Set(holes.map((h) => h.round ?? 1))].sort((a, b) => a - b);
