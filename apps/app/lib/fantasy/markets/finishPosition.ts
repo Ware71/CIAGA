@@ -41,12 +41,12 @@ export const finishPosition: MarketDefinition = {
   eligibleForCashout: true,
 
   displayName(market, names) {
-    return `${playerName(names, market.subject_profile_id)} — Finishing Position`;
+    return `${playerName(names, market.subject_profile_id)} — Finishing Position (ties count)`;
   },
 
   selectionLabel(_market, selectionKey) {
     const n = Number(selectionKey);
-    return Number.isInteger(n) ? `Exactly ${ordinal(n)}` : selectionKey;
+    return Number.isInteger(n) ? `${ordinal(n)} or T${ordinal(n)}` : selectionKey;
   },
 
   generateMarkets(ctx: GenerateCtx): MarketSpec[] {
@@ -86,6 +86,10 @@ export const finishPosition: MarketDefinition = {
     const player = market.subject_profile_id ? final.players[market.subject_profile_id] : undefined;
     // Settle the full possible range — a pick only ever sits on an offered
     // position (≤ MAX_POSITIONS); extras simply resolve "lost".
+    //
+    // `position` (ties intact), NOT `resolvedPosition`: backing 1st and
+    // finishing T1 pays out whatever the playoff decides. Only the outright
+    // winner market is resolved by the tie-break. Do not "unify" these.
     for (let pos = 1; pos <= MAX_POSITIONS; pos++) {
       if (!player || player.withdrawn || player.position == null) {
         out.set(String(pos), "void");

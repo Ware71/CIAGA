@@ -7,6 +7,7 @@ import {
 } from "@/lib/majors/queries";
 import type { FrozenLeaderboardEntry, EventPlayoff } from "@/lib/majors/types";
 import { computeFormulaPoints, FEDEX_POINTS } from "@/lib/events/constants";
+import { resolvedPositionsFromPlayoff } from "@/lib/majors/playoffPoints";
 
 /**
  * The event branch of GET /api/majors/leaderboard, lifted out verbatim so the
@@ -235,14 +236,14 @@ function applyCompletedPlayoff<T extends PlayoffAdjustable>(
   activePlayoff: EventPlayoff | null,
   event: EventConfig,
 ): T[] {
-  if (!activePlayoff || activePlayoff.status !== "completed") return rows;
-  const tied = new Set(activePlayoff.tied_profile_ids ?? []);
-  const winner = activePlayoff.winner_profile_id;
-  const type = activePlayoff.resolution_type ?? "playoff";
+  const resolved = resolvedPositionsFromPlayoff(activePlayoff);
+  if (resolved.size === 0) return rows;
+  const winner = activePlayoff?.winner_profile_id;
+  const type = activePlayoff?.resolution_type ?? "playoff";
   const fieldSize = Math.max(rows.filter((r) => (r.net_score ?? null) != null).length, 1);
   const adjusted = rows.map((r) => {
-    if (!tied.has(r.profile_id)) return r;
-    const pos = r.profile_id === winner ? 1 : 2;
+    const pos = resolved.get(r.profile_id);
+    if (pos == null) return r;
     return {
       ...r,
       position: pos,

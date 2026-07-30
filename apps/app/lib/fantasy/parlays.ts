@@ -1,7 +1,7 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { parsePointsAmount, readFantasyConfig } from "@/lib/fantasy/config";
 import { getMarketDefinition } from "@/lib/fantasy/markets/registry";
-import type { FantasyMarket } from "@/lib/fantasy/markets/types";
+import { selectionIsFrozen, type FantasyMarket } from "@/lib/fantasy/markets/types";
 import { loadPlacementContext } from "@/lib/fantasy/odds";
 import { estimateParlayCashouts } from "@/lib/fantasy/parlayCashout";
 import { PickError } from "@/lib/fantasy/picks";
@@ -149,6 +149,9 @@ export async function placeParlay(params: {
     if (!def) throw new PickError("Unknown market type");
     if (market.status !== "open") throw new PickError("A market in this acca is no longer open");
     const live = liveByEvent.get(market.event_id)!;
+    if (selectionIsFrozen(market, leg.selectionKey, live)) {
+      throw new PickError("A player in this acca is frozen for the ceremony");
+    }
     if (!def.placementAllowed(market, leg.selectionKey, live)) {
       throw new PickError("A selection in this acca can no longer be backed");
     }
@@ -375,6 +378,7 @@ export async function getMyParlays(profileId: string): Promise<MyParlay[]> {
   const estimates = await estimateParlayCashouts(
     rows.map((row) => ({
       id: row.id,
+      profile_id: row.profile_id,
       stake: row.stake,
       potential_return: row.potential_return,
       joint_priced: !!row.joint_priced,

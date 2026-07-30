@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 import { getGroupStandings } from "@/lib/majors/queries";
 import { getEventLeaderboardPayload } from "@/lib/majors/eventLeaderboardPayload";
@@ -25,7 +26,27 @@ export async function GET(req: Request) {
 
     if (groupId) {
       const rows = await getGroupStandings(groupId);
-      return NextResponse.json({ rows }, { headers: { "Cache-Control": "no-store" } });
+      // Standings themselves are masked in ciaga_compute_group_standings (a
+      // frozen event contributes its freeze-snapshot position/points, not the
+      // real ones). Surface the fact that a ceremony is in progress so the
+      // client can badge the table — without it, callers had no way to know
+      // these numbers are provisional.
+      const { data: frozen } = await supabaseAdmin
+        .from("events")
+        .select("id, name")
+        .eq("group_id", groupId)
+        .eq("leaderboard_freeze_state", "frozen")
+        .in("standings_contribution", ["season", "both"]);
+      return NextResponse.json(
+        {
+          rows,
+          freeze: {
+            any_frozen: (frozen ?? []).length > 0,
+            frozen_events: (frozen ?? []).map((e: any) => ({ id: e.id, name: e.name })),
+          },
+        },
+        { headers: { "Cache-Control": "no-store" } }
+      );
     }
 
     return NextResponse.json({ error: "Provide event_id or group_id" }, { status: 400 });

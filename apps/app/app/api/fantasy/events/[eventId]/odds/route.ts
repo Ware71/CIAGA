@@ -67,24 +67,54 @@ export async function GET(req: Request, { params }: { params: Promise<{ eventId:
       refreshing = !result.refreshed && result.refreshing;
     }
 
-    const [{ data: freshState }, { data: marketData, error: marketErr }, { data: snapData, error: snapErr }] =
-      await Promise.all([
-        supabaseAdmin.from("fantasy_event_state").select("*").eq("event_id", eventId).single(),
-        supabaseAdmin.from("fantasy_markets").select("*").eq("event_id", eventId),
-        supabaseAdmin
+    // State first: the snapshot read needs the current version to filter on.
+    const { data: freshState } = await supabaseAdmin
+      .from("fantasy_event_state")
+      .select("*")
+      .eq("event_id", eventId)
+      .single();
+
+    type SnapshotRow = {
+      id: string; market_id: string; selection_key: string;
+      probability: number; decimal_odds: number; event_version: number; computed_at: string;
+    };
+
+    // This read was unpaginated, so PostgREST's 1000-row cap silently truncated
+    // it: The International 2026 (236 markets over 2 rounds) came back with 182
+    // markets priced and 54 arbitrarily blank.
+    //
+    // Page it, but do NOT also filter to the current event_version. `status =
+    // 'active'` is the selector on purpose: writeSnapshots deliberately leaves a
+    // market's previous snapshot active when it wasn't re-priced this version
+    // (e.g. its subject was briefly out of the field), because blanking it
+    // punches a hole in the ladder — the "1+ shows, 2+ blank, 3+ shows" bug.
+    // Markets that WERE re-priced have their older rows superseded, so there is
+    // no double-counting.
+    const readSnapshots = async (): Promise<SnapshotRow[]> => {
+      const rows: SnapshotRow[] = [];
+      const pageSize = 1000;
+      for (let from = 0; ; from += pageSize) {
+        const { data, error } = await supabaseAdmin
           .from("fantasy_odds_snapshots")
           .select("id, market_id, selection_key, probability, decimal_odds, event_version, computed_at")
           .eq("event_id", eventId)
-          .eq("status", "active"),
-      ]);
+          .eq("status", "active")
+          .range(from, from + pageSize - 1);
+        if (error) throw error;
+        const page = (data ?? []) as SnapshotRow[];
+        rows.push(...page);
+        if (page.length < pageSize) break;
+      }
+      return rows;
+    };
+
+    const [{ data: marketData, error: marketErr }, snapshots] = await Promise.all([
+      supabaseAdmin.from("fantasy_markets").select("*").eq("event_id", eventId),
+      readSnapshots(),
+    ]);
     if (marketErr) throw marketErr;
-    if (snapErr) throw snapErr;
 
     const markets = (marketData ?? []) as FantasyMarket[];
-    const snapshots = (snapData ?? []) as {
-      id: string; market_id: string; selection_key: string;
-      probability: number; decimal_odds: number; event_version: number; computed_at: string;
-    }[];
 
     // Names for player-scoped markets and player selection keys.
     const nameIds = new Set<string>();

@@ -111,30 +111,75 @@ export type PlayingHandicapDetail = {
     | "no_data";
 };
 
+/** Tee ratings needed to turn a handicap index into a course handicap. */
+export type CourseConversion = {
+  slope: number | null;
+  rating: number | null;
+  parTotal: number | null;
+  holesInRound: number | null;
+};
+
 /**
- * Event playing handicap per player. Uses the same source as the leaderboard
- * (event_entries assigned values), so net market pricing matches settlement:
- * assigned_playing_handicap → CH × allowance → HI × allowance → profile HI.
- * compare_against_lowest mode nets everyone against the field's lowest.
+ * Event playing handicap per player: PLAYING HANDICAP = COURSE HANDICAP ×
+ * allowance, matching round_participants and therefore the leaderboard.
+ *
+ * The trap this function used to fall into: event_entries.assigned_course_handicap
+ * and .assigned_playing_handicap are never written by the app — only
+ * assigned_handicap_index is (see events/[id]/enter) — so every entry landed on
+ * the index branch, and the index was then multiplied by the allowance AS IF it
+ * were a course handicap. That skipped the slope/rating conversion entirely and
+ * priced every net market off a handicap ~7-8 strokes too generous (measured on
+ * the CiaGA Championship 2026: HI 22.1 → 15 on the leaderboard, 23 in fantasy).
+ *
+ * `conversion` supplies the tee's slope/rating/par so an index can be converted
+ * properly. Without it we can only fall back to treating the index as a course
+ * handicap — the old behaviour — so callers that can supply it should.
  */
 export function resolvePlayingHandicapDetails(
   event: EventRow,
   entries: EntryRow[],
-  profileHi: Map<string, number | null>
+  profileHi: Map<string, number | null>,
+  conversion?: CourseConversion | null
 ): Map<string, PlayingHandicapDetail> {
   const rules = event.handicap_rules as { mode?: string } | null;
   const pct = allowancePct(event);
   const out = new Map<string, PlayingHandicapDetail>();
 
+  const slope = conversion?.slope ?? null;
+  const rating = conversion?.rating ?? null;
+  const parTotal = conversion?.parTotal ?? null;
+  const holesInRound = conversion?.holesInRound ?? 18;
+
+  /** WHS course handicap from an index, mirroring calcCourseHandicap plus the
+   *  9-hole halving the round SQL applies (20260717000000). */
+  const indexToCourseHandicap = (hi: number): number => {
+    if (slope == null || rating == null || parTotal == null) return hi;
+    const effectiveHi = holesInRound === 9 ? hi / 2 : hi;
+    return Math.round(effectiveHi * (slope / 113) + (rating - parTotal));
+  };
+
   const courseHandicap = (
     e: EntryRow
   ): { value: number; src: "assigned_course_handicap" | "assigned_handicap_index" | "profile_handicap_index" } | null => {
+    // An explicitly assigned course handicap is deliberate organiser intent and
+    // still wins (nothing writes it today, but if something does, honour it).
     if (e.assigned_course_handicap != null)
       return { value: Number(e.assigned_course_handicap), src: "assigned_course_handicap" };
-    if (e.assigned_handicap_index != null)
-      return { value: Number(e.assigned_handicap_index), src: "assigned_handicap_index" };
+    // The player's REAL, current handicap index — the same value the round and
+    // the leaderboard compute from. Deliberately preferred over
+    // event_entries.assigned_handicap_index, which is a snapshot frozen at entry
+    // time and drifts away from reality as the player's index moves: Ware
+    // entered off ~24.6 but plays off 22.1, so the entry snapshot priced him two
+    // strokes too generously while the leaderboard settled on the live figure.
     const hi = profileHi.get(e.profile_id);
-    if (hi != null) return { value: hi, src: "profile_handicap_index" };
+    if (hi != null)
+      return { value: indexToCourseHandicap(hi), src: "profile_handicap_index" };
+    // Only when there is no live index at all (e.g. a historical import).
+    if (e.assigned_handicap_index != null)
+      return {
+        value: indexToCourseHandicap(Number(e.assigned_handicap_index)),
+        src: "assigned_handicap_index",
+      };
     return null;
   };
 
@@ -175,13 +220,59 @@ export function resolvePlayingHandicapDetails(
 function resolvePlayingHandicaps(
   event: EventRow,
   entries: EntryRow[],
-  profileHi: Map<string, number | null>
+  profileHi: Map<string, number | null>,
+  conversion?: CourseConversion | null
 ): Map<string, number> {
   const out = new Map<string, number>();
-  for (const [pid, d] of resolvePlayingHandicapDetails(event, entries, profileHi)) {
+  for (const [pid, d] of resolvePlayingHandicapDetails(event, entries, profileHi, conversion)) {
     out.set(pid, d.value);
   }
   return out;
+}
+
+/**
+ * Each player's REAL, current handicap index — the latest handicap_index_history
+ * row, which is exactly what ciaga_current_true_hi() returns and therefore what
+ * the round and the leaderboard compute their course handicaps from.
+ *
+ * fantasy_player_profiles.handicap_index is a rebuilt cache with a 24h TTL, so it
+ * can lag a handicap that moved this morning; it stays as the fallback for
+ * players with no history rows at all.
+ */
+export async function loadCurrentHandicapIndexes(
+  profileIds: string[],
+  cached?: Map<string, { handicap_index: number | null }>
+): Promise<Map<string, number | null>> {
+  const out = new Map<string, number | null>();
+  if (cached) for (const [pid, row] of cached) out.set(pid, row.handicap_index);
+  if (profileIds.length === 0) return out;
+
+  const { data } = await supabaseAdmin
+    .from("handicap_index_history")
+    .select("profile_id, handicap_index, as_of_date")
+    .in("profile_id", profileIds)
+    .not("handicap_index", "is", null)
+    .order("as_of_date", { ascending: true });
+
+  // Ascending → the last write per player is their newest index.
+  for (const r of (data ?? []) as {
+    profile_id: string; handicap_index: number | string;
+  }[]) {
+    out.set(r.profile_id, Number(r.handicap_index));
+  }
+  return out;
+}
+
+/** Tee conversion inputs ride on every SimHole; round 1's tee is the basis. */
+export function conversionFromHoles(holes: SimHole[]): CourseConversion | null {
+  const h = holes.find((x) => (x.round ?? 1) === 1) ?? holes[0];
+  if (!h) return null;
+  return {
+    slope: h.slope ?? null,
+    rating: h.rating ?? null,
+    parTotal: h.parTotal ?? null,
+    holesInRound: h.holesInRound ?? null,
+  };
 }
 
 /** One tee's holes for a course; empty when unresolvable. */
@@ -299,7 +390,39 @@ export type LiveRoundData = {
   profileRoundStatus: Map<string, Map<number, { finished: boolean; holesInRound: number }>>;
   /** profile → holeKey(round, hole) → latest strokes. */
   completedByProfile: Map<string, Record<number, number>>;
+  /**
+   * Players whose leaderboard row is frozen for the ceremony. Their holes above
+   * the freeze threshold have already been stripped from completedByProfile, so
+   * the model can only see what a spectator sees.
+   */
+  frozenProfiles: Set<string>;
 };
+
+/**
+ * Keep only the first `shown` holes a frozen player has played, in play order.
+ *
+ * `holes_shown` counts holes across the whole event, so this slices the ordered
+ * key list rather than filtering on hole number — which would be wrong for a
+ * multi-round event and for anyone starting on the 10th.
+ *
+ * The invariant this depends on: the map must hold ONE ENTRY PER PLAYED HOLE,
+ * including picked-up ones. When a picked-up hole was missing (its score event
+ * carries NULL strokes), the slice ran one hole deeper than the freeze threshold
+ * and leaked a hidden score — hence `loadLiveRoundData` reading
+ * `round_effective_scores`, which always emits the pick-up.
+ */
+export function clipToShownHoles(
+  completed: Record<number, number>,
+  shown: number
+): Record<number, number> {
+  const kept: Record<number, number> = {};
+  const orderedKeys = Object.keys(completed)
+    .map(Number)
+    .sort((a, b) => a - b)
+    .slice(0, Math.max(shown, 0));
+  for (const k of orderedKeys) kept[k] = completed[k];
+  return kept;
+}
 
 /** Live in-event rounds: per-player per-event-round status + latest scores. */
 async function loadLiveRoundData(eventId: string, fallbackHoleCount: number): Promise<LiveRoundData> {
@@ -323,7 +446,11 @@ async function loadLiveRoundData(eventId: string, fallbackHoleCount: number): Pr
   );
 
   if (teeTimeIds.length === 0) {
-    return { profileRoundStatus: new Map(), completedByProfile: new Map() };
+    return {
+      profileRoundStatus: new Map(),
+      completedByProfile: new Map(),
+      frozenProfiles: new Set(),
+    };
   }
 
   // Plain queries, no embed: rounds ↔ round_participants embeds are ambiguous
@@ -342,6 +469,7 @@ async function loadLiveRoundData(eventId: string, fallbackHoleCount: number): Pr
 
   const participantToProfile = new Map<string, string>();
   const participantEventRound = new Map<string, number>();
+  const participantRoundFinished = new Map<string, boolean>();
   const profileRoundStatus = new Map<string, Map<number, { finished: boolean; holesInRound: number }>>();
   if (roundIds.length > 0) {
     const { data: partData, error: partErr } = await supabaseAdmin
@@ -358,6 +486,7 @@ async function loadLiveRoundData(eventId: string, fallbackHoleCount: number): Pr
         : 1;
       participantToProfile.set(p.id, p.profile_id);
       participantEventRound.set(p.id, eventRound);
+      participantRoundFinished.set(p.id, round.status === "finished");
       const perRound = profileRoundStatus.get(p.profile_id) ?? new Map();
       perRound.set(eventRound, {
         finished: round.status === "finished",
@@ -367,27 +496,104 @@ async function loadLiveRoundData(eventId: string, fallbackHoleCount: number): Pr
     }
   }
 
+  // Scores come from round_effective_scores, the same view both leaderboard
+  // functions read, rather than raw round_score_events. That view resolves the
+  // latest event per hole AND applies WHS net double bogey to a picked-up hole
+  // off `course_handicap_used` — the identical basis the scorecard uses — so the
+  // model, the leaderboard and settlement cannot disagree about a pick-up.
+  //
+  // Reading the raw table instead cost us twice: a picked-up hole (strokes NULL)
+  // vanished from the map, which (a) understated the player's gross by the whole
+  // net double bogey, and (b) shortened their key list, so the freeze clip below
+  // — which keeps the first `holes_shown` ENTRIES — reached one hole PAST the
+  // threshold and published a hidden score. Measured on a real card: the model
+  // priced a 115 round as 107 and leaked hole 13 while the board showed thru 12.
+  type EffectiveScoreRow = {
+    participant_id: string; hole_number: number;
+    effective_strokes: number | null; ndb_strokes: number | null; counts_as_played: boolean;
+  };
   const completedByProfile = new Map<string, Record<number, number>>();
   if (roundIds.length > 0) {
-    const { data: scoreData, error: scoreErr } = await supabaseAdmin
-      .from("round_score_events")
-      .select("participant_id, hole_number, strokes, created_at, id")
-      .in("round_id", roundIds)
-      .not("strokes", "is", null)
-      .order("created_at", { ascending: true })
-      .order("id", { ascending: true });
-    if (scoreErr) throw scoreErr;
-    for (const ev of (scoreData ?? []) as any[]) {
-      const profileId = participantToProfile.get(ev.participant_id);
+    // Paginate: the view emits a row per snapshot hole — including holes not yet
+    // played, which the old round_score_events read filtered out — so a big
+    // multi-round field clears PostgREST's 1000-row cap and would silently lose
+    // scores. (Exactly how The International lost 54 markets before F8.)
+    const rows: EffectiveScoreRow[] = [];
+    const pageSize = 1000;
+    for (let from = 0; ; from += pageSize) {
+      const { data, error: scoreErr } = await supabaseAdmin
+        .from("round_effective_scores")
+        .select("participant_id, hole_number, effective_strokes, ndb_strokes, counts_as_played")
+        .in("round_id", roundIds)
+        .range(from, from + pageSize - 1);
+      if (scoreErr) throw scoreErr;
+      const page = (data ?? []) as EffectiveScoreRow[];
+      rows.push(...page);
+      if (page.length < pageSize) break;
+    }
+    for (const row of rows) {
+      const profileId = participantToProfile.get(row.participant_id);
       if (!profileId) continue;
-      const eventRound = participantEventRound.get(ev.participant_id) ?? 1;
+      // A hole not yet played contributes nothing WHILE the round is live, but a
+      // FINISHED card scores it net double bogey (WHS Rule 3.1) — the same
+      // COALESCE(effective_strokes, ndb_strokes) the submitted leaderboard
+      // lateral applies. Uses the real round status: the freeze block below
+      // reports frozen players as unfinished, which must not change the maths.
+      const strokes =
+        row.counts_as_played && row.effective_strokes != null
+          ? row.effective_strokes
+          : participantRoundFinished.get(row.participant_id)
+            ? row.ndb_strokes
+            : null;
+      if (strokes == null) continue;
+      const eventRound = participantEventRound.get(row.participant_id) ?? 1;
       const map = completedByProfile.get(profileId) ?? {};
-      map[holeKey(eventRound, ev.hole_number)] = ev.strokes; // ascending → last write wins
+      map[holeKey(eventRound, row.hole_number)] = strokes;
       completedByProfile.set(profileId, map);
     }
   }
 
-  return { profileRoundStatus, completedByProfile };
+  // ── Ceremony freeze ────────────────────────────────────────────────────
+  // The leaderboard hides a frozen player's last N holes, but the model was
+  // still pricing off every one of them — so the board published, to within a
+  // stroke, the score the ceremony was hiding (measured: an outright drifting
+  // 4.50 → 51.00 while the leaderboard showed "thru 12"). Strip the hidden
+  // holes here, at the single point where live scores enter the engine, so
+  // every market, cash-out quote and narrative downstream is leak-proof by
+  // construction.
+  const frozenProfiles = new Set<string>();
+  const { data: freezeEvent } = await supabaseAdmin
+    .from("events")
+    .select("leaderboard_freeze_state")
+    .eq("id", eventId)
+    .maybeSingle();
+
+  if ((freezeEvent as any)?.leaderboard_freeze_state === "frozen") {
+    const { data: snaps } = await supabaseAdmin
+      .from("event_player_freeze_snapshots")
+      .select("profile_id, holes_shown")
+      .eq("event_id", eventId);
+
+    for (const s of (snaps ?? []) as { profile_id: string; holes_shown: number | null }[]) {
+      if (!s.profile_id) continue;
+      frozenProfiles.add(s.profile_id);
+      const shown = s.holes_shown ?? 0;
+
+      const completed = completedByProfile.get(s.profile_id);
+      if (completed) completedByProfile.set(s.profile_id, clipToShownHoles(completed, shown));
+
+      // Their round being finished is itself part of what's hidden — leaving it
+      // true would close their markets at exactly the moment they hole out.
+      const perRound = profileRoundStatus.get(s.profile_id);
+      if (perRound) {
+        for (const [round, st] of perRound) {
+          perRound.set(round, { ...st, finished: false });
+        }
+      }
+    }
+  }
+
+  return { profileRoundStatus, completedByProfile, frozenProfiles };
 }
 
 function makeLiveCtx(event: EventRow, holes: SimHole[], liveData: LiveRoundData): LiveMarketCtx {
@@ -420,6 +626,7 @@ function makeLiveCtx(event: EventRow, holes: SimHole[], liveData: LiveRoundData)
 
   return {
     eventCompleted: ["completed", "cancelled"].includes(event.majors_status),
+    frozen: (profileId) => liveData.frozenProfiles.has(profileId),
     roundComplete: (profileId, round) => {
       if (round != null) return profileRoundStatus.get(profileId)?.get(round)?.finished ?? false;
       const perRound = profileRoundStatus.get(profileId);
@@ -576,8 +783,7 @@ export async function loadSimInputs(eventId: string): Promise<EventSimContext> {
     loadNames(fieldIds),
   ]);
 
-  const profileHi = new Map<string, number | null>();
-  for (const [pid, row] of profiles) profileHi.set(pid, row.handicap_index);
+  const profileHi = await loadCurrentHandicapIndexes(fieldIds, profiles);
 
   // Provisional players get a synthetic entry (no assigned values) so their PH
   // resolves from profile HI × allowance — the same path the leaderboard uses.
@@ -589,10 +795,18 @@ export async function loadSimInputs(eventId: string): Promise<EventSimContext> {
     assigned_playing_handicap: null,
   }));
   const allEntries = [...entries, ...provisionalEntries];
-  const playingHandicaps = resolvePlayingHandicaps(event, allEntries, profileHi);
 
   let holes = await loadHoles(event);
   if (holes.length === 0) holes = fallbackHoles();
+
+  // Handicaps resolve AFTER the holes load: converting a handicap index into a
+  // course handicap needs the tee's slope/rating/par, which ride on SimHole.
+  const playingHandicaps = resolvePlayingHandicaps(
+    event,
+    allEntries,
+    profileHi,
+    conversionFromHoles(holes)
+  );
 
   const liveData = await loadLiveRoundData(eventId, holes.length);
   const { profileRoundStatus, completedByProfile } = liveData;

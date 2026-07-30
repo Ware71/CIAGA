@@ -35,7 +35,7 @@ export async function reconcileEventStatus(
   const [eventResult, roundsResult, teeTimesResult] = await Promise.all([
     supabaseAdmin
       .from("events")
-      .select("majors_status, event_date")
+      .select("majors_status, event_date, leaderboard_freeze_state")
       .eq("id", eventId)
       .maybeSingle(),
     supabaseAdmin
@@ -55,8 +55,19 @@ export async function reconcileEventStatus(
     return;
   }
 
-  const evt = eventResult.data as { majors_status: EventStatus; event_date: string | null } | null;
+  const evt = eventResult.data as {
+    majors_status: EventStatus;
+    event_date: string | null;
+    leaderboard_freeze_state: string | null;
+  } | null;
   if (!evt) return;
+
+  // A frozen leaderboard means the ceremony hasn't happened yet. Completing the
+  // event here would settle the fantasy book (reconcile fires settleFantasyEvent
+  // below) and publish the finished result into season standings — both of which
+  // spoil the reveal for everyone watching. Hold at 'live' until the organiser
+  // taps Reveal Results, which un-freezes and then calls this function again.
+  const isFrozen = evt.leaderboard_freeze_state === "frozen";
 
   const rounds = (roundsResult.data ?? []) as { status: string }[];
 
@@ -160,7 +171,7 @@ export async function reconcileEventStatus(
     const anyRoundLive =
       activeEventRounds.some((r) => r.status === "live") || anyLinkedRoundLive;
 
-    if (activeTeeTimeCount > 0 && allRoundsCompleted) {
+    if (activeTeeTimeCount > 0 && allRoundsCompleted && !isFrozen) {
       target = "completed";
     } else if (daysDiff >= 0 || anyRoundLive || anyLinkedRoundEverStarted) {
       target = "live";

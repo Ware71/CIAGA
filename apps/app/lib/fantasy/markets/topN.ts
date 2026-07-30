@@ -25,7 +25,7 @@ export const topN: MarketDefinition = {
   eligibleForCashout: true,
 
   displayName(market) {
-    return `Top ${marketN(market)} Finish`;
+    return `Top ${marketN(market)} Finish (ties count)`;
   },
 
   selectionLabel(_market, selectionKey, names) {
@@ -56,6 +56,8 @@ export const topN: MarketDefinition = {
   settle(final: FinalScoringData, market): Map<string, SettlementOutcome> {
     const n = marketN(market);
     const out = new Map<string, SettlementOutcome>();
+    // Tied rank, not the playoff-resolved one: T3 in a top-3 market pays.
+    // Matches the pricing, which counts position <= n with ties all in.
     for (const p of Object.values(final.players)) {
       if (p.withdrawn || p.position == null) out.set(p.profileId, "void");
       else out.set(p.profileId, p.position <= n ? "won" : "lost");

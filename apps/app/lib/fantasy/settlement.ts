@@ -8,11 +8,17 @@ import type {
 } from "@/lib/fantasy/markets/types";
 import { marketRound } from "@/lib/fantasy/markets/roundUtil";
 import {
+  conversionFromHoles,
+  loadCurrentHandicapIndexes,
   loadPlacementContext,
   resolvePlayingHandicapDetails,
   type EntryRow,
 } from "@/lib/fantasy/odds";
 import { holeKey } from "@/lib/fantasy/simulation/types";
+import {
+  resolvedPositionsFromPlayoff,
+  type PlayoffOutcome,
+} from "@/lib/majors/playoffPoints";
 import { createNotification } from "@/lib/notifications/notify";
 
 /**
@@ -33,8 +39,12 @@ export type SettleResult =
   | { settled: false; reason: string };
 
 async function loadFinalScoringData(eventId: string): Promise<FinalScoringData> {
-  const [{ data: entryData, error: entryErr }, { data: lbData, error: lbErr }, placement] =
-    await Promise.all([
+  const [
+    { data: entryData, error: entryErr },
+    { data: lbData, error: lbErr },
+    { data: playoffData },
+    placement,
+  ] = await Promise.all([
       supabaseAdmin
         .from("event_entries")
         .select(
@@ -43,18 +53,31 @@ async function loadFinalScoringData(eventId: string): Promise<FinalScoringData> 
         .eq("event_id", eventId),
       supabaseAdmin
         .from("event_leaderboard_entries")
-        .select("profile_id, position, gross_score, net_score")
+        .select("profile_id, position, playoff_final_position, gross_score, net_score")
         .eq("event_id", eventId),
+      // The trophy is resolved from the playoff RECORD, not from
+      // event_leaderboard_entries.playoff_final_position — any recompute wipes
+      // that column, and the event sits at 'live' right through the frozen
+      // window, so merely opening the group or season page (which recomputes
+      // live events to refresh standings) used to un-resolve the tie and settle
+      // BOTH tied players' outrights as winners.
+      supabaseAdmin
+        .from("event_playoffs")
+        .select("status, winner_profile_id, tied_profile_ids")
+        .eq("event_id", eventId)
+        .maybeSingle(),
       loadPlacementContext(eventId),
     ]);
   if (entryErr) throw entryErr;
   if (lbErr) throw lbErr;
+  const resolvedByPlayoff = resolvedPositionsFromPlayoff(playoffData as PlayoffOutcome);
 
   const entries = (entryData ?? []) as (EntryRow & { entry_status: string })[];
 
   // Playing handicaps (per round) — same resolution the pricing uses, so
-  // round nets match the leaderboard's per-submission handicap sum.
-  const profileHi = new Map<string, number | null>();
+  // round nets match the leaderboard's per-submission handicap sum. The cached
+  // fantasy profile is only a fallback; the real current index wins.
+  const cachedHi = new Map<string, { handicap_index: number | null }>();
   if (placement.event.group_id && entries.length > 0) {
     const { data: hiRows } = await supabaseAdmin
       .from("fantasy_player_profiles")
@@ -62,10 +85,24 @@ async function loadFinalScoringData(eventId: string): Promise<FinalScoringData> 
       .eq("group_id", placement.event.group_id)
       .in("profile_id", entries.map((e) => e.profile_id));
     for (const r of (hiRows ?? []) as { profile_id: string; handicap_index: number | null }[]) {
-      profileHi.set(r.profile_id, r.handicap_index != null ? Number(r.handicap_index) : null);
+      cachedHi.set(r.profile_id, {
+        handicap_index: r.handicap_index != null ? Number(r.handicap_index) : null,
+      });
     }
   }
-  const phDetails = resolvePlayingHandicapDetails(placement.event, entries, profileHi);
+  const profileHi = await loadCurrentHandicapIndexes(
+    entries.map((e) => e.profile_id),
+    cachedHi
+  );
+  // Same conversion the pricing uses (tee slope/rating/par off the loaded
+  // holes), so a net market settles on the handicap it was priced with — and
+  // on the same one the leaderboard ranked with.
+  const phDetails = resolvePlayingHandicapDetails(
+    placement.event,
+    entries,
+    profileHi,
+    conversionFromHoles(placement.holes)
+  );
 
   const holes = placement.holes.map((h) => ({
     holeNumber: h.holeNumber,
@@ -133,6 +170,7 @@ async function loadFinalScoringData(eventId: string): Promise<FinalScoringData> 
     players[e.profile_id] = {
       profileId: e.profile_id,
       position: null,
+      resolvedPosition: null,
       grossScore: null,
       netScore: null,
       birdieCount: counts.birdies,
@@ -143,7 +181,8 @@ async function loadFinalScoringData(eventId: string): Promise<FinalScoringData> 
     };
   }
   for (const lb of (lbData ?? []) as {
-    profile_id: string; position: number | null; gross_score: number | null; net_score: number | null;
+    profile_id: string; position: number | null; playoff_final_position: number | null;
+    gross_score: number | null; net_score: number | null;
   }[]) {
     let player = players[lb.profile_id];
     if (!player) {
@@ -151,6 +190,7 @@ async function loadFinalScoringData(eventId: string): Promise<FinalScoringData> 
       player = {
         profileId: lb.profile_id,
         position: null,
+        resolvedPosition: null,
         grossScore: null,
         netScore: null,
         birdieCount: counts.birdies,
@@ -161,6 +201,11 @@ async function loadFinalScoringData(eventId: string): Promise<FinalScoringData> 
       };
     }
     player.position = lb.position;
+    // Tied `position` stays untouched — position/top-N/range markets pay ties.
+    // Only the outright uses resolvedPosition. Column is the fallback for a
+    // countback or an older record the playoff table doesn't describe.
+    player.resolvedPosition =
+      resolvedByPlayoff.get(lb.profile_id) ?? lb.playoff_final_position ?? lb.position;
     player.grossScore = lb.gross_score;
     player.netScore = lb.net_score;
     players[lb.profile_id] = player;
