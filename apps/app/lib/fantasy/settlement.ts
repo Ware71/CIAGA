@@ -15,6 +15,10 @@ import {
   type EntryRow,
 } from "@/lib/fantasy/odds";
 import { holeKey } from "@/lib/fantasy/simulation/types";
+import {
+  resolvedPositionsFromPlayoff,
+  type PlayoffOutcome,
+} from "@/lib/majors/playoffPoints";
 import { createNotification } from "@/lib/notifications/notify";
 
 /**
@@ -35,8 +39,12 @@ export type SettleResult =
   | { settled: false; reason: string };
 
 async function loadFinalScoringData(eventId: string): Promise<FinalScoringData> {
-  const [{ data: entryData, error: entryErr }, { data: lbData, error: lbErr }, placement] =
-    await Promise.all([
+  const [
+    { data: entryData, error: entryErr },
+    { data: lbData, error: lbErr },
+    { data: playoffData },
+    placement,
+  ] = await Promise.all([
       supabaseAdmin
         .from("event_entries")
         .select(
@@ -47,10 +55,22 @@ async function loadFinalScoringData(eventId: string): Promise<FinalScoringData> 
         .from("event_leaderboard_entries")
         .select("profile_id, position, playoff_final_position, gross_score, net_score")
         .eq("event_id", eventId),
+      // The trophy is resolved from the playoff RECORD, not from
+      // event_leaderboard_entries.playoff_final_position — any recompute wipes
+      // that column, and the event sits at 'live' right through the frozen
+      // window, so merely opening the group or season page (which recomputes
+      // live events to refresh standings) used to un-resolve the tie and settle
+      // BOTH tied players' outrights as winners.
+      supabaseAdmin
+        .from("event_playoffs")
+        .select("status, winner_profile_id, tied_profile_ids")
+        .eq("event_id", eventId)
+        .maybeSingle(),
       loadPlacementContext(eventId),
     ]);
   if (entryErr) throw entryErr;
   if (lbErr) throw lbErr;
+  const resolvedByPlayoff = resolvedPositionsFromPlayoff(playoffData as PlayoffOutcome);
 
   const entries = (entryData ?? []) as (EntryRow & { entry_status: string })[];
 
@@ -181,7 +201,11 @@ async function loadFinalScoringData(eventId: string): Promise<FinalScoringData> 
       };
     }
     player.position = lb.position;
-    player.resolvedPosition = lb.playoff_final_position ?? lb.position;
+    // Tied `position` stays untouched — position/top-N/range markets pay ties.
+    // Only the outright uses resolvedPosition. Column is the fallback for a
+    // countback or an older record the playoff table doesn't describe.
+    player.resolvedPosition =
+      resolvedByPlayoff.get(lb.profile_id) ?? lb.playoff_final_position ?? lb.position;
     player.grossScore = lb.gross_score;
     player.netScore = lb.net_score;
     players[lb.profile_id] = player;

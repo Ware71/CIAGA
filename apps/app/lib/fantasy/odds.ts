@@ -398,6 +398,32 @@ export type LiveRoundData = {
   frozenProfiles: Set<string>;
 };
 
+/**
+ * Keep only the first `shown` holes a frozen player has played, in play order.
+ *
+ * `holes_shown` counts holes across the whole event, so this slices the ordered
+ * key list rather than filtering on hole number — which would be wrong for a
+ * multi-round event and for anyone starting on the 10th.
+ *
+ * The invariant this depends on: the map must hold ONE ENTRY PER PLAYED HOLE,
+ * including picked-up ones. When a picked-up hole was missing (its score event
+ * carries NULL strokes), the slice ran one hole deeper than the freeze threshold
+ * and leaked a hidden score — hence `loadLiveRoundData` reading
+ * `round_effective_scores`, which always emits the pick-up.
+ */
+export function clipToShownHoles(
+  completed: Record<number, number>,
+  shown: number
+): Record<number, number> {
+  const kept: Record<number, number> = {};
+  const orderedKeys = Object.keys(completed)
+    .map(Number)
+    .sort((a, b) => a - b)
+    .slice(0, Math.max(shown, 0));
+  for (const k of orderedKeys) kept[k] = completed[k];
+  return kept;
+}
+
 /** Live in-event rounds: per-player per-event-round status + latest scores. */
 async function loadLiveRoundData(eventId: string, fallbackHoleCount: number): Promise<LiveRoundData> {
   // rounds ↔ event_tee_times are related in both directions, which makes a
@@ -443,6 +469,7 @@ async function loadLiveRoundData(eventId: string, fallbackHoleCount: number): Pr
 
   const participantToProfile = new Map<string, string>();
   const participantEventRound = new Map<string, number>();
+  const participantRoundFinished = new Map<string, boolean>();
   const profileRoundStatus = new Map<string, Map<number, { finished: boolean; holesInRound: number }>>();
   if (roundIds.length > 0) {
     const { data: partData, error: partErr } = await supabaseAdmin
@@ -459,6 +486,7 @@ async function loadLiveRoundData(eventId: string, fallbackHoleCount: number): Pr
         : 1;
       participantToProfile.set(p.id, p.profile_id);
       participantEventRound.set(p.id, eventRound);
+      participantRoundFinished.set(p.id, round.status === "finished");
       const perRound = profileRoundStatus.get(p.profile_id) ?? new Map();
       perRound.set(eventRound, {
         finished: round.status === "finished",
@@ -468,22 +496,59 @@ async function loadLiveRoundData(eventId: string, fallbackHoleCount: number): Pr
     }
   }
 
+  // Scores come from round_effective_scores, the same view both leaderboard
+  // functions read, rather than raw round_score_events. That view resolves the
+  // latest event per hole AND applies WHS net double bogey to a picked-up hole
+  // off `course_handicap_used` — the identical basis the scorecard uses — so the
+  // model, the leaderboard and settlement cannot disagree about a pick-up.
+  //
+  // Reading the raw table instead cost us twice: a picked-up hole (strokes NULL)
+  // vanished from the map, which (a) understated the player's gross by the whole
+  // net double bogey, and (b) shortened their key list, so the freeze clip below
+  // — which keeps the first `holes_shown` ENTRIES — reached one hole PAST the
+  // threshold and published a hidden score. Measured on a real card: the model
+  // priced a 115 round as 107 and leaked hole 13 while the board showed thru 12.
+  type EffectiveScoreRow = {
+    participant_id: string; hole_number: number;
+    effective_strokes: number | null; ndb_strokes: number | null; counts_as_played: boolean;
+  };
   const completedByProfile = new Map<string, Record<number, number>>();
   if (roundIds.length > 0) {
-    const { data: scoreData, error: scoreErr } = await supabaseAdmin
-      .from("round_score_events")
-      .select("participant_id, hole_number, strokes, created_at, id")
-      .in("round_id", roundIds)
-      .not("strokes", "is", null)
-      .order("created_at", { ascending: true })
-      .order("id", { ascending: true });
-    if (scoreErr) throw scoreErr;
-    for (const ev of (scoreData ?? []) as any[]) {
-      const profileId = participantToProfile.get(ev.participant_id);
+    // Paginate: the view emits a row per snapshot hole — including holes not yet
+    // played, which the old round_score_events read filtered out — so a big
+    // multi-round field clears PostgREST's 1000-row cap and would silently lose
+    // scores. (Exactly how The International lost 54 markets before F8.)
+    const rows: EffectiveScoreRow[] = [];
+    const pageSize = 1000;
+    for (let from = 0; ; from += pageSize) {
+      const { data, error: scoreErr } = await supabaseAdmin
+        .from("round_effective_scores")
+        .select("participant_id, hole_number, effective_strokes, ndb_strokes, counts_as_played")
+        .in("round_id", roundIds)
+        .range(from, from + pageSize - 1);
+      if (scoreErr) throw scoreErr;
+      const page = (data ?? []) as EffectiveScoreRow[];
+      rows.push(...page);
+      if (page.length < pageSize) break;
+    }
+    for (const row of rows) {
+      const profileId = participantToProfile.get(row.participant_id);
       if (!profileId) continue;
-      const eventRound = participantEventRound.get(ev.participant_id) ?? 1;
+      // A hole not yet played contributes nothing WHILE the round is live, but a
+      // FINISHED card scores it net double bogey (WHS Rule 3.1) — the same
+      // COALESCE(effective_strokes, ndb_strokes) the submitted leaderboard
+      // lateral applies. Uses the real round status: the freeze block below
+      // reports frozen players as unfinished, which must not change the maths.
+      const strokes =
+        row.counts_as_played && row.effective_strokes != null
+          ? row.effective_strokes
+          : participantRoundFinished.get(row.participant_id)
+            ? row.ndb_strokes
+            : null;
+      if (strokes == null) continue;
+      const eventRound = participantEventRound.get(row.participant_id) ?? 1;
       const map = completedByProfile.get(profileId) ?? {};
-      map[holeKey(eventRound, ev.hole_number)] = ev.strokes; // ascending → last write wins
+      map[holeKey(eventRound, row.hole_number)] = strokes;
       completedByProfile.set(profileId, map);
     }
   }
@@ -514,19 +579,8 @@ async function loadLiveRoundData(eventId: string, fallbackHoleCount: number): Pr
       frozenProfiles.add(s.profile_id);
       const shown = s.holes_shown ?? 0;
 
-      // holes_shown counts holes across the whole event, so keep the first N in
-      // play order rather than filtering on hole number (which would be wrong
-      // for a multi-round event, and for anyone starting on the 10th).
       const completed = completedByProfile.get(s.profile_id);
-      if (completed) {
-        const kept: Record<number, number> = {};
-        const orderedKeys = Object.keys(completed)
-          .map(Number)
-          .sort((a, b) => a - b)
-          .slice(0, shown);
-        for (const k of orderedKeys) kept[k] = completed[k];
-        completedByProfile.set(s.profile_id, kept);
-      }
+      if (completed) completedByProfile.set(s.profile_id, clipToShownHoles(completed, shown));
 
       // Their round being finished is itself part of what's hidden — leaving it
       // true would close their markets at exactly the moment they hole out.

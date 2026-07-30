@@ -378,6 +378,7 @@ export async function getMyParlays(profileId: string): Promise<MyParlay[]> {
   const estimates = await estimateParlayCashouts(
     rows.map((row) => ({
       id: row.id,
+      profile_id: row.profile_id,
       stake: row.stake,
       potential_return: row.potential_return,
       joint_priced: !!row.joint_priced,
