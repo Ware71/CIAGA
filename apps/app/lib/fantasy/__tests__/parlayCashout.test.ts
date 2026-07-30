@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   combineOpenLegProbability,
   effectiveParlayReturn,
+  legIsCashable,
   type OpenLegForPricing,
 } from "@/lib/fantasy/parlayCashout";
 import { computeCashoutValue } from "@/lib/fantasy/cashout";
+import type { FantasyMarket, LiveMarketCtx } from "@/lib/fantasy/markets/types";
 import { MIN_JOINT_SUPPORT, type MatrixLeg } from "@/lib/fantasy/simulation/jointPricing";
 import type { JointBundle } from "@/lib/fantasy/simulation/jointBundle";
 
@@ -164,5 +166,86 @@ describe("acca cash-out quote composition", () => {
     expect(effReturn).toBe(60);
     // Open leg repriced to p = 0.5 → fair 30, quoted 27.
     expect(computeCashoutValue(0.5, effReturn)).toBe(27);
+  });
+});
+
+describe("legIsCashable", () => {
+  const BETTOR = "11111111-1111-4111-8111-111111111111";
+  // An outright's selection key IS the player's uuid, and selectionSubjects only
+  // treats a key as a player when it's uuid-shaped — so these must look real.
+  const SUBJECT = "22222222-2222-4222-8222-222222222222";
+
+  const market = (overrides: Partial<FantasyMarket> = {}): FantasyMarket => ({
+    id: "m1",
+    event_id: "e1",
+    group_id: "g1",
+    market_type: "outright_winner",
+    subject_profile_id: null,
+    opponent_profile_id: null,
+    params: {},
+    status: "open",
+    settled_at: null,
+    ...overrides,
+  });
+
+  const ctx = (overrides: Partial<LiveMarketCtx> = {}): LiveMarketCtx => ({
+    eventCompleted: false,
+    frozen: () => false,
+    roundComplete: () => false,
+    holesRemaining: () => 18,
+    currentBirdies: () => 0,
+    currentEagles: () => 0,
+    holeScore: () => null,
+    ...overrides,
+  });
+
+  it("allows an open leg on an unfrozen player", () => {
+    expect(legIsCashable(market(), SUBJECT, BETTOR, ctx())).toBe(true);
+  });
+
+  it("refuses a leg whose player is frozen for the ceremony", () => {
+    // The D2 regression: estimates used to skip this gate entirely, so acca cards
+    // advertised a value the firm quote then refused.
+    expect(legIsCashable(market(), SUBJECT, BETTOR, ctx({ frozen: (id) => id === SUBJECT }))).toBe(
+      false
+    );
+  });
+
+  it("refuses an h2h leg when EITHER side is frozen", () => {
+    const h2h = market({
+      market_type: "h2h",
+      subject_profile_id: "a",
+      opponent_profile_id: "b",
+      params: { basis: "net" },
+    });
+    expect(legIsCashable(h2h, "a", BETTOR, ctx({ frozen: (id) => id === "b" }))).toBe(false);
+    expect(legIsCashable(h2h, "a", BETTOR, ctx({ frozen: (id) => id === "a" }))).toBe(false);
+    expect(legIsCashable(h2h, "a", BETTOR, ctx())).toBe(true);
+  });
+
+  it("refuses a market type that doesn't support cash-out", () => {
+    // field_special and hole_score are eligibleForCashout: false by design.
+    expect(
+      legIsCashable(market({ market_type: "field_special", params: { kind: "field_eagle" } }), "yes", BETTOR, ctx())
+    ).toBe(false);
+  });
+
+  it("refuses a settled, suspended or unknown market, and a missing context", () => {
+    expect(legIsCashable(market({ status: "settled" }), SUBJECT, BETTOR, ctx())).toBe(false);
+    expect(legIsCashable(market({ status: "suspended" }), SUBJECT, BETTOR, ctx())).toBe(false);
+    expect(
+      legIsCashable(
+        market({ market_type: "nonsense" as FantasyMarket["market_type"] }),
+        SUBJECT,
+        BETTOR,
+        ctx()
+      )
+    ).toBe(false);
+    expect(legIsCashable(undefined, SUBJECT, BETTOR, ctx())).toBe(false);
+    expect(legIsCashable(market(), SUBJECT, BETTOR, undefined)).toBe(false);
+  });
+
+  it("refuses once the event is completed", () => {
+    expect(legIsCashable(market(), SUBJECT, BETTOR, ctx({ eventCompleted: true }))).toBe(false);
   });
 });

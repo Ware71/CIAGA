@@ -9,21 +9,35 @@ import {
 } from "@/lib/fantasy/cashout";
 import { getMarketDefinition } from "@/lib/fantasy/markets/registry";
 import { scoreSelectionProbability } from "@/lib/fantasy/markets/analytic";
-import { selectionIsFrozen, type FantasyMarket } from "@/lib/fantasy/markets/types";
+import {
+  selectionIsFrozen,
+  type FantasyMarket,
+  type LiveMarketCtx,
+} from "@/lib/fantasy/markets/types";
 
-/** Batch-load the current exact-score pmfs for the given events → keyed by
+/** Batch-load the exact-score pmfs for the given events → keyed by
  * `${eventId}|${profileId}|${basis}`. Used to price score_band/score_total legs
- * whose band/value may no longer be an offered snapshot. */
+ * whose band/value may no longer be an offered snapshot.
+ *
+ * `tolerant` serves the freshest pmf at or below the given version instead of
+ * insisting on that exact version. The firm quote must stay exact — it pins a
+ * version and force-refreshes to get one. Indicative estimates must not, or they
+ * blank out for the whole debounce window after every score. */
 async function loadScorePmfs(
-  eventVersionByEvent: Map<string, number>
+  eventVersionByEvent: Map<string, number>,
+  opts: { tolerant?: boolean } = {}
 ): Promise<Map<string, { min: number; probs: number[] }>> {
   const out = new Map<string, { min: number; probs: number[] }>();
   for (const [eventId, version] of eventVersionByEvent) {
-    const { data } = await supabaseAdmin
+    let q = supabaseAdmin
       .from("fantasy_score_pmfs")
       .select("profile_id, basis, pmf_min, pmf_probs")
-      .eq("event_id", eventId)
-      .eq("event_version", version);
+      .eq("event_id", eventId);
+    // Ascending version order → the last write per key is the newest.
+    q = opts.tolerant
+      ? q.lte("event_version", version).order("event_version", { ascending: true })
+      : q.eq("event_version", version);
+    const { data } = await q;
     for (const r of (data ?? []) as {
       profile_id: string; basis: string; pmf_min: number; pmf_probs: number[];
     }[]) {
@@ -31,6 +45,26 @@ async function loadScorePmfs(
     }
   }
   return out;
+}
+
+/**
+ * Whether one open acca leg is cashable right now — the same four gates the firm
+ * quote throws on (see requestParlayCashout). Shared so an indicative estimate
+ * can never advertise a value the quote would refuse: the acca cards used to show
+ * a live cash-out figure for legs whose players were frozen for the ceremony.
+ */
+export function legIsCashable(
+  market: FantasyMarket | undefined,
+  selectionKey: string,
+  bettorProfileId: string,
+  live: LiveMarketCtx | undefined
+): boolean {
+  if (!market || market.status !== "open" || !live) return false;
+  const def = getMarketDefinition(market.market_type);
+  if (!def || !def.eligibleForCashout) return false;
+  if (selectionIsFrozen(market, selectionKey, live)) return false;
+  if (def.isSelfDependent(market, selectionKey, bettorProfileId, live)) return false;
+  return def.cashoutCutoff(market, selectionKey, live).eligible;
 }
 
 /** A drift-market leg's current probability from its pmf, or null. */
@@ -169,6 +203,8 @@ export type ParlayCashoutOffer = {
 
 export type EstimateParlay = {
   id: string;
+  /** The bettor — needed for the self-dependency gate. */
+  profile_id: string;
   stake: number | string;
   potential_return: number | string;
   joint_priced: boolean;
@@ -220,20 +256,28 @@ export async function estimateParlayCashouts(
   );
 
   // `${event_id}|${market_id}|${selection_key}` → current active probability.
+  //
+  // Do NOT pin the exact event_version. Every score bumps it and the reprice is
+  // debounced 60s behind, so an exact match found nothing for that whole window
+  // and every acca button lost its value mid-round — the same defect already
+  // fixed for singles in estimateSingleCashouts. Serve the freshest snapshot at
+  // or below the current version; the firm quote stays exact.
   const probByKey = new Map<string, number>();
   for (const eventId of eventIds) {
     const state = stateByEvent.get(eventId);
     if (!state || state.is_final) continue;
     const { data: snaps } = await supabaseAdmin
       .from("fantasy_odds_snapshots")
-      .select("market_id, selection_key, probability")
+      .select("market_id, selection_key, probability, event_version")
       .eq("event_id", eventId)
-      .eq("event_version", state.version)
+      .lte("event_version", state.version)
       .eq("status", "active")
-      .in("market_id", [...(marketsByEvent.get(eventId) ?? [])]);
+      .in("market_id", [...(marketsByEvent.get(eventId) ?? [])])
+      .order("event_version", { ascending: true });
     for (const s of (snaps ?? []) as {
-      market_id: string; selection_key: string; probability: number;
+      market_id: string; selection_key: string; probability: number; event_version: number;
     }[]) {
+      // Ascending version order → the last write per key is the newest.
       probByKey.set(`${eventId}|${s.market_id}|${s.selection_key}`, Number(s.probability));
     }
   }
@@ -256,7 +300,22 @@ export async function estimateParlayCashouts(
       }
     }
   }
-  const pmfByKey = await loadScorePmfs(driftEventVersions);
+  const pmfByKey = await loadScorePmfs(driftEventVersions, { tolerant: true });
+
+  // Eligibility context per event, so the estimate applies the SAME gates the
+  // firm quote does. Without this the acca cards advertised a live value for
+  // legs whose players were frozen for the ceremony — a number the quote then
+  // refused, and one that had no business being on screen mid-ceremony.
+  const liveByEvent = new Map<string, Awaited<ReturnType<typeof loadPlacementContext>>["live"]>();
+  for (const eventId of eventIds) {
+    const state = stateByEvent.get(eventId);
+    if (!state || state.is_final) continue;
+    try {
+      liveByEvent.set(eventId, (await loadPlacementContext(eventId)).live);
+    } catch {
+      // No context ⇒ no estimate for that event's parlays (handled below).
+    }
+  }
 
   for (const parlay of openParlays) {
     let ok = true;
@@ -267,8 +326,15 @@ export async function estimateParlayCashouts(
         ok = false;
         break;
       }
+      const market = marketById.get(leg.market_id);
+      if (
+        !legIsCashable(market, leg.selection_key, parlay.profile_id, liveByEvent.get(leg.event_id))
+      ) {
+        ok = false;
+        break;
+      }
       let prob: number | null =
-        legPmfProbability(marketById.get(leg.market_id), leg.event_id, leg.selection_key, pmfByKey);
+        legPmfProbability(market, leg.event_id, leg.selection_key, pmfByKey);
       if (prob == null) {
         prob = probByKey.get(`${leg.event_id}|${leg.market_id}|${leg.selection_key}`) ?? null;
       }
