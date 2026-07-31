@@ -4,6 +4,7 @@ import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 import { getEventById } from "@/lib/majors/queries";
 import { computeCountback } from "@/lib/majors/countback";
 import { strokesReceivedOnHole } from "@/lib/rounds/handicapUtils";
+import { notifyPlayoffStarted } from "@/lib/notifications/majorsActivity";
 
 export const runtime = "nodejs";
 
@@ -160,6 +161,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           .select()
           .single();
         if (pe) throw pe;
+
+        // Being in a sudden-death playoff is unmissable-worthy. Countback is a
+        // paper exercise, so it doesn't get a buzz.
+        if (resolution_type === "playoff") {
+          const { data: tiedProfiles } = await supabaseAdmin
+            .from("profiles")
+            .select("name")
+            .in("id", tiedIds);
+          await notifyPlayoffStarted({
+            eventId,
+            playerProfileIds: tiedIds,
+            playerNames: (tiedProfiles ?? []).map((p: any) => p.name).filter(Boolean),
+          });
+        }
 
         if (resolution_type === "playoff" && hole_number && course_id && tee_box_id) {
           // Fetch hole details from the tee box

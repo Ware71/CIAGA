@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 import { getEventById } from "@/lib/majors/queries";
 import { createNotification } from "@/lib/notifications/notify";
+import { notifyGroupAdmins } from "@/lib/notifications/majorsActivity";
 
 export const runtime = "nodejs";
 
@@ -168,6 +169,23 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
           },
         });
       }
+    }
+
+    // A withdrawal may need the organiser to re-draw tee times, so it is worth
+    // surfacing. Grouped per event, same as entries.
+    if (event.group_id) {
+      const { count } = await supabaseAdmin
+        .from("event_entries")
+        .select("id", { count: "exact", head: true })
+        .eq("event_id", id);
+
+      await notifyGroupAdmins({
+        groupId: event.group_id,
+        type: "event_withdrawal",
+        actorProfileId: profileId,
+        groupKey: `event_withdrawal:${id}`,
+        payload: { event_id: id, event_name: event.name, entry_count: count ?? null },
+      });
     }
 
     return NextResponse.json({ ok: true });

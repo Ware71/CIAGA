@@ -2,8 +2,18 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 import { getEventById } from "@/lib/majors/queries";
+import { createNotification } from "@/lib/notifications/notify";
 
 export const runtime = "nodejs";
+
+/** "£15.00" — en-GB, matching the app's UK-only assumption. */
+function formatMoney(amount: number): string {
+  try {
+    return new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(amount);
+  } catch {
+    return `${amount}`;
+  }
+}
 
 // POST /api/majors/events/[id]/player-charges/[playerChargeId]/pay
 // Marks an individual player charge as paid by creating a payment transaction
@@ -69,6 +79,21 @@ export async function POST(
       .single();
 
     if (updateErr) throw updateErr;
+
+    // Receipt for the player. An admin marks this off on their behalf, so
+    // without it the player has no way to know their payment was registered.
+    await createNotification({
+      recipientProfileId: (pc as any).profile_id,
+      type: "payment_recorded",
+      payload: {
+        amount_label: formatMoney(Math.abs((pc as any).amount)),
+        amount: (pc as any).amount,
+        charge_name: (pc as any).name ?? null,
+        event_id: id,
+        event_name: event.name,
+        group_id: event.group_id,
+      },
+    });
 
     return NextResponse.json({ player_charge: { ...(updated as any), is_paid: true } });
   } catch (e: any) {

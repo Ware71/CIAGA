@@ -5,6 +5,7 @@ import { reconcileEventStatus } from "@/lib/majors/reconcileStatus";
 import { runEntryOpenNotifications } from "@/lib/notifications/entryOpenSweep";
 import { runEntryClosingNotifications } from "@/lib/notifications/entryClosingSweep";
 import { runFantasySweeps } from "@/lib/fantasy/cronSweeps";
+import { runCatchUpDigest } from "@/lib/notifications/catchUpDigest";
 import { safeCompare } from "@/lib/auth/safeCompare";
 
 export const runtime = "nodejs";
@@ -127,6 +128,25 @@ export async function GET(req: Request) {
     console.error("[auto-complete-rounds] fantasy sweep failed:", e?.message);
   }
 
+  // Catch-up digest LAST — it releases everything the throttling gates held
+  // back, including anything the sweeps above just suppressed. Running it here
+  // is also why quiet hours end at 08:00 rather than 07:00: this job is the
+  // only thing that can release them. Best-effort.
+  let digest: Awaited<ReturnType<typeof runCatchUpDigest>> | null = null;
+  try {
+    digest = await runCatchUpDigest();
+  } catch (e: any) {
+    console.error("[auto-complete-rounds] catch-up digest failed:", e?.message);
+  }
+
   const completed = results.filter((r) => r.status === "ok").length;
-  return NextResponse.json({ ok: true, completed, results, entryOpen, entryClosing, fantasy });
+  return NextResponse.json({
+    ok: true,
+    completed,
+    results,
+    entryOpen,
+    entryClosing,
+    fantasy,
+    digest,
+  });
 }

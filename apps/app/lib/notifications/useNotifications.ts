@@ -96,16 +96,55 @@ export function useNotifications(profileId: string | null, limit = 50) {
     };
   }, [profileId, persist]);
 
-  const unreadCount = items.reduce((n, i) => n + (i.read ? 0 : 1), 0);
+  // Unread in the loaded page. Correct below `limit`, but it silently caps
+  // there — hence the server-side count below.
+  const loadedUnread = items.reduce((n, i) => n + (i.read ? 0 : 1), 0);
+
+  // True unread, counted server-side. The loaded page is capped at `limit`
+  // (50), so a user with more than that unread used to see a badge stuck at 50
+  // while the app-icon badge — which notify.ts computes with count: exact —
+  // showed the real figure. The two disagreed.
+  const [serverUnread, setServerUnread] = useState<number | null>(null);
+
+  const refreshUnread = useCallback(async () => {
+    if (!profileId) {
+      setServerUnread(null);
+      return;
+    }
+    const { count, error } = await supabase
+      .from("user_notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("profile_id", profileId)
+      .eq("read", false);
+    if (!error) setServerUnread(count ?? 0);
+  }, [profileId]);
+
+  // Recount whenever the loaded set changes — covers the initial load, realtime
+  // arrivals, and both mark-read paths without a second subscription.
+  useEffect(() => {
+    void refreshUnread();
+  }, [refreshUnread, items]);
+
+  // Server figure once we have one; the loaded page until then. Mark-read
+  // adjusts it optimistically below so the badge drops immediately rather than
+  // waiting for the recount.
+  const unreadCount = serverUnread ?? loadedUnread;
 
   const markRead = useCallback(async (id: string) => {
-    setItems((prev) => persist(prev.map((p) => (p.id === id ? { ...p, read: true } : p))));
+    let wasUnread = false;
+    setItems((prev) => {
+      wasUnread = prev.some((p) => p.id === id && !p.read);
+      return persist(prev.map((p) => (p.id === id ? { ...p, read: true } : p)));
+    });
+    // Drop the badge now; the effect above reconciles against the server after.
+    if (wasUnread) setServerUnread((n) => (n == null ? n : Math.max(0, n - 1)));
     await supabase.from("user_notifications").update({ read: true }).eq("id", id);
   }, [persist]);
 
   const markAllRead = useCallback(async () => {
     if (!profileId) return;
     setItems((prev) => persist(prev.map((p) => ({ ...p, read: true }))));
+    setServerUnread(0);
     await supabase
       .from("user_notifications")
       .update({ read: true })

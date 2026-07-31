@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
+import { notifyJoinRequestApproved } from "@/lib/notifications/majorsActivity";
 
 export const runtime = "nodejs";
 
@@ -79,6 +80,20 @@ export async function PATCH(
       .single();
 
     if (error) throw error;
+
+    // Approval: pending/invited → active. Only fire on the actual transition,
+    // so re-saving an already-active member's role stays silent.
+    if (
+      body.status === "active" &&
+      (target as any).status !== "active" &&
+      (target as any).profile_id
+    ) {
+      await notifyJoinRequestApproved({
+        groupId,
+        profileId: (target as any).profile_id,
+      });
+    }
+
     return NextResponse.json({ membership: data });
   } catch (e: any) {
     const msg = e?.message ?? "Unknown error";

@@ -6,18 +6,30 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   AtSign,
+  Banknote,
   Bell,
+  CalendarClock,
   CalendarPlus,
+  CalendarX,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
   Clock,
   DoorOpen,
   Flag,
+  Heart,
+  Mail,
+  MessageCircle,
+  Reply,
+  RotateCcw,
   Settings,
   Smartphone,
+  Swords,
   Ticket,
   Trophy,
+  UserCheck,
+  UserMinus,
+  UserPlus,
   Users,
 } from "lucide-react";
 import {
@@ -50,15 +62,29 @@ type Props = {
   profileId?: string | null;
 };
 
+// Every icon key emitted by renderNotification must appear here, or the card
+// silently falls back to a generic bell.
 const ICONS: Record<string, ComponentType<{ size?: number; className?: string }>> = {
   "calendar-plus": CalendarPlus,
+  "calendar-clock": CalendarClock,
+  "calendar-x": CalendarX,
   "door-open": DoorOpen,
   "at-sign": AtSign,
   flag: Flag,
   "flag-checkered": CheckCircle2,
+  "rotate-ccw": RotateCcw,
   trophy: Trophy,
   clock: Clock,
   ticket: Ticket,
+  mail: Mail,
+  "message-circle": MessageCircle,
+  reply: Reply,
+  heart: Heart,
+  swords: Swords,
+  banknote: Banknote,
+  "user-check": UserCheck,
+  "user-plus": UserPlus,
+  "user-minus": UserMinus,
   bell: Bell,
 };
 
@@ -88,7 +114,9 @@ function NotificationCard({
   const Icon = ICONS[rendered.icon] ?? Bell;
 
   const actors: NotificationActor[] = Array.isArray(n.payload?.actors) ? n.payload.actors : [];
-  const groupable = actors.length > 1;
+  const totalActorCount = Math.max(Number(n.payload?.total_count ?? 0), actors.length);
+  const hiddenActorCount = Math.max(0, totalActorCount - actors.length);
+  const groupable = totalActorCount > 1;
 
   return (
     <div
@@ -152,6 +180,13 @@ function NotificationCard({
               )}
             </div>
           ))}
+          {/* Payloads cap stored actors, so a busy group holds more people than
+              it lists. Say so rather than silently showing a partial list. */}
+          {hiddenActorCount > 0 && (
+            <div className="pl-5 text-xs italic text-emerald-100/50">
+              and {hiddenActorCount} more
+            </div>
+          )}
         </div>
       )}
     </div>

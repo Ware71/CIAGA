@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 import { getEventById } from "@/lib/majors/queries";
+import { notifyGroupAdmins } from "@/lib/notifications/majorsActivity";
 
 export const runtime = "nodejs";
 
@@ -333,6 +334,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         .eq("event_id", id)
         .eq("profile_id", profileId)
         .eq("status", "offered");
+    }
+
+    // Organisers had no signal that their event was filling up. Grouped per
+    // event so a rush of entries collapses into one card rather than one each.
+    if (event.group_id) {
+      const { count } = await supabaseAdmin
+        .from("event_entries")
+        .select("id", { count: "exact", head: true })
+        .eq("event_id", id);
+
+      await notifyGroupAdmins({
+        groupId: event.group_id,
+        type: "event_entry_received",
+        actorProfileId: profileId,
+        groupKey: `event_entry_received:${id}`,
+        payload: { event_id: id, event_name: event.name, entry_count: count ?? null },
+      });
     }
 
     return NextResponse.json({ entry }, { status: 201 });

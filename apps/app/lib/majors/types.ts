@@ -943,21 +943,9 @@ export type EventWaitlistEntryWithProfile = EventWaitlistEntry & {
   profile: { id: string; name: string | null; avatar_url: string | null };
 };
 
-// ─── Notifications ────────────────────────────────────────────────────────────
-
-export type NotificationType =
-  | "tee_time_assigned"
-  | "tee_time_reminder"
-  | "waitlist_offered";
-
-export type UserNotification = {
-  id: string;
-  profile_id: string;
-  type: NotificationType | string;
-  payload: Record<string, unknown>;
-  read: boolean;
-  created_at: string;
-};
+// Notification types live in lib/notifications/render.ts — the single source
+// shared by the bell UI and the push sender. A stale three-member copy used to
+// sit here, missing group_key/updated_at.
 
 // ─── Season financials ────────────────────────────────────────────────────────
 

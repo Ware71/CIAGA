@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 import { getGroupById, getGroupMemberCount } from "@/lib/majors/queries";
+import { notifyGroupAdmins } from "@/lib/notifications/majorsActivity";
 
 export const runtime = "nodejs";
 
@@ -73,6 +74,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .single();
 
     if (error) throw error;
+
+    // A pending request has nothing surfacing it to admins — it can sit forever.
+    // Grouped per group so a rush of requests is one card, not one each.
+    if (status === "pending") {
+      await notifyGroupAdmins({
+        groupId: id,
+        type: "join_request_pending",
+        actorProfileId: profileId,
+        groupKey: `join_request_pending:${id}`,
+      });
+    }
+
     return NextResponse.json({ membership }, { status: 201 });
   } catch (e: any) {
     const msg = e?.message ?? "Unknown error";
