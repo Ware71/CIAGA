@@ -117,6 +117,8 @@ export type RegisterPushResult =
   | { status: "denied" }
   | { status: "unsupported" }
   | { status: "needs_install" }
+  /** The build has no VAPID public key — a deploy problem, not a user one. */
+  | { status: "misconfigured" }
   | { status: "error"; error: string };
 
 /**
@@ -165,7 +167,16 @@ export async function registerPush(opts?: {
 
   if (!isPushSupported()) return { status: "unsupported" };
   if (isIOS() && !isStandalone()) return { status: "needs_install" };
-  if (!VAPID_PUBLIC_KEY) return { status: "error", error: "Push not configured" };
+  // NEXT_PUBLIC_* is inlined at BUILD time, so an empty key here means the
+  // environment that produced this bundle had no NEXT_PUBLIC_VAPID_PUBLIC_KEY.
+  // Distinct from a runtime error: no amount of retrying or re-consenting will
+  // fix it, and the UI must not imply otherwise.
+  if (!VAPID_PUBLIC_KEY) {
+    console.error(
+      "[push] NEXT_PUBLIC_VAPID_PUBLIC_KEY is empty in this build — push cannot be enabled"
+    );
+    return { status: "misconfigured" };
+  }
 
   try {
     step("Requesting permission…");

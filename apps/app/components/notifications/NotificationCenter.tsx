@@ -217,8 +217,11 @@ function Toggle({
         on ? "bg-emerald-400" : "bg-emerald-900/70"
       }`}
     >
+      {/* left-0 is required: without an explicit inset the knob is positioned
+          from its STATIC position, and a button's default text-align:center
+          (which Tailwind preflight does not reset) pushed it off-centre. */}
       <span
-        className={`absolute top-0.5 h-5 w-5 rounded-full bg-[#071c10] transition-transform ${
+        className={`absolute left-0 top-0.5 h-5 w-5 rounded-full bg-[#071c10] transition-transform ${
           on ? "translate-x-[22px]" : "translate-x-0.5"
         }`}
       />
@@ -286,7 +289,12 @@ function NotificationSettings({ profileId }: { profileId: string | null }) {
       setDelivery("delivering");
     } else if (r.status === "denied") setPermission("denied");
     else if (r.status === "needs_install") setNeedsInstall(true);
-    else if (r.status === "error") setError(r.error || "Couldn’t enable notifications.");
+    else if (r.status === "misconfigured") {
+      setError(
+        "Push isn’t set up on this deployment (the server is missing its VAPID key). This needs fixing in the app’s environment settings — it isn’t something you can turn on here."
+      );
+      setDelivery("not_registered");
+    } else if (r.status === "error") setError(r.error || "Couldn’t enable notifications.");
     else if (r.status === "unsupported") setPermission("unsupported");
   }
 
