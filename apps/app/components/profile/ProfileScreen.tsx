@@ -233,11 +233,15 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
     if (!canFollow || !myProfileId || !profile?.id) return;
     setBusy(true);
     try {
-      const { error } = await supabase.from("follows").insert({
-        follower_id: myProfileId,
-        following_id: profile.id,
+      // Via the API so the follow notification fires server-side.
+      const token = await getToken();
+      if (!token) throw new Error("Not signed in");
+      const res = await fetch("/api/follows", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ following_id: profile.id }),
       });
-      if (error) throw error;
+      if (!res.ok) throw new Error("Follow failed");
 
       setIsFollowing(true);
       setMyFollowingSet((prev) => {
@@ -323,11 +327,14 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
 
     setBusyUserId(targetPid);
     try {
-      const { error } = await supabase.from("follows").insert({
-        follower_id: myProfileId,
-        following_id: targetPid,
+      const token = await getToken();
+      if (!token) throw new Error("Not signed in");
+      const res = await fetch("/api/follows", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ following_id: targetPid }),
       });
-      if (error) throw error;
+      if (!res.ok) throw new Error("Follow failed");
 
       setMyFollowingSet((prev) => {
         const n = new Set(prev);

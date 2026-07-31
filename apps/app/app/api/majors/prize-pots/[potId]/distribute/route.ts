@@ -1,8 +1,18 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
+import { createNotification } from "@/lib/notifications/notify";
 
 export const runtime = "nodejs";
+
+/** "£42.50" — pinned to en-GB, which matches the app's UK-only assumption. */
+function formatMoney(amount: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat("en-GB", { style: "currency", currency }).format(amount);
+  } catch {
+    return `${amount}`;
+  }
+}
 
 type ProposedPayout = {
   profile_id: string;
@@ -269,6 +279,37 @@ export async function POST(req: Request, { params }: { params: Promise<{ potId: 
       .from("prize_pots")
       .update({ status: "distributed", updated_at: new Date().toISOString() })
       .eq("id", potId);
+
+    // Tell the winners. Previously the whole money domain was silent in both
+    // directions — you could win the pot and never find out. Best-effort: the
+    // payouts are already written and must not be rolled back by a push failure.
+    try {
+      const currency = (pot as any).entry_fee_currency ?? "GBP";
+      await Promise.allSettled(
+        (insertedPayouts ?? []).map((payout: any) => {
+          const proposedRow = proposed.find((p) => p.profile_id === payout.profile_id);
+          const amountLabel =
+            payout.amount != null && payout.amount > 0
+              ? formatMoney(payout.amount, currency)
+              : (proposedRow?.note ?? null);
+          return createNotification({
+            recipientProfileId: payout.profile_id,
+            type: "prize_won",
+            payload: {
+              pot_name: (pot as any).name ?? null,
+              amount_label: amountLabel,
+              amount: payout.amount ?? null,
+              currency,
+              event_id: (pot as any).event_id ?? null,
+              group_season_id: (pot as any).group_season_id ?? null,
+              group_id: (pot as any).group_id ?? null,
+            },
+          });
+        })
+      );
+    } catch (e: any) {
+      console.error("[notify] prize_won fan-out failed:", e?.message);
+    }
 
     return NextResponse.json({ ok: true, total_pot: totalPot, payouts: insertedPayouts?.length ?? 0 });
   } catch (e: any) {

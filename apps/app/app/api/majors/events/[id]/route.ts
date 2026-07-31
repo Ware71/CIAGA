@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 import { getEventById } from "@/lib/majors/queries";
 import { reconcileEventStatus } from "@/lib/majors/reconcileStatus";
+import { notifyEventAudience } from "@/lib/notifications/majorsActivity";
 
 export const runtime = "nodejs";
 
@@ -91,6 +92,28 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       .single();
 
     if (error) throw error;
+
+    // Entrants were previously never told an event was called off. Gate on the
+    // transition so re-saving an already-cancelled event stays silent.
+    if (body.majors_status === "cancelled" && event.majors_status !== "cancelled") {
+      await notifyEventAudience({
+        eventId: id,
+        type: "event_cancelled",
+        excludeProfileId: profileId,
+      });
+    } else if (
+      // A date move matters to anyone planning around it. Compare against the
+      // pre-update value so a no-op save doesn't notify.
+      "event_date" in body &&
+      body.event_date &&
+      body.event_date !== event.event_date
+    ) {
+      await notifyEventAudience({
+        eventId: id,
+        type: "event_date_changed",
+        excludeProfileId: profileId,
+      });
+    }
 
     return NextResponse.json({ event: data });
   } catch (e: any) {

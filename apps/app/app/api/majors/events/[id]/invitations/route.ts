@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 import { getEventById } from "@/lib/majors/queries";
+import { notifyEventInvited } from "@/lib/notifications/majorsActivity";
 
 export const runtime = "nodejs";
 
@@ -66,6 +67,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .single();
 
     if (error) throw error;
+
+    // Invitations used to be pull-only, so they were missed by default.
+    await notifyEventInvited({
+      eventId: id,
+      inviteeProfileId: body.profile_id,
+      actorProfileId: profileId,
+    });
+
     return NextResponse.json({ invitation: data }, { status: 201 });
   } catch (e: any) {
     const msg = e?.message ?? "Unknown error";

@@ -3,6 +3,7 @@ import type { FeedAudience, FeedItemType } from "@/lib/feed/types";
 import { parseFeedPayload } from "@/lib/feed/schemas";
 import { fanOutFeedItemToFollowers } from "@/lib/feed/fanout";
 import { createNotification } from "@/lib/notifications/notify";
+import { notifyPostReaction, notifyThreadActivity } from "@/lib/notifications/socialActivity";
 
 /** Look up a profile's display name (for "X tagged you" copy). */
 async function getProfileName(profileId: string): Promise<string> {
@@ -92,8 +93,16 @@ export async function createUserPost(params: {
     const actorName = await getProfileName(actorProfileId);
     const excerpt = typeof parsed.text === "string" ? parsed.text : "";
     await Promise.allSettled(
-      mentionIds.map((recipientProfileId) =>
-        createNotification({
+      mentionIds.map(async (recipientProfileId) => {
+        // Same visibility gate createComment applies to comment mentions. Without
+        // it, tagging a non-follower in a followers-audience post notified them
+        // about an item they cannot open.
+        try {
+          await assertViewerCanReadFeedItem(data.id, recipientProfileId);
+        } catch {
+          return;
+        }
+        await createNotification({
           recipientProfileId,
           type: "mention_post",
           payload: {
@@ -102,8 +111,8 @@ export async function createUserPost(params: {
             actor_name: actorName,
             excerpt,
           },
-        })
-      )
+        });
+      })
     );
   }
 
@@ -148,7 +157,8 @@ export async function setReaction(params: {
       return { status: "removed", emoji: null };
     }
 
-    // Update to new emoji
+    // Update to new emoji. Deliberately NOT notified: the author was already
+    // told when this person first reacted, and swapping 👍 for 🎉 is not news.
     const { error: upErr } = await supabaseAdmin.from("feed_reactions").update({ emoji }).eq("id", existing.id);
     if (upErr) throw upErr;
     return { status: "set", emoji };
@@ -162,6 +172,9 @@ export async function setReaction(params: {
   });
 
   if (insErr) throw insErr;
+
+  await notifyPostReaction({ feedItemId, actorProfileId: profileId, emoji });
+
   return { status: "set", emoji };
 }
 
@@ -217,6 +230,10 @@ export async function createComment(params: {
   const mentionIds = Array.from(
     new Set((mentionedProfileIds ?? []).filter((id) => id && id !== profileId))
   );
+  // Top rung of the precedence ladder — a mention outranks a reply, which
+  // outranks thread activity, so one comment is never three notifications.
+  // notifiedIds accumulates who has been claimed by a higher rung.
+  const notifiedIds: string[] = [];
   if (mentionIds.length > 0) {
     const actorName = await getProfileName(profileId);
     await Promise.allSettled(
@@ -226,6 +243,7 @@ export async function createComment(params: {
         } catch {
           return; // mentioned user can't see this item — skip
         }
+        notifiedIds.push(recipientProfileId);
         await createNotification({
           recipientProfileId,
           type: "mention_comment",
@@ -240,6 +258,16 @@ export async function createComment(params: {
       })
     );
   }
+
+  // Lower rungs: the parent commenter, then the post author + prior commenters.
+  await notifyThreadActivity({
+    feedItemId,
+    commentId: data.id,
+    actorProfileId: profileId,
+    excerpt: trimmed,
+    parentCommentId: parentCommentId ?? null,
+    alreadyNotified: notifiedIds,
+  });
 
   return { comment_id: data.id };
 }

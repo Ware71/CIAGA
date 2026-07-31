@@ -1,4 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { createNotification } from "@/lib/notifications/notify";
+import { seasonMarketLabel } from "@/lib/fantasy/seasonOdds";
 
 /**
  * Settle season markets against the FINAL standings once the season is decided
@@ -80,5 +82,60 @@ export async function settleFantasySeason(groupSeasonId: string): Promise<{
   });
   if (error) throw error;
   const r = (res ?? { won: 0, lost: 0, void: 0 }) as { won: number; lost: number; void: number };
+
+  // Season picks used to settle silently while event and round picks notified —
+  // an inconsistency, not a decision. Best-effort: the settlement is already
+  // committed by the RPC above and must not be undone by a notification failure.
+  await notifySettledSeasonPicks(groupSeasonId, outcomes, markets).catch((e: any) =>
+    console.error("[notify] season pick fan-out failed:", e?.message)
+  );
+
   return { settled: true, won: r.won, lost: r.lost, void: r.void };
+}
+
+async function notifySettledSeasonPicks(
+  groupSeasonId: string,
+  outcomes: { pick_id: string; outcome: "won" | "lost" | "void" }[],
+  markets: Map<string, { id: string; market_type: string; params: Record<string, unknown> }>
+): Promise<void> {
+  if (outcomes.length === 0) return;
+  const outcomeByPick = new Map(outcomes.map((o) => [o.pick_id, o.outcome]));
+
+  const [{ data: picks }, { data: season }] = await Promise.all([
+    supabaseAdmin
+      .from("fantasy_season_picks")
+      .select("id, profile_id, season_market_id, stake, potential_return")
+      .in(
+        "id",
+        outcomes.map((o) => o.pick_id)
+      ),
+    supabaseAdmin
+      .from("group_seasons")
+      .select("name")
+      .eq("id", groupSeasonId)
+      .maybeSingle(),
+  ]);
+
+  const seasonName = (season as any)?.name ?? null;
+
+  await Promise.allSettled(
+    ((picks ?? []) as any[]).map((pick) => {
+      const outcome = outcomeByPick.get(pick.id);
+      if (!outcome) return Promise.resolve();
+      const market = markets.get(pick.season_market_id);
+      return createNotification({
+        recipientProfileId: pick.profile_id,
+        type: `fantasy_season_pick_${outcome}`,
+        payload: {
+          group_season_id: groupSeasonId,
+          season_name: seasonName,
+          market_label: market
+            ? seasonMarketLabel(market.market_type, market.params)
+            : "Your season pick",
+          stake: pick.stake,
+          payout: outcome === "won" ? pick.potential_return : undefined,
+        },
+      });
+    })
+  );
 }

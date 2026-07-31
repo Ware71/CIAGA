@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 import { getEventById } from "@/lib/majors/queries";
 import { reconcileEventStatus } from "@/lib/majors/reconcileStatus";
+import { getEventWinnerName, notifyEventAudience } from "@/lib/notifications/majorsActivity";
 
 export const runtime = "nodejs";
 
@@ -148,6 +149,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         .not("status", "in", '("completed","cancelled")');
 
       await reconcileEventStatus(id);
+
+      // The reveal IS the results moment — the payoff of the whole event, and
+      // previously silent. reconcileEventStatus deliberately suppresses its own
+      // event_completed notification for a revealed event so this doesn't
+      // double-fire; see lib/majors/reconcileStatus.ts.
+      await notifyEventAudience({
+        eventId: id,
+        type: "event_results_revealed",
+        extraPayload: { winner_name: await getEventWinnerName(id) },
+        excludeProfileId: profileId,
+      });
     }
 
     // Emit audit log

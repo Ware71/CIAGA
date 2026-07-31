@@ -197,6 +197,21 @@ export async function reconcileEventStatus(
       import("@/lib/fantasy/settlement")
         .then(({ settleFantasyEvent }) => settleFantasyEvent(eventId))
         .catch(() => {});
+
+      // Announce the result — unless the leaderboard was frozen and then
+      // revealed, in which case the reveal already announced it and this would
+      // be a second buzz for the same moment. See the freeze-control route.
+      if (evt.leaderboard_freeze_state !== "revealed") {
+        import("@/lib/notifications/majorsActivity")
+          .then(async ({ notifyEventAudience, getEventWinnerName }) =>
+            notifyEventAudience({
+              eventId,
+              type: "event_completed",
+              extraPayload: { winner_name: await getEventWinnerName(eventId) },
+            })
+          )
+          .catch(() => {});
+      }
     }
   }
 }
