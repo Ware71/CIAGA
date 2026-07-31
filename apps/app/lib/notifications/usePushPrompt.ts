@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import {
+  getPushDeliveryState,
   isPushSupported,
   isStandalone,
   isIOS,
@@ -15,8 +16,15 @@ import {
  * Cadence: device-local (localStorage) — push permission/subscription is
  * per-device, so a user on a new device should be asked there too. Once the
  * prompt is presented (shown OR stamped by onboarding) it won't reappear for
- * 3 months. Already-granted devices are never shown the modal; if granted but
- * not subscribed (e.g. a pruned subscription) we re-subscribe silently.
+ * 3 months.
+ *
+ * BROKEN-DELIVERY RE-PROMPT: "granted" is not proof of delivery. The server
+ * prunes a subscription after a 404/410 (endpoint rotation, PWA reinstall, SW
+ * replacement) and the browser keeps reporting "granted" forever. This used to
+ * mean a user whose push silently died was never asked again — the prompt was
+ * skipped on permission alone, and the 3-month cooldown hid it on top. We now
+ * check ACTUAL delivery: try a silent re-subscribe first, and only surface the
+ * prompt if that fails, which is the case the user cannot fix on their own.
  */
 
 const KEY = "ciaga_push_prompt_last_shown";
@@ -64,21 +72,46 @@ export function usePushPrompt(params: { profileId: string | null; suppressed: bo
 
   useEffect(() => {
     if (!profileId) return;
+    let cancelled = false;
 
-    // Already granted on this device: never nag, but make sure we hold a live
-    // subscription (best-effort, no UI — requestPermission resolves instantly
-    // when permission is already granted).
-    if (isPushSupported() && notificationPermission() === "granted") {
-      void registerPush();
-      return;
+    async function run() {
+      if (isPushSupported() && notificationPermission() === "granted") {
+        // Granted — but is anything actually being delivered?
+        const state = await getPushDeliveryState();
+        if (cancelled || state === "delivering") return;
+        if (state === "unknown") {
+          // Couldn't tell (offline, SW slow). Try the silent repair anyway and
+          // don't escalate to a prompt on inconclusive evidence.
+          void registerPush();
+          return;
+        }
+
+        // not_registered — the silent case that used to swallow every push.
+        const r = await registerPush();
+        if (cancelled) return;
+        if (r.status === "subscribed") return; // repaired, no need to bother them
+
+        // Repair failed. This is worth interrupting for, and the 3-month
+        // cooldown is deliberately ignored: it exists to stop nagging people
+        // who said no, not to hide a broken state they never chose.
+        if (!suppressed) {
+          markPushPromptShown();
+          setShow(true);
+        }
+        return;
+      }
+
+      if (suppressed) return;
+      if (shouldShowPushPrompt()) {
+        markPushPromptShown();
+        setShow(true);
+      }
     }
 
-    if (suppressed) return;
-
-    if (shouldShowPushPrompt()) {
-      markPushPromptShown();
-      setShow(true);
-    }
+    void run();
+    return () => {
+      cancelled = true;
+    };
   }, [profileId, suppressed]);
 
   return { show, dismiss: () => setShow(false) };

@@ -47,6 +47,10 @@ export default function PushPermissionPrompt({
     if (r.status === "subscribed") dismiss();
     else if (r.status === "denied") setVariant("denied");
     else if (r.status === "needs_install") setVariant("ios_install");
+    else if (r.status === "misconfigured")
+      setError(
+        "Push isn’t set up on this deployment yet. Nothing you can fix from here — it needs the server’s VAPID key."
+      );
     else if (r.status === "error") setError(r.error || "Couldn’t enable notifications.");
     // unsupported: leave the modal so the user can dismiss it
   }
