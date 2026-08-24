@@ -103,10 +103,79 @@ sits at the weighted centroid — roughly 28 rounds back at the default half-lif
 which for a player trending 0.05 strokes/round is a 1.4-stroke bias in the
 starting level.
 
-**Trend.** Damped: `−trend · τ · (1 − e^(−j/τ))` with `τ = 12` rounds, clamped to
-±3.0 strokes total. It is applied **only** when the effective sample size is ≥ 8
-*and* the slope clears 1.5 standard errors. Otherwise the projection is flat.
-Nobody improves linearly forever, and an insignificant slope is noise.
+**Improvement.** Two separate things, and conflating them was the original error.
+
+*Momentum* — the player's own recent slope — is damped with `τ = 7` rounds and
+capped at 2.0 strokes, applied only when the effective sample is ≥ 8 and the
+slope clears 1.5 standard errors. `τ = 7` is not a guess: regressing a player's
+next-20-round slope on their prior-20-round slope gives **0.132** (t = 3.5), a
+half-life of about seven rounds. Streaks are real but short.
+
+*Sustained improvement* is the thing that lets a projected handicap keep falling
+for years, and it is not momentum at all. Ability decays toward a personal floor,
+in proportion to **headroom and nothing else**:
+
+```
+dL/dround = -0.0090 x max(0, L - floor)
+```
+
+The rate is the best-identified quantity in the model: fitting each player
+separately with the floor held at the prior centre gives 0.0072, 0.0098 and
+0.0108 — a spread of about 1.5x, against 10x or worse for everything else here.
+The measured relationships behind it:
+
+| Level now | Change over next 20 rounds |
+|---|---|
+| 10-15 | -0.73 |
+| 15-20 | -1.06 |
+| 20-25 | -3.16 |
+| 40+ | -8.48 |
+
+Whole careers agree: every stroke worse a player starts, they improve 0.67 more
+(r = -0.67).
+
+**There is deliberately no experience term.** An `exp(-n / N0)` factor — "players
+with many rounds improve less" — was fitted and then removed on evidence
+(`scripts/test-experience-term.mjs`):
+
+- rounds-played correlates **-0.668** with level, so the factor was largely
+  re-explaining the headroom the model already had;
+- the headroom-only residuals correlate with rounds-played at just **0.067** —
+  no leftover signal for it to explain;
+- **within** the player with the most history (232 observations), the improvement
+  rate per stroke of headroom got roughly **three times faster** after 100+
+  rounds, the opposite of what the factor asserts. The only other player with
+  enough data went the other way, so there is no reliable effect;
+- and `n` counts rounds recorded in CIAGA, not rounds played in a lifetime. A
+  twenty-year golfer joining the society starts at `n = 0`, indistinguishable
+  from a beginner. The variable was wrong even in principle.
+
+Its apparent 18.9% variance gain was an artefact of letting a second badly
+identified parameter absorb fitting error: headroom-only with a free floor lands
+on `F = 15.5`, which would mean nobody improves past a ~12 handicap.
+
+**The floor is drawn per path, from TWO draws.** It is the one thing the data
+cannot pin down (§7) and the one that decides whether someone can reach a low
+target:
+
+```
+target   ~ N(8.1, 3.5)          where the population tends toward
+fraction ~ U(0, 1.15)           how much of THEIR OWN gap this player closes
+floor    = level - fraction x (level - target)
+```
+
+The fraction is what makes the prior relative to the player. An absolute
+`N(8.1, 3.5)` put the ceiling in the same place for everyone: a player at level
+23.5 had a five-in-a-million chance of drawing a floor at or above where they
+already stood, so the model had effectively ruled out *"you might already be
+about as good as you are going to get"* — and duly projected a 20-handicap to a
+5-year median of **3.9**, with certainty of passing 15.
+
+The uniform fraction is not arbitrary. The four careers with enough history have
+closed **89%, 69%, 36% and 6%** of their gap so far — mean 0.50, sd 0.36, close
+to uniform. Caveats: those careers are in progress, so eventual fractions run
+higher; and players who reach 200+ rounds in a society are the engaged ones, so
+the sample leans toward improvers.
 
 **Spread.** The detrended round-to-round standard deviation, shrunk toward a
 population prior: `σ² = (n_eff·σ̂² + k₀·σ²_pop) / (n_eff + k₀)`. With ≥ 12
@@ -152,10 +221,35 @@ rather than presenting noise with a caveat.
 | 20–39 | `simulated` | Everything, confidence `medium`. |
 | 40+, `effectiveN ≥ 12` | `simulated` | Everything, confidence `high`. |
 
-Also refused: any date beyond the 2-year simulated horizon; a median ETA when
+Also refused: any date beyond the 5-year simulated horizon; a median ETA when
 fewer than half the paths reach the target.
 
 ---
+
+## 5b. Head-to-head
+
+Comparing two players reports **P(your index is the lower one)** on a date, not a
+crossing date. The old page intersected two fitted curves and printed the
+result — a date with no uncertainty attached.
+
+`probBelowOther` is an all-pairs estimate over both players' sorted samples, by
+merge walk in O(na + nb). Two deliberate choices:
+
+- **All-pairs, not index-pairing.** Pairing path *i* of one player with path *i*
+  of the other is a valid draw from the joint under independence, but it is
+  noisier and it silently requires equal path counts — which this engine does not
+  have, since `sims` scales with each player's cadence.
+- **Ties split evenly**, so `P(a<b) + P(b<a) = 1`. Indices are quoted to a tenth,
+  so exact ties carry real mass; counting them as losses for both would show two
+  golfers each under 50%.
+
+Independence is close enough between two golfers. If it ever needs to be exact,
+`lib/fantasy/simulation` already models the small shared-conditions correlation
+(same course, same weather, ρ = 0.06).
+
+The chart drops the uncertainty bands in head-to-head: two overlapping 80% fans
+across five years are unreadable, so the comparison shows medians and puts the
+uncertainty in the crossing odds instead.
 
 ## 6. "Your next round" carries no model risk
 
@@ -176,15 +270,30 @@ order statistic of the window is).
 
 None of these are derived. They are defensible starting points to be recalibrated.
 
-| Constant | Value | Where | Notes |
+| Constant | Value | Where | Identified? |
 |---|---|---|---|
-| `σ_pop` | `2.5 + 0.06 × HI` | `simulate.ts` | Recalibrate from `fantasy_player_profiles.differential_stddev`. |
-| `SIGMA_PRIOR_STRENGTH` | 8 pseudo-rounds | `simulate.ts` | At 8 observations the estimate is half prior, half player. |
-| `TREND_DAMPING_ROUNDS` | 12 | `simulate.ts` | |
-| `TREND_SIGNIFICANCE` | 1.5 s.e. | `simulate.ts` | |
-| `MAX_TREND_STROKES` | 3.0 | `simulate.ts` | |
-| `DIFFERENTIAL_HALFLIFE_ROUNDS` | 20 | `fantasy/simulation/differentials.ts` | Shared with fantasy odds — changing it moves both. |
-| `sims` | 1000 | `simulate.ts` | See below. SE of the median ≈ 0.06 HI, inside the 0.1 displayed. |
+| improvement rate `a` | 0.0090 | `improvement.ts` | **Yes** — per-player 0.0072 / 0.0098 / 0.0108 |
+| floor `F` | 8.1 centre, sd 3.5 | `improvement.ts` | **NO** — bootstrap [-2.6, 26.4]. Drawn per path. |
+| momentum `τ` | 7 rounds | `simulate.ts` | **Yes** — from the 0.132 persistence coefficient |
+| `σ_pop` | `2.5 + 0.06 × HI` | `simulate.ts` | No — a plausible starting point |
+| `SIGMA_PRIOR_STRENGTH` | 8 pseudo-rounds | `simulate.ts` | Judgement |
+| `RESIDUAL_WINDOW_ROUNDS` | 60 | `simulate.ts` | Judgement |
+| horizon | 5 years | `simulate.ts` | Product decision |
+| `sims` | 1000, scaled by cadence | `simulate.ts` | See below |
+
+### The parameter that is not identified
+
+`F` decides the answer to "when will I go scratch", and it is not pinned down by
+this data. The reason is structural: the best player in the set sits at scoring
+level 10.9 and **nobody has ever plateaued near scratch**, so the fit simply
+places the floor just under the best level it has ever seen. Taken as a point
+estimate it would say no CIAGA player can ever get below roughly a 5 handicap —
+a fact about the dataset, not about golf.
+
+It is therefore drawn per simulated path from an explicit prior, wide enough to
+carry that ignorance into the fan. **Revisit it when somebody in the data has
+actually plateaued low.** Until then, treat a scratch probability as a statement
+about the prior as much as about the player.
 
 Cost scales with `sims × (rounds simulated per path)`, and the second factor is the
 player's cadence — not a constant. Measured on a development desktop: a typical
@@ -207,6 +316,8 @@ Stated plainly, because it is what makes the rest credible.
   of hard courses in bad weather is not in the model.
 - **Lessons, injury, new clubs, age.** Any step change in ability appears only
   after it has shown up in posted scores, and then only slowly.
+- **How good you can actually get.** The floor is a prior, not a measurement —
+  see §7. It is the single biggest assumption behind any long-range answer.
 - **Seasonality.** UK scoring is materially worse in winter. Deliberately not
   modelled: at 5–40 rounds per player a per-player seasonal term is
   unidentifiable and would be fitting noise. If it is wanted, estimate **one**
