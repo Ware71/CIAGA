@@ -15,7 +15,8 @@ import { dayIndexFromISO, isoFromDayIndex } from "@/lib/whs/handicapIndex";
 import type { Projection, ProjectionConfidence } from "@/lib/stats/projection/simulate";
 
 /** Simulated horizon. Nothing outside it gets an answer. */
-export const HORIZON_DAYS = 730;
+export const HORIZON_DAYS = 1826;
+export const HORIZON_YEARS = Math.round(HORIZON_DAYS / 365);
 
 // ---------------------------------------------------------------------------
 // Readiness
@@ -160,7 +161,7 @@ export function goalOutlook(
     return {
       ...empty,
       probability,
-      note: "Not reachable within 2 years at your current scoring",
+      note: `Not reachable within ${HORIZON_YEARS} years at your current scoring`,
     };
   }
 
@@ -172,7 +173,7 @@ export function goalOutlook(
     latestISO: eta.p90Days === null ? null : isoFromDayIndex(todayIdx + eta.p90Days),
     note:
       eta.p50Days === null
-        ? `Fewer than half of simulated futures get there within 2 years`
+        ? `Fewer than half of simulated futures get there within ${HORIZON_YEARS} years`
         : "",
     reached: false,
   };

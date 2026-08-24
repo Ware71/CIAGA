@@ -470,8 +470,11 @@ export default function ProjectionsPage() {
                     aProj={chart.aProj}
                     bActual={chart.bActual}
                     bProj={chart.bProj}
-                    aProjBand={chart.aBand}
-                    bProjBand={chart.bBand}
+                    // Bands only in the solo view — two overlapping 80% fans
+                    // across five years are visual mush, so head-to-head shows
+                    // medians and puts the uncertainty in the crossing odds.
+                    aProjBand={compareActive ? undefined : chart.aBand}
+                    bProjBand={undefined}
                     height={960}
                     formatXLabel={chart.formatXLabel}
                     formatYLabel={(v) => formatHI(v)}
@@ -487,6 +490,72 @@ export default function ProjectionsPage() {
                 </>
               )}
             </div>
+
+            {/* Head-to-head */}
+            {compareActive && bProjection ? (
+              <Card>
+                <div>
+                  <div className="text-sm font-extrabold text-emerald-50">
+                    You vs {data.get(compareBId)?.name}
+                  </div>
+                  <div className="text-[11px] text-emerald-100/55 font-semibold">
+                    Chance your index is the lower one
+                  </div>
+                </div>
+
+                {(() => {
+                  const rows = [
+                    { label: "In 1 year", days: 365 },
+                    { label: "In 2 years", days: 730 },
+                    { label: "In 5 years", days: 1826 },
+                  ].map((r) => ({
+                    ...r,
+                    p: aProjection.probBelowOther(
+                      bProjection,
+                      isoFromDayIndex(aProjection.todayDayIndex + r.days)
+                    ),
+                  }));
+
+                  const now =
+                    aProjection.currentHi !== null && bProjection.currentHi !== null
+                      ? aProjection.currentHi - bProjection.currentHi
+                      : null;
+
+                  return (
+                    <>
+                      {now !== null ? (
+                        <div className="text-[11px] font-semibold text-emerald-100/65 leading-snug">
+                          {now === 0
+                            ? "Level right now."
+                            : now < 0
+                            ? `You're ${Math.abs(now).toFixed(1)} ahead right now.`
+                            : `You're ${now.toFixed(1)} behind right now.`}
+                        </div>
+                      ) : null}
+
+                      <div className="space-y-2">
+                        {rows.map((r) => (
+                          <div key={r.days} className="flex items-center gap-3">
+                            <div className="w-[72px] shrink-0 text-[11px] font-semibold text-emerald-100/65">
+                              {r.label}
+                            </div>
+                            <div className="h-2 flex-1 rounded-full bg-[#042713] overflow-hidden border border-emerald-900/60">
+                              <div
+                                className="h-full rounded-full bg-[#f5e6b0]/70"
+                                style={{ width: `${Math.round((r.p ?? 0) * 100)}%` }}
+                              />
+                            </div>
+                            <div className="w-[44px] shrink-0 text-right text-sm font-extrabold text-emerald-50 tabular-nums">
+                              {percentLabel(r.p)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  );
+                })()}
+              </Card>
+            ) : null}
 
             {/* What your next round does — no model, works from 3 rounds */}
             {nextRound ? (
