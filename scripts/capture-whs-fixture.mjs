@@ -71,10 +71,19 @@ async function fetchAll(table, columns, apply) {
 // Pull every profile that has any differential at all, then classify.
 // ---------------------------------------------------------------------------
 
+// round_id is fetched purely for ORDER. recalc_handicap_profile walks the
+// record by (played_at, round_id), and since Rule 5.9 judges each score against
+// the index in force when it was posted, two rounds sharing a date give
+// different answers in different orders. Capturing the differentials without
+// their order would make the fixture unreproducible.
 const streamRows = await fetchAll(
   "ciaga_scoring_record_stream",
-  "profile_id, played_at, differential, combined_from_9",
-  (q) => q.not("differential", "is", null).order("played_at", { ascending: true })
+  "profile_id, played_at, differential, combined_from_9, round_id",
+  (q) =>
+    q
+      .not("differential", "is", null)
+      .order("played_at", { ascending: true })
+      .order("round_id", { ascending: true })
 );
 console.log(`Differential rows: ${streamRows.length}`);
 
@@ -178,10 +187,17 @@ mkdirSync(OUT_DIR, { recursive: true });
 const manifest = [];
 chosen.forEach((c, i) => {
   const slug = `p${i + 1}`;
+  // Rows arrive in the SQL's own (played_at, round_id) order. Real round ids are
+  // replaced with zero-padded synthetic ones that sort identically, so the
+  // fixture reproduces the ordering without carrying database ids — the same
+  // reason profile ids become p1..pN.
   const stream = byProfile
     .get(c.profileId)
-    .map((r) => ({ playedAt: String(r.played_at).slice(0, 10), differential: num(r.differential) }))
-    .sort((a, b) => (a.playedAt < b.playedAt ? -1 : a.playedAt > b.playedAt ? 1 : 0));
+    .map((r, idx) => ({
+      playedAt: String(r.played_at).slice(0, 10),
+      differential: num(r.differential),
+      roundId: `r${String(idx + 1).padStart(5, "0")}`,
+    }));
 
   const expected = (historyByProfile.get(c.profileId) ?? []).map((h) => ({
     asOfDate: String(h.as_of_date).slice(0, 10),

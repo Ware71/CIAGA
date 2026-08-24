@@ -269,12 +269,37 @@ checked; a genuinely solo round would still post a differential.
 
 ## 6. Applying a rules change
 
-Changing any of the above changes historical differentials, so the pipeline has to be replayed:
+Changing any of the above changes historical differentials, so the pipeline has to be replayed.
+This is deliberately **not** run inside a migration — it walks every finished round.
 
-```sql
-select public.ciaga_refresh_handicaps_from(null);
+**`ciaga_refresh_handicaps_from(null)` cannot be called over the API.** Two blockers, both found
+the hard way on 2026-08-24:
+
+1. The `p_from_date = NULL` branch runs `DELETE FROM handicap_round_results;` with no `WHERE`
+   clause. Supabase's safe-update guard rejects that with **SQLSTATE 21000, "DELETE requires a
+   WHERE clause"**. The function is atomic, so a failed attempt changes nothing.
+2. Even with a qualified early date, replaying every round in one statement exceeds the PostgREST
+   8-second statement timeout (**SQLSTATE 57014**).
+
+Use the cursor-batched variant instead, which exists for exactly this and whose header states its
+per-batch semantics are identical. Every finished round is after 1900, so this cutoff rebuilds
+everything:
+
+```js
+let lastTs = null, lastId = null;
+for (;;) {
+  const { data } = await db.rpc("ciaga_refresh_handicaps_step", {
+    p_from_date: "1900-01-01", p_after_ts: lastTs, p_after_id: lastId, p_max_rounds: 10,
+  });
+  lastTs = data.last_ts; lastId = data.last_id;
+  if (data.remaining === 0 || data.processed === 0) break;
+}
 ```
 
-This is deliberately **not** run inside a migration — it walks every finished round. Run it by hand
-after the migration, staging first, and diff `handicap_index_history` before and after so the size
-of the move is known before production sees it. See `CLAUDE.md` for the migration ordering rules.
+The one behavioural difference from the `NULL` branch: it leaves `handicap_round_results` rows for
+**non-finished** rounds alone, rather than wiping the table wholesale. Those rows should not exist
+anyway.
+
+Snapshot `current_handicaps` and `handicap_round_results` before and after, and diff them, so the
+size of the move is known before production sees it. On staging (428 rounds, 8 members) the replay
+took ~46s in 43 batches. See `CLAUDE.md` for the migration ordering rules.

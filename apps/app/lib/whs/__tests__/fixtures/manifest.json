@@ -6,15 +6,15 @@
       "capped",
       "sameDay"
     ],
-    "differentials": 262,
-    "historyRows": 251
+    "differentials": 274,
+    "historyRows": 262
   },
   {
     "slug": "p2",
     "tags": [
       "smallN"
     ],
-    "differentials": 5,
-    "historyRows": 5
+    "differentials": 6,
+    "historyRows": 6
   }
 ]

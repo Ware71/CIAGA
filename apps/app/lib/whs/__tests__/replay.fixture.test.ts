@@ -24,36 +24,25 @@ import {
  * what makes the projection simulator trustworthy — it forks this replay
  * thousands of times per page render.
  *
- * Two grades of assertion, because the SQL is not fully deterministic:
+ * Two grades of assertion. The tie allowance is now largely historical: since
+ * the GB&I alignment migration the SQL orders the record by
+ * `(played_at, round_id)`, and the fixtures carry a synthetic round id that
+ * preserves that order, so the cut is deterministic. It is kept because stored
+ * rows written BEFORE that migration were computed under the old ambiguous
+ * `order by played_at desc limit 20` and can still be in a captured fixture.
  *
  *   - Rows where the 20-round window cut is unambiguous must match EXACTLY.
- *   - Rows where the cut falls inside a group of same-date differentials have no
- *     single correct answer (`order by played_at desc` on a DATE column has no
- *     tiebreak, so Postgres keeps an arbitrary subset). There we assert the
- *     stored value is one the SQL could legitimately have produced. Asserting
- *     exact equality would be asserting a coin flip.
+ *   - Rows where the cut falls inside a group of same-date differentials are
+ *     asserted to be one of the values the SQL could legitimately have
+ *     produced. Asserting exact equality there would be asserting a coin flip.
  *
  * If this goes red, the SQL is right and apps/app/lib/whs/handicapIndex.ts is
  * wrong. Do not edit the fixtures. To refresh after a deliberate SQL change:
- *   node scripts/capture-whs-fixture.mjs      (read-only, staging)
- *
- * ── STALE FIXTURES (2026-08-24) ───────────────────────────────────────────────
- * The two comparison tests below are SKIPPED. The committed fixtures were
- * captured before 20260824000000_whs_acceptability_gbi_alignment.sql, so they
- * encode the pre-GB&I engine: a Low Handicap Index established from the very
- * first index rather than at 20 scores (Rule 5.7), no Exceptional Score
- * Reduction (Rule 5.9), and a non-deterministic 20-round cut.
- *
- * Both sides of the comparison have moved together, but the recorded ANSWER
- * has not. Re-capturing needs staging, so it cannot be done from a local run:
- *
- *   1. npx supabase db push                        (staging)
- *   2. psql> select ciaga_refresh_handicaps_from(null);
- *   3. node scripts/capture-whs-fixture.mjs
- *   4. delete the .skip below
- *
- * Until step 4, the load-bearing SQL-equivalence proof is NOT running. Treat
- * that as an open item, not as coverage.
+ *   1. npx supabase db push                             (staging)
+ *   2. replay:  ciaga_refresh_handicaps_step in a loop from an early date
+ *      (the one-shot ciaga_refresh_handicaps_from(null) is NOT callable over
+ *      the API — see docs/whs-acceptable-scores.md §6)
+ *   3. node scripts/capture-whs-fixture.mjs             (read-only, staging)
  */
 
 type ExpectedRow = {
@@ -125,8 +114,7 @@ describe("replayHandicapIndex vs recalc_handicap_profile", () => {
     expect(fixtures.length).toBeGreaterThan(0);
   });
 
-  // SKIPPED: fixtures predate the GB&I alignment migration. See module header.
-  it.skip.each(fixtures.map((f) => [f.slug, f] as const))(
+  it.each(fixtures.map((f) => [f.slug, f] as const))(
     "%s reproduces handicap_index_history",
     (_slug, fx) => {
       const actual = replayHandicapIndex(fx.stream);
@@ -169,8 +157,7 @@ describe("replayHandicapIndex vs recalc_handicap_profile", () => {
     }
   );
 
-  // SKIPPED: fixtures predate the GB&I alignment migration. See module header.
-  it.skip("matches exactly on the overwhelming majority of rows", () => {
+  it("matches exactly on the overwhelming majority of rows", () => {
     // Guards against the tie allowance quietly swallowing a real regression: if
     // a change made the engine wrong everywhere, `ambiguousCutDays` would not
     // grow to cover it, but this keeps the bar explicit anyway.
