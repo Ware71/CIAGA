@@ -10,6 +10,7 @@ import { hashSeed } from "@/lib/fantasy/simulation/rng";
 import { generateNarrative } from "@/lib/fantasy/narrative";
 import { writeJointSamples } from "@/lib/fantasy/jointSamples";
 import { computeAttendanceProbability, participationRate } from "@/lib/fantasy/attendance";
+import { readEventMarkets } from "@/lib/fantasy/eventReads";
 import {
   clampProbability,
   holeKey,
@@ -1020,6 +1021,42 @@ async function readState(eventId: string): Promise<FantasyEventState | null> {
   return (data as FantasyEventState | null) ?? null;
 }
 
+/**
+ * Markets whose PREVIOUS snapshot must survive this version's supersede.
+ *
+ * An OPEN market we merely failed to price this version keeps its last good
+ * snapshot; blanking it would punch a hole in the ladder (the "1+ shows, 2+
+ * blank, 3+ shows" bug). Settled/suspended markets are never in
+ * writtenMarketIds, so they still get superseded and correctly drop out.
+ *
+ * The exception is a market whose subject (or h2h opponent) has LEFT the field
+ * — withdrawn, or never re-entered before the entry window closed, at which
+ * point loadProvisionalPlayers stops supplying them entirely. simulate() can
+ * only return an empty map for such a market, so "couldn't price it this time"
+ * is permanent: keeping it alive leaves a player who isn't playing on the board
+ * at frozen odds, still bettable, indefinitely. Dropping their snapshots is
+ * self-healing — if they re-enter, the next refresh prices them again.
+ */
+export function keepableMarketIds(
+  markets: Pick<
+    FantasyMarket,
+    "id" | "status" | "subject_profile_id" | "opponent_profile_id"
+  >[],
+  fieldIds: Set<string>,
+  writtenMarketIds: Set<string>
+): string[] {
+  const offField = (id: string | null): boolean => id != null && !fieldIds.has(id);
+  return markets
+    .filter(
+      (m) =>
+        m.status === "open" &&
+        !writtenMarketIds.has(m.id) &&
+        !offField(m.subject_profile_id) &&
+        !offField(m.opponent_profile_id)
+    )
+    .map((m) => m.id);
+}
+
 async function writeSnapshots(
   ctx: EventSimContext,
   sim: SimulationResult,
@@ -1057,14 +1094,12 @@ async function writeSnapshots(
   }
 
   // Supersede prior-version active snapshots — but ONLY for markets we either
-  // just re-priced or that are no longer open. An OPEN market we couldn't price
-  // this version (e.g. its subject was momentarily absent from the field) keeps
-  // its last good snapshot; blanking it would punch a hole in the ladder (the
-  // "1+ shows, 2+ blank, 3+ shows" bug). Settled/suspended markets are not in
-  // writtenMarketIds, so they still get superseded and correctly drop out.
-  const keepMarketIds = markets
-    .filter((m) => m.status === "open" && !writtenMarketIds.has(m.id))
-    .map((m) => m.id);
+  // just re-priced, that are no longer open, or whose player has left the field.
+  const keepMarketIds = keepableMarketIds(
+    markets,
+    new Set(ctx.players.map((p) => p.profileId)),
+    writtenMarketIds
+  );
   let supersede = supabaseAdmin
     .from("fantasy_odds_snapshots")
     .update({ status: "superseded" })
@@ -1171,14 +1206,15 @@ async function ensureMarkets(
   // upserts can't target — diff against existing markets in TS and bulk-insert
   // only the missing shapes. A concurrent-generate race can still 23505; fall
   // back to per-row inserts for that case only.
-  const { data: existingData, error: existingErr } = await supabaseAdmin
-    .from("fantasy_markets")
-    .select("market_type, subject_profile_id, opponent_profile_id, params")
-    .eq("event_id", ctx.event.id);
-  if (existingErr) throw existingErr;
-  const existingKeys = new Set(
-    ((existingData ?? []) as FantasyMarket[]).map((m) => marketShapeKey(m))
+  //
+  // Paged: a truncated read here is worse than a truncated display. `existingKeys`
+  // would come back incomplete, so every refresh would re-insert markets that
+  // already exist, 23505, and fall into the swallow-the-error per-row path.
+  const existingData = await readEventMarkets<FantasyMarket>(
+    ctx.event.id,
+    "market_type, subject_profile_id, opponent_profile_id, params"
   );
+  const existingKeys = new Set(existingData.map((m) => marketShapeKey(m)));
   const missingRows = specs
     .filter((s) => !existingKeys.has(marketShapeKey(s)))
     .map((s) => ({
@@ -1222,13 +1258,12 @@ async function executeRefresh(eventId: string, jobId: string): Promise<void> {
     // New entrants since generation get their per-player markets here.
     await ensureMarkets(ctx, sim);
 
-    const { data: marketData, error: marketErr } = await supabaseAdmin
-      .from("fantasy_markets")
-      .select("*")
-      .eq("event_id", eventId);
-    if (marketErr) throw marketErr;
+    // Paged: a market missing from this read is neither re-priced NOR in
+    // keepMarketIds, so writeSnapshots would supersede its last good snapshot
+    // and blank it on the board for good.
+    const marketData = await readEventMarkets<FantasyMarket>(eventId, "*");
 
-    await writeSnapshots(ctx, sim, (marketData ?? []) as FantasyMarket[], version);
+    await writeSnapshots(ctx, sim, marketData, version);
 
     // Retain the joint positions matrix for correlated-acca pricing. Best-effort
     // — accas fall back to the independent product if it's missing.
@@ -1399,12 +1434,7 @@ export async function generateEventFantasy(eventId: string): Promise<{ markets: 
   const newMarkets = await ensureMarkets(ctx, sim);
   logPhase(`markets (${newMarkets} new)`);
 
-  const { data: marketData, error: marketSelErr } = await supabaseAdmin
-    .from("fantasy_markets")
-    .select("*")
-    .eq("event_id", eventId);
-  if (marketSelErr) throw marketSelErr;
-  const markets = (marketData ?? []) as FantasyMarket[];
+  const markets = await readEventMarkets<FantasyMarket>(eventId, "*");
 
   await writeSnapshots(ctx, sim, markets, version);
   await writeJointSamples(eventId, ctx.groupId, version, sim).catch((e) =>

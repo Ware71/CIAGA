@@ -16,11 +16,27 @@ import type { HoleSplits, SimHole, SimPlayerProfile } from "@/lib/fantasy/simula
  *
  * The birdie-or-better mass is then calibrated EXACTLY to a Bayesian-shrunk
  * target rate (observed birdies/round shrunk toward a handicap-based prior —
- * the normal tail wildly overstates amateur birdie odds), the eagle bin is set
- * within that mass, and a fixed-point loop re-adjusts each hole's latent mean
- * so the POST-calibration expected score still equals holeMu (the differential
- * level already includes the player's real birdies, so calibration must fix
- * the shape without moving the level).
+ * the normal tail wildly overstates amateur birdie odds), the PAR bin is
+ * calibrated the same way, the eagle bin is set within the birdie mass, and a
+ * fixed-point loop re-adjusts each hole's latent mean so the POST-calibration
+ * expected score still equals holeMu (the differential level already includes
+ * the player's real birdies, so calibration must fix the shape without moving
+ * the level).
+ *
+ * Why par is calibrated and bogey is not: `hole_score` prices bogey-or-worse as
+ * the residual `1 − P(birdie+) − P(par)`, so pinning birdie and par pins the
+ * whole hole book. Before this, only the birdie side was calibrated and the
+ * par/bogey split was whatever the normal had left — which discarded ~60% of a
+ * real player's par mass (measured: 7.2% modelled against 17.9% observed) and
+ * left the bogey book quoting a flat 1.01-1.14 on every hole.
+ *
+ * Pinning BOGEY too would over-constrain it: with birdie, par and bogey all
+ * fixed, only the shape beyond double bogey could move the mean, so a
+ * harder-than-usual course would have nowhere to put the extra strokes. It also
+ * isn't needed — pin birdie and par, preserve the level, and the bogey/double
+ * split falls out on its own (a player whose record says his bogey-or-worse
+ * holes average +2.03 gets exactly that back). `bogeysPerRound` and
+ * `doublesPlusPerRound` are therefore stored but deliberately unread.
  */
 
 export const OUTCOME_OFFSET = 2; // k index 2 = par
@@ -86,6 +102,11 @@ const CONFIDENCE_SIGMA_FACTOR: Record<SimPlayerProfile["confidence"], number> = 
  */
 export const BIRDIE_PRIOR_STRENGTH = 8;
 export const EAGLE_PRIOR_STRENGTH = 40;
+/**
+ * Pars are 5-10× more common than birdies, so the observed rate over the same
+ * sample is proportionally far more reliable and needs less shrinking.
+ */
+export const PAR_PRIOR_STRENGTH = 5;
 
 export function birdiePriorMean(hi: number): number {
   return Math.min(3.0, Math.max(0.03, 2.2 * Math.exp(-0.115 * hi)));
@@ -93,6 +114,18 @@ export function birdiePriorMean(hi: number): number {
 
 export function eaglePriorMean(hi: number): number {
   return Math.min(0.15, Math.max(0.001, 0.06 * Math.exp(-0.18 * hi)));
+}
+
+/**
+ * Pars per round by handicap. Fitted by log-linear regression to the group's
+ * OWN profiles rather than published amateur tables — this population plays
+ * meaningfully above its index (a 6.4 shoots 83 on these courses), so a
+ * published curve sits well wide. Prior vs observed at the fitted points:
+ * HI 6.4 → 7.76/7.66 · 20 → 3.03/3.23 · 31.8 → 1.34/1.16 · 43.9 → 0.58/0.78 ·
+ * 47.5 → 0.45/0.37. Extrapolates to ≈12 pars/round at scratch, ≈6 at HI 10.
+ */
+export function parPriorMean(hi: number): number {
+  return Math.min(14, Math.max(0.05, 12.1 * Math.exp(-0.069 * hi)));
 }
 
 /** Gamma-Poisson posterior mean; a null observation contributes zero rounds. */
@@ -341,6 +374,19 @@ export type CalibrationMeta = {
     postMass: number;
     capped: boolean;
   };
+  /** Exactly-par bin — same treatment as birdie; sets the bogey book by residual. */
+  par: {
+    observedRate: number | null;
+    sampleRounds: number;
+    priorMean: number;
+    priorStrength: number;
+    targetRate: number;
+    targetMass: number;
+    preMass: number;
+    postMass: number;
+    factor: number;
+    capped: boolean;
+  };
   /** Max per-hole |holeMu − E[score]| after the final pass (strokes). */
   meanResidual: number;
   /** Fixed-point passes run (1 when already converged). */
@@ -377,8 +423,15 @@ const CALIBRATION_MAX_HOLE_MASS = 0.95;
 function calibrateDistributions(
   dists: number[][],
   targetBirdieMass: number,
-  targetEagleMass: number
-): { factor: number; capped: boolean; eagleCapped: boolean } {
+  targetEagleMass: number,
+  targetParMass: number
+): {
+  factor: number;
+  capped: boolean;
+  eagleCapped: boolean;
+  parFactor: number;
+  parCapped: boolean;
+} {
   const birdieMass = dists.map((d) => d[0] + d[1]);
   const total = birdieMass.reduce((s, x) => s + x, 0);
   let factor = 1;
@@ -414,8 +467,75 @@ function calibrateDistributions(
     }
   }
 
+  // PAR bin, calibrated the same way but strictly WITHIN the non-birdie mass:
+  // one global factor keeps the relative par shape across holes (a hard hole
+  // still holds proportionally less par), and each hole's k>=3 bins rescale to
+  // absorb the difference, so the birdie bins just fixed above never move.
+  let parFactor = 1;
+  let parCapped = false;
+  const parRaw = dists.map((d) => d[2]);
+  const parRoom = dists.map((d) => CALIBRATION_MAX_HOLE_MASS * (1 - d[0] - d[1]));
+  if (parRaw.reduce((s, x) => s + x, 0) > CALIBRATION_EPS) {
+    // Water-fill. A single global factor preserves the relative par shape (a
+    // hard hole keeps proportionally less), but no hole may take more than
+    // MAX_HOLE_MASS of the room the birdie bins leave it, or the k>=3 rescale
+    // below goes negative. A hole that would overflow is pinned at its ceiling
+    // and its shortfall redistributes over the rest.
+    //
+    // The redistribution is what makes a low handicap reachable at all: par
+    // mass concentrates on the easy holes, so with one hard-capped factor the
+    // easiest hole hits the ceiling first and the whole field gives up short of
+    // target — a scratch player's ~12 pars/round was unreachable.
+    const finalPar = new Array<number>(dists.length).fill(0);
+    const pinned = new Array<boolean>(dists.length).fill(false);
+    let remaining = targetParMass;
+    for (let pass = 0; pass < dists.length; pass++) {
+      let activeRaw = 0;
+      for (let i = 0; i < dists.length; i++) if (!pinned[i]) activeRaw += parRaw[i];
+      if (activeRaw <= CALIBRATION_EPS) break;
+      parFactor = remaining / activeRaw;
+      let overflowed = false;
+      for (let i = 0; i < dists.length; i++) {
+        if (pinned[i]) continue;
+        const proposed = parFactor * parRaw[i];
+        if (proposed > parRoom[i] + CALIBRATION_EPS) {
+          pinned[i] = true;
+          overflowed = true;
+          finalPar[i] = parRoom[i];
+          remaining -= parRoom[i];
+        } else {
+          finalPar[i] = proposed;
+        }
+      }
+      if (!overflowed) break;
+    }
+    // `capped` means the target was MISSED, not merely that a hole hit its
+    // ceiling — water-filling usually still lands the target after pinning one.
+    // Same meaning as the birdie block's flag, so the audit reads consistently.
+    const placed = finalPar.reduce((s, x) => s + x, 0);
+    parCapped = targetParMass - placed > 1e-9;
+
+    for (let i = 0; i < dists.length; i++) {
+      const d = dists[i];
+      const p = parRaw[i];
+      if (p <= CALIBRATION_EPS) continue;
+      const beyondPar = 1 - d[0] - d[1] - p;
+      d[2] = finalPar[i];
+      if (beyondPar <= CALIBRATION_EPS) {
+        // Degenerate hole (no mass past par): park the difference on bogey,
+        // mirroring how the birdie block parks on par. finalPar <= 0.95·p here,
+        // so this can only ever add.
+        d[3] += p - finalPar[i];
+      } else {
+        const g = (1 - d[0] - d[1] - d[2]) / beyondPar;
+        for (let k = 3; k < OUTCOME_BINS; k++) d[k] *= g;
+      }
+    }
+  }
+
   // Eagle bin is set WITHIN the birdie-or-better mass (moving weight between
-  // k=0 and k=1) so the just-calibrated birdie total is untouched.
+  // k=0 and k=1) so the just-calibrated birdie total is untouched. It runs last
+  // and touches only k=0/k=1, so it cannot disturb the par mass either.
   let eagleCapped = false;
   const eagleTotal = dists.reduce((s, d) => s + d[0], 0);
   if (eagleTotal > CALIBRATION_EPS) {
@@ -429,7 +549,7 @@ function calibrateDistributions(
     }
   }
 
-  return { factor, capped, eagleCapped };
+  return { factor, capped, eagleCapped, parFactor, parCapped };
 }
 
 /**
@@ -456,8 +576,10 @@ export function buildHoleDistributionsDetailed(
 
   const birdieRounds = profile.birdiesPerRound != null ? profile.sampleSize : 0;
   const eagleRounds = profile.eaglesPerRound != null ? profile.sampleSize : 0;
+  const parRounds = profile.parsPerRound != null ? profile.sampleSize : 0;
   const birdiePrior = birdiePriorMean(hiProxy);
   const eaglePrior = eaglePriorMean(hiProxy);
+  const parPrior = parPriorMean(hiProxy);
   const birdieTargetRate = shrunkRate(
     profile.birdiesPerRound,
     birdieRounds,
@@ -469,10 +591,18 @@ export function buildHoleDistributionsDetailed(
     birdieTargetRate,
     shrunkRate(profile.eaglesPerRound, eagleRounds, eaglePrior, EAGLE_PRIOR_STRENGTH)
   );
+  const parTargetRate = shrunkRate(profile.parsPerRound, parRounds, parPrior, PAR_PRIOR_STRENGTH);
 
   const perRoundScale = holes.length / 18;
   const targetBirdieMass = birdieTargetRate * perRoundScale;
   const targetEagleMass = eagleTargetRate * perRoundScale;
+  // Birdies and pars are disjoint, so together they can never claim more than
+  // the holes available. The per-hole cap inside calibrateDistributions is the
+  // real guard; this just keeps an absurd pair of targets from fighting it.
+  const targetParMass = Math.max(
+    0,
+    Math.min(parTargetRate * perRoundScale, holes.length - targetBirdieMass)
+  );
 
   const mus = holes.map((hole) => holeMu(profile, hole, playingHandicap));
   const sigmas = holes.map((hole) => holeSigma(profile, hole));
@@ -481,9 +611,12 @@ export function buildHoleDistributionsDetailed(
   let dists: number[][] = [];
   let preMass = 0;
   let preEagleMass = 0;
+  let preParMass = 0;
   let factor = 1;
   let capped = false;
   let eagleCapped = false;
+  let parFactor = 1;
+  let parCapped = false;
   let meanResidual = 0;
   let iterations = 0;
 
@@ -493,11 +626,19 @@ export function buildHoleDistributionsDetailed(
     if (pass === 0) {
       preMass = dists.reduce((s, d) => s + d[0] + d[1], 0);
       preEagleMass = dists.reduce((s, d) => s + d[0], 0);
+      preParMass = dists.reduce((s, d) => s + d[2], 0);
     }
-    const cal = calibrateDistributions(dists, targetBirdieMass, targetEagleMass);
+    const cal = calibrateDistributions(
+      dists,
+      targetBirdieMass,
+      targetEagleMass,
+      targetParMass
+    );
     factor = cal.factor;
     capped = cal.capped;
     eagleCapped = cal.eagleCapped;
+    parFactor = cal.parFactor;
+    parCapped = cal.parCapped;
 
     // Calibration is always the LAST operation on the distributions (birdie
     // exactness prices the birdie markets); the loop only decides whether the
@@ -520,6 +661,7 @@ export function buildHoleDistributionsDetailed(
 
   const postMass = dists.reduce((s, d) => s + d[0] + d[1], 0);
   const postEagleMass = dists.reduce((s, d) => s + d[0], 0);
+  const postParMass = dists.reduce((s, d) => s + d[2], 0);
 
   // Variance reconciliation: intended per-hole σ² vs the realized discrete
   // variance the calibration actually leaves in each distribution.
@@ -561,6 +703,18 @@ export function buildHoleDistributionsDetailed(
         preMass: preEagleMass,
         postMass: postEagleMass,
         capped: eagleCapped,
+      },
+      par: {
+        observedRate: profile.parsPerRound,
+        sampleRounds: parRounds,
+        priorMean: parPrior,
+        priorStrength: PAR_PRIOR_STRENGTH,
+        targetRate: parTargetRate,
+        targetMass: targetParMass,
+        preMass: preParMass,
+        postMass: postParMass,
+        factor: parFactor,
+        capped: parCapped,
       },
       meanResidual,
       iterations,

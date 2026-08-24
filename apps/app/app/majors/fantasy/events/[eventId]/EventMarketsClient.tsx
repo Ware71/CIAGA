@@ -64,6 +64,11 @@ const SEASON_TAB = "season";
 
 type HoleOutcome = "birdie_or_better" | "bogey_or_worse";
 
+const HOLE_OUTCOMES: { id: HoleOutcome; label: string }[] = [
+  { id: "birdie_or_better", label: "Birdie or better" },
+  { id: "bogey_or_worse", label: "Bogey or worse" },
+];
+
 type CategoryId =
   | "finishes" | "match" | "scoreBands" | "scoreTotals" | "birdies" | "eagles" | "rare" | "holes";
 
@@ -621,10 +626,26 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
         return (
           <div className="space-y-2">
             {holePlayers.map((pid) => {
-              const outcome = holeOutcome.get(pid) ?? "birdie_or_better";
-              const forPlayer = data.holeMarkets.filter((m) => m.subject_profile_id === pid);
-              const active =
-                forPlayer.find((m) => (m.params.outcome ?? "birdie_or_better") === outcome) ?? forPlayer[0];
+              // Index this player's hole markets BY outcome. Never fall back to
+              // "the other one": an unpriced bogey market used to render the
+              // birdie book under the "Bogey or worse" tab — identical odds on
+              // both tabs, and a bogey click that placed a birdie bet.
+              const byOutcome = new Map<HoleOutcome, BoardMarket>();
+              for (const m of data.holeMarkets) {
+                if (m.subject_profile_id !== pid) continue;
+                byOutcome.set(
+                  m.params.outcome === "bogey_or_worse" ? "bogey_or_worse" : "birdie_or_better",
+                  m
+                );
+              }
+              // Open on the viewer's choice when it's actually available, else on
+              // whichever outcome this player has prices for.
+              const chosen = holeOutcome.get(pid);
+              const outcome: HoleOutcome =
+                chosen && byOutcome.has(chosen)
+                  ? chosen
+                  : HOLE_OUTCOMES.find((o) => byOutcome.has(o.id))?.id ?? "birdie_or_better";
+              const active = byOutcome.get(outcome) ?? null;
               return (
                 <PlayerAccordion
                   key={pid}
@@ -635,25 +656,39 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
                   onInfo={() => openStats(pid)}
                 >
                   <div className="mb-2 flex rounded-lg border border-emerald-900/60 p-0.5 text-[10px]">
-                    {(["birdie_or_better", "bogey_or_worse"] as HoleOutcome[]).map((o) => (
-                      <button
-                        key={o}
-                        type="button"
-                        onClick={() => {
-                          const next = new Map(holeOutcome);
-                          next.set(pid, o);
-                          setHoleOutcome(next);
-                        }}
-                        className={`flex-1 rounded-md px-2 py-1 font-semibold transition-colors ${
-                          outcome === o ? "bg-emerald-800/50 text-[#f5e6b0]" : "text-emerald-200/60"
-                        }`}
-                      >
-                        {o === "birdie_or_better" ? "Birdie or better" : "Bogey or worse"}
-                      </button>
-                    ))}
+                    {HOLE_OUTCOMES.map((o) => {
+                      const available = byOutcome.has(o.id);
+                      return (
+                        <button
+                          key={o.id}
+                          type="button"
+                          disabled={!available}
+                          onClick={() => {
+                            const next = new Map(holeOutcome);
+                            next.set(pid, o.id);
+                            setHoleOutcome(next);
+                          }}
+                          className={`flex-1 rounded-md px-2 py-1 font-semibold transition-colors ${
+                            outcome === o.id
+                              ? "bg-emerald-800/50 text-[#f5e6b0]"
+                              : available
+                              ? "text-emerald-200/60"
+                              : "text-emerald-200/25 cursor-default"
+                          }`}
+                        >
+                          {o.label}
+                        </button>
+                      );
+                    })}
                   </div>
                   <div className="space-y-1">
-                    {active ? sortHoles(active.selections).map((sel) => selectionRow(active, sel)) : null}
+                    {active ? (
+                      sortHoles(active.selections).map((sel) => selectionRow(active, sel))
+                    ) : (
+                      <p className="px-1 py-2 text-[11px] text-emerald-200/60">
+                        No prices for this player.
+                      </p>
+                    )}
                   </div>
                 </PlayerAccordion>
               );

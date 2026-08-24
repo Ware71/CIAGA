@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 import { readFantasyConfig } from "@/lib/fantasy/config";
 import { getWalletSummary, resolveWalletScope } from "@/lib/fantasy/wallet";
+import { readAllPages } from "@/lib/fantasy/paginate";
 import {
   buildFinishesTable,
   toPreviewRows,
@@ -115,16 +116,22 @@ export async function GET(req: Request) {
         const mkts = (mktRows ?? []) as {
           id: string; event_id: string; market_type: string; params: Record<string, unknown>;
         }[];
-        const { data: snapRows } = mkts.length
-          ? await supabaseAdmin
-              .from("fantasy_odds_snapshots")
-              .select("market_id, selection_key, probability, decimal_odds")
-              .in("market_id", mkts.map((m) => m.id))
-              .eq("status", "active")
-          : { data: [] };
-        const snaps = (snapRows ?? []) as {
-          market_id: string; selection_key: string; probability: number | string; decimal_odds: number | string;
-        }[];
+        // Paged + ordered by the PK: the outright/top-N books across several
+        // events can clear 1000 active rows, and an unordered range() drops
+        // whole markets at the page boundary rather than trimming the tail.
+        const snaps = mkts.length
+          ? await readAllPages<{
+              market_id: string; selection_key: string;
+              probability: number | string; decimal_odds: number | string;
+            }>(() =>
+              supabaseAdmin
+                .from("fantasy_odds_snapshots")
+                .select("market_id, selection_key, probability, decimal_odds")
+                .in("market_id", mkts.map((m) => m.id))
+                .eq("status", "active")
+                .order("id")
+            )
+          : [];
         const previewNames: Record<string, string> = {};
         const selectionIds = [...new Set(snaps.map((s) => s.selection_key))];
         if (selectionIds.length > 0) {

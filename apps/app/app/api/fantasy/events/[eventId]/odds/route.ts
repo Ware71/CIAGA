@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 import { getGroupRole } from "@/lib/fantasy/wallet";
 import { refreshIfStale } from "@/lib/fantasy/odds";
+import { readActiveSnapshots, readEventMarkets } from "@/lib/fantasy/eventReads";
 import { rankingBasisFromScoringModel } from "@/lib/fantasy/parlayRules";
 import { getMarketDefinition, MARKET_TYPE_ORDER } from "@/lib/fantasy/markets/registry";
 import type { FantasyMarket } from "@/lib/fantasy/markets/types";
@@ -79,42 +80,24 @@ export async function GET(req: Request, { params }: { params: Promise<{ eventId:
       probability: number; decimal_odds: number; event_version: number; computed_at: string;
     };
 
-    // This read was unpaginated, so PostgREST's 1000-row cap silently truncated
-    // it: The International 2026 (236 markets over 2 rounds) came back with 182
-    // markets priced and 54 arbitrarily blank.
+    // Both reads go through lib/fantasy/eventReads, which pages AND applies a
+    // total order. This one used to hand-roll its own `range()` loop with no
+    // ordering, which silently dropped a whole market's selections once the
+    // event passed 1000 active snapshots.
     //
-    // Page it, but do NOT also filter to the current event_version. `status =
-    // 'active'` is the selector on purpose: writeSnapshots deliberately leaves a
-    // market's previous snapshot active when it wasn't re-priced this version
-    // (e.g. its subject was briefly out of the field), because blanking it
-    // punches a hole in the ladder — the "1+ shows, 2+ blank, 3+ shows" bug.
-    // Markets that WERE re-priced have their older rows superseded, so there is
-    // no double-counting.
-    const readSnapshots = async (): Promise<SnapshotRow[]> => {
-      const rows: SnapshotRow[] = [];
-      const pageSize = 1000;
-      for (let from = 0; ; from += pageSize) {
-        const { data, error } = await supabaseAdmin
-          .from("fantasy_odds_snapshots")
-          .select("id, market_id, selection_key, probability, decimal_odds, event_version, computed_at")
-          .eq("event_id", eventId)
-          .eq("status", "active")
-          .range(from, from + pageSize - 1);
-        if (error) throw error;
-        const page = (data ?? []) as SnapshotRow[];
-        rows.push(...page);
-        if (page.length < pageSize) break;
-      }
-      return rows;
-    };
-
-    const [{ data: marketData, error: marketErr }, snapshots] = await Promise.all([
-      supabaseAdmin.from("fantasy_markets").select("*").eq("event_id", eventId),
-      readSnapshots(),
+    // Do NOT also filter to the current event_version. `status = 'active'` is
+    // the selector on purpose: writeSnapshots deliberately leaves a market's
+    // previous snapshot active when it wasn't re-priced this version (e.g. its
+    // subject was briefly out of the field), because blanking it punches a hole
+    // in the ladder — the "1+ shows, 2+ blank, 3+ shows" bug. Markets that WERE
+    // re-priced have their older rows superseded, so there is no double-counting.
+    const [markets, snapshots] = await Promise.all([
+      readEventMarkets<FantasyMarket>(eventId, "*"),
+      readActiveSnapshots<SnapshotRow>(
+        eventId,
+        "id, market_id, selection_key, probability, decimal_odds, event_version, computed_at"
+      ),
     ]);
-    if (marketErr) throw marketErr;
-
-    const markets = (marketData ?? []) as FantasyMarket[];
 
     // Names for player-scoped markets and player selection keys.
     const nameIds = new Set<string>();

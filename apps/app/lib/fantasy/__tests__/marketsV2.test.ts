@@ -19,6 +19,7 @@ import { eagleCount } from "@/lib/fantasy/markets/eagles";
 import { holeScore, holeSelectionKey } from "@/lib/fantasy/markets/holeScore";
 import { fieldSpecial } from "@/lib/fantasy/markets/fieldSpecials";
 import { outrightWinner } from "@/lib/fantasy/markets/outrightWinner";
+import { shapeFor } from "@/lib/fantasy/__tests__/shapeFixture";
 
 function profile(overrides: Partial<SimPlayerProfile> & { profileId: string }): SimPlayerProfile {
   // The model prices off par-type averages, so derive them from avgGross —
@@ -31,9 +32,9 @@ function profile(overrides: Partial<SimPlayerProfile> & { profileId: string }): 
     recentForm: 0,
     birdiesPerRound: 1,
     eaglesPerRound: 0.05,
-    parsPerRound: 7,
-    bogeysPerRound: 7,
-    doublesPlusPerRound: 3,
+    // Derived from the level (see shapeFixture.ts) so an avgGross override
+    // stays a player who could exist once the par bin is calibrated.
+    ...shapeFor(overrides.avgGross ?? 85, overrides.birdiesPerRound ?? 1),
     par3AvgVsPar: perHole,
     par4AvgVsPar: perHole,
     par5AvgVsPar: perHole,
@@ -387,6 +388,57 @@ describe("hole markets", () => {
       expect(p).toBeGreaterThanOrEqual(0);
       expect(p).toBeLessThan(0.6);
     }
+  });
+
+  it("REGRESSION: skips holes the engine never modelled, instead of quoting them at the floor", () => {
+    // A finished round with only holes 1-2 recorded. The engine fixes those two
+    // and samples nothing (the round is over), so every other hole's outcome
+    // bins stay empty — the pick-up / mid-round-withdrawal shape. Quoting them
+    // reported P = 0 on BOTH books, which the clamp turned into an identical
+    // 1000/1 on each: "birdie and bogey have the same odds".
+    const sim = runSimulation({
+      players: [
+        {
+          profileId: "a",
+          displayName: "a",
+          profile: profile({ profileId: "a" }),
+          playingHandicap: 10,
+          completedHoles: { 101: 3, 102: 4 }, // hole 1 (par 4) birdie, hole 2 par
+          roundComplete: true,
+        },
+        {
+          profileId: "b",
+          displayName: "b",
+          profile: profile({ profileId: "b" }),
+          playingHandicap: 10,
+          completedHoles: {},
+          roundComplete: false,
+        },
+      ],
+      holes: makeHoles([1]),
+      rankingBasis: "net",
+      simulationCount: 200,
+      seed: 17,
+    });
+    const forOutcome = (outcome: string) =>
+      holeScore.simulate(
+        sim,
+        market({ market_type: "hole_score", subject_profile_id: "a", params: { outcome } })
+      );
+    const birdie = forOutcome("birdie_or_better");
+    const bogey = forOutcome("bogey_or_worse");
+
+    // Only the two recorded holes are offered — on both books.
+    const recorded = [holeSelectionKey(1, 1), holeSelectionKey(1, 2)];
+    expect([...birdie.keys()]).toEqual(recorded);
+    expect([...bogey.keys()]).toEqual(recorded);
+
+    // Played holes still price deterministically. Hole 2 was PARRED, so zero on
+    // both books is correct — a decided hole, not a missing one.
+    expect(birdie.get(holeSelectionKey(1, 1))).toBe(1);
+    expect(bogey.get(holeSelectionKey(1, 1))).toBe(0);
+    expect(birdie.get(holeSelectionKey(1, 2))).toBe(0);
+    expect(bogey.get(holeSelectionKey(1, 2))).toBe(0);
   });
 });
 
