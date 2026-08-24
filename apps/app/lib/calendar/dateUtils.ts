@@ -1,18 +1,18 @@
 // lib/calendar/dateUtils.ts
-// Calendar grid / range helpers, extending lib/stats/timeModel.ts.
+// Calendar grid / range helpers, extending lib/stats/chartMath.ts.
 
-import { addDays, iso } from "@/lib/stats/timeModel";
+import { addDays, iso, isoLocal } from "@/lib/stats/chartMath";
 import type { ZoomLevel } from "./types";
 
 export { addDays, iso };
 
-/** Local YYYY-MM-DD key for a date (unlike `iso`, which uses UTC). */
-export function dayKey(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
+/**
+ * Local YYYY-MM-DD key for a date (unlike `iso`, which uses UTC).
+ *
+ * Now an alias of `isoLocal` — the calendar had independently worked around the
+ * UTC problem with its own copy, and one implementation is enough.
+ */
+export const dayKey = isoLocal;
 
 /** Midnight (local) at the start of the given day. */
 export function startOfDay(d: Date): Date {

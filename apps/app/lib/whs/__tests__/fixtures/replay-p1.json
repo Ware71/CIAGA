@@ -1,0 +1,2316 @@
+{
+  "slug": "p1",
+  "tags": [
+    "longSteady",
+    "capped",
+    "sameDay"
+  ],
+  "differentials": 262,
+  "stream": [
+    {
+      "playedAt": "2023-08-13",
+      "differential": 23.6
+    },
+    {
+      "playedAt": "2023-08-20",
+      "differential": 29.3
+    },
+    {
+      "playedAt": "2023-08-24",
+      "differential": 26.8
+    },
+    {
+      "playedAt": "2023-08-31",
+      "differential": 24.7
+    },
+    {
+      "playedAt": "2023-09-07",
+      "differential": 26
+    },
+    {
+      "playedAt": "2023-09-07",
+      "differential": 22.2
+    },
+    {
+      "playedAt": "2023-09-07",
+      "differential": 32.2
+    },
+    {
+      "playedAt": "2023-10-05",
+      "differential": 18.6
+    },
+    {
+      "playedAt": "2023-10-10",
+      "differential": 15.3
+    },
+    {
+      "playedAt": "2024-03-14",
+      "differential": 32.1
+    },
+    {
+      "playedAt": "2024-03-21",
+      "differential": 29.1
+    },
+    {
+      "playedAt": "2024-05-02",
+      "differential": 32.2
+    },
+    {
+      "playedAt": "2024-05-04",
+      "differential": 39.6
+    },
+    {
+      "playedAt": "2024-05-07",
+      "differential": 36.3
+    },
+    {
+      "playedAt": "2024-05-16",
+      "differential": 29.7
+    },
+    {
+      "playedAt": "2024-05-17",
+      "differential": 37.9
+    },
+    {
+      "playedAt": "2024-05-20",
+      "differential": 31
+    },
+    {
+      "playedAt": "2024-05-23",
+      "differential": 36.5
+    },
+    {
+      "playedAt": "2024-05-25",
+      "differential": 32.8
+    },
+    {
+      "playedAt": "2024-05-27",
+      "differential": 30.6
+    },
+    {
+      "playedAt": "2024-05-28",
+      "differential": 31.9
+    },
+    {
+      "playedAt": "2024-05-29",
+      "differential": 26.4
+    },
+    {
+      "playedAt": "2024-05-30",
+      "differential": 20.3
+    },
+    {
+      "playedAt": "2024-06-03",
+      "differential": 22.7
+    },
+    {
+      "playedAt": "2024-06-07",
+      "differential": 20.8
+    },
+    {
+      "playedAt": "2024-06-10",
+      "differential": 27
+    },
+    {
+      "playedAt": "2024-06-14",
+      "differential": 21.2
+    },
+    {
+      "playedAt": "2024-06-15",
+      "differential": 25.5
+    },
+    {
+      "playedAt": "2024-06-19",
+      "differential": 27
+    },
+    {
+      "playedAt": "2024-06-22",
+      "differential": 24.6
+    },
+    {
+      "playedAt": "2024-06-27",
+      "differential": 30.6
+    },
+    {
+      "playedAt": "2024-06-29",
+      "differential": 31
+    },
+    {
+      "playedAt": "2024-07-04",
+      "differential": 27.4
+    },
+    {
+      "playedAt": "2024-07-06",
+      "differential": 27
+    },
+    {
+      "playedAt": "2024-07-08",
+      "differential": 33.2
+    },
+    {
+      "playedAt": "2024-07-10",
+      "differential": 19.6
+    },
+    {
+      "playedAt": "2024-07-12",
+      "differential": 21.4
+    },
+    {
+      "playedAt": "2024-07-16",
+      "differential": 23.6
+    },
+    {
+      "playedAt": "2024-07-18",
+      "differential": 21.3
+    },
+    {
+      "playedAt": "2024-07-20",
+      "differential": 29
+    },
+    {
+      "playedAt": "2024-07-21",
+      "differential": 23.9
+    },
+    {
+      "playedAt": "2024-07-23",
+      "differential": 18.9
+    },
+    {
+      "playedAt": "2024-07-26",
+      "differential": 22
+    },
+    {
+      "playedAt": "2024-07-29",
+      "differential": 18
+    },
+    {
+      "playedAt": "2024-08-01",
+      "differential": 16.8
+    },
+    {
+      "playedAt": "2024-08-03",
+      "differential": 21.7
+    },
+    {
+      "playedAt": "2024-08-06",
+      "differential": 22.5
+    },
+    {
+      "playedAt": "2024-08-08",
+      "differential": 18.4
+    },
+    {
+      "playedAt": "2024-08-09",
+      "differential": 23.1
+    },
+    {
+      "playedAt": "2024-08-11",
+      "differential": 16.4
+    },
+    {
+      "playedAt": "2024-08-12",
+      "differential": 16.2
+    },
+    {
+      "playedAt": "2024-08-15",
+      "differential": 20.7
+    },
+    {
+      "playedAt": "2024-08-18",
+      "differential": 27.8
+    },
+    {
+      "playedAt": "2024-08-19",
+      "differential": 22.3
+    },
+    {
+      "playedAt": "2024-08-22",
+      "differential": 24.3
+    },
+    {
+      "playedAt": "2024-08-26",
+      "differential": 28.4
+    },
+    {
+      "playedAt": "2024-08-28",
+      "differential": 15.4
+    },
+    {
+      "playedAt": "2024-08-29",
+      "differential": 16.3
+    },
+    {
+      "playedAt": "2024-08-31",
+      "differential": 20.1
+    },
+    {
+      "playedAt": "2024-09-02",
+      "differential": 19.3
+    },
+    {
+      "playedAt": "2024-09-03",
+      "differential": 15.3
+    },
+    {
+      "playedAt": "2024-09-07",
+      "differential": 11.6
+    },
+    {
+      "playedAt": "2024-09-12",
+      "differential": 12.7
+    },
+    {
+      "playedAt": "2024-09-14",
+      "differential": 18.7
+    },
+    {
+      "playedAt": "2024-09-17",
+      "differential": 13.3
+    },
+    {
+      "playedAt": "2024-09-27",
+      "differential": 24.5
+    },
+    {
+      "playedAt": "2024-09-28",
+      "differential": 26.8
+    },
+    {
+      "playedAt": "2024-10-04",
+      "differential": 11.3
+    },
+    {
+      "playedAt": "2024-10-06",
+      "differential": 17.8
+    },
+    {
+      "playedAt": "2024-10-07",
+      "differential": 17.2
+    },
+    {
+      "playedAt": "2024-10-10",
+      "differential": 19.1
+    },
+    {
+      "playedAt": "2024-10-14",
+      "differential": 21.3
+    },
+    {
+      "playedAt": "2024-10-16",
+      "differential": 15.4
+    },
+    {
+      "playedAt": "2024-10-25",
+      "differential": 28.4
+    },
+    {
+      "playedAt": "2024-10-26",
+      "differential": 17.3
+    },
+    {
+      "playedAt": "2024-10-28",
+      "differential": 20.7
+    },
+    {
+      "playedAt": "2024-10-30",
+      "differential": 14.4
+    },
+    {
+      "playedAt": "2024-11-05",
+      "differential": 15
+    },
+    {
+      "playedAt": "2024-11-08",
+      "differential": 14
+    },
+    {
+      "playedAt": "2024-11-09",
+      "differential": 12.4
+    },
+    {
+      "playedAt": "2024-11-15",
+      "differential": 14.2
+    },
+    {
+      "playedAt": "2024-11-23",
+      "differential": 22.8
+    },
+    {
+      "playedAt": "2024-11-24",
+      "differential": 18.2
+    },
+    {
+      "playedAt": "2024-11-25",
+      "differential": 15.6
+    },
+    {
+      "playedAt": "2024-11-26",
+      "differential": 20.7
+    },
+    {
+      "playedAt": "2024-11-28",
+      "differential": 15.5
+    },
+    {
+      "playedAt": "2025-02-12",
+      "differential": 15.9
+    },
+    {
+      "playedAt": "2025-02-26",
+      "differential": 21.3
+    },
+    {
+      "playedAt": "2025-03-08",
+      "differential": 21.7
+    },
+    {
+      "playedAt": "2025-04-05",
+      "differential": 12.3
+    },
+    {
+      "playedAt": "2025-04-09",
+      "differential": 21.9
+    },
+    {
+      "playedAt": "2025-04-10",
+      "differential": 17.3
+    },
+    {
+      "playedAt": "2025-04-15",
+      "differential": 27
+    },
+    {
+      "playedAt": "2025-04-16",
+      "differential": 20.2
+    },
+    {
+      "playedAt": "2025-04-18",
+      "differential": 19.1
+    },
+    {
+      "playedAt": "2025-04-24",
+      "differential": 19.8
+    },
+    {
+      "playedAt": "2025-04-25",
+      "differential": 17.3
+    },
+    {
+      "playedAt": "2025-04-26",
+      "differential": 23.3
+    },
+    {
+      "playedAt": "2025-04-27",
+      "differential": 20.9
+    },
+    {
+      "playedAt": "2025-04-29",
+      "differential": 17.1
+    },
+    {
+      "playedAt": "2025-04-30",
+      "differential": 18.1
+    },
+    {
+      "playedAt": "2025-05-01",
+      "differential": 20
+    },
+    {
+      "playedAt": "2025-05-04",
+      "differential": 18.2
+    },
+    {
+      "playedAt": "2025-05-05",
+      "differential": 19.1
+    },
+    {
+      "playedAt": "2025-05-07",
+      "differential": 14.6
+    },
+    {
+      "playedAt": "2025-05-12",
+      "differential": 13.7
+    },
+    {
+      "playedAt": "2025-05-14",
+      "differential": 24.3
+    },
+    {
+      "playedAt": "2025-05-16",
+      "differential": 18.3
+    },
+    {
+      "playedAt": "2025-05-19",
+      "differential": 16.4
+    },
+    {
+      "playedAt": "2025-05-21",
+      "differential": 16.8
+    },
+    {
+      "playedAt": "2025-05-21",
+      "differential": 16.3
+    },
+    {
+      "playedAt": "2025-05-24",
+      "differential": 16.4
+    },
+    {
+      "playedAt": "2025-05-26",
+      "differential": 19.9
+    },
+    {
+      "playedAt": "2025-06-06",
+      "differential": 22.7
+    },
+    {
+      "playedAt": "2025-06-08",
+      "differential": 18.2
+    },
+    {
+      "playedAt": "2025-06-09",
+      "differential": 15.5
+    },
+    {
+      "playedAt": "2025-06-10",
+      "differential": 11.3
+    },
+    {
+      "playedAt": "2025-06-11",
+      "differential": 21.4
+    },
+    {
+      "playedAt": "2025-06-13",
+      "differential": 14.6
+    },
+    {
+      "playedAt": "2025-06-14",
+      "differential": 22.2
+    },
+    {
+      "playedAt": "2025-06-16",
+      "differential": 14
+    },
+    {
+      "playedAt": "2025-06-18",
+      "differential": 13.2
+    },
+    {
+      "playedAt": "2025-06-21",
+      "differential": 20
+    },
+    {
+      "playedAt": "2025-06-25",
+      "differential": 7.8
+    },
+    {
+      "playedAt": "2025-06-26",
+      "differential": 14.8
+    },
+    {
+      "playedAt": "2025-06-28",
+      "differential": 10.5
+    },
+    {
+      "playedAt": "2025-06-30",
+      "differential": 15.7
+    },
+    {
+      "playedAt": "2025-07-02",
+      "differential": 14.5
+    },
+    {
+      "playedAt": "2025-07-03",
+      "differential": 15.7
+    },
+    {
+      "playedAt": "2025-07-04",
+      "differential": 19.9
+    },
+    {
+      "playedAt": "2025-07-05",
+      "differential": 17.3
+    },
+    {
+      "playedAt": "2025-07-09",
+      "differential": 14.8
+    },
+    {
+      "playedAt": "2025-07-10",
+      "differential": 17.4
+    },
+    {
+      "playedAt": "2025-07-12",
+      "differential": 19.5
+    },
+    {
+      "playedAt": "2025-07-14",
+      "differential": 19.1
+    },
+    {
+      "playedAt": "2025-07-16",
+      "differential": 18.1
+    },
+    {
+      "playedAt": "2025-07-17",
+      "differential": 14.9
+    },
+    {
+      "playedAt": "2025-07-19",
+      "differential": 15.7
+    },
+    {
+      "playedAt": "2025-07-21",
+      "differential": 11.4
+    },
+    {
+      "playedAt": "2025-07-23",
+      "differential": 9.4
+    },
+    {
+      "playedAt": "2025-07-24",
+      "differential": 12.2
+    },
+    {
+      "playedAt": "2025-07-27",
+      "differential": 11.4
+    },
+    {
+      "playedAt": "2025-07-30",
+      "differential": 15.4
+    },
+    {
+      "playedAt": "2025-08-02",
+      "differential": 17
+    },
+    {
+      "playedAt": "2025-08-04",
+      "differential": 10.8
+    },
+    {
+      "playedAt": "2025-08-06",
+      "differential": 11.8
+    },
+    {
+      "playedAt": "2025-08-07",
+      "differential": 8
+    },
+    {
+      "playedAt": "2025-08-10",
+      "differential": 17.8
+    },
+    {
+      "playedAt": "2025-08-11",
+      "differential": 22.7
+    },
+    {
+      "playedAt": "2025-08-13",
+      "differential": 14.3
+    },
+    {
+      "playedAt": "2025-08-14",
+      "differential": 11.3
+    },
+    {
+      "playedAt": "2025-08-16",
+      "differential": 8.1
+    },
+    {
+      "playedAt": "2025-08-17",
+      "differential": 15.5
+    },
+    {
+      "playedAt": "2025-08-18",
+      "differential": 21.3
+    },
+    {
+      "playedAt": "2025-08-20",
+      "differential": 11.9
+    },
+    {
+      "playedAt": "2025-08-23",
+      "differential": 13.1
+    },
+    {
+      "playedAt": "2025-08-28",
+      "differential": 10.5
+    },
+    {
+      "playedAt": "2025-08-30",
+      "differential": 17.1
+    },
+    {
+      "playedAt": "2025-09-01",
+      "differential": 11.9
+    },
+    {
+      "playedAt": "2025-09-06",
+      "differential": 14.8
+    },
+    {
+      "playedAt": "2025-09-10",
+      "differential": 14.1
+    },
+    {
+      "playedAt": "2025-09-17",
+      "differential": 24.1
+    },
+    {
+      "playedAt": "2025-09-20",
+      "differential": 12.2
+    },
+    {
+      "playedAt": "2025-09-24",
+      "differential": 15
+    },
+    {
+      "playedAt": "2025-09-25",
+      "differential": 18.7
+    },
+    {
+      "playedAt": "2025-09-26",
+      "differential": 17.3
+    },
+    {
+      "playedAt": "2025-09-30",
+      "differential": 7.8
+    },
+    {
+      "playedAt": "2025-09-30",
+      "differential": 12.6
+    },
+    {
+      "playedAt": "2025-10-01",
+      "differential": 10.5
+    },
+    {
+      "playedAt": "2025-10-02",
+      "differential": 15.9
+    },
+    {
+      "playedAt": "2025-10-03",
+      "differential": 10.1
+    },
+    {
+      "playedAt": "2025-10-05",
+      "differential": 15.3
+    },
+    {
+      "playedAt": "2025-10-08",
+      "differential": 19.7
+    },
+    {
+      "playedAt": "2025-10-11",
+      "differential": 13.7
+    },
+    {
+      "playedAt": "2025-10-15",
+      "differential": 12.5
+    },
+    {
+      "playedAt": "2025-10-20",
+      "differential": 9.7
+    },
+    {
+      "playedAt": "2025-10-22",
+      "differential": 7.4
+    },
+    {
+      "playedAt": "2025-10-26",
+      "differential": 18.9
+    },
+    {
+      "playedAt": "2025-11-02",
+      "differential": 23
+    },
+    {
+      "playedAt": "2025-11-05",
+      "differential": 13
+    },
+    {
+      "playedAt": "2025-11-08",
+      "differential": 19.9
+    },
+    {
+      "playedAt": "2025-11-16",
+      "differential": 15.2
+    },
+    {
+      "playedAt": "2025-11-19",
+      "differential": 10.8
+    },
+    {
+      "playedAt": "2025-11-20",
+      "differential": 9.9
+    },
+    {
+      "playedAt": "2025-11-21",
+      "differential": 10.1
+    },
+    {
+      "playedAt": "2025-11-24",
+      "differential": 18.2
+    },
+    {
+      "playedAt": "2025-11-25",
+      "differential": 12.9
+    },
+    {
+      "playedAt": "2026-01-17",
+      "differential": 11.7
+    },
+    {
+      "playedAt": "2026-01-24",
+      "differential": 14.3
+    },
+    {
+      "playedAt": "2026-01-31",
+      "differential": 9.1
+    },
+    {
+      "playedAt": "2026-02-22",
+      "differential": 21.7
+    },
+    {
+      "playedAt": "2026-02-26",
+      "differential": 10.9
+    },
+    {
+      "playedAt": "2026-03-07",
+      "differential": 14.3
+    },
+    {
+      "playedAt": "2026-03-08",
+      "differential": 11.7
+    },
+    {
+      "playedAt": "2026-03-11",
+      "differential": 16.1
+    },
+    {
+      "playedAt": "2026-03-15",
+      "differential": 12.6
+    },
+    {
+      "playedAt": "2026-03-15",
+      "differential": 12.6
+    },
+    {
+      "playedAt": "2026-03-18",
+      "differential": 17
+    },
+    {
+      "playedAt": "2026-03-22",
+      "differential": 15.8
+    },
+    {
+      "playedAt": "2026-03-22",
+      "differential": 15.8
+    },
+    {
+      "playedAt": "2026-03-23",
+      "differential": 13
+    },
+    {
+      "playedAt": "2026-03-23",
+      "differential": 13
+    },
+    {
+      "playedAt": "2026-03-31",
+      "differential": 15.6
+    },
+    {
+      "playedAt": "2026-04-03",
+      "differential": 6.5
+    },
+    {
+      "playedAt": "2026-04-03",
+      "differential": 6.5
+    },
+    {
+      "playedAt": "2026-04-04",
+      "differential": 13.6
+    },
+    {
+      "playedAt": "2026-04-05",
+      "differential": 12.8
+    },
+    {
+      "playedAt": "2026-04-06",
+      "differential": 19.4
+    },
+    {
+      "playedAt": "2026-04-08",
+      "differential": 16.9
+    },
+    {
+      "playedAt": "2026-04-09",
+      "differential": 10.8
+    },
+    {
+      "playedAt": "2026-04-09",
+      "differential": 10.8
+    },
+    {
+      "playedAt": "2026-04-10",
+      "differential": 12.8
+    },
+    {
+      "playedAt": "2026-04-10",
+      "differential": 12.8
+    },
+    {
+      "playedAt": "2026-04-11",
+      "differential": 20
+    },
+    {
+      "playedAt": "2026-04-14",
+      "differential": 9.7
+    },
+    {
+      "playedAt": "2026-04-16",
+      "differential": 6.5
+    },
+    {
+      "playedAt": "2026-04-17",
+      "differential": 10
+    },
+    {
+      "playedAt": "2026-04-19",
+      "differential": 12.2
+    },
+    {
+      "playedAt": "2026-04-22",
+      "differential": 15.2
+    },
+    {
+      "playedAt": "2026-04-23",
+      "differential": 12.8
+    },
+    {
+      "playedAt": "2026-04-28",
+      "differential": 6.5
+    },
+    {
+      "playedAt": "2026-04-29",
+      "differential": 13
+    },
+    {
+      "playedAt": "2026-05-02",
+      "differential": 13.3
+    },
+    {
+      "playedAt": "2026-05-04",
+      "differential": 10.8
+    },
+    {
+      "playedAt": "2026-05-05",
+      "differential": 12.6
+    },
+    {
+      "playedAt": "2026-05-07",
+      "differential": 8.3
+    },
+    {
+      "playedAt": "2026-05-08",
+      "differential": 16.7
+    },
+    {
+      "playedAt": "2026-05-09",
+      "differential": 11.6
+    },
+    {
+      "playedAt": "2026-05-10",
+      "differential": 20.3
+    },
+    {
+      "playedAt": "2026-05-12",
+      "differential": 8.3
+    },
+    {
+      "playedAt": "2026-05-17",
+      "differential": 10.8
+    },
+    {
+      "playedAt": "2026-05-23",
+      "differential": 7.4
+    },
+    {
+      "playedAt": "2026-05-27",
+      "differential": 12.7
+    },
+    {
+      "playedAt": "2026-05-28",
+      "differential": 11.9
+    },
+    {
+      "playedAt": "2026-05-31",
+      "differential": 8
+    },
+    {
+      "playedAt": "2026-06-05",
+      "differential": 15.3
+    },
+    {
+      "playedAt": "2026-06-07",
+      "differential": 10.1
+    },
+    {
+      "playedAt": "2026-06-15",
+      "differential": 17.5
+    },
+    {
+      "playedAt": "2026-06-18",
+      "differential": 8.3
+    },
+    {
+      "playedAt": "2026-06-18",
+      "differential": 7.4
+    },
+    {
+      "playedAt": "2026-06-19",
+      "differential": 12.5
+    },
+    {
+      "playedAt": "2026-06-20",
+      "differential": 12.5
+    },
+    {
+      "playedAt": "2026-06-21",
+      "differential": 12.5
+    },
+    {
+      "playedAt": "2026-06-24",
+      "differential": 9.5
+    },
+    {
+      "playedAt": "2026-06-27",
+      "differential": 7.4
+    },
+    {
+      "playedAt": "2026-06-28",
+      "differential": 13.3
+    },
+    {
+      "playedAt": "2026-07-01",
+      "differential": 16.5
+    },
+    {
+      "playedAt": "2026-07-02",
+      "differential": 10.8
+    },
+    {
+      "playedAt": "2026-07-03",
+      "differential": 5.7
+    },
+    {
+      "playedAt": "2026-07-08",
+      "differential": 14.9
+    },
+    {
+      "playedAt": "2026-07-10",
+      "differential": 9.1
+    },
+    {
+      "playedAt": "2026-07-11",
+      "differential": 8.3
+    },
+    {
+      "playedAt": "2026-07-12",
+      "differential": 11.6
+    },
+    {
+      "playedAt": "2026-07-13",
+      "differential": 9.1
+    },
+    {
+      "playedAt": "2026-07-15",
+      "differential": 8.7
+    },
+    {
+      "playedAt": "2026-07-18",
+      "differential": 9.1
+    },
+    {
+      "playedAt": "2026-07-20",
+      "differential": 10
+    },
+    {
+      "playedAt": "2026-07-21",
+      "differential": 5.7
+    },
+    {
+      "playedAt": "2026-07-23",
+      "differential": 12.4
+    },
+    {
+      "playedAt": "2026-07-25",
+      "differential": 9.1
+    },
+    {
+      "playedAt": "2026-07-27",
+      "differential": 22.5
+    },
+    {
+      "playedAt": "2026-07-30",
+      "differential": 9.7
+    }
+  ],
+  "expected": [
+    {
+      "asOfDate": "2023-08-13",
+      "handicapIndex": null,
+      "lowHandicapIndex": null
+    },
+    {
+      "asOfDate": "2023-08-20",
+      "handicapIndex": null,
+      "lowHandicapIndex": null
+    },
+    {
+      "asOfDate": "2023-08-24",
+      "handicapIndex": 21.6,
+      "lowHandicapIndex": 21.6
+    },
+    {
+      "asOfDate": "2023-08-31",
+      "handicapIndex": 22.6,
+      "lowHandicapIndex": 21.6
+    },
+    {
+      "asOfDate": "2023-09-07",
+      "handicapIndex": 22.9,
+      "lowHandicapIndex": 21.6
+    },
+    {
+      "asOfDate": "2023-10-05",
+      "handicapIndex": 20.4,
+      "lowHandicapIndex": 21.6
+    },
+    {
+      "asOfDate": "2023-10-10",
+      "handicapIndex": 18.7,
+      "lowHandicapIndex": 20.4
+    },
+    {
+      "asOfDate": "2024-03-14",
+      "handicapIndex": 18.7,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-03-21",
+      "handicapIndex": 18.7,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-05-02",
+      "handicapIndex": 19.9,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-05-04",
+      "handicapIndex": 19.9,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-05-07",
+      "handicapIndex": 19.9,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-05-16",
+      "handicapIndex": 20.9,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-05-17",
+      "handicapIndex": 20.9,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-05-20",
+      "handicapIndex": 21.7,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-05-23",
+      "handicapIndex": 21.7,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-05-25",
+      "handicapIndex": 22.1,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-05-27",
+      "handicapIndex": 22.5,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-05-28",
+      "handicapIndex": 23.7,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-05-29",
+      "handicapIndex": 22.7,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-05-30",
+      "handicapIndex": 22.3,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-06-03",
+      "handicapIndex": 22.2,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-06-07",
+      "handicapIndex": 21.8,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-06-10",
+      "handicapIndex": 21.7,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-06-14",
+      "handicapIndex": 21.5,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-06-15",
+      "handicapIndex": 22.1,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-06-19",
+      "handicapIndex": 23.7,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-06-22",
+      "handicapIndex": 22.7,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-06-27",
+      "handicapIndex": 22.7,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-06-29",
+      "handicapIndex": 22.7,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-07-04",
+      "handicapIndex": 22.7,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-07-06",
+      "handicapIndex": 22.7,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-07-08",
+      "handicapIndex": 22.7,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-07-10",
+      "handicapIndex": 22.2,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-07-12",
+      "handicapIndex": 21.9,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-07-16",
+      "handicapIndex": 21.8,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-07-18",
+      "handicapIndex": 21.4,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-07-20",
+      "handicapIndex": 21.4,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-07-21",
+      "handicapIndex": 21.4,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-07-23",
+      "handicapIndex": 20.8,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-07-26",
+      "handicapIndex": 21,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-07-29",
+      "handicapIndex": 20.4,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-08-01",
+      "handicapIndex": 19.9,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-08-03",
+      "handicapIndex": 19.9,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-08-06",
+      "handicapIndex": 20,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-08-08",
+      "handicapIndex": 19.5,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-08-09",
+      "handicapIndex": 19.5,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-08-11",
+      "handicapIndex": 18.9,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-08-12",
+      "handicapIndex": 18.2,
+      "lowHandicapIndex": 18.7
+    },
+    {
+      "asOfDate": "2024-08-15",
+      "handicapIndex": 18.1,
+      "lowHandicapIndex": 18.2
+    },
+    {
+      "asOfDate": "2024-08-18",
+      "handicapIndex": 18.1,
+      "lowHandicapIndex": 18.1
+    },
+    {
+      "asOfDate": "2024-08-19",
+      "handicapIndex": 18.1,
+      "lowHandicapIndex": 18.1
+    },
+    {
+      "asOfDate": "2024-08-22",
+      "handicapIndex": 18.1,
+      "lowHandicapIndex": 18.1
+    },
+    {
+      "asOfDate": "2024-08-26",
+      "handicapIndex": 18.3,
+      "lowHandicapIndex": 18.1
+    },
+    {
+      "asOfDate": "2024-08-28",
+      "handicapIndex": 17.6,
+      "lowHandicapIndex": 18.1
+    },
+    {
+      "asOfDate": "2024-08-29",
+      "handicapIndex": 17.1,
+      "lowHandicapIndex": 17.6
+    },
+    {
+      "asOfDate": "2024-08-31",
+      "handicapIndex": 17.1,
+      "lowHandicapIndex": 17.1
+    },
+    {
+      "asOfDate": "2024-09-02",
+      "handicapIndex": 17.1,
+      "lowHandicapIndex": 17.1
+    },
+    {
+      "asOfDate": "2024-09-03",
+      "handicapIndex": 16.6,
+      "lowHandicapIndex": 17.1
+    },
+    {
+      "asOfDate": "2024-09-07",
+      "handicapIndex": 15.8,
+      "lowHandicapIndex": 16.6
+    },
+    {
+      "asOfDate": "2024-09-12",
+      "handicapIndex": 15.1,
+      "lowHandicapIndex": 15.8
+    },
+    {
+      "asOfDate": "2024-09-14",
+      "handicapIndex": 15.1,
+      "lowHandicapIndex": 15.1
+    },
+    {
+      "asOfDate": "2024-09-17",
+      "handicapIndex": 14.7,
+      "lowHandicapIndex": 15.1
+    },
+    {
+      "asOfDate": "2024-09-27",
+      "handicapIndex": 14.7,
+      "lowHandicapIndex": 14.7
+    },
+    {
+      "asOfDate": "2024-09-28",
+      "handicapIndex": 14.7,
+      "lowHandicapIndex": 14.7
+    },
+    {
+      "asOfDate": "2024-10-04",
+      "handicapIndex": 14,
+      "lowHandicapIndex": 14.7
+    },
+    {
+      "asOfDate": "2024-10-06",
+      "handicapIndex": 14,
+      "lowHandicapIndex": 14
+    },
+    {
+      "asOfDate": "2024-10-07",
+      "handicapIndex": 14,
+      "lowHandicapIndex": 14
+    },
+    {
+      "asOfDate": "2024-10-10",
+      "handicapIndex": 14.1,
+      "lowHandicapIndex": 14
+    },
+    {
+      "asOfDate": "2024-10-14",
+      "handicapIndex": 14.1,
+      "lowHandicapIndex": 14
+    },
+    {
+      "asOfDate": "2024-10-16",
+      "handicapIndex": 13.9,
+      "lowHandicapIndex": 14
+    },
+    {
+      "asOfDate": "2024-10-25",
+      "handicapIndex": 13.9,
+      "lowHandicapIndex": 13.9
+    },
+    {
+      "asOfDate": "2024-10-26",
+      "handicapIndex": 13.9,
+      "lowHandicapIndex": 13.9
+    },
+    {
+      "asOfDate": "2024-10-28",
+      "handicapIndex": 13.9,
+      "lowHandicapIndex": 13.9
+    },
+    {
+      "asOfDate": "2024-10-30",
+      "handicapIndex": 13.8,
+      "lowHandicapIndex": 13.9
+    },
+    {
+      "asOfDate": "2024-11-05",
+      "handicapIndex": 13.6,
+      "lowHandicapIndex": 13.8
+    },
+    {
+      "asOfDate": "2024-11-08",
+      "handicapIndex": 13.5,
+      "lowHandicapIndex": 13.6
+    },
+    {
+      "asOfDate": "2024-11-09",
+      "handicapIndex": 13.1,
+      "lowHandicapIndex": 13.5
+    },
+    {
+      "asOfDate": "2024-11-15",
+      "handicapIndex": 13,
+      "lowHandicapIndex": 13.1
+    },
+    {
+      "asOfDate": "2024-11-23",
+      "handicapIndex": 13.4,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2024-11-24",
+      "handicapIndex": 13.8,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2024-11-25",
+      "handicapIndex": 13.8,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2024-11-26",
+      "handicapIndex": 14,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2024-11-28",
+      "handicapIndex": 14,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-02-12",
+      "handicapIndex": 14,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-02-26",
+      "handicapIndex": 14.6,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-03-08",
+      "handicapIndex": 14.6,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-04-05",
+      "handicapIndex": 14.2,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-04-09",
+      "handicapIndex": 14.2,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-04-10",
+      "handicapIndex": 14.2,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-04-15",
+      "handicapIndex": 14.2,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-04-16",
+      "handicapIndex": 14.2,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-04-18",
+      "handicapIndex": 14.2,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-04-24",
+      "handicapIndex": 14.2,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-04-25",
+      "handicapIndex": 14.4,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-04-26",
+      "handicapIndex": 14.7,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-04-27",
+      "handicapIndex": 15.1,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-04-29",
+      "handicapIndex": 15.7,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-04-30",
+      "handicapIndex": 16.1,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-05-01",
+      "handicapIndex": 16.1,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-05-04",
+      "handicapIndex": 16.1,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-05-05",
+      "handicapIndex": 16.3,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-05-07",
+      "handicapIndex": 16,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-05-12",
+      "handicapIndex": 15.8,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-05-14",
+      "handicapIndex": 16.1,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-05-16",
+      "handicapIndex": 16.1,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-05-19",
+      "handicapIndex": 15.9,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-05-21",
+      "handicapIndex": 16.1,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-05-24",
+      "handicapIndex": 16.1,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-05-26",
+      "handicapIndex": 16.1,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-06-06",
+      "handicapIndex": 16.1,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-06-08",
+      "handicapIndex": 16.1,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-06-09",
+      "handicapIndex": 15.9,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-06-10",
+      "handicapIndex": 15.1,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-06-11",
+      "handicapIndex": 15.1,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-06-13",
+      "handicapIndex": 14.9,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-06-14",
+      "handicapIndex": 14.9,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-06-16",
+      "handicapIndex": 14.6,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-06-18",
+      "handicapIndex": 14.2,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-06-21",
+      "handicapIndex": 14.2,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-06-25",
+      "handicapIndex": 13.1,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-06-26",
+      "handicapIndex": 13.1,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-06-28",
+      "handicapIndex": 12.7,
+      "lowHandicapIndex": 13
+    },
+    {
+      "asOfDate": "2025-06-30",
+      "handicapIndex": 12.7,
+      "lowHandicapIndex": 12.7
+    },
+    {
+      "asOfDate": "2025-07-02",
+      "handicapIndex": 12.6,
+      "lowHandicapIndex": 12.7
+    },
+    {
+      "asOfDate": "2025-07-03",
+      "handicapIndex": 12.6,
+      "lowHandicapIndex": 12.6
+    },
+    {
+      "asOfDate": "2025-07-04",
+      "handicapIndex": 12.6,
+      "lowHandicapIndex": 12.6
+    },
+    {
+      "asOfDate": "2025-07-05",
+      "handicapIndex": 12.6,
+      "lowHandicapIndex": 12.6
+    },
+    {
+      "asOfDate": "2025-07-09",
+      "handicapIndex": 12.6,
+      "lowHandicapIndex": 12.6
+    },
+    {
+      "asOfDate": "2025-07-10",
+      "handicapIndex": 12.6,
+      "lowHandicapIndex": 12.6
+    },
+    {
+      "asOfDate": "2025-07-12",
+      "handicapIndex": 12.6,
+      "lowHandicapIndex": 12.6
+    },
+    {
+      "asOfDate": "2025-07-14",
+      "handicapIndex": 12.6,
+      "lowHandicapIndex": 12.6
+    },
+    {
+      "asOfDate": "2025-07-16",
+      "handicapIndex": 12.6,
+      "lowHandicapIndex": 12.6
+    },
+    {
+      "asOfDate": "2025-07-17",
+      "handicapIndex": 13,
+      "lowHandicapIndex": 12.6
+    },
+    {
+      "asOfDate": "2025-07-19",
+      "handicapIndex": 13,
+      "lowHandicapIndex": 12.6
+    },
+    {
+      "asOfDate": "2025-07-21",
+      "handicapIndex": 12.6,
+      "lowHandicapIndex": 12.6
+    },
+    {
+      "asOfDate": "2025-07-23",
+      "handicapIndex": 12,
+      "lowHandicapIndex": 12.6
+    },
+    {
+      "asOfDate": "2025-07-24",
+      "handicapIndex": 11.7,
+      "lowHandicapIndex": 12
+    },
+    {
+      "asOfDate": "2025-07-27",
+      "handicapIndex": 11.5,
+      "lowHandicapIndex": 11.7
+    },
+    {
+      "asOfDate": "2025-07-30",
+      "handicapIndex": 11.5,
+      "lowHandicapIndex": 11.5
+    },
+    {
+      "asOfDate": "2025-08-02",
+      "handicapIndex": 12.4,
+      "lowHandicapIndex": 11.5
+    },
+    {
+      "asOfDate": "2025-08-04",
+      "handicapIndex": 11.9,
+      "lowHandicapIndex": 11.5
+    },
+    {
+      "asOfDate": "2025-08-06",
+      "handicapIndex": 12,
+      "lowHandicapIndex": 11.5
+    },
+    {
+      "asOfDate": "2025-08-07",
+      "handicapIndex": 11.2,
+      "lowHandicapIndex": 11.5
+    },
+    {
+      "asOfDate": "2025-08-10",
+      "handicapIndex": 11.2,
+      "lowHandicapIndex": 11.2
+    },
+    {
+      "asOfDate": "2025-08-11",
+      "handicapIndex": 11.2,
+      "lowHandicapIndex": 11.2
+    },
+    {
+      "asOfDate": "2025-08-13",
+      "handicapIndex": 11.2,
+      "lowHandicapIndex": 11.2
+    },
+    {
+      "asOfDate": "2025-08-14",
+      "handicapIndex": 10.8,
+      "lowHandicapIndex": 11.2
+    },
+    {
+      "asOfDate": "2025-08-16",
+      "handicapIndex": 10.3,
+      "lowHandicapIndex": 10.8
+    },
+    {
+      "asOfDate": "2025-08-17",
+      "handicapIndex": 10.3,
+      "lowHandicapIndex": 10.3
+    },
+    {
+      "asOfDate": "2025-08-18",
+      "handicapIndex": 10.3,
+      "lowHandicapIndex": 10.3
+    },
+    {
+      "asOfDate": "2025-08-20",
+      "handicapIndex": 10.3,
+      "lowHandicapIndex": 10.3
+    },
+    {
+      "asOfDate": "2025-08-23",
+      "handicapIndex": 10.3,
+      "lowHandicapIndex": 10.3
+    },
+    {
+      "asOfDate": "2025-08-28",
+      "handicapIndex": 10.1,
+      "lowHandicapIndex": 10.3
+    },
+    {
+      "asOfDate": "2025-08-30",
+      "handicapIndex": 10.1,
+      "lowHandicapIndex": 10.1
+    },
+    {
+      "asOfDate": "2025-09-01",
+      "handicapIndex": 10.2,
+      "lowHandicapIndex": 10.1
+    },
+    {
+      "asOfDate": "2025-09-06",
+      "handicapIndex": 10.5,
+      "lowHandicapIndex": 10.1
+    },
+    {
+      "asOfDate": "2025-09-10",
+      "handicapIndex": 10.5,
+      "lowHandicapIndex": 10.1
+    },
+    {
+      "asOfDate": "2025-09-17",
+      "handicapIndex": 10.5,
+      "lowHandicapIndex": 10.1
+    },
+    {
+      "asOfDate": "2025-09-20",
+      "handicapIndex": 10.5,
+      "lowHandicapIndex": 10.1
+    },
+    {
+      "asOfDate": "2025-09-24",
+      "handicapIndex": 10.5,
+      "lowHandicapIndex": 10.1
+    },
+    {
+      "asOfDate": "2025-09-25",
+      "handicapIndex": 10.7,
+      "lowHandicapIndex": 10.1
+    },
+    {
+      "asOfDate": "2025-09-26",
+      "handicapIndex": 10.9,
+      "lowHandicapIndex": 10.1
+    },
+    {
+      "asOfDate": "2025-09-30",
+      "handicapIndex": 10.8,
+      "lowHandicapIndex": 10.1
+    },
+    {
+      "asOfDate": "2025-10-01",
+      "handicapIndex": 10.5,
+      "lowHandicapIndex": 10.1
+    },
+    {
+      "asOfDate": "2025-10-02",
+      "handicapIndex": 10.5,
+      "lowHandicapIndex": 10.1
+    },
+    {
+      "asOfDate": "2025-10-03",
+      "handicapIndex": 10.4,
+      "lowHandicapIndex": 10.1
+    },
+    {
+      "asOfDate": "2025-10-05",
+      "handicapIndex": 10.9,
+      "lowHandicapIndex": 10.1
+    },
+    {
+      "asOfDate": "2025-10-08",
+      "handicapIndex": 10.9,
+      "lowHandicapIndex": 10.1
+    },
+    {
+      "asOfDate": "2025-10-11",
+      "handicapIndex": 10.9,
+      "lowHandicapIndex": 10.1
+    },
+    {
+      "asOfDate": "2025-10-15",
+      "handicapIndex": 11,
+      "lowHandicapIndex": 10.1
+    },
+    {
+      "asOfDate": "2025-10-20",
+      "handicapIndex": 10.7,
+      "lowHandicapIndex": 10.1
+    },
+    {
+      "asOfDate": "2025-10-22",
+      "handicapIndex": 10.3,
+      "lowHandicapIndex": 10.1
+    },
+    {
+      "asOfDate": "2025-10-26",
+      "handicapIndex": 10.3,
+      "lowHandicapIndex": 10.1
+    },
+    {
+      "asOfDate": "2025-11-02",
+      "handicapIndex": 10.4,
+      "lowHandicapIndex": 10.1
+    },
+    {
+      "asOfDate": "2025-11-05",
+      "handicapIndex": 10.4,
+      "lowHandicapIndex": 10.1
+    },
+    {
+      "asOfDate": "2025-11-08",
+      "handicapIndex": 10.4,
+      "lowHandicapIndex": 10.1
+    },
+    {
+      "asOfDate": "2025-11-16",
+      "handicapIndex": 10.4,
+      "lowHandicapIndex": 10.1
+    },
+    {
+      "asOfDate": "2025-11-19",
+      "handicapIndex": 10.2,
+      "lowHandicapIndex": 10.1
+    },
+    {
+      "asOfDate": "2025-11-20",
+      "handicapIndex": 9.8,
+      "lowHandicapIndex": 10.1
+    },
+    {
+      "asOfDate": "2025-11-21",
+      "handicapIndex": 9.5,
+      "lowHandicapIndex": 9.8
+    },
+    {
+      "asOfDate": "2025-11-24",
+      "handicapIndex": 9.5,
+      "lowHandicapIndex": 9.5
+    },
+    {
+      "asOfDate": "2025-11-25",
+      "handicapIndex": 9.5,
+      "lowHandicapIndex": 9.5
+    },
+    {
+      "asOfDate": "2026-01-17",
+      "handicapIndex": 10,
+      "lowHandicapIndex": 9.5
+    },
+    {
+      "asOfDate": "2026-01-24",
+      "handicapIndex": 10.3,
+      "lowHandicapIndex": 9.5
+    },
+    {
+      "asOfDate": "2026-01-31",
+      "handicapIndex": 9.9,
+      "lowHandicapIndex": 9.5
+    },
+    {
+      "asOfDate": "2026-02-22",
+      "handicapIndex": 10.2,
+      "lowHandicapIndex": 9.5
+    },
+    {
+      "asOfDate": "2026-02-26",
+      "handicapIndex": 10,
+      "lowHandicapIndex": 9.5
+    },
+    {
+      "asOfDate": "2026-03-07",
+      "handicapIndex": 10,
+      "lowHandicapIndex": 9.5
+    },
+    {
+      "asOfDate": "2026-03-08",
+      "handicapIndex": 10,
+      "lowHandicapIndex": 9.5
+    },
+    {
+      "asOfDate": "2026-03-11",
+      "handicapIndex": 10,
+      "lowHandicapIndex": 9.5
+    },
+    {
+      "asOfDate": "2026-03-15",
+      "handicapIndex": 10.9,
+      "lowHandicapIndex": 9.5
+    },
+    {
+      "asOfDate": "2026-03-18",
+      "handicapIndex": 10.9,
+      "lowHandicapIndex": 9.5
+    },
+    {
+      "asOfDate": "2026-03-22",
+      "handicapIndex": 10.9,
+      "lowHandicapIndex": 9.5
+    },
+    {
+      "asOfDate": "2026-03-23",
+      "handicapIndex": 10.9,
+      "lowHandicapIndex": 9.5
+    },
+    {
+      "asOfDate": "2026-03-31",
+      "handicapIndex": 11.1,
+      "lowHandicapIndex": 9.5
+    },
+    {
+      "asOfDate": "2026-04-03",
+      "handicapIndex": 10.2,
+      "lowHandicapIndex": 9.5
+    },
+    {
+      "asOfDate": "2026-04-04",
+      "handicapIndex": 10.2,
+      "lowHandicapIndex": 9.5
+    },
+    {
+      "asOfDate": "2026-04-05",
+      "handicapIndex": 10.2,
+      "lowHandicapIndex": 9.5
+    },
+    {
+      "asOfDate": "2026-04-06",
+      "handicapIndex": 10.3,
+      "lowHandicapIndex": 9.5
+    },
+    {
+      "asOfDate": "2026-04-08",
+      "handicapIndex": 10.3,
+      "lowHandicapIndex": 9.5
+    },
+    {
+      "asOfDate": "2026-04-09",
+      "handicapIndex": 10.3,
+      "lowHandicapIndex": 9.5
+    },
+    {
+      "asOfDate": "2026-04-10",
+      "handicapIndex": 10.5,
+      "lowHandicapIndex": 9.5
+    },
+    {
+      "asOfDate": "2026-04-11",
+      "handicapIndex": 10.7,
+      "lowHandicapIndex": 9.5
+    },
+    {
+      "asOfDate": "2026-04-14",
+      "handicapIndex": 10.3,
+      "lowHandicapIndex": 9.5
+    },
+    {
+      "asOfDate": "2026-04-16",
+      "handicapIndex": 9.5,
+      "lowHandicapIndex": 9.5
+    },
+    {
+      "asOfDate": "2026-04-17",
+      "handicapIndex": 9.2,
+      "lowHandicapIndex": 9.5
+    },
+    {
+      "asOfDate": "2026-04-19",
+      "handicapIndex": 9.1,
+      "lowHandicapIndex": 9.2
+    },
+    {
+      "asOfDate": "2026-04-22",
+      "handicapIndex": 9.1,
+      "lowHandicapIndex": 9.1
+    },
+    {
+      "asOfDate": "2026-04-23",
+      "handicapIndex": 9.1,
+      "lowHandicapIndex": 9.1
+    },
+    {
+      "asOfDate": "2026-04-28",
+      "handicapIndex": 8.4,
+      "lowHandicapIndex": 9.1
+    },
+    {
+      "asOfDate": "2026-04-29",
+      "handicapIndex": 8.4,
+      "lowHandicapIndex": 8.4
+    },
+    {
+      "asOfDate": "2026-05-02",
+      "handicapIndex": 8.4,
+      "lowHandicapIndex": 8.4
+    },
+    {
+      "asOfDate": "2026-05-04",
+      "handicapIndex": 9,
+      "lowHandicapIndex": 8.4
+    },
+    {
+      "asOfDate": "2026-05-05",
+      "handicapIndex": 9.7,
+      "lowHandicapIndex": 8.4
+    },
+    {
+      "asOfDate": "2026-05-07",
+      "handicapIndex": 9.2,
+      "lowHandicapIndex": 8.4
+    },
+    {
+      "asOfDate": "2026-05-08",
+      "handicapIndex": 9.2,
+      "lowHandicapIndex": 8.4
+    },
+    {
+      "asOfDate": "2026-05-09",
+      "handicapIndex": 9.2,
+      "lowHandicapIndex": 8.4
+    },
+    {
+      "asOfDate": "2026-05-10",
+      "handicapIndex": 9.2,
+      "lowHandicapIndex": 8.4
+    },
+    {
+      "asOfDate": "2026-05-12",
+      "handicapIndex": 8.9,
+      "lowHandicapIndex": 8.4
+    },
+    {
+      "asOfDate": "2026-05-17",
+      "handicapIndex": 8.9,
+      "lowHandicapIndex": 8.4
+    },
+    {
+      "asOfDate": "2026-05-23",
+      "handicapIndex": 8.4,
+      "lowHandicapIndex": 8.4
+    },
+    {
+      "asOfDate": "2026-05-27",
+      "handicapIndex": 8.4,
+      "lowHandicapIndex": 8.4
+    },
+    {
+      "asOfDate": "2026-05-28",
+      "handicapIndex": 8.4,
+      "lowHandicapIndex": 8.4
+    },
+    {
+      "asOfDate": "2026-05-31",
+      "handicapIndex": 8.2,
+      "lowHandicapIndex": 8.4
+    },
+    {
+      "asOfDate": "2026-06-05",
+      "handicapIndex": 8.8,
+      "lowHandicapIndex": 8.2
+    },
+    {
+      "asOfDate": "2026-06-07",
+      "handicapIndex": 8.8,
+      "lowHandicapIndex": 8.2
+    },
+    {
+      "asOfDate": "2026-06-15",
+      "handicapIndex": 8.8,
+      "lowHandicapIndex": 8.2
+    },
+    {
+      "asOfDate": "2026-06-18",
+      "handicapIndex": 8,
+      "lowHandicapIndex": 8.2
+    },
+    {
+      "asOfDate": "2026-06-19",
+      "handicapIndex": 8.6,
+      "lowHandicapIndex": 8
+    },
+    {
+      "asOfDate": "2026-06-20",
+      "handicapIndex": 8.6,
+      "lowHandicapIndex": 8
+    },
+    {
+      "asOfDate": "2026-06-21",
+      "handicapIndex": 8.6,
+      "lowHandicapIndex": 8
+    },
+    {
+      "asOfDate": "2026-06-24",
+      "handicapIndex": 8.4,
+      "lowHandicapIndex": 8
+    },
+    {
+      "asOfDate": "2026-06-27",
+      "handicapIndex": 8.1,
+      "lowHandicapIndex": 8
+    },
+    {
+      "asOfDate": "2026-06-28",
+      "handicapIndex": 8.3,
+      "lowHandicapIndex": 8
+    },
+    {
+      "asOfDate": "2026-07-01",
+      "handicapIndex": 8.3,
+      "lowHandicapIndex": 8
+    },
+    {
+      "asOfDate": "2026-07-02",
+      "handicapIndex": 8.3,
+      "lowHandicapIndex": 8
+    },
+    {
+      "asOfDate": "2026-07-03",
+      "handicapIndex": 7.8,
+      "lowHandicapIndex": 8
+    },
+    {
+      "asOfDate": "2026-07-08",
+      "handicapIndex": 8,
+      "lowHandicapIndex": 7.8
+    },
+    {
+      "asOfDate": "2026-07-10",
+      "handicapIndex": 7.9,
+      "lowHandicapIndex": 7.8
+    },
+    {
+      "asOfDate": "2026-07-11",
+      "handicapIndex": 8,
+      "lowHandicapIndex": 7.8
+    },
+    {
+      "asOfDate": "2026-07-12",
+      "handicapIndex": 8,
+      "lowHandicapIndex": 7.8
+    },
+    {
+      "asOfDate": "2026-07-13",
+      "handicapIndex": 7.9,
+      "lowHandicapIndex": 7.8
+    },
+    {
+      "asOfDate": "2026-07-15",
+      "handicapIndex": 8,
+      "lowHandicapIndex": 7.8
+    },
+    {
+      "asOfDate": "2026-07-18",
+      "handicapIndex": 8,
+      "lowHandicapIndex": 7.8
+    },
+    {
+      "asOfDate": "2026-07-20",
+      "handicapIndex": 8,
+      "lowHandicapIndex": 7.8
+    },
+    {
+      "asOfDate": "2026-07-21",
+      "handicapIndex": 7.6,
+      "lowHandicapIndex": 7.8
+    },
+    {
+      "asOfDate": "2026-07-23",
+      "handicapIndex": 7.8,
+      "lowHandicapIndex": 7.6
+    },
+    {
+      "asOfDate": "2026-07-25",
+      "handicapIndex": 7.9,
+      "lowHandicapIndex": 7.6
+    },
+    {
+      "asOfDate": "2026-07-27",
+      "handicapIndex": 7.9,
+      "lowHandicapIndex": 7.6
+    },
+    {
+      "asOfDate": "2026-07-30",
+      "handicapIndex": 7.9,
+      "lowHandicapIndex": 7.6
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+[
+  {
+    "slug": "p1",
+    "tags": [
+      "longSteady",
+      "capped",
+      "sameDay"
+    ],
+    "differentials": 262,
+    "historyRows": 251
+  },
+  {
+    "slug": "p2",
+    "tags": [
+      "smallN"
+    ],
+    "differentials": 5,
+    "historyRows": 5
+  }
+]
