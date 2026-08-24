@@ -150,6 +150,7 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
   const [netByRoundId, setNetByRoundId] = useState<Record<string, number>>({});
   const [scoreDiffByRoundId, setScoreDiffByRoundId] = useState<Record<string, number>>({});
   const [hiUsedByRoundId, setHiUsedByRoundId] = useState<Record<string, number>>({});
+  const [rejectedReasonByRoundId, setRejectedReasonByRoundId] = useState<Record<string, string>>({});
 
   const initialsFor = (p: { name?: string | null; email?: string | null }) => {
     const label = p.name || p.email || "P";
@@ -871,12 +872,13 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
         const sdMap: Record<string, number> = {};
         const hiUsedMap: Record<string, number> = {};
         const courseHcpByPid: Record<string, number> = {};
+        const rejectionMap: Record<string, string> = {};
 
         if (participantIds.length) {
           for (const ids of chunk(participantIds, 150)) {
             const { data: hrr, error: hErr } = await supabase
               .from("handicap_round_results")
-              .select("round_id, participant_id, adjusted_gross_score, score_differential, handicap_index_used, course_handicap_used")
+              .select("round_id, participant_id, adjusted_gross_score, score_differential, handicap_index_used, course_handicap_used, rejected_reason")
               .in("participant_id", ids);
 
             if (hErr) continue;
@@ -892,6 +894,7 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
               if (sd != null) sdMap[rid] = sd;
               if (hiUsed != null) hiUsedMap[rid] = hiUsed;
               if (chcp != null) courseHcpByPid[pid2] = chcp;
+              if (row.rejected_reason) rejectionMap[rid] = row.rejected_reason as string;
             }
           }
         }
@@ -900,9 +903,14 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
           setAgsByRoundId(agsMap);
           setScoreDiffByRoundId(sdMap);
           setHiUsedByRoundId(hiUsedMap);
+          setRejectedReasonByRoundId(rejectionMap);
         }
 
-        // 4.5) Apply WHS penalties for PU/NS holes to gross totals
+        // 4.5) Apply the WHS net-double-bogey penalty for picked-up holes to
+        //      gross totals. Holes never STARTED get nothing: Rule 3.1's NDB is
+        //      for holes begun and not finished, while a hole never played is
+        //      excluded from the Adjusted Gross Score and scaled up in the
+        //      differential instead (Rule 3.2).
         if (participantIds.length) {
           const teeSnapByPid: Record<string, string> = {};
           for (const [roundId, participantId] of Object.entries(pidMap)) {
@@ -927,23 +935,16 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
             }
           }
 
-          const acceptablePids = new Set<string>(
-            Object.keys(pidMap).filter((rid) => agsMap[rid] != null).map((rid) => pidMap[rid])
-          );
-
           for (const ids of chunk(participantIds, 150)) {
             const { data: hs } = await supabase
               .from("round_hole_states")
               .select("participant_id, hole_number, status")
               .in("participant_id", ids)
-              .in("status", ["picked_up", "not_started"]);
+              .eq("status", "picked_up");
 
             for (const row of (hs ?? []) as any[]) {
               const participantId = row.participant_id as string;
               const holeNumber = row.hole_number as number;
-              const status = row.status as string;
-
-              if (status === "not_started" && !acceptablePids.has(participantId)) continue;
 
               const teeSnapId = teeSnapByPid[participantId];
               if (!teeSnapId) continue;
@@ -1348,6 +1349,7 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
               netByRoundId={netByRoundId}
               scoreDiffByRoundId={scoreDiffByRoundId}
               hiUsedByRoundId={hiUsedByRoundId}
+              rejectedReasonByRoundId={rejectedReasonByRoundId}
               loading={historyLoading}
               error={historyError}
             />

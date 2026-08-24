@@ -21,6 +21,8 @@ type Props = {
   netByRoundId?: Record<string, number>;
   scoreDiffByRoundId: Record<string, number>;
   hiUsedByRoundId: Record<string, number>;
+  /** `handicap_round_results.rejected_reason` per round — why it didn't count. */
+  rejectedReasonByRoundId?: Record<string, string | null>;
   loading?: boolean;
   error?: string | null;
   fromContext?: "player" | "history";
@@ -34,6 +36,7 @@ export default function NonAcceptableRoundsTab({
   netByRoundId,
   scoreDiffByRoundId,
   hiUsedByRoundId,
+  rejectedReasonByRoundId,
   loading,
   error,
   fromContext = "player",
@@ -68,6 +71,7 @@ export default function NonAcceptableRoundsTab({
       netByRoundId={netByRoundId}
       scoreDiffByRoundId={scoreDiffByRoundId}
       hiUsedByRoundId={hiUsedByRoundId}
+      rejectedReasonByRoundId={rejectedReasonByRoundId}
       fromContext={fromContext}
       emptyMessage="No non-acceptable rounds."
     />

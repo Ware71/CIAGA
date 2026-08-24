@@ -1,11 +1,18 @@
 /**
  * WHS Handicap Index — the canonical TypeScript mirror of the database engine.
  *
- * SOURCE OF TRUTH: `public.recalc_handicap_profile(uuid)` in
- * supabase/migrations/20260120144116_remote_schema.sql (L1845–1985), together
- * with `ciaga_lowest_of_n_count(int)` (L894) and `ciaga_hi_adjustment(int)`
- * (L862). If those change, this file changes with them and the fixture test in
+ * SOURCE OF TRUTH: `public.recalc_handicap_profile(uuid)`, last rewritten in
+ * supabase/migrations/20260824000000_whs_acceptability_gbi_alignment.sql,
+ * together with `ciaga_lowest_of_n_count(int)` and `ciaga_hi_adjustment(int)`
+ * (both in 20260120144116_remote_schema.sql, L894 and L862). If those change,
+ * this file changes with them and the fixture test in
  * __tests__/replay.fixture.test.ts is what proves the two still agree.
+ *
+ * Implements Rule 5.2 (best-of-k of the most recent 20 plus the small-sample
+ * adjustment), Rule 5.7 (Low Handicap Index, established only at 20 acceptable
+ * scores), Rule 5.8 (soft/hard caps) and Rule 5.9 (Exceptional Score
+ * Reduction). It consumes an already-filtered differential stream — the
+ * decision about which rounds get in is lib/whs/acceptability.ts.
  *
  * Why a TS copy exists at all: the projection engine has to ask "what would this
  * player's Handicap Index be if the next N rounds went like *this*?" thousands
@@ -28,22 +35,24 @@
  * ── Three SQL behaviours that are easy to get subtly wrong ────────────────────
  *
  *   1. LHI is `min(handicap_index)` over the rows ALREADY WRITTEN for the
- *      trailing 365 days (SQL L1923–1930) — the *capped* column, nulls excluded,
- *      and NOT the stored `low_handicap_index`. Because the current date's row is
- *      inserted afterwards, today's own index never caps itself. A consequence
- *      worth knowing: the stored `low_handicap_index` can be HIGHER than the
+ *      trailing 365 days — the *capped* column, nulls excluded, and NOT the
+ *      stored `low_handicap_index`. Because the current date's row is inserted
+ *      afterwards, today's own index never caps itself. A consequence worth
+ *      knowing: the stored `low_handicap_index` can be HIGHER than the
  *      `handicap_index` on the same row, on the day a player sets a new low.
  *
- *   2. One history row per DISTINCT played_at. The SQL loops over distinct dates
- *      and re-queries every differential `<= that date`, so two rounds on the
- *      same day both enter the window before a single row is emitted. That is
- *      what `postManyInPlace` is for; `postInPlace` is the one-round shorthand.
+ *   2. One history row per DISTINCT played_at, but the SQL walks the record one
+ *      differential at a time — it has to, or Rule 5.9 could not judge the
+ *      second of two same-day scores against the index the first produced. Only
+ *      the last record of a date is written. `postManyInPlace` reproduces this;
+ *      `postInPlace` is the one-round shorthand.
  *
- *   3. The 20-round cut can be ambiguous. `order by played_at desc limit 20` has
- *      no tiebreak, so when the 20th and 21st newest differentials share a date
- *      Postgres picks arbitrarily. This module keeps the last-appended ones;
- *      `hasAmbiguousWindowCut` lets callers detect the case rather than pretend
- *      it cannot happen.
+ *   3. The 20-round cut is deterministic, ordered by `(played_at, round_id)`.
+ *      It was not always: until the GB&I alignment migration the SQL said
+ *      `order by played_at desc limit 20` with no tiebreak, so a replay could
+ *      move an index by ~0.4 with no new scores. `hasAmbiguousWindowCut`
+ *      survives to identify players whose *stored* history was computed under
+ *      that ambiguity and has not yet been replayed.
  */
 
 export const WHS_MAX_INDEX_TENTHS = 540; // 54.0
@@ -51,10 +60,41 @@ export const WHS_WINDOW = 20;
 export const LHI_WINDOW_DAYS = 365;
 export const MIN_DIFFERENTIALS_FOR_INDEX = 3;
 
+/**
+ * Rule 5.7: a Low Handicap Index is established only once the player has 20
+ * acceptable scores. Below that there is no LHI and therefore no soft or hard
+ * cap — a new player cannot be capped against a baseline they have not set.
+ */
+export const LHI_MIN_SCORES = 20;
+
 /** Soft cap starts once base HI exceeds LHI by this much (tenths). */
 const SOFT_CAP_THRESHOLD_TENTHS = 30; // 3.0
 /** Hard cap pins base HI at LHI plus this much (tenths). */
 const HARD_CAP_THRESHOLD_TENTHS = 50; // 5.0
+
+// --- Rule 5.9, Exceptional Score Reduction ---------------------------------
+/** A differential this far below the index reduces it by 1.0. */
+export const ESR_MINOR_THRESHOLD_TENTHS = 70; // 7.0
+/** A differential this far below the index reduces it by 2.0. */
+export const ESR_MAJOR_THRESHOLD_TENTHS = 100; // 10.0
+const ESR_MINOR_REDUCTION_TENTHS = 10; // -1.0
+const ESR_MAJOR_REDUCTION_TENTHS = 20; // -2.0
+
+/**
+ * Rule 5.9. The reduction earned by a single differential, judged against the
+ * Handicap Index in force at the moment it was posted (null = no index yet, so
+ * nothing to be exceptional relative to).
+ */
+export function esrReductionTenths(
+  indexBeforeTenths: number | null,
+  diffTenths: number
+): number {
+  if (indexBeforeTenths === null) return 0;
+  const below = indexBeforeTenths - diffTenths;
+  if (below >= ESR_MAJOR_THRESHOLD_TENTHS) return ESR_MAJOR_REDUCTION_TENTHS;
+  if (below >= ESR_MINOR_THRESHOLD_TENTHS) return ESR_MINOR_REDUCTION_TENTHS;
+  return 0;
+}
 
 // ---------------------------------------------------------------------------
 // Rounding
@@ -141,7 +181,10 @@ export function hiAdjustmentTenths(n: number): number {
  */
 const selectionScratch = new Int16Array(WHS_WINDOW);
 
-export function baseIndexTenths(windowTenths: readonly number[]): number | null {
+export function baseIndexTenths(
+  windowTenths: readonly number[],
+  esrTotalTenths = 0
+): number | null {
   const n = windowTenths.length;
   if (n < MIN_DIFFERENTIALS_FOR_INDEX) return null;
 
@@ -173,7 +216,12 @@ export function baseIndexTenths(windowTenths: readonly number[]): number | null 
   const adjTenths = hiAdjustmentTenths(n);
   const base = divRoundHalfAwayFromZero(sum + adjTenths * k, k);
 
-  return Math.min(WHS_MAX_INDEX_TENTHS, base);
+  // Rule 5.9 applies the reduction uniformly to every differential in the
+  // window, so subtracting it once from the average of the lowest k gives the
+  // identical answer. Reductions are whole tenths, so the SQL's
+  // `round(base - esr, 1)` is a no-op here and needs no re-rounding.
+  // The 54.0 ceiling is applied AFTER the reduction, matching the SQL order.
+  return Math.min(WHS_MAX_INDEX_TENTHS, base - esrTotalTenths);
 }
 
 /**
@@ -181,12 +229,23 @@ export function baseIndexTenths(windowTenths: readonly number[]): number | null 
  * no prior index in the trailing window, i.e. this is their first ever HI, in
  * which case nothing caps it and the LHI is seeded from the result.
  *
- * Returns the capped index and the LHI to store alongside it.
+ * `scoreCount` is the number of differentials in the counting window. Rule 5.7
+ * establishes a Low Handicap Index only at 20 acceptable scores, so below that
+ * there is no LHI to store and no cap to apply. It defaults to `WHS_WINDOW` so
+ * callers reasoning about an established player need not pass it.
+ *
+ * Returns the capped index and the LHI to store alongside it (null while
+ * unestablished).
  */
 export function applyLhiCapTenths(
   baseTenths: number,
-  lhiTenths: number | null
-): { cappedTenths: number; lhiTenths: number } {
+  lhiTenths: number | null,
+  scoreCount: number = WHS_WINDOW
+): { cappedTenths: number; lhiTenths: number | null } {
+  if (scoreCount < LHI_MIN_SCORES) {
+    return { cappedTenths: Math.min(WHS_MAX_INDEX_TENTHS, baseTenths), lhiTenths: null };
+  }
+
   if (lhiTenths === null) {
     const capped = Math.min(WHS_MAX_INDEX_TENTHS, baseTenths);
     return { cappedTenths: capped, lhiTenths: capped };
@@ -225,24 +284,45 @@ export type WhsState = {
   windowTenths: number[];
   /** Day index of each windowed differential, parallel to `windowTenths`. */
   windowDays: number[];
+  /**
+   * Rule 5.9 reduction earned by each windowed differential, parallel to
+   * `windowTenths`. A reduction stays in force exactly as long as the
+   * exceptional score that earned it stays inside the 20, which is what makes
+   * it "dilute over time" without any explicit expiry.
+   */
+  windowEsrTenths: number[];
   /** Non-null computed indices (tenths) inside the trailing LHI window, oldest → newest. */
   hiTenths: number[];
   /** Day index of each entry in `hiTenths`. */
   hiDays: number[];
+  /**
+   * The index in force before the next differential is posted — what Rule 5.9
+   * judges an exceptional score against. Null while the player has no index.
+   */
+  prevIndexTenths: number | null;
 };
 
 export type DifferentialPost = { dayIndex: number; diffTenths: number };
 
 export function emptyWhsState(): WhsState {
-  return { windowTenths: [], windowDays: [], hiTenths: [], hiDays: [] };
+  return {
+    windowTenths: [],
+    windowDays: [],
+    windowEsrTenths: [],
+    hiTenths: [],
+    hiDays: [],
+    prevIndexTenths: null,
+  };
 }
 
 export function cloneWhsState(s: WhsState): WhsState {
   return {
     windowTenths: s.windowTenths.slice(),
     windowDays: s.windowDays.slice(),
+    windowEsrTenths: s.windowEsrTenths.slice(),
     hiTenths: s.hiTenths.slice(),
     hiDays: s.hiDays.slice(),
+    prevIndexTenths: s.prevIndexTenths,
   };
 }
 
@@ -324,15 +404,19 @@ export function countingWindow(s: WhsState): WindowEntry[] {
  * time would emit an intermediate index the database never produces.
  */
 export function postInPlace(s: WhsState, dayIndex: number, diffTenths: number): number | null {
-  // Deliberately does NOT delegate to postManyInPlace: wrapping the value in an
-  // array allocates once per simulated round, and the Monte Carlo runs ~10^5 of
-  // them per page render.
-  s.windowTenths.push(diffTenths);
-  s.windowDays.push(dayIndex);
-  return finishDate(s, dayIndex).handicapIndexTenths;
+  return postRecord(s, dayIndex, diffTenths).handicapIndexTenths;
 }
 
-/** As `postInPlace`, for every differential recorded on a single date. */
+/**
+ * As `postInPlace`, for every differential recorded on a single date.
+ *
+ * The SQL walks the scoring record one differential at a time — it has to, or
+ * Rule 5.9 could not judge the second of two same-day scores against the index
+ * the first one produced. Only the LAST record of a date is written to
+ * `handicap_index_history`, which `postRecord` reproduces by dropping any row
+ * it already wrote for the same day. So the emitted per-date index is
+ * unchanged; only the intermediate value the database never stores differs.
+ */
 export function postManyInPlace(
   s: WhsState,
   dayIndex: number,
@@ -342,26 +426,34 @@ export function postManyInPlace(
 }
 
 /**
- * The full per-date step, exposed for the replay so it can also report the LHI
- * that the database would have stored on that row.
+ * Every differential on one date, returning the row the database would store.
  */
 function postDate(
   s: WhsState,
   dayIndex: number,
   diffsTenths: readonly number[]
 ): { handicapIndexTenths: number | null; lowHandicapIndexTenths: number | null } {
+  let last: { handicapIndexTenths: number | null; lowHandicapIndexTenths: number | null } = {
+    handicapIndexTenths: null,
+    lowHandicapIndexTenths: null,
+  };
   for (const d of diffsTenths) {
-    s.windowTenths.push(d);
-    s.windowDays.push(dayIndex);
+    last = postRecord(s, dayIndex, d);
   }
-  return finishDate(s, dayIndex);
+  return last;
 }
 
-/** Trim the window, apply the caps, record the row. Assumes the diffs are pushed. */
-function finishDate(
+/** Post one differential: score it for Rule 5.9, trim, cap, record the row. */
+function postRecord(
   s: WhsState,
-  dayIndex: number
+  dayIndex: number,
+  diffTenths: number
 ): { handicapIndexTenths: number | null; lowHandicapIndexTenths: number | null } {
+  // Rule 5.9 is judged against the index in force BEFORE this score.
+  s.windowTenths.push(diffTenths);
+  s.windowDays.push(dayIndex);
+  s.windowEsrTenths.push(esrReductionTenths(s.prevIndexTenths, diffTenths));
+
   // Manual shift rather than splice: this runs once per simulated round across
   // ~10^5 rounds, and splice reallocates.
   if (s.windowTenths.length > WHS_WINDOW) {
@@ -369,14 +461,20 @@ function finishDate(
     for (let i = 0; i < WHS_WINDOW; i++) {
       s.windowTenths[i] = s.windowTenths[i + excess];
       s.windowDays[i] = s.windowDays[i + excess];
+      s.windowEsrTenths[i] = s.windowEsrTenths[i + excess];
     }
     s.windowTenths.length = WHS_WINDOW;
     s.windowDays.length = WHS_WINDOW;
+    s.windowEsrTenths.length = WHS_WINDOW;
   }
 
-  const base = baseIndexTenths(s.windowTenths);
+  let esrTotal = 0;
+  for (let i = 0; i < s.windowEsrTenths.length; i++) esrTotal += s.windowEsrTenths[i];
+
+  const base = baseIndexTenths(s.windowTenths, esrTotal);
   if (base === null) {
     // SQL writes a row with NULL index and leaves the LHI history untouched.
+    s.prevIndexTenths = null;
     return { handicapIndexTenths: null, lowHandicapIndexTenths: null };
   }
 
@@ -410,10 +508,11 @@ function finishDate(
     if (lhi === null || v < lhi) lhi = v;
   }
 
-  const { cappedTenths, lhiTenths } = applyLhiCapTenths(base, lhi);
+  const { cappedTenths, lhiTenths } = applyLhiCapTenths(base, lhi, s.windowTenths.length);
 
   s.hiDays.push(dayIndex);
   s.hiTenths.push(cappedTenths);
+  s.prevIndexTenths = cappedTenths;
 
   return { handicapIndexTenths: cappedTenths, lowHandicapIndexTenths: lhiTenths };
 }
@@ -422,7 +521,17 @@ function finishDate(
 // Full historical replay — the SQL-equivalence target
 // ---------------------------------------------------------------------------
 
-export type StreamRow = { playedAt: string; differential: number };
+export type StreamRow = {
+  playedAt: string;
+  differential: number;
+  /**
+   * The round this differential came from. The SQL orders the scoring record
+   * by `(played_at, round_id)`, so supplying it makes same-day ordering — and
+   * therefore the 20-score cut and Rule 5.9 — match exactly. Omit it only when
+   * no two rows share a date.
+   */
+  roundId?: string | null;
+};
 
 export type ReplayRow = {
   asOfDate: string;
@@ -440,8 +549,13 @@ export type ReplayRow = {
 export function replayHandicapIndex(stream: readonly StreamRow[]): ReplayRow[] {
   const rows = [...stream]
     .filter((r) => Number.isFinite(r.differential))
-    .map((r) => ({ dayIndex: dayIndexFromISO(r.playedAt), diffTenths: toTenths(r.differential) }))
-    .sort((a, b) => a.dayIndex - b.dayIndex);
+    .map((r) => ({
+      dayIndex: dayIndexFromISO(r.playedAt),
+      diffTenths: toTenths(r.differential),
+      roundId: r.roundId ?? "",
+    }))
+    // Matches the SQL's `order by played_at, round_id`.
+    .sort((a, b) => a.dayIndex - b.dayIndex || (a.roundId < b.roundId ? -1 : a.roundId > b.roundId ? 1 : 0));
 
   const s = emptyWhsState();
   const out: ReplayRow[] = [];
@@ -467,19 +581,20 @@ export function replayHandicapIndex(stream: readonly StreamRow[]): ReplayRow[] {
 }
 
 /**
- * Day indices whose Handicap Index the database cannot pin down uniquely.
+ * Day indices whose STORED Handicap Index the database could not pin down
+ * uniquely, back when the 20-round cut had no tiebreak.
  *
- * `recalc_handicap_profile` selects the counting window with
- * `order by played_at desc limit 20`, and `played_at` is a DATE with no
- * tiebreak. So whenever the 20-round cut lands inside a group of differentials
- * sharing a date, Postgres keeps an arbitrary subset of that group and the
- * resulting index depends on physical row order — re-running the recalc can move
- * a player's index without any new scores. Observed range on real data: ~0.4.
+ * `recalc_handicap_profile` used to select the counting window with
+ * `order by played_at desc limit 20`, and `played_at` is a DATE. So whenever
+ * the cut landed inside a group of differentials sharing a date, Postgres kept
+ * an arbitrary subset and the resulting index depended on physical row order —
+ * re-running the recalc could move a player's index without any new scores.
+ * Observed range on real data: ~0.4.
  *
- * This module keeps the last-appended differentials, which is *a* valid answer
- * but not necessarily the one currently stored. Callers that need to agree with
- * the stored value (rather than merely be correct) should seed from
- * `handicap_index_history` and use the replay only for window mechanics.
+ * The SQL now orders by `(played_at, round_id)`, so newly computed history is
+ * deterministic. This helper remains useful for one thing: identifying players
+ * whose stored rows predate the fix and therefore may not match a fresh replay
+ * until `ciaga_refresh_handicaps_from(null)` has been run.
  */
 export function ambiguousCutDays(stream: readonly StreamRow[]): Set<number> {
   const days = [...stream]

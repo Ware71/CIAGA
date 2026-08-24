@@ -14,6 +14,7 @@ import { isEmptyHoleDetail } from "@/lib/rounds/hooks/useRoundDetail";
 import WolfHoleDetails from "@/components/round/WolfHoleDetails";
 import HoleDetailPanel from "@/components/round/HoleDetailPanel";
 import { strokesReceivedOnHole, netFromGross, netDoubleBogeyGross } from "@/lib/rounds/handicapUtils";
+import { minHolesForAcceptance, isAuthorisedFormat, REJECTED_REASON_LABELS } from "@/lib/whs/acceptability";
 import { computeFormatDisplay, computeSideGameDisplays, isFormatView, formatViewIndex, type FormatScoreView, type FormatDisplayData } from "@/lib/rounds/formatScoring";
 import { useOrientationLock } from "@/lib/useOrientationLock";
 
@@ -185,14 +186,22 @@ function hasIncompleteHoles(
   );
 }
 
-/** Compute set of participant IDs whose rounds don't meet WHS minimum holes */
+/**
+ * Participants whose cards fall short of the WHS minimum number of holes
+ * (GB&I G2.2(1)B — 10 for an 18-hole score, all 9 for a 9-hole score).
+ *
+ * Hole count only. The format gate lives separately in `finishWarning`,
+ * because this set also drives format scoring — an unplayed hole still costs
+ * you 0 stableford points whether or not the round is authorised for
+ * handicapping, and a scramble's format display must not change.
+ */
 function getNotAcceptedParticipants(
   participants: Participant[],
   holesList: Hole[],
   holeStatesByKey: Record<string, string>
 ): { ids: Set<string>; names: string[] } {
   const holeCount = holesList.length || 18;
-  const minRequired = holeCount <= 9 ? 7 : 14;
+  const minRequired = minHolesForAcceptance(holeCount);
   const ids = new Set<string>();
   const names: string[] = [];
 
@@ -449,6 +458,30 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     return ids;
   }, [isFinished, participants, holesList, holeStatesByKey]);
 
+  // Who does NOT get a handicap differential from this round, and why. Distinct
+  // from `notAcceptedIds` above: that one is hole-count only because it also
+  // drives format scoring, whereas an unauthorised format (Rule 2.1a) takes
+  // every card out of handicapping without changing the round's own result.
+  const handicapRejection = useMemo<{ ids: Set<string>; label: string } | null>(() => {
+    if (!isFinished) return null;
+    if (!isAuthorisedFormat(formatType)) {
+      return {
+        ids: new Set(participants.map((p) => p.id)),
+        label: REJECTED_REASON_LABELS.format_not_authorised,
+      };
+    }
+    const { ids } = getNotAcceptedParticipants(participants, holesList, holeStatesByKey);
+    if (ids.size === 0) return null;
+    const holeCount = holesList.length || 18;
+    return {
+      ids,
+      label:
+        holeCount === 9
+          ? REJECTED_REASON_LABELS.min_holes_not_met_9
+          : REJECTED_REASON_LABELS.min_holes_not_met_18,
+    };
+  }, [isFinished, formatType, participants, holesList, holeStatesByKey]);
+
   const formatDisplays = useMemo<FormatDisplayData[]>(() => {
     const main = computeFormatDisplay(formatType, formatConfig, participants, holesList, scoresByKey, holeStatesByKey, teams, getParticipantLabel, notAcceptedIds, wolfPicksByHole, startingHole);
     const side = computeSideGameDisplays(sideGames, participants, holesList, scoresByKey, holeStatesByKey, wolfPicksByHole);
@@ -555,10 +588,15 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
   }, [eventId, isFinished]);
 
   // Displayed score:
-  // - not_started (non-acceptable) => null (render blank)
-  // - not_started (acceptable)     => penalty score (cell shows NS badge)
-  // - picked_up                    => penalty score (cell shows PU badge)
-  // - completed                    => number (gross or net) or format value
+  // - not_started => null (render blank)
+  // - picked_up   => penalty score (cell shows PU badge)
+  // - completed   => number (gross or net) or format value
+  //
+  // A hole that was never started gets no score at all. Rule 3.1's net double
+  // bogey applies to holes STARTED and not finished; holes never played fall
+  // under Rule 3.2 and are excluded from the Adjusted Gross Score entirely,
+  // with the differential scaled up instead. Filling in an NDB here would
+  // show a gross total the handicap engine will not agree with.
   const displayedScoreFor = useCallback(
     (participantId: string, holeNumber: number): string | number | null => {
       if (isFormatView(scoreView) && activeFormatDisplay) {
@@ -571,12 +609,8 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
       const h = holesList.find((x) => x.hole_number === holeNumber);
 
       if (st === "not_started") {
-        // Non-acceptable round: blank
-        if (notAcceptedIds.has(participantId)) return null;
-        // Acceptable round: show the penalty being applied
-        if (!h?.par) return null;
-        if (scoreView === "gross") return puPenaltyGross(h.par, p?.course_handicap ?? null, h.stroke_index, holesList.length);
-        return h.par + 2;
+        // Rule 3.2: never played, never scored.
+        return null;
       }
 
       if (st === "picked_up") {
@@ -592,7 +626,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
       const recv = strokesReceivedOnHole(p?.course_handicap ?? null, h?.stroke_index ?? null, holesList.length);
       return netFromGross(gross, recv);
     },
-    [holeStateFor, scoreFor, scoreView, participants, holesList, activeFormatDisplay, notAcceptedIds]
+    [holeStateFor, scoreFor, scoreView, participants, holesList, activeFormatDisplay]
   );
 
   // Numeric scoring value for totals (includes PU penalty, unlike displayedScoreFor which returns "PU")
@@ -603,14 +637,9 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
       const st = holeStateFor(participantId, holeNumber);
 
       if (st === "not_started") {
-        // Acceptable scorecards: incomplete holes count as net double bogey (WHS rule)
-        if (notAcceptedIds.has(participantId)) return null;
-        const h = holesList.find((x) => x.hole_number === holeNumber);
-        if (!h?.par) return null;
-        const p = participants.find((x) => x.id === participantId);
-        const courseHcp = p?.course_handicap ?? null;
-        if (scoreView === "gross") return puPenaltyGross(h.par, courseHcp, h.stroke_index, holesList.length);
-        return h.par + 2; // net: strokes received cancel out
+        // Rule 3.2: excluded from the gross/net total, scaled up in the
+        // differential instead. See displayedScoreFor.
+        return null;
       }
 
       if (st === "picked_up") {
@@ -631,7 +660,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
       const recv = strokesReceivedOnHole(p?.course_handicap ?? null, h?.stroke_index ?? null, holesList.length);
       return netFromGross(gross, recv);
     },
-    [holeStateFor, scoreFor, scoreView, participants, holesList, notAcceptedIds]
+    [holeStateFor, scoreFor, scoreView, participants, holesList]
   );
 
   const totals = useMemo(() => {
@@ -836,14 +865,19 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
   }, [participants]);
 
   const finishWarning = useMemo<string | null>(() => {
+    // Rule 2.1a: an unauthorised format takes the whole round out of
+    // handicapping, so say that rather than counting holes nobody cares about.
+    if (!isAuthorisedFormat(formatType)) {
+      return "This format is not acceptable for handicap purposes. No one's round will count toward handicap.";
+    }
+
     const { names } = getNotAcceptedParticipants(participants, holesList, holeStatesByKey);
     if (names.length === 0) return null;
-    const hc = holesList.length || 18;
-    const minRequired = hc <= 9 ? 7 : 14;
+    const minRequired = minHolesForAcceptance(holesList.length || 18);
     return names.length === 1
       ? `${names[0]} has fewer than ${minRequired} holes started. Their round will not count toward handicap.`
       : `${names.join(", ")} have fewer than ${minRequired} holes started. Their rounds will not count toward handicap.`;
-  }, [participants, holesList, holeStatesByKey]);
+  }, [participants, holesList, holeStatesByKey, formatType]);
 
   useEffect(() => {
     if (isFinished) return;
@@ -1759,7 +1793,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
           </div>
         ) : null}
 
-        {!needsSetup && isFinished && winner ? <FinalResultsPanel winner={winner} finalRows={finalRows} formatDisplay={formatDisplays[0] ?? null} notAcceptedIds={notAcceptedIds} handicaps={scoreView === "gross" ? undefined : finalHandicapsByParticipant} /> : null}
+        {!needsSetup && isFinished && winner ? <FinalResultsPanel winner={winner} finalRows={finalRows} formatDisplay={formatDisplays[0] ?? null} notAcceptedIds={handicapRejection?.ids} notAcceptedReason={handicapRejection?.label} handicaps={scoreView === "gross" ? undefined : finalHandicapsByParticipant} /> : null}
 
         {!needsSetup ? (
           isPortrait ? (

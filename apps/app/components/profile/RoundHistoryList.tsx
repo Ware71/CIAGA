@@ -5,6 +5,7 @@ import Link from "next/link";
 import { one } from "@/lib/stats/helpers";
 import { shortDate, monthKey } from "@/lib/profile/helpers";
 import { formatHI } from "@/lib/rounds/handicapUtils";
+import { rejectedReasonLabel } from "@/lib/whs/acceptability";
 
 type RoundRow = {
   id: string;
@@ -26,6 +27,8 @@ type Props = {
   hiUsedByRoundId: Record<string, number>;
   countingSet?: Set<string>;
   cutoffRoundId?: string | null;
+  /** `handicap_round_results.rejected_reason` per round, for non-acceptable rounds. */
+  rejectedReasonByRoundId?: Record<string, string | null>;
   fromContext?: "player" | "history";
   emptyMessage?: string;
 };
@@ -40,6 +43,7 @@ export default function RoundHistoryList({
   hiUsedByRoundId,
   countingSet,
   cutoffRoundId,
+  rejectedReasonByRoundId,
   fromContext = "player",
   emptyMessage = "No rounds yet.",
 }: Props) {
@@ -96,6 +100,7 @@ export default function RoundHistoryList({
 
                 const isCounting = countingSet?.has(r.id) ?? false;
                 const isCutoff = cutoffRoundId === r.id;
+                const rejectionText = rejectedReasonLabel(rejectedReasonByRoundId?.[r.id]);
 
                 return (
                   <Link
@@ -115,6 +120,11 @@ export default function RoundHistoryList({
                         <div className="text-[9px] text-emerald-100/70 truncate">
                           {teeName} &middot; {played}
                         </div>
+                        {rejectionText && (
+                          <div className="text-[9px] text-amber-400/80 truncate mt-0.5">
+                            {rejectionText}
+                          </div>
+                        )}
                       </div>
 
                       <div className="shrink-0 grid grid-cols-2 gap-1 items-center">

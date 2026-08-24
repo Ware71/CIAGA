@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { BackButton } from "@/components/ui/BackButton";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { formatHI, strokesReceivedOnHole } from "@/lib/rounds/handicapUtils";
+import { rejectedReasonLabel } from "@/lib/whs/acceptability";
 
 type ProfileRow = {
   id: string;
@@ -111,6 +112,7 @@ export default function RoundsHistoryPage() {
   const [scoreDiffByRoundId, setScoreDiffByRoundId] = useState<Record<string, number>>({});
   const [hiUsedByRoundId, setHiUsedByRoundId] = useState<Record<string, number>>({});
   const [hiAfterByRoundId, setHiAfterByRoundId] = useState<Record<string, number>>({});
+  const [rejectedReasonByRoundId, setRejectedReasonByRoundId] = useState<Record<string, string>>({});
 
   const [error, setError] = useState<string | null>(null);
 
@@ -214,23 +216,20 @@ export default function RoundsHistoryPage() {
         }
       }
 
-      const acceptablePids = new Set<string>(
-        slice.filter((r) => agsMap[r.id] != null && pidMap[r.id]).map((r) => pidMap[r.id])
-      );
-
+      // Only picked-up holes carry a penalty into the gross total. A hole never
+      // started is excluded from the Adjusted Gross Score entirely (Rule 3.2 —
+      // it is scaled up in the differential instead), so adding a net double
+      // bogey here would show a total the handicap engine disagrees with.
       for (const ids of chunk(sliceParticipantIds, 150)) {
         const { data: hs } = await supabase
           .from("round_hole_states")
           .select("participant_id, hole_number, status")
           .in("participant_id", ids)
-          .in("status", ["picked_up", "not_started"]);
+          .eq("status", "picked_up");
 
         for (const row of (hs ?? []) as any[]) {
           const participantId = row.participant_id as string;
           const holeNumber = row.hole_number as number;
-          const status = row.status as string;
-
-          if (status === "not_started" && !acceptablePids.has(participantId)) continue;
 
           const teeSnapId = teeSnapByPid[participantId];
           if (!teeSnapId) continue;
@@ -318,8 +317,10 @@ export default function RoundsHistoryPage() {
       const hiUsedMap: Record<string, number> = {};
       const hiAfterMap: Record<string, number> = {};
       const courseHcpByPid: Record<string, number> = {};
+      const rejectionMap: Record<string, string> = {};
 
       for (const s of summary) {
+        if (s.rejected_reason) rejectionMap[s.round_id] = s.rejected_reason;
         pidMap[s.round_id] = s.participant_id;
         if (s.tee_snapshot_id) teeSnapIdByRound[s.round_id] = s.tee_snapshot_id;
         if (s.adjusted_gross_score != null) agsMap[s.round_id] = s.adjusted_gross_score;
@@ -341,6 +342,7 @@ export default function RoundsHistoryPage() {
       setScoreDiffByRoundId(sdMap);
       setHiUsedByRoundId(hiUsedMap);
       setHiAfterByRoundId(hiAfterMap);
+      setRejectedReasonByRoundId(rejectionMap);
 
       return extracted;
     }
@@ -526,6 +528,7 @@ export default function RoundsHistoryPage() {
 
     const isCounting = showCountingDecorations && countingSet.has(r.id);
     const isCutoff = showCountingDecorations && cutoffRoundId === r.id;
+    const rejectionText = rejectedReasonLabel(rejectedReasonByRoundId[r.id]);
 
     return (
       <Link
@@ -548,6 +551,11 @@ export default function RoundsHistoryPage() {
             <div className="text-[9px] sm:text-[10px] text-emerald-100/70 truncate">
               {teeName} &middot; {played}
             </div>
+            {rejectionText && (
+              <div className="text-[9px] sm:text-[10px] text-amber-400/80 truncate mt-0.5">
+                {rejectionText}
+              </div>
+            )}
           </div>
 
           <div className="shrink-0 grid grid-cols-2 gap-1 items-center">
