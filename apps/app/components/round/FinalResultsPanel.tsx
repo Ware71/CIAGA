@@ -48,11 +48,17 @@ export default function FinalResultsPanel(props: {
   winner: FinalRow;
   finalRows: FinalRow[];
   formatDisplay?: FormatDisplayData | null;
+  /** Participants whose round will not produce a handicap differential. */
   notAcceptedIds?: Set<string>;
+  /** Why those rounds don't count, e.g. "Fewer than 10 holes played". */
+  notAcceptedReason?: string;
   /** Per-participant HI/CH/PH, shown on Net / Format results. */
   handicaps?: Record<string, HandicapFigures>;
 }) {
-  const { winner, finalRows, formatDisplay, notAcceptedIds, handicaps } = props;
+  const { winner, finalRows, formatDisplay, notAcceptedIds, notAcceptedReason, handicaps } = props;
+  const rejectionLabel = notAcceptedReason
+    ? `Not accepted for handicap · ${notAcceptedReason}`
+    : "Not accepted for handicap";
   const isStringTotal = typeof winner.total === "string";
   const scoreLabel = isStringTotal ? "Result" : formatDisplay?.higherIsBetter ? "Points" : "Total";
   const showOutIn = !isStringTotal;
@@ -84,7 +90,7 @@ export default function FinalResultsPanel(props: {
                 </div>
               )}
               {notAcceptedIds?.has(winner.participantId) && (
-                <div className="text-[9px] text-amber-400/80 mt-0.5">Not accepted for handicap</div>
+                <div className="text-[9px] text-amber-400/80 mt-0.5">{rejectionLabel}</div>
               )}
               <HandicapLine figures={handicaps?.[winner.participantId]} />
             </div>
@@ -129,7 +135,7 @@ export default function FinalResultsPanel(props: {
                     </div>
                   )}
                   {notAcceptedIds?.has(r.participantId) && (
-                    <div className="text-[9px] text-amber-400/80 mt-0.5">Not accepted for handicap</div>
+                    <div className="text-[9px] text-amber-400/80 mt-0.5">{rejectionLabel}</div>
                   )}
                   <HandicapLine figures={handicaps?.[r.participantId]} />
                 </div>

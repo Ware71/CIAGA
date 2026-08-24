@@ -7,6 +7,7 @@ import {
   dayIndexFromISO,
   divRoundHalfAwayFromZero,
   emptyWhsState,
+  esrReductionTenths,
   hasAmbiguousWindowCut,
   hiAdjustmentTenths,
   initWhsState,
@@ -270,7 +271,9 @@ describe("replayHandicapIndex", () => {
     expect(rows).toEqual([
       { asOfDate: "2026-01-01", handicapIndex: null, lowHandicapIndex: null },
       { asOfDate: "2026-01-08", handicapIndex: null, lowHandicapIndex: null },
-      { asOfDate: "2026-01-15", handicapIndex: 8.0, lowHandicapIndex: 8.0 },
+      // Rule 5.7: no Low Handicap Index until 20 acceptable scores, so the LHI
+      // column stays null even once an index exists.
+      { asOfDate: "2026-01-15", handicapIndex: 8.0, lowHandicapIndex: null },
     ]);
   });
 
@@ -288,17 +291,38 @@ describe("replayHandicapIndex", () => {
   });
 
   it("stores an LHI that can sit above the index on a new-low day", () => {
+    // Needs 20 scores before an LHI exists at all (Rule 5.7), so pad with a
+    // steady run and then drop a much better round on the 21st.
+    const steady = Array.from({ length: 20 }, (_, i) => ({
+      playedAt: isoFromDayIndex(dayIndexFromISO("2026-01-01") + i * 7),
+      differential: 20.0,
+    }));
     const rows = replayHandicapIndex([
-      { playedAt: "2026-01-01", differential: 20.0 },
-      { playedAt: "2026-01-08", differential: 20.0 },
-      { playedAt: "2026-01-15", differential: 20.0 },
-      { playedAt: "2026-01-22", differential: 2.0 },
+      ...steady,
+      { playedAt: "2026-06-01", differential: 8.0 },
     ]);
-    const newLowDay = rows[3];
+
+    const newLowDay = rows[rows.length - 1];
     // The stored low_handicap_index is the min of PRIOR rows, so on the day the
     // player sets a new low it is higher than the index itself. Quirk of the SQL,
     // mirrored deliberately.
+    expect(newLowDay.lowHandicapIndex).not.toBeNull();
     expect(newLowDay.handicapIndex!).toBeLessThan(newLowDay.lowHandicapIndex!);
+  });
+
+  it("has no LHI below 20 scores and gains one at exactly 20", () => {
+    const stream = Array.from({ length: 20 }, (_, i) => ({
+      playedAt: isoFromDayIndex(dayIndexFromISO("2026-01-01") + i * 7),
+      differential: 20.0,
+    }));
+
+    const rows = replayHandicapIndex(stream);
+    // Rows 0-18 are scores 1-19: index yes (from the 3rd), LHI no.
+    for (let i = 2; i < 19; i++) {
+      expect(rows[i].handicapIndex, `row ${i} index`).not.toBeNull();
+      expect(rows[i].lowHandicapIndex, `row ${i} LHI`).toBeNull();
+    }
+    expect(rows[19].lowHandicapIndex).not.toBeNull();
   });
 
   it("sorts an out-of-order stream before replaying", () => {
@@ -313,6 +337,144 @@ describe("replayHandicapIndex", () => {
       { playedAt: "2026-01-08", differential: 12.0 },
     ]);
     expect(shuffled).toEqual(ordered);
+  });
+});
+
+describe("Exceptional Score Reduction (Rule 5.9)", () => {
+  it("fires at 7.0 below, not at 6.9, and doubles at 10.0", () => {
+    // "Any reduction is applied based on the difference between the Score
+    // Differential and the player's Handicap Index": 7.0–9.9 → −1.0,
+    // 10.0 or more → −2.0.
+    const index = 200; // 20.0
+    expect(esrReductionTenths(index, index - 69)).toBe(0);
+    expect(esrReductionTenths(index, index - 70)).toBe(10);
+    expect(esrReductionTenths(index, index - 99)).toBe(10);
+    expect(esrReductionTenths(index, index - 100)).toBe(20);
+    expect(esrReductionTenths(index, index - 250)).toBe(20);
+  });
+
+  it("does nothing to a player who has no index yet", () => {
+    expect(esrReductionTenths(null, 10)).toBe(0);
+  });
+
+  it("does nothing for a score worse than the index", () => {
+    expect(esrReductionTenths(200, 260)).toBe(0);
+  });
+
+  it("subtracts uniformly from the window average", () => {
+    // Rule 5.9 adjusts each of the most recent 20 differentials, so the effect
+    // on the average of the lowest k is exactly the reduction itself.
+    const window = [100, 120, 140, 160, 180];
+    const plain = baseIndexTenths(window)!;
+    expect(baseIndexTenths(window, 10)).toBe(plain - 10);
+    expect(baseIndexTenths(window, 20)).toBe(plain - 20);
+  });
+
+  it("reduces the index when an exceptional round is posted, then dilutes", () => {
+    const day = (i: number) => dayIndexFromISO("2026-01-01") + i * 7;
+    const s = emptyWhsState();
+
+    // A steady player on 20.0 differentials.
+    for (let i = 0; i < 20; i++) postInPlace(s, day(i), 200);
+    const before = currentIndexTenths(s)!;
+
+    // One round 12.0 strokes better than the index → a −2.0 reduction on top of
+    // whatever the new low differential does to the average.
+    const exceptional = before - 120;
+    postInPlace(s, day(20), exceptional);
+    const after = currentIndexTenths(s)!;
+
+    // Compare against the same posting with the reduction switched off, so the
+    // assertion isolates Rule 5.9 rather than the differential's own effect.
+    const control = emptyWhsState();
+    for (let i = 0; i < 20; i++) control.windowTenths.push(200);
+    for (let i = 0; i < 20; i++) control.windowDays.push(day(i));
+    for (let i = 0; i < 20; i++) control.windowEsrTenths.push(0);
+    control.windowTenths.shift();
+    control.windowDays.shift();
+    control.windowEsrTenths.shift();
+    control.windowTenths.push(exceptional);
+    control.windowDays.push(day(20));
+    control.windowEsrTenths.push(0);
+    const withoutEsr = baseIndexTenths(control.windowTenths, 0)!;
+
+    expect(after).toBe(withoutEsr - 20);
+    expect(after).toBeLessThan(before);
+  });
+
+  it("stops applying once the exceptional score leaves the 20-round window", () => {
+    const day = (i: number) => dayIndexFromISO("2026-01-01") + i * 7;
+    const s = emptyWhsState();
+
+    for (let i = 0; i < 20; i++) postInPlace(s, day(i), 200);
+    const indexBefore = currentIndexTenths(s)!;
+    postInPlace(s, day(20), indexBefore - 120); // exceptional
+    const depressed = currentIndexTenths(s)!;
+
+    // Post 20 more ordinary rounds: the exceptional one ages out, and with it
+    // the reduction. Nothing has to expire it explicitly.
+    for (let i = 21; i < 41; i++) postInPlace(s, day(i), 200);
+
+    let esrStillInWindow = 0;
+    for (const e of s.windowEsrTenths) esrStillInWindow += e;
+    expect(esrStillInWindow).toBe(0);
+
+    // The index recovers well above where the reduction put it...
+    expect(currentIndexTenths(s)!).toBeGreaterThan(depressed);
+
+    // ...but NOT all the way back to the raw window average. The exceptional
+    // round set a new Low Handicap Index, and Rule 5.8's cap on upward movement
+    // keeps working off that low for the full 365 days — long after the Rule 5.9
+    // reduction itself has aged out. Two separate mechanisms, and only one of
+    // them expires with the window.
+    expect(currentIndexTenths(s)!).toBeLessThan(baseIndexTenths(s.windowTenths, 0)!);
+  });
+
+  it("judges a same-day second round against the index the first produced", () => {
+    // The SQL walks the record one differential at a time precisely so this
+    // works; batching by date would judge both against the stale index.
+    const d = dayIndexFromISO("2026-06-01");
+    const s = emptyWhsState();
+    for (let i = 0; i < 20; i++) postInPlace(s, dayIndexFromISO("2026-01-01") + i * 7, 200);
+
+    const indexBefore = currentIndexTenths(s)!;
+    postManyInPlace(s, d, [indexBefore - 70, indexBefore - 70]);
+
+    // The first round earns −1.0. The second is measured against the *reduced*
+    // index, so 7.0 below the OLD index is less than 7.0 below the new one.
+    expect(s.windowEsrTenths[s.windowEsrTenths.length - 2]).toBe(10);
+    expect(s.windowEsrTenths[s.windowEsrTenths.length - 1]).toBe(0);
+  });
+});
+
+describe("Low Handicap Index gate (Rule 5.7)", () => {
+  it("does not cap below 20 scores", () => {
+    // base is 10.0 over the LHI — under the old behaviour the hard cap would
+    // have pinned it at LHI + 5.0.
+    expect(applyLhiCapTenths(200, 100, 19)).toEqual({ cappedTenths: 200, lhiTenths: null });
+    expect(applyLhiCapTenths(200, 100, 3)).toEqual({ cappedTenths: 200, lhiTenths: null });
+  });
+
+  it("caps from the 20th score", () => {
+    expect(applyLhiCapTenths(200, 100, 20)).toEqual({ cappedTenths: 150, lhiTenths: 100 });
+  });
+
+  it("still honours the 54.0 ceiling while uncapped", () => {
+    expect(applyLhiCapTenths(600, 100, 5).cappedTenths).toBe(WHS_MAX_INDEX_TENTHS);
+  });
+
+  it("lets a new player's index rise freely where it used to be pinned", () => {
+    const day = (i: number) => dayIndexFromISO("2026-01-01") + i;
+    const s = emptyWhsState();
+    // Three good rounds establish a low index, then it falls apart.
+    postInPlace(s, day(0), 100);
+    postInPlace(s, day(1), 120);
+    postInPlace(s, day(2), 140);
+    for (let i = 3; i < 12; i++) postInPlace(s, day(i), 400);
+
+    // 12 scores: no LHI, so no hard cap at 8.0 + 5.0 = 13.0.
+    expect(windowSize(s)).toBe(12);
+    expect(currentIndexTenths(s)!).toBeGreaterThan(130);
   });
 });
 

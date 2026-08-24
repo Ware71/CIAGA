@@ -15,13 +15,18 @@ rounds and replaying the real WHS arithmetic over them**.
 
 ## 1. The mechanics being modelled
 
-Source of truth is `public.recalc_handicap_profile(uuid)` in
-`supabase/migrations/20260120144116_remote_schema.sql` (L1845–1985). The
-TypeScript in `lib/whs/handicapIndex.ts` mirrors it exactly.
+Source of truth is `public.recalc_handicap_profile(uuid)`, last rewritten in
+`supabase/migrations/20260824000000_whs_acceptability_gbi_alignment.sql`. The
+TypeScript in `lib/whs/handicapIndex.ts` mirrors it exactly. Which rounds get
+*into* the differential stream is a separate question, documented in
+[`whs-acceptable-scores.md`](./whs-acceptable-scores.md).
 
-For each distinct `played_at`, take the last 20 accepted score differentials,
-average the lowest **k**, add an adjustment, cap at 54.0, then cap against the
-low index of the trailing 365 days.
+Walking the scoring record in `(played_at, round_id)` order, take the last 20
+accepted score differentials, average the lowest **k**, add an adjustment,
+subtract any Exceptional Score Reduction still in force, cap at 54.0, then — once
+the player has 20 scores — cap against the low index of the trailing 365 days.
+One history row is written per distinct `played_at`, carrying the last record of
+that date.
 
 | n (differentials in window) | k (lowest counted) | adjustment |
 |---|---|---|
@@ -38,7 +43,9 @@ low index of the trailing 365 days.
 | 19 | 7 | 0 |
 | 20 | 8 | 0 |
 
-Caps, against `LHI` = the lowest index recorded in the previous 365 days:
+Caps, against `LHI` = the lowest index recorded in the previous 365 days. Rule
+5.7 establishes a Low Handicap Index only once the player has **20 acceptable
+scores**, so below that there is no LHI and no cap at all:
 
 | base − LHI | resulting index |
 |---|---|
@@ -47,6 +54,17 @@ Caps, against `LHI` = the lowest index recorded in the previous 365 days:
 | > 5.0 | `LHI + 5.0` |
 
 Then `least(54.0, …)`.
+
+Exceptional Score Reduction (Rule 5.9) is applied before the 54.0 cap. A
+differential 7.0–9.9 below the index in force when it was posted earns −1.0;
+10.0 or more earns −2.0. The rule adjusts every one of the most recent 20
+differentials, so subtracting the total once from the average of the lowest k is
+identical arithmetic. A reduction stays in force exactly as long as the
+exceptional score remains inside the 20, which is what makes it dilute.
+
+**This matters for projections**: a simulated path that draws an exceptional
+score now carries a reduction forward for up to 19 further rounds, so the
+downward tail is fatter than a pure order statistic would suggest.
 
 ---
 
@@ -347,22 +365,24 @@ Stated plainly, because it is what makes the rest credible.
   the gaps; that is a real modelling change, not a bolt-on.
 - **Whether you will play at all.** Every date assumes you keep posting scores.
 
-### A known discrepancy
+### A known discrepancy — now fixed, but only after a replay
 
-`recalc_handicap_profile` selects the counting window with
+`recalc_handicap_profile` used to select the counting window with
 `order by played_at desc limit 20`, and `played_at` is a `date` with no
-tiebreak. When the 20-round cut lands inside a group of rounds sharing a date,
-Postgres keeps an arbitrary subset, and **re-running the recalculation can move a
-player's index without any new scores** — up to ~0.4 on real staging data (3 rows
-out of 251 for the most active player).
+tiebreak. When the 20-round cut landed inside a group of rounds sharing a date,
+Postgres kept an arbitrary subset, and **re-running the recalculation could move
+a player's index without any new scores** — up to ~0.4 on real staging data (3
+rows out of 251 for the most active player).
 
-The TS replay keeps the last-appended rounds, which is *a* valid answer but not
-necessarily the stored one. Because of this the chart's historical line is read
-from `handicap_index_history` (authoritative) while the simulation is seeded from
-the differential stream, so the two can disagree very slightly on affected dates.
+The GB&I alignment migration added the tiebreak: the record is now ordered by
+`(played_at, round_id)` in both the SQL and the TS replay. Rule 5.9 forced the
+issue — an Exceptional Score Reduction needs a stable notion of "the most recent
+20" before it can mean anything.
 
-`ambiguousCutDays()` identifies the affected dates. Fixing this properly means
-adding a deterministic tiebreak to the SQL's `order by`.
+Stored rows written *before* that migration were still computed under the
+ambiguity, so they may not match a fresh replay until
+`ciaga_refresh_handicaps_from(null)` has been run. `ambiguousCutDays()` survives
+to identify exactly those dates.
 
 ---
 

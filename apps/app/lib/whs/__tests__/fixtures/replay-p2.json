@@ -3,27 +3,37 @@
   "tags": [
     "smallN"
   ],
-  "differentials": 5,
+  "differentials": 6,
   "stream": [
     {
       "playedAt": "2026-04-06",
-      "differential": 78.6
+      "differential": 78.6,
+      "roundId": "r00001"
     },
     {
       "playedAt": "2026-04-09",
-      "differential": 74.3
+      "differential": 74.3,
+      "roundId": "r00002"
     },
     {
       "playedAt": "2026-05-10",
-      "differential": 87.4
+      "differential": 87.4,
+      "roundId": "r00003"
     },
     {
       "playedAt": "2026-06-07",
-      "differential": 67.4
+      "differential": 67.4,
+      "roundId": "r00004"
     },
     {
-      "playedAt": "2026-07-30",
-      "differential": 61.9
+      "playedAt": "2026-08-02",
+      "differential": 61.9,
+      "roundId": "r00005"
+    },
+    {
+      "playedAt": "2026-08-07",
+      "differential": 62.9,
+      "roundId": "r00006"
     }
   ],
   "expected": [
@@ -40,17 +50,22 @@
     {
       "asOfDate": "2026-05-10",
       "handicapIndex": 54,
-      "lowHandicapIndex": 54
+      "lowHandicapIndex": null
     },
     {
       "asOfDate": "2026-06-07",
       "handicapIndex": 54,
-      "lowHandicapIndex": 54
+      "lowHandicapIndex": null
     },
     {
-      "asOfDate": "2026-07-30",
+      "asOfDate": "2026-08-02",
       "handicapIndex": 54,
-      "lowHandicapIndex": 54
+      "lowHandicapIndex": null
+    },
+    {
+      "asOfDate": "2026-08-07",
+      "handicapIndex": 54,
+      "lowHandicapIndex": null
     }
   ]
 }

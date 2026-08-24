@@ -25,6 +25,8 @@ export type HistorySummaryRound = {
   score_differential: number | null;
   handicap_index_used: number | null;
   course_handicap_used: number | null;
+  /** Why this round produced no differential, or null when it counted. */
+  rejected_reason: string | null;
   /** Handicap index in effect immediately after this round (tooltip). */
   hi_after: number | null;
 };
@@ -106,14 +108,20 @@ export async function getRoundHistorySummary(profileId: string): Promise<History
   const participantIds = Array.from(new Set(base.map((r) => r.participant_id)));
   const hrrByRound = new Map<
     string,
-    { ags: number | null; sd: number | null; hiUsed: number | null; chcp: number | null }
+    {
+      ags: number | null;
+      sd: number | null;
+      hiUsed: number | null;
+      chcp: number | null;
+      rejectedReason: string | null;
+    }
   >();
 
   for (const ids of chunk(participantIds, 500)) {
     const { data: hrr } = await supabaseAdmin
       .from("handicap_round_results")
       .select(
-        "round_id, participant_id, adjusted_gross_score, score_differential, handicap_index_used, course_handicap_used"
+        "round_id, participant_id, adjusted_gross_score, score_differential, handicap_index_used, course_handicap_used, rejected_reason"
       )
       .in("participant_id", ids);
 
@@ -123,6 +131,7 @@ export async function getRoundHistorySummary(profileId: string): Promise<History
         sd: toNum(row.score_differential),
         hiUsed: toNum(row.handicap_index_used),
         chcp: toNum(row.course_handicap_used),
+        rejectedReason: typeof row.rejected_reason === "string" ? row.rejected_reason : null,
       });
     }
   }
@@ -176,6 +185,7 @@ export async function getRoundHistorySummary(profileId: string): Promise<History
       score_differential: hrr?.sd ?? null,
       handicap_index_used: hrr?.hiUsed ?? null,
       course_handicap_used: hrr?.chcp ?? null,
+      rejected_reason: hrr?.rejectedReason ?? null,
       hi_after: hiAsOfInclusive(r.started_at ?? r.created_at),
     };
   });
