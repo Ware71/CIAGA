@@ -2,8 +2,8 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import type { SeriesT } from "@/lib/stats/timeModel";
-import { clamp, niceStep, round1 } from "@/lib/stats/timeModel";
+import type { SeriesT } from "@/lib/stats/chartMath";
+import { clamp, niceStep, round1 } from "@/lib/stats/chartMath";
 
 // -----------------------------
 // SVG smoothing (Catmull–Rom -> Bezier)
@@ -37,6 +37,22 @@ function catmullRomPath(points: XY[], tension = 0.85) {
   return d.join(" ");
 }
 
+/**
+ * Step path: hold the previous value until the next point, then jump. This is
+ * what a Handicap Index actually does — it is constant between posting dates.
+ */
+function stepPath(pts: { x: number; y: number }[]) {
+  if (pts.length === 0) return "";
+  if (pts.length === 1) return `M ${pts[0].x.toFixed(2)} ${pts[0].y.toFixed(2)}`;
+
+  const d: string[] = [`M ${pts[0].x.toFixed(2)} ${pts[0].y.toFixed(2)}`];
+  for (let i = 1; i < pts.length; i++) {
+    d.push(`H ${pts[i].x.toFixed(2)}`);
+    d.push(`V ${pts[i].y.toFixed(2)}`);
+  }
+  return d.join(" ");
+}
+
 // -----------------------------
 // Zoom + Pan SVG chart (data-driven axes)
 // -----------------------------
@@ -52,6 +68,8 @@ export function ZoomPanChart({
   intercept,
   height = 960,
   formatXLabel,
+  formatYLabel,
+  stepActual = true,
 }: {
   aActual: SeriesT[];
   aTrend?: SeriesT[];
@@ -64,6 +82,13 @@ export function ZoomPanChart({
   intercept?: { t: number; aV: number; bV: number };
   height?: number;
   formatXLabel?: (t: number) => string;
+  formatYLabel?: (v: number) => string;
+  /**
+   * Draw the actual series as a step. Handicap Index is constant between rounds
+   * and jumps on a posting date, so smoothing it invents values the player never
+   * had — and at tension 0.85 the curve can dip below their true best.
+   */
+  stepActual?: boolean;
 }) {
   const svgRef = useRef<SVGSVGElement | null>(null);
 
@@ -292,11 +317,14 @@ export function ZoomPanChart({
   const bTrendPts = bTrend ? mkXY(bTrend) : null;
   const bProjPts = bProj ? mkXY(bProj) : null;
 
-  const aActualPath = catmullRomPath(aActualPts, 0.85);
+  const actualPath = (pts: { x: number; y: number }[]) =>
+    stepActual ? stepPath(pts) : catmullRomPath(pts, 0.85);
+
+  const aActualPath = actualPath(aActualPts);
   const aTrendPath = aTrendPts ? catmullRomPath(aTrendPts, 0.85) : "";
   const aProjPath = aProjPts ? catmullRomPath(aProjPts, 0.85) : "";
 
-  const bActualPath = bActualPts ? catmullRomPath(bActualPts, 0.85) : "";
+  const bActualPath = bActualPts ? actualPath(bActualPts) : "";
   const bTrendPath = bTrendPts ? catmullRomPath(bTrendPts, 0.85) : "";
   const bProjPath = bProjPts ? catmullRomPath(bProjPts, 0.85) : "";
 
@@ -318,11 +346,17 @@ export function ZoomPanChart({
   const xTicks: number[] = [];
   for (let t = xTick0; t <= vMax + 1e-9; t += xStep) xTicks.push(t);
 
-  // ---------- Y-axis labels ----------
+  // ---------- Y-axis gridlines + labels ----------
 
-  const yTop = round1(maxBase);
-  const yMid = round1((maxBase + minBase) / 2);
-  const yBot = round1(minBase);
+  // Labelled off the RENDERED domain [minY, maxY], not off minBase/maxBase.
+  // Those differ by the padding and the clamp below, so labelling with the raw
+  // data extremes put every number on the axis somewhere other than the
+  // gridline it sat on — by at least 0.6 HI and by up to 0.6 x span.
+  const yStep = niceStep(spanY, 4);
+  const yTicks: number[] = [];
+  for (let v = Math.ceil(minY / yStep) * yStep; v <= maxY + 1e-9; v += yStep) {
+    yTicks.push(round1(v));
+  }
 
   // ---------- Intercept marker ----------
 
@@ -387,32 +421,28 @@ export function ZoomPanChart({
             })}
           </g>
 
-          {/* Horizontal guides */}
+          {/* Horizontal gridlines — one per labelled value */}
           <g opacity={0.22}>
-            <line x1={padL} y1={padT} x2={baseWidth - padR} y2={padT} stroke="rgba(245,230,176,0.34)" strokeWidth={1.5} />
-            <line
-              x1={padL}
-              y1={(height - padB + padT) / 2}
-              x2={baseWidth - padR}
-              y2={(height - padB + padT) / 2}
-              stroke="rgba(245,230,176,0.26)"
-              strokeWidth={1.25}
-            />
-            <line
-              x1={padL}
-              y1={height - padB}
-              x2={baseWidth - padR}
-              y2={height - padB}
-              stroke="rgba(245,230,176,0.20)"
-              strokeWidth={1.25}
-            />
+            {yTicks.map((v) => (
+              <line
+                key={v}
+                x1={padL}
+                y1={yScale(v)}
+                x2={baseWidth - padR}
+                y2={yScale(v)}
+                stroke="rgba(245,230,176,0.26)"
+                strokeWidth={1.25}
+              />
+            ))}
           </g>
 
-          {/* Y-axis labels */}
+          {/* Y-axis labels, on their own gridlines */}
           <g fill="rgba(226,252,231,0.70)" fontSize="28" fontFamily="ui-sans-serif, system-ui" fontWeight={900} textAnchor="end">
-            <text x={padL - 8} y={padT + 22}>{yTop}</text>
-            <text x={padL - 8} y={(height - padB + padT) / 2 + 10}>{yMid}</text>
-            <text x={padL - 8} y={height - padB + 10}>{yBot}</text>
+            {yTicks.map((v) => (
+              <text key={v} x={padL - 8} y={yScale(v) + 10}>
+                {formatYLabel ? formatYLabel(v) : v}
+              </text>
+            ))}
           </g>
 
           {/* X-axis labels */}

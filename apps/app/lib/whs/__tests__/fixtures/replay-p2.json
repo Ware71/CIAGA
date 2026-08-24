@@ -1,0 +1,56 @@
+{
+  "slug": "p2",
+  "tags": [
+    "smallN"
+  ],
+  "differentials": 5,
+  "stream": [
+    {
+      "playedAt": "2026-04-06",
+      "differential": 78.6
+    },
+    {
+      "playedAt": "2026-04-09",
+      "differential": 74.3
+    },
+    {
+      "playedAt": "2026-05-10",
+      "differential": 87.4
+    },
+    {
+      "playedAt": "2026-06-07",
+      "differential": 67.4
+    },
+    {
+      "playedAt": "2026-07-30",
+      "differential": 61.9
+    }
+  ],
+  "expected": [
+    {
+      "asOfDate": "2026-04-06",
+      "handicapIndex": null,
+      "lowHandicapIndex": null
+    },
+    {
+      "asOfDate": "2026-04-09",
+      "handicapIndex": null,
+      "lowHandicapIndex": null
+    },
+    {
+      "asOfDate": "2026-05-10",
+      "handicapIndex": 54,
+      "lowHandicapIndex": 54
+    },
+    {
+      "asOfDate": "2026-06-07",
+      "handicapIndex": 54,
+      "lowHandicapIndex": 54
+    },
+    {
+      "asOfDate": "2026-07-30",
+      "handicapIndex": 54,
+      "lowHandicapIndex": 54
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 // Shared stat helper functions — extracted from stats pages to eliminate duplication.
-// Re-exports round1 from timeModel.ts where it already exists.
+// Re-exports round1 from chartMath.ts where it already exists.
 
-export { round1 } from "./timeModel";
+export { round1 } from "./chartMath";
 
 export function safeNum(x: any): number | null {
   const n = Number(x);

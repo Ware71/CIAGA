@@ -31,6 +31,24 @@ export type WeightedDifferentialStats = {
   effectiveN: number;
   /** Raw count of differentials used. */
   sampleSize: number;
+  /** Weighted centroid of the round index. Null when no trend was fitted. */
+  rMean: number | null;
+  /**
+   * The fitted level AT THE NEWEST ROUND, i.e. `mean − trendPerRound·rMean`.
+   *
+   * `mean` is the weighted mean, which sits at the weighted CENTROID of the
+   * sample — around 28 rounds back at the default half-life. For a player
+   * trending 0.05 strokes/round that is a 1.4-stroke difference. Anything
+   * projecting FORWARD must start from `levelNow`, not `mean`. Equal to `mean`
+   * when no trend was fitted.
+   */
+  levelNow: number;
+  /**
+   * Standard error of `trendPerRound`. Lets a caller ask whether an apparent
+   * trend is distinguishable from noise before extrapolating it. Null when no
+   * trend was fitted.
+   */
+  trendStdErr: number | null;
 };
 
 /**
@@ -67,6 +85,8 @@ export function recencyWeightedDifferentialStats(
 
   let stddev: number | null = null;
   let trendPerRound: number | null = null;
+  let rMeanOut: number | null = null;
+  let trendStdErr: number | null = null;
 
   if (values.length >= 2) {
     // Detrended path: fit x ≈ a + b·r by WLS, measure spread around the line.
@@ -102,6 +122,10 @@ export function recencyWeightedDifferentialStats(
         if (denom > 0) {
           stddev = Math.sqrt(num / denom);
           trendPerRound = slope;
+          rMeanOut = rMean;
+          // Var(slope) for a WLS fit is σ²/Σw(r−r̄)², with σ² the residual
+          // variance already computed as num/denom.
+          trendStdErr = Math.sqrt(num / denom / srrW);
         }
       }
     }
@@ -119,5 +143,20 @@ export function recencyWeightedDifferentialStats(
     }
   }
 
-  return { mean, stddev, trendPerRound, effectiveN, sampleSize: values.length };
+  // Index 0 is the NEWEST round, so the fitted line at r = 0 is the level today.
+  // A POSITIVE trendPerRound means older rounds scored higher, i.e. the player
+  // is improving, and the forward per-round change is −trendPerRound.
+  const levelNow =
+    trendPerRound !== null && rMeanOut !== null ? mean - trendPerRound * rMeanOut : mean;
+
+  return {
+    mean,
+    stddev,
+    trendPerRound,
+    effectiveN,
+    sampleSize: values.length,
+    rMean: rMeanOut,
+    levelNow,
+    trendStdErr,
+  };
 }

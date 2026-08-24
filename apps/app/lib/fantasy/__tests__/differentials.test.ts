@@ -82,3 +82,39 @@ describe("recencyWeightedDifferentialStats", () => {
     expect(s.stddev!).toBeLessThan(0.001);
   });
 });
+
+describe("levelNow and trendStdErr", () => {
+  it("puts the level at the newest round, not at the weighted centroid", () => {
+    // A perfectly linear improvement: newest = 10, each older round +0.5.
+    const values = Array.from({ length: 30 }, (_, r) => 10 + 0.5 * r);
+    const s = recencyWeightedDifferentialStats(values)!;
+
+    expect(s.trendPerRound).toBeCloseTo(0.5, 8); // positive ⇒ improving
+    expect(s.levelNow).toBeCloseTo(10, 6); // the newest round's value
+    // `mean` sits at the weighted centroid, well above the current level — this
+    // gap is exactly the bias a forward projection would inherit from it.
+    expect(s.mean).toBeGreaterThan(s.levelNow + 3);
+  });
+
+  it("collapses to the mean when no trend is fitted", () => {
+    const s = recencyWeightedDifferentialStats([12, 14, 16])!;
+    expect(s.trendPerRound).toBeNull();
+    expect(s.rMean).toBeNull();
+    expect(s.levelNow).toBe(s.mean);
+  });
+
+  it("shrinks the trend standard error as the sample grows", () => {
+    const line = (n: number) => Array.from({ length: n }, (_, r) => 10 + 0.2 * r + (r % 3) - 1);
+    const small = recencyWeightedDifferentialStats(line(8))!;
+    const large = recencyWeightedDifferentialStats(line(60))!;
+    expect(small.trendStdErr).not.toBeNull();
+    expect(large.trendStdErr!).toBeLessThan(small.trendStdErr!);
+  });
+
+  it("reports a standard error large enough to swamp a noise-only trend", () => {
+    // Pure noise, no real trend: |slope| should not clear 1.5 standard errors.
+    const noise = [3, -2, 1, 4, -3, 0, 2, -1, 3, -2, 1, 0, -1, 2, -3, 1];
+    const s = recencyWeightedDifferentialStats(noise.map((v) => 15 + v))!;
+    expect(Math.abs(s.trendPerRound!)).toBeLessThan(1.5 * s.trendStdErr!);
+  });
+});
