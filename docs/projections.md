@@ -226,6 +226,26 @@ fewer than half the paths reach the target.
 
 ---
 
+## 5a. The chart
+
+`components/stats/ProjectionFan.tsx`, purpose-built. It replaced `ZoomPanChart`,
+a generic line-and-band component from the curve-fit era which could draw only
+one band (so no two-tier fan), spent its complexity on pan/zoom, and sized its
+axis labels for a 1400-unit viewBox — about seven pixels on a 384px phone.
+
+**Series colours are validated, not chosen.** The app's own emerald and gold fail
+as a pair: ΔE 4.0 under protan simulation and 9.5 even with normal colour vision,
+i.e. genuinely hard to tell apart. The chart uses `#3b82f6` recorded, `#c2810c`
+projected, `#0f9d8f` for the compared player — all five checks pass against the
+`#0b3b21` panel (worst adjacent ΔE 13.0 CVD, 20.4 normal). If you restyle this,
+re-run the validator rather than eyeballing it.
+
+The recorded line is a **step**, because an index is constant between postings
+and jumps on the day; smoothing it invents indices the player never had. Y
+gridlines are labelled from the rendered domain, so every number sits on its own
+line — the old chart labelled from the raw data extremes while positioning on a
+padded domain, so none of them did.
+
 ## 5b. Head-to-head
 
 Comparing two players reports **P(your index is the lower one)** on a date, not a

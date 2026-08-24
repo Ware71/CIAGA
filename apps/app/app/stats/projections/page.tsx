@@ -11,9 +11,6 @@ import { BackButton } from "@/components/ui/BackButton";
 import type { HiPoint } from "@/lib/stats/chartMath";
 import {
   addDays,
-  calendarDaysBetween,
-  clamp,
-  fmtDM,
   isoLocal,
   parseISODateLocal,
   startOfLocalDay,
@@ -29,6 +26,7 @@ import {
   hiValue,
   horizonLabel,
   percentLabel,
+  HORIZON_DAYS,
   projectedHiOn,
   readiness,
   realisticFloor,
@@ -45,12 +43,12 @@ import { fetchDifferentialStreams, type DiffPoint } from "@/lib/stats/projection
 
 import { Modal } from "@/components/stats/Modal";
 import { Wheel } from "@/components/stats/Wheel";
-import { ZoomPanChart } from "@/components/stats/ZoomPanChart";
+import { ProjectionFan } from "@/components/stats/ProjectionFan";
 import { formatHI } from "@/lib/rounds/handicapUtils";
 
 const ME = "__me__";
-const CHART_PAST_DAYS = 540;
-const CHART_FUTURE_DAYS = 365;
+const CHART_PAST_DAYS = 365;
+const CHART_FUTURE_DAYS = HORIZON_DAYS;
 
 const CONFIDENCE_STYLE: Record<Confidence["level"], string> = {
   low: "border-red-900/60 text-red-200/80",
@@ -85,7 +83,6 @@ export default function ProjectionsPage() {
 
   const [goalCompareOpen, setGoalCompareOpen] = useState(false);
   const [sweepLoading, setSweepLoading] = useState(false);
-  const [windowOpen, setWindowOpen] = useState(false);
 
   const today = useMemo(() => startOfLocalDay(new Date()), []);
 
@@ -212,41 +209,66 @@ export default function ProjectionsPage() {
   // ---- Chart ----------------------------------------------------------------
 
   const chart = useMemo(() => {
-    const anchor = addDays(today, -CHART_PAST_DAYS);
-    const absEnd = CHART_PAST_DAYS + CHART_FUTURE_DAYS;
-    const todayAbs = CHART_PAST_DAYS;
-
-    const actualOf = (id: string) =>
+    const from = addDays(today, -CHART_PAST_DAYS);
+    const clipHistory = (id: string) =>
       (data.get(id)?.history ?? [])
-        .map((p) => ({ t: calendarDaysBetween(anchor, parseISODateLocal(p.date)), v: p.hi }))
-        .filter((p) => p.t >= 0 && p.t <= absEnd);
+        .filter((h) => parseISODateLocal(h.date) >= from)
+        .map((h) => ({ d: h.date, hi: h.hi }));
 
-    const fanOf = (p: Projection) => {
-      if (!p.fan.length) return { median: undefined, band: undefined };
-      const pts = p.fan.filter((f) => f.dayIndex - p.todayDayIndex <= CHART_FUTURE_DAYS);
-      return {
-        median: pts.map((f) => ({ t: todayAbs + (f.dayIndex - p.todayDayIndex), v: f.p50 })),
-        band: {
-          upper: pts.map((f) => ({ t: todayAbs + (f.dayIndex - p.todayDayIndex), v: f.p10 })),
-          lower: pts.map((f) => ({ t: todayAbs + (f.dayIndex - p.todayDayIndex), v: f.p90 })),
-        },
-      };
-    };
-
-    const a = fanOf(aProjection);
-    const b = bProjection ? fanOf(bProjection) : { median: undefined, band: undefined };
+    const fanOf = (p: Projection) =>
+      p.fan.map((f) => ({
+        dateISO: f.dateISO,
+        p10: f.p10,
+        p25: f.p25,
+        p50: f.p50,
+        p75: f.p75,
+        p90: f.p90,
+      }));
 
     return {
-      aActual: actualOf(ME),
-      bActual: compareActive ? actualOf(compareBId) : undefined,
-      aProj: a.median,
-      bProj: compareActive ? b.median : undefined,
-      aBand: a.band,
-      bBand: compareActive ? b.band : undefined,
-      formatXLabel: (t: number) => fmtDM(addDays(anchor, t)),
-      rangeLabel: `${isoLocal(anchor)} → ${isoLocal(addDays(today, CHART_FUTURE_DAYS))}`,
+      history: clipHistory(ME),
+      fan: fanOf(aProjection),
+      otherHistory: compareActive ? clipHistory(compareBId) : undefined,
+      otherFan: compareActive && bProjection ? fanOf(bProjection) : undefined,
+      rangeLabel: `${isoLocal(from)} → ${isoLocal(addDays(today, CHART_FUTURE_DAYS))}`,
     };
   }, [data, aProjection, bProjection, compareActive, compareBId, today]);
+
+  // ---- Milestones -----------------------------------------------------------
+
+  const milestones = useMemo(() => {
+    if (!aReady.canProject) return [];
+    return [
+      { label: "6 mo", days: 182 },
+      { label: "1 yr", days: 365 },
+      { label: "2 yr", days: 730 },
+      { label: "3 yr", days: 1095 },
+      { label: "5 yr", days: 1826 },
+    ].map((m) => ({
+      ...m,
+      v: projectedHiOn(aProjection, isoFromDayIndex(aProjection.todayDayIndex + m.days)),
+    }));
+  }, [aProjection, aReady.canProject]);
+
+  // ---- Goal ladder ----------------------------------------------------------
+  //
+  // A ladder of targets rather than one at a time: the interesting question is
+  // where the odds fall off, and that is invisible when you can only see a
+  // single number. Anchored on the current index so it suits every player.
+
+  const goalLadder = useMemo(() => {
+    if (!aReady.canProject || aProjection.currentHi === null) return [];
+    const hi = aProjection.currentHi;
+    const steps = [1, 2, 3, 5, 8, 12].map((d) => Math.round((hi - d) * 10) / 10).filter((t) => t >= 0);
+    if (hi > 0 && !steps.includes(0)) steps.push(0);
+    const at = isoFromDayIndex(aProjection.todayDayIndex + HORIZON_DAYS);
+    return steps.map((t) => ({
+      target: t,
+      reach: aProjection.probReachBy(t, at),
+      hold: aProjection.probBelowAt(t, at),
+      eta: aProjection.etaDistribution(t),
+    }));
+  }, [aProjection, aReady.canProject]);
 
   // ---- What your next round does -------------------------------------------
 
@@ -446,7 +468,7 @@ export default function ProjectionsPage() {
                 </div>
               </div>
 
-              {chart.aActual.length < 2 ? (
+              {chart.history.length < 2 ? (
                 <div className="h-[220px] flex items-center justify-center px-6 text-center text-sm font-semibold text-emerald-100/70 rounded-2xl border border-emerald-900/70 bg-[#042713]/55">
                   {aReady.detail ?? "Not enough history yet"}
                 </div>
@@ -465,19 +487,14 @@ export default function ProjectionsPage() {
                     ) : null}
                   </div>
 
-                  <ZoomPanChart
-                    aActual={chart.aActual}
-                    aProj={chart.aProj}
-                    bActual={chart.bActual}
-                    bProj={chart.bProj}
-                    // Bands only in the solo view — two overlapping 80% fans
-                    // across five years are visual mush, so head-to-head shows
-                    // medians and puts the uncertainty in the crossing odds.
-                    aProjBand={compareActive ? undefined : chart.aBand}
-                    bProjBand={undefined}
-                    height={960}
-                    formatXLabel={chart.formatXLabel}
-                    formatYLabel={(v) => formatHI(v)}
+                  <ProjectionFan
+                    history={chart.history}
+                    fan={chart.fan}
+                    otherHistory={chart.otherHistory}
+                    otherFan={chart.otherFan}
+                    otherName={compareActive ? data.get(compareBId)?.name ?? "Them" : undefined}
+                    todayISO={isoFromDayIndex(aProjection.todayDayIndex)}
+                    currentHi={aProjection.currentHi}
                   />
 
                   {aReady.canProject ? (
@@ -490,6 +507,28 @@ export default function ProjectionsPage() {
                 </>
               )}
             </div>
+
+            {/* Milestones — where the median lands, at a glance */}
+            {milestones.length ? (
+              <div className="grid grid-cols-3 gap-1.5">
+                {milestones.map((m) => (
+                  <div
+                    key={m.days}
+                    className="rounded-xl border border-emerald-900/60 bg-[#042713]/55 px-2 py-1.5 text-center"
+                  >
+                    <div className="text-[9px] font-extrabold uppercase tracking-wider text-emerald-100/45">
+                      {m.label}
+                    </div>
+                    <div className="text-base font-extrabold tabular-nums text-emerald-50">
+                      {hiValue(m.v.p50)}
+                    </div>
+                    <div className="text-[9px] font-semibold tabular-nums text-emerald-100/45">
+                      {hiValue(m.v.p10)}–{hiValue(m.v.p90)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
 
             {/* Head-to-head */}
             {compareActive && bProjection ? (
@@ -695,6 +734,46 @@ export default function ProjectionsPage() {
               </div>
             </Card>
 
+            {/* Goal ladder — where the odds fall away */}
+            {goalLadder.length ? (
+              <Card>
+                <div>
+                  <div className="text-sm font-extrabold text-emerald-50">How far can you get?</div>
+                  <div className="text-[11px] text-emerald-100/55 font-semibold">
+                    Within {Math.round(HORIZON_DAYS / 365)} years. <b className="text-emerald-100/75">Reach</b> = touch it at
+                    least once; <b className="text-emerald-100/75">hold</b> = still there at the end.
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  {goalLadder.map((g) => (
+                    <div key={g.target} className="flex items-center gap-2">
+                      <div className="w-[42px] shrink-0 text-right text-[12px] font-extrabold tabular-nums text-emerald-50">
+                        {hiValue(g.target)}
+                      </div>
+                      <div className="h-2 flex-1 overflow-hidden rounded-full border border-emerald-900/60 bg-[#042713]">
+                        <div
+                          className="h-full rounded-full bg-[#c2810c]"
+                          style={{ width: `${Math.round((g.reach ?? 0) * 100)}%` }}
+                        />
+                      </div>
+                      <div className="w-[38px] shrink-0 text-right text-[11px] font-extrabold tabular-nums text-emerald-50">
+                        {percentLabel(g.reach)}
+                      </div>
+                      <div className="w-[34px] shrink-0 text-right text-[10px] font-semibold tabular-nums text-emerald-100/45">
+                        {percentLabel(g.hold)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-end gap-2 text-[9px] font-bold uppercase tracking-wider text-emerald-100/35">
+                  <span className="w-[38px] text-right">Reach</span>
+                  <span className="w-[34px] text-right">Hold</span>
+                </div>
+              </Card>
+            ) : null}
+
             {/* Projected index */}
             <Card>
               <div>
@@ -773,30 +852,44 @@ export default function ProjectionsPage() {
               </div>
             </Card>
 
-            {/* Counting window */}
+            {/* Counting scores — inline, because it explains the forecast */}
             {window20.length ? (
               <Card>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-extrabold text-emerald-50">Counting scores</div>
-                    <div className="text-[11px] text-emerald-100/55 font-semibold">
-                      {window20.filter((e) => e.counting).length} of your last {window20.length} set
-                      your index
-                    </div>
+                <div>
+                  <div className="text-sm font-extrabold text-emerald-50">Counting scores</div>
+                  <div className="text-[11px] text-emerald-100/55 font-semibold">
+                    {window20.filter((e) => e.counting).length} of your last {window20.length} set your index
                   </div>
-                  <Button
-                    size="sm"
-                    className="h-9 px-3 bg-transparent border border-emerald-900/70 text-emerald-100 hover:bg-emerald-900/30 font-semibold"
-                    onClick={() => setWindowOpen(true)}
-                  >
-                    View
-                  </Button>
+                </div>
+
+                <div className="grid grid-cols-5 gap-1">
+                  {[...window20].reverse().map((e) => (
+                    <div
+                      key={`${e.position}-${e.dayIndex}`}
+                      className={`rounded-lg border px-1 py-1 text-center ${
+                        e.counting
+                          ? "border-[#c2810c]/55 bg-[#c2810c]/15"
+                          : "border-emerald-900/60 bg-[#042713]/45"
+                      }`}
+                      title={`${isoFromDayIndex(e.dayIndex)} · drops out after ${e.roundsUntilDropOut} more round${
+                        e.roundsUntilDropOut === 1 ? "" : "s"
+                      }`}
+                    >
+                      <div
+                        className={`text-[12px] font-extrabold tabular-nums ${
+                          e.counting ? "text-[#e0a63a]" : "text-emerald-100/55"
+                        }`}
+                      >
+                        {e.differential.toFixed(1)}
+                      </div>
+                    </div>
+                  ))}
                 </div>
 
                 {worstCounting ? (
-                  <div className="text-[11px] font-semibold text-emerald-100/65 leading-snug">
-                    Your worst counting score is{" "}
-                    <span className="font-extrabold text-[#f5e6b0]">
+                  <div className="text-[11px] font-semibold leading-snug text-emerald-100/65">
+                    Worst counting score is{" "}
+                    <span className="font-extrabold text-[#e0a63a]">
                       {worstCounting.differential.toFixed(1)}
                     </span>{" "}
                     from {isoFromDayIndex(worstCounting.dayIndex)} — it drops out after{" "}
@@ -822,44 +915,6 @@ export default function ProjectionsPage() {
         <Wheel values={targetValues} value={target} onChange={setTarget} />
       </Modal>
 
-      {/* Counting window */}
-      <Modal title="Your last 20 scores" open={windowOpen} onClose={() => setWindowOpen(false)}>
-        <div className="text-[11px] text-emerald-100/60 font-semibold mb-3 leading-snug">
-          Highlighted scores are the ones averaged to set your index. A score leaves the window when
-          20 newer ones have been posted — that's rounds played, not days elapsed.
-        </div>
-        <div
-          className="space-y-1.5 max-h-[60vh] overflow-y-auto overscroll-y-contain pr-1"
-          style={{ WebkitOverflowScrolling: "touch" }}
-        >
-          {[...window20].reverse().map((e) => (
-            <div
-              key={`${e.position}-${e.dayIndex}`}
-              className={`flex items-center justify-between rounded-xl border px-3 py-2 ${
-                e.counting
-                  ? "border-[#f5e6b0]/40 bg-[#f5e6b0]/10"
-                  : "border-emerald-900/60 bg-[#042713]/45"
-              }`}
-            >
-              <div className="text-[11px] font-semibold text-emerald-100/70 tabular-nums">
-                {isoFromDayIndex(e.dayIndex)}
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="text-[10px] font-semibold text-emerald-100/45 tabular-nums">
-                  {e.roundsUntilDropOut} to go
-                </div>
-                <div
-                  className={`text-sm font-extrabold tabular-nums ${
-                    e.counting ? "text-[#f5e6b0]" : "text-emerald-100/60"
-                  }`}
-                >
-                  {e.differential.toFixed(1)}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Modal>
 
       {/* Compare all */}
       <Modal
