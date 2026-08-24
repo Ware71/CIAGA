@@ -40,6 +40,7 @@ type InspectPayload = {
       avg_differential: number | null; differential_stddev: number | null;
       differential_sample_size: number | null; differential_effective_n: number | null;
       birdies_per_round: number | null; eagles_per_round: number | null;
+      pars_per_round: number | null;
       sample_size: number; confidence: string; computed_at: string;
       recent_rounds: { playedAt: string; gross18: number; birdies: number; holes: number }[] | null;
       hole_splits: Record<string, unknown> | null;
@@ -59,6 +60,11 @@ type InspectPayload = {
           observedRate: number | null; sampleRounds: number; priorMean: number;
           priorStrength: number; targetRate: number; targetMass: number;
           preMass: number; postMass: number; capped: boolean;
+        };
+        par: {
+          observedRate: number | null; sampleRounds: number; priorMean: number;
+          priorStrength: number; targetRate: number; targetMass: number;
+          preMass: number; postMass: number; factor: number; capped: boolean;
         };
         meanResidual: number; iterations: number;
         variance: { target: number; realized: number; perHole: { target: number; realized: number }[] };
@@ -296,6 +302,7 @@ export default function InspectorClient({ eventId }: { eventId: string }) {
                     <th className={th}>σ round</th>
                     <th className={th}>Form</th>
                     <th className={th}>Brd/rd</th>
+                    <th className={th} title="Calibrated since V6 — sets the bogey book by residual">Par/rd</th>
                     <th className={th}>Mean G</th>
                     <th className={th}>Mean N</th>
                     <th className={th} title="Ties split evenly — prices the outright">Win</th>
@@ -452,6 +459,7 @@ function PlayerRows({
         <td className={td}>{num(prof?.score_stddev)}</td>
         <td className={td}>{num(prof?.recent_form)}</td>
         <td className={td}>{num(prof?.birdies_per_round)}</td>
+        <td className={td}>{num(prof?.pars_per_round)}</td>
         <td className={td}>{num(p.sim.meanGross)}</td>
         <td className={td}>{num(p.sim.meanNet)}</td>
         <td className={td}>{pct(p.sim.winProb)}</td>
@@ -489,6 +497,30 @@ function PlayerRows({
                 {p.model.calibration.birdie.capped ? " · CAPPED" : ""} · sim E[brd]{" "}
                 {p.sim.expectedBirdies.toFixed(2)} · mean residual{" "}
                 {p.model.calibration.meanResidual.toFixed(3)} ({p.model.calibration.iterations} passes)
+              </div>
+              <div className="text-[10px] text-emerald-100/60">
+                Par calibration: obs {num(p.model.calibration.par.observedRate, 2)}/rd over{" "}
+                {p.model.calibration.par.sampleRounds} rds · prior{" "}
+                {p.model.calibration.par.priorMean.toFixed(2)} (K {p.model.calibration.par.priorStrength}) →
+                target {p.model.calibration.par.targetRate.toFixed(2)}/rd · model pre-cal{" "}
+                {p.model.calibration.par.preMass.toFixed(2)} → post{" "}
+                {p.model.calibration.par.postMass.toFixed(2)} (×
+                {p.model.calibration.par.factor.toFixed(2)})
+                {p.model.calibration.par.capped ? " · CAPPED" : ""}
+              </div>
+              <div className="text-[10px] text-emerald-100/60">
+                {/* What the hole book actually quotes — the residual the two
+                    calibrated bins leave behind. */}
+                ⇒ P(bogey+)/hole{" "}
+                {p.model.muByHole.length > 0
+                  ? (
+                      (p.model.muByHole.length -
+                        p.model.calibration.birdie.postMass -
+                        p.model.calibration.par.postMass) /
+                      p.model.muByHole.length
+                    ).toFixed(3)
+                  : "—"}{" "}
+                (= 1 − P(birdie+) − P(par); this is the bogey-or-worse hole book)
               </div>
               <div className="text-[10px] text-emerald-100/60">
                 Variance reconciliation: round σ² target{" "}

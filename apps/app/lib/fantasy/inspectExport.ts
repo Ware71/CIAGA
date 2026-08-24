@@ -13,6 +13,7 @@ import { hashSeed } from "@/lib/fantasy/simulation/rng";
 import {
   BIRDIE_PRIOR_STRENGTH,
   EAGLE_PRIOR_STRENGTH,
+  PAR_PRIOR_STRENGTH,
   buildHoleDistributionsDetailed,
   holeMu,
   holeSigmaDetailed,
@@ -20,6 +21,7 @@ import {
 } from "@/lib/fantasy/simulation/holeModel";
 import { DIFFERENTIAL_HALFLIFE_ROUNDS } from "@/lib/fantasy/simulation/differentials";
 import { getMarketDefinition } from "@/lib/fantasy/markets/registry";
+import { readEventMarkets } from "@/lib/fantasy/eventReads";
 import { clampProbability, probabilityToDecimalOdds } from "@/lib/fantasy/simulation/types";
 import type { FantasyMarket } from "@/lib/fantasy/markets/types";
 import type { StoredFantasyProfile } from "@/lib/fantasy/profiles";
@@ -45,7 +47,7 @@ const DERIVATION: Record<string, string> = {
   score_total: "Per score value: share of iterations under / equal to / over that value (gross or net total).",
   birdies: "Tail of the birdie-count distribution: P(birdies ≥ count).",
   eagle_count: "Tail of the eagle-count distribution (per-hole eagle-bin convolution): P(eagles ≥ count).",
-  hole_score: "Per-hole outcome bins: birdie-or-better = k≤1, bogey-or-worse = k≥3, divided by sims.",
+  hole_score: "Per-hole outcome bins: birdie-or-better = k≤1, bogey-or-worse = k≥3, divided by sims. Both are pinned by calibration: the birdie AND par bins are calibrated to shrunk targets, so bogey-or-worse is exactly 1 − P(birdie+) − P(par).",
   field_special: "Empirical base-rate exposure (HIO/albatross) or 1 − Π(no eagle) across the whole field.",
 };
 
@@ -55,7 +57,7 @@ const GUIDE: [string, string][] = [
   ["Model paths", "Differential (WHS) path when the tee carries rating/slope AND the player has score differentials; otherwise the gross-average fallback path. The 'Model path' column on Player inputs shows which was used."],
   ["Handicap anchor", "Handicap is a PRIOR, not a driver: per-hole μ blends the player's own scoring toward a handicap-derived anchor, weighted by effective sample size (thin samples lean on the anchor)."],
   ["Per-hole μ / σ", "Each hole is a discretized normal over strokes-vs-par. μ (latent) combines observed shape + stroke-index tilt + form; σ comes from differential/round stddev, widened by a confidence factor and clamped per hole. The sim draws from the DISCRETIZED + CALIBRATED bins, whose expected score E is shown alongside μ — a mean-preservation loop keeps E ≈ μ, so Σ(E)+par reconciles with the simulated mean gross."],
-  ["Rare-event calibration", "Birdie-or-better mass is calibrated EXACTLY to a Bayesian target: the observed rate over the shape sample, shrunk toward a handicap-based prior (Gamma-Poisson, prior strength in rounds — see Assumptions). Eagle mass is then set WITHIN the birdie mass. The Calibration sheet reconciles observed → prior → target → simulated."],
+  ["Shape calibration", "The birdie-or-better AND exactly-par masses are each calibrated EXACTLY to a Bayesian target: the observed rate over the shape sample, shrunk toward a handicap-based prior (Gamma-Poisson, prior strength in rounds — see Assumptions). Eagle mass is then set WITHIN the birdie mass. Because the hole book prices bogey-or-worse as the residual, pinning birdie and par pins it too. Bogey vs double-plus is deliberately left free so the level can absorb an unusually hard course. The Calibration sheet reconciles observed → prior → target → simulated."],
   ["Attendance", "Provisional (not-yet-entered) members are sampled present/absent each iteration by an attendance probability; only present players are ranked, so confirmed players' odds rise when a provisional is absent."],
   ["Ranking", "Each iteration ranks the field on the event's basis (gross / net / stableford) with standard '1224' competition ranking. Two first-place quantities exist: Win% splits ties evenly (prices the outright, which settles on the tie-resolved leaderboard); P(1st incl ties) counts every tied leader in full (prices finish-position, which settles on the shared position). Positions are retained per iteration for correlated accumulators."],
   ["Cell legend", "'—' = value missing from the profile (the model then uses the documented fallback for that field — never a hidden numeric default). Numbers are calculated values; the Error column on Refresh jobs is the job's stored error text."],
@@ -95,7 +97,7 @@ export async function buildInspectWorkbook(
 ): Promise<{ buffer: ExcelJS.Buffer; filename: string }> {
   const ctx = await loadSimInputs(eventId);
 
-  const [stateRes, jobsRes, entriesRes, storedRes, marketsRes] = await Promise.all([
+  const [stateRes, jobsRes, entriesRes, storedRes, markets] = await Promise.all([
     supabaseAdmin.from("fantasy_event_state").select("*").eq("event_id", eventId).maybeSingle(),
     supabaseAdmin
       .from("fantasy_refresh_jobs")
@@ -113,7 +115,7 @@ export async function buildInspectWorkbook(
       .select("*")
       .eq("group_id", ctx.groupId)
       .in("profile_id", ctx.players.map((p) => p.profileId)),
-    supabaseAdmin.from("fantasy_markets").select("*").eq("event_id", eventId),
+    readEventMarkets<FantasyMarket>(eventId, "*"),
   ]);
 
   const state = (stateRes.data as { version?: number } | null) ?? null;
@@ -175,9 +177,10 @@ export async function buildInspectWorkbook(
     ["Shape sample cap", "20 rounds (30 candidates)", "Per-hole shape, birdie/eagle rates and form come from the most recent ≤20 rounds — freshness cap on SHAPE only; ability (differentials) is uncapped."],
     ["Birdie prior", "λ0 = clamp(2.2·e^(−0.115·HI), 0.03, 3.0), K = " + BIRDIE_PRIOR_STRENGTH, "Gamma-Poisson shrinkage of the observed birdies/round toward published amateur rates (scratch ≈ 2.2, HI 10 ≈ 0.70, HI 20 ≈ 0.22); K in rounds — 20 observed rounds get 71% data weight."],
     ["Eagle prior", "λ0 = clamp(0.06·e^(−0.18·HI), 0.001, 0.15), K = " + EAGLE_PRIOR_STRENGTH, "Eagles ≈ 1 per 15–25 rounds even for scratch; heavy shrinkage because the event is rare. Eagle target never exceeds the birdie target."],
-    ["Calibration exactness", "Σ P(birdie) = target, per hole sums = 1", "Single global factor on the birdie bins, non-birdie bins rescaled per hole — no clipping toward the raw normal tail (the old [0.5,2] clip floor bound for whole fields)."],
-    ["Mean preservation", "≤ 6 fixed-point passes, tol 0.01 strokes/hole", "Calibration alone would shift the expected score; the latent means are re-targeted so the post-calibration E[score] still equals holeMu (the differential level already includes real birdies)."],
-    ["Per-hole σ clamp", "[0.5, 2.6]", "Round σ ≈ 2.1–11; flagged on the Sim aggregates sheet when it binds."],
+    ["Par prior", "λ0 = clamp(12.1·e^(−0.069·HI), 0.05, 14), K = " + PAR_PRIOR_STRENGTH, "Gamma-Poisson shrinkage of observed pars/round, fitted to THIS group's profiles (HI 6.4-54) rather than published tables — this population plays above its index. Lower K than birdies: pars are 5-10× more common, so the observed rate is proportionally more reliable."],
+    ["Calibration exactness", "Σ P(birdie) = target, Σ P(par) = target, per hole sums = 1", "One global factor on the birdie bins with the rest rescaled per hole, then the same on the par bin within the non-birdie mass (water-filled, so a hole hitting its 0.95 ceiling redistributes rather than stranding the target). No clipping toward the raw normal tail."],
+    ["Mean preservation", "≤ 20 fixed-point passes, tol 0.01 strokes/hole", "Calibration alone would shift the expected score; the latent means are re-targeted so the post-calibration E[score] still equals holeMu (the differential level already includes real birdies)."],
+    ["Per-hole σ clamp", "[0.35, 3.0]", "Round σ ≈ 2.1–11; flagged on the Sim aggregates sheet when it binds."],
     ["Confidence σ widening", "high ×1.0 / medium ×1.1 / low ×1.3", "Thin profiles simulate wider."],
     ["Probability clamp", "[0.001, 0.995] → odds ≤ 1000/1, ladder-quantized", "Book protection on every priced selection."],
     ["Simulation count", "10,000 (5,000 for fields > 60)", "Seeded per event version — re-runs reproduce the board exactly."],
@@ -249,6 +252,8 @@ export async function buildInspectWorkbook(
     ["Player", "Obs brd/rd", "n rounds", "Prior mean", "Prior K", "Target λ* (shrunk)",
      "Model mass (pre-cal)", "Mass after cal", "Factor", "Factor capped?",
      "Sim E[birdies]", "Obs eag/rd", "Eagle prior", "Eagle target", "Eagle mass post", "Eagle capped?",
+     "Obs par/rd", "Par prior", "Par K", "Par target λ*", "Par mass (pre-cal)", "Par mass after cal", "Par factor", "Par capped?",
+     "P(bogey+)/hole (residual)",
      "Mean residual (strokes/hole)", "Passes",
      "Round var target (Σσ²)", "Round var realized", "Var retention %"],
     ctx.players.map((p) => {
@@ -273,6 +278,17 @@ export async function buildInspectWorkbook(
         r3(meta.eagle.targetRate),
         r3(meta.eagle.postMass),
         meta.eagle.capped ? "YES" : "no",
+        meta.par.observedRate ?? dash,
+        r3(meta.par.priorMean),
+        meta.par.priorStrength,
+        r3(meta.par.targetRate),
+        r3(meta.par.preMass),
+        r3(meta.par.postMass),
+        r3(meta.par.factor),
+        meta.par.capped ? "YES" : "no",
+        // What the hole book actually quotes: everything the two calibrated
+        // bins leave behind, per hole.
+        r3((ctx.holes.length - meta.birdie.postMass - meta.par.postMass) / ctx.holes.length),
         r3(meta.meanResidual),
         meta.iterations,
         r3(meta.variance.target),
@@ -398,7 +414,6 @@ export async function buildInspectWorkbook(
   );
 
   // 8. Markets derivation
-  const markets = (marketsRes.data ?? []) as FantasyMarket[];
   const marketRows: (string | number)[][] = [];
   for (const m of markets) {
     const def = getMarketDefinition(m.market_type);

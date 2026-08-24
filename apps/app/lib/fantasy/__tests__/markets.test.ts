@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { MARKET_REGISTRY } from "@/lib/fantasy/markets/registry";
 import { selectionIsFrozen } from "@/lib/fantasy/markets/types";
+import { keepableMarketIds } from "@/lib/fantasy/odds";
+import { shapeFor } from "@/lib/fantasy/__tests__/shapeFixture";
 import type {
   FantasyMarket,
   FinalScoringData,
@@ -112,9 +114,10 @@ function simFor(profiles: Array<Partial<SimPlayerProfile> & { profileId: string;
       recentForm: 0,
       birdiesPerRound: p.birdiesPerRound ?? 1,
       eaglesPerRound: 0.05,
-      parsPerRound: 7,
-      bogeysPerRound: 7,
-      doublesPlusPerRound: 3,
+      // Derived from the level so an avgGross override stays self-consistent —
+      // a fixed par rate makes two players with different levels calibrate
+      // toward each other and collapses the h2h separation.
+      ...shapeFor(p.avgGross ?? 85, p.birdiesPerRound ?? 1),
       par3AvgVsPar: p.par3AvgVsPar ?? 0.7,
       par4AvgVsPar: p.par4AvgVsPar ?? 0.7,
       par5AvgVsPar: p.par5AvgVsPar ?? 0.7,
@@ -305,6 +308,58 @@ describe("ceremony freeze locks the affected selections", () => {
   it("leaves event-wide specials alone — they depend on nobody in particular", () => {
     const m = makeMarket({ market_type: "field_special", params: { kind: "hio" } });
     expect(selectionIsFrozen(m, "yes", ctx)).toBe(false);
+  });
+});
+
+describe("a player leaving the field", () => {
+  const IN = "11111111-1111-4111-8111-111111111111";
+  const GONE = "22222222-2222-4222-8222-222222222222";
+  const field = new Set([IN]);
+
+  describe("keepableMarketIds (which stale snapshots survive a reprice)", () => {
+    const written = new Set<string>();
+
+    it("keeps an unpriced open market whose subject is still in the field", () => {
+      // The ladder-gap fix: "1+ shows, 2+ blank, 3+ shows" — an open market we
+      // merely failed to price this version keeps its last good price.
+      const m = makeMarket({ id: "keep", market_type: "birdies", subject_profile_id: IN });
+      expect(keepableMarketIds([m], field, written)).toEqual(["keep"]);
+    });
+
+    it("drops an unpriced open market whose subject has left the field", () => {
+      const m = makeMarket({ id: "drop", market_type: "birdies", subject_profile_id: GONE });
+      expect(keepableMarketIds([m], field, written)).toEqual([]);
+    });
+
+    it("drops a head-to-head whose OPPONENT has left the field", () => {
+      const m = makeMarket({
+        id: "drop",
+        market_type: "h2h",
+        subject_profile_id: IN,
+        opponent_profile_id: GONE,
+      });
+      expect(keepableMarketIds([m], field, written)).toEqual([]);
+    });
+
+    it("never keeps a market that was priced this version — its old rows supersede", () => {
+      const m = makeMarket({ id: "priced", market_type: "birdies", subject_profile_id: IN });
+      expect(keepableMarketIds([m], field, new Set(["priced"]))).toEqual([]);
+    });
+
+    it("never keeps a non-open market, even for an in-field subject", () => {
+      const m = makeMarket({
+        id: "settled",
+        market_type: "birdies",
+        subject_profile_id: IN,
+        status: "settled",
+      });
+      expect(keepableMarketIds([m], field, written)).toEqual([]);
+    });
+
+    it("keeps field-wide markets with no subject at all", () => {
+      const m = makeMarket({ id: "field", market_type: "field_special", params: { kind: "hio" } });
+      expect(keepableMarketIds([m], field, written)).toEqual(["field"]);
+    });
   });
 });
 

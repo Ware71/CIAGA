@@ -731,3 +731,270 @@ TTL and is likewise only a fallback.
 `position === worst`, which pays every tied player, so splitting priced the
 wooden spoon systematically too long. `winProb` still splits — that one *is*
 resolved by a playoff.
+
+---
+
+## 16. Leaving the field, and holes the engine never modelled (2026-08-24)
+
+Two board defects reported on an entry-closed event: markets still showing for a
+player who was no longer entered, and "Birdie or better" / "Bogey or worse"
+quoting identical odds for the same player.
+
+### A player who leaves the field
+
+There is no entry *deadline* concept inside fantasy — the field is
+`event_entries` filtered by `ACTIVE_ENTRY_STATUSES` (`entered`, `approved`,
+`pending_approval`, `waitlisted`), plus non-entered group members carried as
+**provisional** with a decaying attendance probability. `loadProvisionalPlayers`
+does gate on `entry_window_end` though: once entry closes the field is fixed and
+provisional players stop being generated at all.
+
+That is what makes withdrawal visible only on closed events:
+
+- **Entry open.** A player who withdraws simply falls back to provisional. They
+  stay in `ctx.players`, so their existing markets keep repricing.
+- **Entry closed.** They vanish from the simulation entirely. Every per-player
+  `simulate()` opens with `if (idx === undefined) return out`, so their markets
+  can never be priced again.
+
+`ensureMarkets` is insert-only ("never deletes"), so the market rows survive —
+and `writeSnapshots` used to *protect* any open-but-unpriced market from the
+supersede, which is the ladder-gap fix ("1+ shows, 2+ blank, 3+ shows"). It
+could not tell "momentarily unpriceable" from "gone for good", so a departed
+player's last-good snapshot stayed `status = 'active'` indefinitely and the
+board kept rendering them at frozen odds, still bettable.
+
+Note the asymmetry: field-wide markets (`outright_winner`, `top_n`,
+`finish_position`, `finish_range`) self-heal, because they *are* re-priced and
+their old selection rows supersede. Only markets carrying a
+`subject_profile_id` / `opponent_profile_id` leaked.
+
+**Fix.** `keepableMarketIds` (odds.ts) now excludes any market whose subject or
+opponent is absent from `ctx.players`. Their snapshots supersede, `marketsInTab`
+drops zero-selection markets, and the player disappears from the board. No
+market `status` is mutated and no migration is needed — if they re-enter, the
+next refresh prices them and the rows come back.
+
+No extra placement guard is needed, and one was deliberately **rejected**:
+`ciaga_fantasy_place_pick` already refuses any snapshot that is not `active` AND
+at the event's current `event_version`, so once the snapshots supersede the RPC
+rejects the bet on its own. An entry-status-based guard would also have been
+*wrong* — `ctx.players` is entrants **plus provisional** members, so keying off
+`event_entries` alone would have blocked backing a not-yet-entered player in the
+outright/top-N markets, which is exactly what the attendance model exists to
+support. `keepableMarketIds` takes its field from `ctx.players` for this reason.
+
+Already-placed picks are untouched: settlement voids them
+(`WITHDRAWN_STATUSES` + `settle()`'s `!player || player.withdrawn` branch), and
+cash-out already required a snapshot at the CURRENT `event_version`, so a stale
+row was never usable there anyway.
+
+### Holes with no simulated support
+
+`runSimulation` adds a hole to `remainingIdx` only while the player's round is
+unfinished. A **finished** round with an unrecorded hole — pick-up, mid-round
+withdrawal, missing hole data, freeze-clipped holes — leaves that hole's outcome
+bins empty. `holeScore.simulate` then reported `P = 0` for *both* outcomes, and
+`clampProbability`'s floor (0.001) turned that into an invented **1000/1 on each
+book**: birdie and bogey with literally identical odds, on a hole nobody has any
+information about.
+
+Such holes are now skipped rather than quoted. The test is "bins sum to zero",
+deliberately **not** "both outcomes are zero" — a hole that was played and
+**parred** has bins summing to `simulationCount` and legitimately prices both
+legs at zero, because it is decided. Those keep their deterministic price, as
+`placementAllowed` already blocks backing them.
+
+`birdies` / `eagle_count` need no equivalent change: they feed the per-hole
+probabilities into `countDistribution`, where a `p = 0` hole and an omitted hole
+are mathematically identical. An unrecorded hole simply cannot contribute a
+birdie, which understates the count — a data gap, not a pricing bug.
+
+### The board no longer substitutes one book for the other
+
+`EventMarketsClient`'s Hole Specials toggle picked the market for the selected
+outcome with a `?? forPlayer[0]` fallback. Since `marketsInTab` drops markets
+with no priced selections, one missing book meant the toggle silently rendered
+the **other** one under the wrong label — identical odds on both tabs, and a
+"bogey" click that placed a **birdie** bet. The markets are now indexed by
+outcome with no fallback: an unavailable outcome's button is disabled and the
+panel says so.
+
+### …and what made a book go missing in the first place
+
+The fallback was the messenger. The board read snapshots with its own
+hand-rolled `range()` loop and **no ordering at all**:
+
+```ts
+.eq("event_id", eventId).eq("status", "active").range(from, from + pageSize - 1)
+```
+
+The International 2026 carries **1,265 active snapshots** across 236 markets, so
+that takes the second page — and `range()` over an unordered select has no
+defined row-to-page assignment. Rows can be served twice or skipped entirely at
+the boundary. It lands on a whole market rather than scattering because
+`writeSnapshots` upserts a market's selections together, so its rows are
+physically adjacent: a shifted boundary drops one market's entire selection set,
+`marketsInTab` removes it, and the toggle substituted the other book.
+
+`lib/fantasy/paginate.ts` has documented this hazard since the cash-out fix —
+`readAllPages` exists, is tested, and *requires* a total order. The board simply
+wasn't using it. `lib/fantasy/eventReads.ts` now owns both event-scoped reads
+(`readActiveSnapshots`, `readEventMarkets`), ordered by `id`; the board, the
+inspector, the Excel export, `ensureMarkets` and both `writeSnapshots` callers
+go through it.
+
+Two of those were worse than a display glitch:
+
+- **`inspect.ts` was unpaginated**, hard-truncating at 1,000 of those 1,265 rows —
+  the odds inspector was quietly showing an incomplete board while being used to
+  diagnose exactly this.
+- **`ensureMarkets`' shape read**: a truncated `existingKeys` re-inserts markets
+  that already exist, 23505s, and falls into the swallow-the-error per-row path
+  on every refresh. The `writeSnapshots` callers are worse still — a market
+  missing from that read is neither re-priced nor in `keepMarketIds`, so its last
+  good snapshot is superseded and it goes blank for good.
+
+Never order these by `event_version` or `computed_at`: both repeat across a whole
+snapshot generation, so paging stays just as undefined. `id` is the primary key
+and the only total order available.
+
+### The bogey book was flat, because nothing calibrated it
+
+None of the fixes above explains the *prices*. Measured on prod (The
+International 2026, v12647), Ware's bogey book quoted 1.01-1.14 on all 36 holes
+— flat enough to read as "the same odds" even once the read bug stopped
+substituting the wrong book. Against his own stored 20-round profile:
+
+| Per hole | Observed (his profile) | Modelled (prod snapshots) |
+|---|---|---|
+| birdie or better | 2.5% (0.45/round) | ~2.2% — **calibrated, accurate** |
+| par | 17.9% (3.23/round) | ~7.2% |
+| bogey or worse | 79.6% (14.32/round) | ~90.6% |
+
+Only the birdie side was calibrated, so only the birdie side landed. The
+par/bogey split was whatever the discretized normal had left after the birdie
+rescale, and it discarded about 60% of his par mass. `profiles.ts` had computed
+and persisted `pars_per_round` since the original schema and `toSimProfile`
+mapped it onto `SimPlayerProfile` — `holeModel.ts` simply never read it.
+
+Fixed in §17 below.
+
+---
+
+## 17. V6 — calibrating the par bin (2026-08-24)
+
+### What changed
+
+`buildHoleDistributionsDetailed` now calibrates the **exactly-par** bin the same
+way it already calibrated birdie-or-better: a Gamma-Poisson target (observed
+rate shrunk toward a handicap prior), exact mass transfer, mean preservation
+unchanged.
+
+That is enough to fix the whole hole book, because `holeScore.simulate` prices
+bogey-or-worse as `bins.slice(3)` — i.e. `1 − P(birdie+) − P(par)`. Pin the two
+calibrated bins and the residual is pinned with them.
+
+```ts
+export const PAR_PRIOR_STRENGTH = 5;
+export function parPriorMean(hi: number): number {
+  return Math.min(14, Math.max(0.05, 12.1 * Math.exp(-0.069 * hi)));
+}
+```
+
+The prior is **fitted by log-linear regression to this group's own profiles**
+(HI 6.4 → 54), not to published amateur tables: this population plays well above
+its index (a 6.4 shoots 83 on these courses), so a published curve sits wide.
+Prior vs observed at the fitted points — 6.4 → 7.76/7.66 · 20 → 3.03/3.23 ·
+31.8 → 1.34/1.16 · 43.9 → 0.58/0.78 · 47.5 → 0.45/0.37. `K = 5` sits below the
+birdie prior's 8 on purpose: pars are 5–10× more common, so the observed rate is
+proportionally far more reliable and needs less shrinking.
+
+Result on the six real production profiles — modelled vs observed, per hole:
+
+| Player | P(birdie+) | P(par) | P(bogey+) |
+|---|---|---|---|
+| Jack Wilson | 0.066 / 0.068 | 0.427 / 0.426 | 0.508 / 0.506 |
+| Ware | 0.021 / 0.025 | **0.177 / 0.179** | **0.801 / 0.796** |
+| Linehan | 0.007 / 0.009 | 0.067 / 0.064 | 0.926 / 0.927 |
+| Ciaran | 0.004 / 0.006 | 0.039 / 0.043 | 0.957 / 0.951 |
+| Harper | 0.002 / 0.003 | 0.022 / 0.021 | 0.976 / 0.977 |
+
+Ware's bogey book moves from ~1.10 to ~1.25 and regains hole-to-hole spread.
+
+### Implementation notes
+
+- **Ordering is load-bearing.** Birdie scaling runs first, then par (touching
+  only `k=2` and `k≥3`), then the eagle move (only `k=0`/`k=1`). Neither later
+  pass can disturb an earlier one, so both exactness guarantees survive. Tests
+  assert birdie and eagle mass are bit-identical across wildly different par
+  targets.
+- **Water-filling, not a hard cap.** No hole may take more than 0.95 of the room
+  the birdie bins leave it, or the `k≥3` rescale goes negative. A single capped
+  global factor is not enough: par mass concentrates on the easy holes, so the
+  easiest hole hits the ceiling first and the target is stranded for everyone —
+  a scratch player's ~12 pars/round was unreachable. Overflowing holes are pinned
+  at their ceiling and the shortfall redistributes over the rest.
+- **`meta.par.capped` means the target was MISSED**, not merely that a hole hit
+  its ceiling — matching the birdie flag, so the audit reads consistently.
+- **No migration, no `PROFILE_MODEL_VERSION` bump.** `pars_per_round` has been
+  computed, persisted and mapped since the original schema; nothing about the
+  stored profile changes, and bumping would force a needless full re-derivation
+  of every profile. Books reprice on the board's admin **Refresh** or
+  `POST /api/fantasy/events/[eventId]/rebuild-profiles` — deliberately *not* a
+  `ciaga_fantasy_mark_stale` sweep, unlike `20260714000000` and `20260715000000`.
+  Open picks keep the odds they were placed at; only new prices and cash-out
+  values move.
+
+### Why par only, and not bogey
+
+`profiles.ts` classifies into `{k≤1} | {k=2} | {k=3} | {k≥4}`, partitioning the
+model's bins exactly, so `bogeys_per_round` and `doubles_plus_per_round` *could*
+be pinned too. They are deliberately left unread.
+
+Pinning bogey as well would leave only the shape beyond double bogey to carry
+the level, so an unusually hard course would have nowhere to put the extra
+strokes. And it isn't needed: pin birdie and par, preserve the level, and the
+split falls out on its own. Ware's tail has to average **+2.03** over par to
+reconcile — his observed record gives **+2.03**. Jack Wilson's lands at +2.30 the
+same way.
+
+### The cost: σ_D no longer controls round variance on its own
+
+P(par) and variance are both functions of σ at a fixed mean, so **pinning the
+shape is a partial σ override.** This is a real behavioural change, not a
+side-effect to shrug at.
+
+Holding a single shape constant while sweeping σ_D now compresses the realized
+round SD toward whatever that shape implies — measured, σ_D 3/5/8 gives
+4.22/5.04/5.26. `engine.test.ts`'s variance band was relaxed accordingly and its
+comment says why.
+
+Across the *real* field, where shape and volatility co-vary as they should, the
+ordering survives intact: round SDs of 4.92 / 6.74 / 7.38 / 8.83 / 8.27 / 8.88
+against σ_gross of 3.68 / 5.23 / 6.33 / 7.48 / 7.48 / 8.05 — monotone, and
+consistently 1.1–1.34× σ. Exact tracking is now the shape's job, and
+`calibrationLiveField.test.ts` guards it on the six production profiles.
+
+### Still open: reconcile σ_D against the measured per-hole spread
+
+Course-adjusted ANOVA over 548 real rounds (`hole_scoring_source`) gives
+within-round per-hole SDs of 1.02–1.64 (Ware 1.42) against a model idiosyncratic
+σ of ~0.93. Both cannot be right: 18 holes at 1.42 give a round SD of 6.03
+unaided, above the 5.23 the model derives from Ware's detrended
+`differential_stddev`. Either σ_D understates true round-to-round spread, or the
+raw within-round measurement contains structure the model attributes to μ.
+
+Two things are now settled and should not be re-litigated:
+
+- **ρ = 0.06 is correct.** Measured course-adjusted intra-round correlation:
+  0.063 (Jack Wilson, 249 rounds), 0.122 (Ware, 162), 0.078 (Ben), 0.063
+  (Linehan), 0.066 (Ciaran), 0.076 (Harper). An earlier estimate of ~0.01 came
+  from treating the double-plus bin as a point mass, which understates per-hole
+  variance. `INTRA_ROUND_CORRELATION` needs no change.
+- **The narrow marginal cannot simply be widened** — see the arithmetic above.
+
+Par calibration removes the symptom from the hole book, but the narrow marginal
+still exaggerates hole-to-hole *variation* in par mass (hard holes lose
+proportionally more than they should) and still shapes score bands and totals.
+That deserves its own analysis, not a tuning pass.

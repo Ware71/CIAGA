@@ -19,6 +19,28 @@ function marketOutcome(market: FantasyMarket): HoleOutcome {
     : "birdie_or_better";
 }
 
+/**
+ * Whether the engine actually modelled this hole for this player.
+ *
+ * The bins sum to zero only when the hole was neither fixed from a recorded
+ * score nor sampled — `runSimulation` adds a hole to `remainingIdx` only while
+ * the player's round is unfinished, so a FINISHED round with an unrecorded hole
+ * (pick-up, mid-round withdrawal, missing hole data, freeze-clipped holes)
+ * leaves its bins untouched. Quoting such a hole reports P = 0 for every
+ * outcome, which the probability clamp turns into an invented 1000/1 on BOTH
+ * birdie-or-better and bogey-or-worse — two markets showing identical odds for
+ * a hole nobody has any information about.
+ *
+ * Deliberately NOT the same test as "both outcomes are zero": a hole that was
+ * played and parred has bins summing to simulationCount and genuinely prices
+ * both legs at zero, because it is decided. Those keep their deterministic
+ * price (and `placementAllowed` already blocks backing them).
+ */
+function hasSupport(bins: number[]): boolean {
+  for (const b of bins) if (b > 0) return true;
+  return false;
+}
+
 /** selection key "r{round}_h{hole}" ↔ (round, hole). */
 export function holeSelectionKey(round: number, holeNumber: number): string {
   return `r${round}_h${holeNumber}`;
@@ -78,6 +100,7 @@ export const holeScore: MarketDefinition = {
     const outcome = marketOutcome(market);
     sim.holes.forEach((hole, hi) => {
       const bins = sim.players[idx].holeOutcomes[hi];
+      if (!hasSupport(bins)) return;
       const p =
         outcome === "birdie_or_better"
           ? (bins[0] + bins[1]) / sim.simulationCount

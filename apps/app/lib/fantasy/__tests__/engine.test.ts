@@ -6,6 +6,7 @@ import type {
   SimPlayerProfile,
   SimulationInputs,
 } from "@/lib/fantasy/simulation/types";
+import { shapeFor } from "@/lib/fantasy/__tests__/shapeFixture";
 
 const PARS = [4, 4, 3, 5, 4, 4, 3, 4, 5, 4, 4, 3, 5, 4, 4, 3, 4, 5];
 
@@ -19,6 +20,13 @@ function makeHoles(): SimHole[] {
 }
 
 function makeProfile(overrides: Partial<SimPlayerProfile> = {}): SimPlayerProfile {
+  // The par/bogey/double+ shape is DERIVED from the level, so overriding
+  // avgGross (or the differential) keeps the fixture a player who could exist —
+  // see shapeFixture.ts. The differential path sets the level from
+  // avgDifferential, so prefer that when a test supplies one.
+  const level =
+    overrides.avgDifferential != null ? overrides.avgDifferential + 72 : overrides.avgGross ?? 85;
+  const birdies = overrides.birdiesPerRound ?? 1;
   return {
     profileId: "p",
     handicapIndex: 12,
@@ -27,9 +35,7 @@ function makeProfile(overrides: Partial<SimPlayerProfile> = {}): SimPlayerProfil
     recentForm: 0,
     birdiesPerRound: 1,
     eaglesPerRound: 0.05,
-    parsPerRound: 7,
-    bogeysPerRound: 7,
-    doublesPlusPerRound: 3,
+    ...shapeFor(level, birdies),
     par3AvgVsPar: 0.7,
     par4AvgVsPar: 0.75,
     par5AvgVsPar: 0.7,
@@ -327,9 +333,23 @@ describe("net-consistency, variance & format (model fixes)", () => {
       const m = arr.reduce((s, x) => s + x, 0) / arr.length;
       return Math.sqrt(arr.reduce((s, x) => s + (x - m) * (x - m), 0) / arr.length);
     };
-    // slope 113 ⇒ σ_round = σ_D. The realized gross SD should track σ_D and
-    // stay within a modest band despite discretization + rare-event calibration
-    // (the per-hole σ is sized so the CORRELATED round total keeps variance σ²).
+    // slope 113 ⇒ σ_round = σ_D.
+    //
+    // V6 WEAKENED THIS GUARANTEE ON PURPOSE. The per-hole marginal is now
+    // pinned by the birdie/par calibration, and P(par) and variance are both
+    // functions of σ at a fixed mean — so pinning the shape IS a partial σ
+    // override. Holding the shape constant while sweeping σ_D (as below) is
+    // self-contradictory post-V6: the realized SD compresses toward whatever
+    // that one shape implies. Measured: σ_D 3/5/8 → 4.22/5.04/5.26.
+    //
+    // What survives, and what the markets actually rely on: more volatility
+    // never yields a NARROWER book, and the SD stays in the same neighbourhood
+    // as σ. Exact tracking is now the SHAPE's job — see the real-profile
+    // regression in calibrationLiveField.test.ts, where six production players
+    // land within 0.005 of their observed birdie/par/bogey rates and their
+    // round SDs stay correctly ordered. The σ_D-vs-shape reconciliation is a
+    // recorded follow-up (docs/fantasy-odds.md §17).
+    let previous = 0;
     for (const sD of [3, 5, 8]) {
       const p = makePlayer("p", { playingHandicap: 12 }, {
         avgDifferential: 15, differentialStddev: sD, differentialEffectiveN: 30,
@@ -338,8 +358,10 @@ describe("net-consistency, variance & format (model fixes)", () => {
         baseInputs([p, makePlayer("q")], { holes: teeHoles(), simulationCount: 15000 })
       );
       const realized = sd(r.players[r.playerIndex["p"]].grossTotals);
-      expect(realized).toBeGreaterThan(sD * 0.7);
-      expect(realized).toBeLessThan(sD * 1.4);
+      expect(realized).toBeGreaterThan(sD * 0.6);
+      expect(realized).toBeLessThan(sD * 1.5);
+      expect(realized).toBeGreaterThan(previous);
+      previous = realized;
     }
   });
 

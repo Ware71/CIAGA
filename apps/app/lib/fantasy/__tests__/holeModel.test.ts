@@ -10,10 +10,13 @@ import {
   holeMu,
   holeSigma,
   OUTCOME_OFFSET,
+  PAR_PRIOR_STRENGTH,
+  parPriorMean,
   shrunkRate,
   strokesReceived,
 } from "@/lib/fantasy/simulation/holeModel";
 import type { SimHole, SimPlayerProfile } from "@/lib/fantasy/simulation/types";
+import { shapeFor } from "@/lib/fantasy/__tests__/shapeFixture";
 
 function profile(overrides: Partial<SimPlayerProfile> = {}): SimPlayerProfile {
   return {
@@ -24,9 +27,10 @@ function profile(overrides: Partial<SimPlayerProfile> = {}): SimPlayerProfile {
     recentForm: 0,
     birdiesPerRound: 1,
     eaglesPerRound: 0.05,
-    parsPerRound: 7,
-    bogeysPerRound: 7,
-    doublesPlusPerRound: 3,
+    // Derived from the level (see shapeFixture.ts): the four rates must
+    // partition 18 holes AND reconcile with avgGross, or the par calibration
+    // and the mean-preservation loop end up pulling against each other.
+    ...shapeFor(overrides.avgGross ?? 85, overrides.birdiesPerRound ?? 1),
     par3AvgVsPar: 0.7,
     par4AvgVsPar: 0.75,
     par5AvgVsPar: 0.7,
@@ -307,22 +311,122 @@ describe("buildHoleDistributions birdie/eagle calibration", () => {
   });
 
   it("absurd targets stay valid: per-hole mass bounded, sums exact, target met", () => {
-    // 12 observed birdies/round → target ≈ 9.2. The mean-preservation loop
-    // settles on lower latent means (more natural birdie mass) rather than
-    // leaving the factor pinned at the 0.95-per-hole cap.
+    // 12 observed birdies/round → target ≈ 9.2, against a player whose level
+    // (par*AvgVsPar 0.7-0.75) says +13.5 a round. That is not a golfer, which is
+    // the point: the contract under an impossible input is that the
+    // distributions stay VALID, and that any shortfall is recorded rather than
+    // silently absorbed.
+    //
+    // Since V6 the par bin competes for the same 18 holes, so the birdie factor
+    // now pins at the 0.95-per-hole ceiling instead of the mean-preservation
+    // loop finding its way out. `meta.birdie.capped` is what says so.
     const p = profile({ birdiesPerRound: 12, sampleSize: 20, handicapIndex: 0 });
     const { dists, meta } = buildHoleDistributionsDetailed(p, holes);
-    expect(birdieMass(dists)).toBeCloseTo(meta.birdie.targetMass, 6);
+    if (meta.birdie.capped) {
+      expect(birdieMass(dists)).toBeLessThan(meta.birdie.targetMass);
+    } else {
+      expect(birdieMass(dists)).toBeCloseTo(meta.birdie.targetMass, 6);
+    }
     for (const d of dists) {
       expect(d[0] + d[1]).toBeLessThanOrEqual(0.95 + 1e-9);
+      expect(d[2]).toBeLessThanOrEqual(0.95 * (1 - d[0] - d[1]) + 1e-9);
       expect(d.reduce((s, x) => s + x, 0)).toBeCloseTo(1, 9);
       for (const x of d) expect(x).toBeGreaterThanOrEqual(0);
     }
   });
 
+  it("a REACHABLE high birdie target is still met exactly, not left at the cap", () => {
+    // The original intent of the case above, with a level that matches the
+    // shape: a player who really does make ~4 birdies a round shoots under par,
+    // and the loop must land the target rather than pinning at the ceiling.
+    const p = profile({
+      birdiesPerRound: 4, sampleSize: 20, handicapIndex: 0,
+      avgGross: 70, par3AvgVsPar: -0.1, par4AvgVsPar: -0.1, par5AvgVsPar: -0.1,
+    });
+    const { dists, meta } = buildHoleDistributionsDetailed(p, holes);
+    expect(meta.birdie.capped).toBe(false);
+    expect(birdieMass(dists)).toBeCloseTo(meta.birdie.targetMass, 6);
+  });
+
   it("more observed birdies → more simulated birdies", () => {
     const few = birdieMass(buildHoleDistributions(profile({ birdiesPerRound: 0.5 }), holes));
     const many = birdieMass(buildHoleDistributions(profile({ birdiesPerRound: 3 }), holes));
+    expect(many).toBeGreaterThan(few);
+  });
+});
+
+/**
+ * V6. `hole_score` prices bogey-or-worse as `1 − P(birdie+) − P(par)`, so the
+ * whole hole book rides on these two masses being right. Before V6 only the
+ * birdie side was calibrated and the par bin was the normal's leftovers, which
+ * discarded ~60% of a real player's par mass.
+ */
+describe("buildHoleDistributions par calibration", () => {
+  const holes: SimHole[] = Array.from({ length: 18 }, (_, i) =>
+    hole({ holeNumber: i + 1, strokeIndex: i + 1 })
+  );
+
+  const parMass = (dists: number[][]) => dists.reduce((s, d) => s + d[2], 0);
+  const birdieMass = (dists: number[][]) => dists.reduce((s, d) => s + d[0] + d[1], 0);
+  const eagleMass = (dists: number[][]) => dists.reduce((s, d) => s + d[0], 0);
+
+  it("hits the shrunk par target exactly, across the handicap range", () => {
+    for (const [pars, hi] of [[10, 4], [7, 12], [3, 20], [0.5, 40]] as const) {
+      const p = profile({ parsPerRound: pars, handicapIndex: hi, sampleSize: 20 });
+      const { dists, meta } = buildHoleDistributionsDetailed(p, holes);
+      const target = shrunkRate(pars, 20, parPriorMean(hi), PAR_PRIOR_STRENGTH);
+      expect(meta.par.targetRate).toBeCloseTo(target, 12);
+      expect(parMass(dists)).toBeCloseTo(target, 9);
+      expect(meta.par.capped).toBe(false);
+    }
+  });
+
+  it("bogey-or-worse is exactly the residual the hole book prices", () => {
+    const p = profile({ parsPerRound: 3.23, birdiesPerRound: 0.45, handicapIndex: 20, sampleSize: 20 });
+    const { dists } = buildHoleDistributionsDetailed(p, holes);
+    const bogeyPlus = dists.reduce((s, d) => s + d.slice(3).reduce((a, x) => a + x, 0), 0);
+    expect(bogeyPlus).toBeCloseTo(holes.length - birdieMass(dists) - parMass(dists), 9);
+  });
+
+  it("the par pass leaves birdie and eagle mass untouched — the ordering guarantee", () => {
+    // Same player, wildly different par targets. The birdie block runs first and
+    // the eagle move only shifts weight between k=0 and k=1, so neither may
+    // budge by so much as a rounding error.
+    const lots = buildHoleDistributionsDetailed(profile({ parsPerRound: 12, sampleSize: 20 }), holes);
+    const few = buildHoleDistributionsDetailed(profile({ parsPerRound: 0.5, sampleSize: 20 }), holes);
+    expect(parMass(lots.dists)).toBeGreaterThan(parMass(few.dists));
+    expect(birdieMass(lots.dists)).toBeCloseTo(birdieMass(few.dists), 9);
+    expect(eagleMass(lots.dists)).toBeCloseTo(eagleMass(few.dists), 9);
+  });
+
+  it("9-hole rounds calibrate to half the per-18 par rate", () => {
+    const nine = holes.slice(0, 9).map((h) => ({ ...h, holesInRound: 9 }));
+    const { dists, meta } = buildHoleDistributionsDetailed(profile({ parsPerRound: 7 }), nine);
+    expect(parMass(dists)).toBeCloseTo(meta.par.targetRate / 2, 9);
+  });
+
+  it("no observed par rate → pure prior (never skips calibration)", () => {
+    const p = profile({ parsPerRound: null, sampleSize: 0, handicapIndex: 20 });
+    const { dists, meta } = buildHoleDistributionsDetailed(p, holes);
+    expect(meta.par.targetRate).toBeCloseTo(parPriorMean(20), 12);
+    expect(parMass(dists)).toBeCloseTo(parPriorMean(20), 9);
+  });
+
+  it("absurd par AND birdie targets together stay valid: bins bounded, sums exact", () => {
+    // 12 birdies/round alongside 14 pars/round asks for more than 18 holes.
+    // The per-hole cap has to hold or the k>=3 rescale drives bins negative.
+    const p = profile({ birdiesPerRound: 12, parsPerRound: 14, sampleSize: 20, handicapIndex: 0 });
+    const { dists } = buildHoleDistributionsDetailed(p, holes);
+    for (const d of dists) {
+      expect(d.reduce((s, x) => s + x, 0)).toBeCloseTo(1, 9);
+      for (const x of d) expect(x).toBeGreaterThanOrEqual(0);
+      expect(d[2]).toBeLessThanOrEqual(0.95 * (1 - d[0] - d[1]) + 1e-9);
+    }
+  });
+
+  it("more observed pars → more simulated pars", () => {
+    const few = parMass(buildHoleDistributions(profile({ parsPerRound: 1, sampleSize: 20 }), holes));
+    const many = parMass(buildHoleDistributions(profile({ parsPerRound: 10, sampleSize: 20 }), holes));
     expect(many).toBeGreaterThan(few);
   });
 });

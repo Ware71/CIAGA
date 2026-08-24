@@ -15,6 +15,7 @@ import {
   OUTCOME_OFFSET,
 } from "@/lib/fantasy/simulation/holeModel";
 import { getMarketDefinition } from "@/lib/fantasy/markets/registry";
+import { readActiveSnapshots, readEventMarkets } from "@/lib/fantasy/eventReads";
 import type { FantasyMarket } from "@/lib/fantasy/markets/types";
 import type { StoredFantasyProfile } from "@/lib/fantasy/profiles";
 
@@ -38,7 +39,15 @@ export async function inspectEvent(eventId: string) {
   // event does the builds, exactly like generation would.
   const ctx = await loadSimInputs(eventId);
 
-  const [stateRes, jobsRes, entriesRes, storedRes, marketsRes, snapsRes] = await Promise.all([
+  type SnapshotRow = {
+    id: string; market_id: string; selection_key: string;
+    probability: number; decimal_odds: number; event_version: number; computed_at: string;
+  };
+
+  // Paged + ordered: this read was unpaginated, so it hard-truncated at 1000 of
+  // The International 2026's 1,265 active snapshots — the inspector was quietly
+  // showing an incomplete board while being used to diagnose exactly that.
+  const [stateRes, jobsRes, entriesRes, storedRes, marketRows, snaps] = await Promise.all([
     supabaseAdmin.from("fantasy_event_state").select("*").eq("event_id", eventId).maybeSingle(),
     supabaseAdmin
       .from("fantasy_refresh_jobs")
@@ -58,12 +67,11 @@ export async function inspectEvent(eventId: string) {
       .select("*")
       .eq("group_id", ctx.groupId)
       .in("profile_id", ctx.players.map((p) => p.profileId)),
-    supabaseAdmin.from("fantasy_markets").select("*").eq("event_id", eventId),
-    supabaseAdmin
-      .from("fantasy_odds_snapshots")
-      .select("id, market_id, selection_key, probability, decimal_odds, event_version, computed_at")
-      .eq("event_id", eventId)
-      .eq("status", "active"),
+    readEventMarkets<FantasyMarket>(eventId, "*"),
+    readActiveSnapshots<SnapshotRow>(
+      eventId,
+      "id, market_id, selection_key, probability, decimal_odds, event_version, computed_at"
+    ),
   ]);
 
   const state = (stateRes.data as { version?: number } | null) ?? null;
@@ -152,18 +160,14 @@ export async function inspectEvent(eventId: string) {
     };
   });
 
-  const snaps = (snapsRes.data ?? []) as {
-    id: string; market_id: string; selection_key: string;
-    probability: number; decimal_odds: number; event_version: number; computed_at: string;
-  }[];
-  const snapsByMarket = new Map<string, typeof snaps>();
+  const snapsByMarket = new Map<string, SnapshotRow[]>();
   for (const s of snaps) {
     const list = snapsByMarket.get(s.market_id);
     if (list) list.push(s);
     else snapsByMarket.set(s.market_id, [s]);
   }
 
-  const markets = ((marketsRes.data ?? []) as FantasyMarket[]).map((m) => {
+  const markets = marketRows.map((m) => {
     const def = getMarketDefinition(m.market_type);
     const selections = (snapsByMarket.get(m.id) ?? [])
       .map((s) => ({
