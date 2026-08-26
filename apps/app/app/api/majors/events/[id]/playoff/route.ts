@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 import { getEventById } from "@/lib/majors/queries";
 import { computeCountback } from "@/lib/majors/countback";
+import { getFinalRoundSubmissions } from "@/lib/majors/resolveEventRoundForRound";
 import { strokesReceivedOnHole } from "@/lib/rounds/handicapUtils";
 import { notifyPlayoffStarted } from "@/lib/notifications/majorsActivity";
 
@@ -37,21 +38,15 @@ async function getPlayoffPlayingHandicaps(
   profileIds: string[],
 ): Promise<Record<string, number>> {
   const result: Record<string, number> = {};
+  // Quote the handicap from the player's FINAL round, by round_number.
+  const finalRounds = await getFinalRoundSubmissions(eventId, profileIds);
   for (const pid of profileIds) {
-    const { data: sub } = await supabaseAdmin
-      .from("event_round_submissions")
-      .select("round_id")
-      .eq("event_id", eventId)
-      .eq("profile_id", pid)
-      .eq("accepted", true)
-      .order("submitted_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (!sub) { result[pid] = 0; continue; }
+    const roundId = finalRounds[pid];
+    if (!roundId) { result[pid] = 0; continue; }
     const { data: rp } = await supabaseAdmin
       .from("round_participants")
       .select("playing_handicap_used, course_handicap_used")
-      .eq("round_id", (sub as any).round_id)
+      .eq("round_id", roundId)
       .eq("profile_id", pid)
       .maybeSingle();
     result[pid] = (rp as any)?.playing_handicap_used ?? (rp as any)?.course_handicap_used ?? 0;
@@ -494,31 +489,25 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
         const scoringModel = (event as any).scoring_model as "gross" | "net" | "stableford_points" ?? "net";
 
-        // For each tied player, load their most recent submitted round's hole scores
+        // For each tied player, load their FINAL round's hole scores. Countback
+        // runs on the last round played, so the round is chosen by
+        // event_rounds.round_number — not by whichever card was submitted last.
         const playerHoles: Array<{
           profile_id: string;
           holes: Array<{ hole_number: number; strokes: number; par: number; stroke_index: number; course_handicap: number }>;
           total_holes: number;
         }> = [];
 
-        for (const pid of tiedIds) {
-          // Find most recent accepted submission for this event
-          const { data: sub } = await supabaseAdmin
-            .from("event_round_submissions")
-            .select("round_id")
-            .eq("event_id", eventId)
-            .eq("profile_id", pid)
-            .eq("accepted", true)
-            .order("submitted_at", { ascending: false })
-            .limit(1)
-            .maybeSingle();
+        const finalRoundByProfile = await getFinalRoundSubmissions(eventId, tiedIds);
 
-          if (!sub) continue;
+        for (const pid of tiedIds) {
+          const finalRoundId = finalRoundByProfile[pid];
+          if (!finalRoundId) continue;
 
           const { data: rp } = await supabaseAdmin
             .from("round_participants")
             .select("id, course_handicap_used, playing_handicap_used, tee_snapshot_id")
-            .eq("round_id", (sub as any).round_id)
+            .eq("round_id", finalRoundId)
             .eq("profile_id", pid)
             .maybeSingle();
 
@@ -530,7 +519,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           const { data: scoreEvents } = await supabaseAdmin
             .from("round_score_events")
             .select("hole_number, strokes, created_at")
-            .eq("round_id", (sub as any).round_id)
+            .eq("round_id", finalRoundId)
             .eq("participant_id", (rp as any).id)
             .order("created_at", { ascending: false });
 

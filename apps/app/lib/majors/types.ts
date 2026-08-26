@@ -369,6 +369,12 @@ export type EventFull = {
   points_config: PointsConfig | null;
   eligibility_rules: Record<string, unknown>;
   handicap_rules: Record<string, unknown>;
+  /** Set when the first round starts; from then on every round of the event
+   *  plays off event_entries.locked_handicap_index. */
+  handicap_locked_at: string | null;
+  /** Cut rule, or null for no cut:
+   *  `{ after_round, top_n, include_ties, within_strokes }`. */
+  cut_config: Record<string, unknown> | null;
   num_rounds: number;
   round_rules: Record<string, unknown>;
   time_rules: Record<string, unknown>;

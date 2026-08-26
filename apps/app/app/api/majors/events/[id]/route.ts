@@ -57,7 +57,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       "event_date", "entry_window_start", "entry_window_end", "rules_text",
       "scoring_model", "points_model", "points_table", "eligibility_rules", "handicap_rules",
       "num_rounds", "round_rules", "time_rules", "membership_rules", "standings_contribution",
-      "majors_status",
+      "majors_status", "cut_config",
       // Upgrade additions
       "allow_self_withdrawal", "tee_time_mode", "waitlist_enabled", "max_entries",
       "prize_table", "entry_fee_amount", "entry_fee_currency", "entry_fee_notes",

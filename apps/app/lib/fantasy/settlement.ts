@@ -346,15 +346,39 @@ export async function settleFantasyEvent(
 
   const { data: eventRow, error: eventErr } = await supabaseAdmin
     .from("events")
-    .select("id, name, majors_status, group_season_id")
+    .select("id, name, majors_status, group_season_id, num_rounds")
     .eq("id", eventId)
     .single();
   if (eventErr) throw eventErr;
   const event = eventRow as {
     id: string; name: string; majors_status: string; group_season_id: string | null;
+    num_rounds: number | null;
   };
   if (event.majors_status !== "completed" && !opts.force) {
     return { settled: false, reason: `event is ${event.majors_status}, not completed` };
+  }
+
+  // Settlement is one-way — the apply RPC only touches 'open' picks, so a book
+  // settled early can never be un-settled. On a multi-round event, refuse until
+  // every round is actually terminal, whatever majors_status claims.
+  if ((event.num_rounds ?? 1) > 1 && !opts.force) {
+    const { data: eventRounds } = await supabaseAdmin
+      .from("event_rounds")
+      .select("round_number, status")
+      .eq("event_id", eventId);
+
+    const pending = (eventRounds ?? []).filter(
+      (r: any) => r.status !== "completed" && r.status !== "cancelled"
+    );
+    if (pending.length > 0) {
+      const names = pending
+        .map((r: any) => `R${r.round_number}`)
+        .join(", ");
+      return {
+        settled: false,
+        reason: `multi-round event still has unfinished round(s): ${names}`,
+      };
+    }
   }
 
   const [{ data: marketData, error: marketErr }, { data: pickData, error: pickErr }] =

@@ -140,6 +140,10 @@ export async function POST(req: Request) {
           name: `Round ${i + 1}`,
           status: "scheduled",
           course_id: roundData.course_id ?? null,
+          // Per-round dates are what make a multi-day event legible. Round 1
+          // defaults to the event date; later rounds are only dated if given,
+          // and can still be set from the Edit Round sheet.
+          scheduled_date: roundData.scheduled_date ?? (i === 0 ? (event_date ?? null) : null),
           default_tee_box_id_male: roundData.default_tee_male_id ?? null,
           default_tee_box_id_female: roundData.default_tee_female_id ?? null,
         };

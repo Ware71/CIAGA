@@ -35,6 +35,17 @@ export async function getEventLeaderboardPayload(eventId: string, profileId: str
     num_rounds,
   } = event as any;
 
+  // Planned holes per round, from the round's own tee — not an assumed 18.
+  // ciaga_event_round_holes is the single source of truth the SQL freeze
+  // thresholds also use, so the client's "thru" decoding can't drift from them.
+  const { data: roundHolesData } = await supabaseAdmin.rpc("ciaga_event_round_holes", {
+    p_event_id: eventId,
+  });
+  const roundHoles: number[] = ((roundHolesData ?? []) as any[]).map((r) => r.holes as number);
+  const totalHoles = roundHoles.length > 0
+    ? roundHoles.reduce((sum, h) => sum + h, 0)
+    : (num_rounds ?? 1) * 18;
+
   const freezeConfig = {
     freeze_state: leaderboard_freeze_state ?? "live",
     freeze_last_holes: leaderboard_freeze_last_holes ?? null,
@@ -42,7 +53,10 @@ export async function getEventLeaderboardPayload(eventId: string, profileId: str
     freeze_top_x: leaderboard_freeze_top_x ?? null,
     reveal_style: leaderboard_reveal_style ?? "none",
     reveal_top_x: leaderboard_reveal_top_x ?? null,
-    total_holes: (num_rounds ?? 1) * 18,
+    total_holes: totalHoles,
+    /** Holes in each round, in round order — lets the UI turn a cumulative
+     *  hole count back into "R2 thru 7" when rounds differ in length. */
+    round_holes: roundHoles,
   };
 
   let myRole: string | null = null;
@@ -139,9 +153,10 @@ export async function getEventLeaderboardPayload(eventId: string, profileId: str
     };
   }
 
-  const [liveRows, submissionMap] = await Promise.all([
+  const [liveRows, submissionMap, cutByProfile] = await Promise.all([
   getEventLeaderboard(eventId),
   getEventSubmissionMap(eventId),
+  getEventCutStatuses(eventId),
   ]);
 
   // (tied_count is computed from finalPositionCounts below, after any completed
@@ -152,6 +167,7 @@ export async function getEventLeaderboardPayload(eventId: string, profileId: str
   liveRows.map((r) => ({
     net_score: r.net_score ?? null,
     rounds_submitted: (r as any).rounds_submitted ?? 0,
+    cut_status: cutByProfile[r.profile_id] ?? null,
   })),
   (event as any).num_rounds ?? 1,
   );
@@ -173,6 +189,7 @@ export async function getEventLeaderboardPayload(eventId: string, profileId: str
     round_id: submissionMap[r.profile_id] ?? null,
     tee_time: null as string | null,
     tied_count: finalPositionCounts[(r as any).position ?? -1] ?? 1,
+    cut_status: cutByProfile[r.profile_id] ?? null,
   })),
   ...pendingParticipants.map((p) => ({
     profile_id: p.profile_id,
@@ -203,6 +220,22 @@ export async function getEventLeaderboardPayload(eventId: string, profileId: str
     all_entrants_complete,
     active_playoff: activePlayoff ?? null,
   };
+}
+
+/**
+ * profile_id → 'made' | 'missed' for events with a cut. Empty for the rest.
+ * Read from event_entries, which survives leaderboard recomputes.
+ */
+async function getEventCutStatuses(eventId: string): Promise<Record<string, string>> {
+  const { data } = await supabaseAdmin
+    .from("event_entries")
+    .select("profile_id, cut_status")
+    .eq("event_id", eventId)
+    .not("cut_status", "is", null);
+
+  return Object.fromEntries(
+    ((data ?? []) as any[]).map((e) => [e.profile_id as string, e.cut_status as string])
+  );
 }
 
 /** Count how many entries share each position value. */
@@ -264,21 +297,33 @@ function applyCompletedPlayoff<T extends PlayoffAdjustable>(
  * scores. Other scored entries (e.g. live in-progress players) do not block the
  * tie — only the tied leaders must be done.
  */
-function detectFirstPlaceTie(
-  entries: Array<{ net_score: number | null; rounds_submitted: number }>,
+export function detectFirstPlaceTie(
+  entries: Array<{ net_score: number | null; rounds_submitted: number; cut_status?: string | null }>,
   numRounds: number,
 ): { has_first_place_tie: boolean; all_rounds_complete: boolean } {
   const scored = entries.filter((e) => e.net_score != null);
 
   if (scored.length === 0) return { has_first_place_tie: false, all_rounds_complete: false };
 
-  const allComplete = scored.every((e) => (e.rounds_submitted ?? 0) >= numRounds);
+  // A player who missed the cut is done at the cut — they will never reach
+  // num_rounds, and without this the event could never read as complete.
+  const isDone = (e: { rounds_submitted: number; cut_status?: string | null }) =>
+    e.cut_status === "missed" || (e.rounds_submitted ?? 0) >= numRounds;
 
-  const best = Math.min(...scored.map((e) => e.net_score as number));
-  const leaders = scored.filter((e) => e.net_score === best);
+  const allComplete = scored.every(isDone);
+
+  // A cut player cannot win, and their through-the-cut total is low simply
+  // because they played fewer rounds — so they must not set the target either.
+  const contenders = scored.filter((e) => e.cut_status !== "missed");
+  if (contenders.length === 0) {
+    return { has_first_place_tie: false, all_rounds_complete: allComplete };
+  }
+
+  const best = Math.min(...contenders.map((e) => e.net_score as number));
+  const leaders = contenders.filter((e) => e.net_score === best);
 
   // Only the tied leaders need to have completed their rounds.
-  const leadersComplete = leaders.every((e) => (e.rounds_submitted ?? 0) >= numRounds);
+  const leadersComplete = leaders.every(isDone);
 
   return {
     has_first_place_tie: leaders.length > 1 && leadersComplete,

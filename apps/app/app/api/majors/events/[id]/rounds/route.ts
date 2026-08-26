@@ -72,6 +72,30 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     if (error) throw error;
 
+    // Close any gap the caller's round_number left, so the set stays 1..N.
+    // cut_config.after_round matches on round_number.
+    const { error: renumErr } = await supabaseAdmin.rpc("ciaga_renumber_event_rounds", {
+      p_event_id: id,
+    });
+    if (renumErr) {
+      console.error("[events/rounds] renumber failed:", renumErr.message);
+    }
+
+    // Keep events.num_rounds in sync. It gates "has this player finished?"
+    // (HAVING COUNT(*) >= num_rounds) and the freeze threshold, so a round
+    // added without it silently corrupts the leaderboard.
+    const { count: total } = await supabaseAdmin
+      .from("event_rounds")
+      .select("id", { count: "exact", head: true })
+      .eq("event_id", id);
+
+    if (total != null) {
+      await supabaseAdmin
+        .from("events")
+        .update({ num_rounds: total })
+        .eq("id", id);
+    }
+
     return NextResponse.json({ round }, { status: 201 });
   } catch (e: any) {
     const msg = e?.message ?? "Unknown error";

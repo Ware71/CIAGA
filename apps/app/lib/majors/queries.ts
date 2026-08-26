@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { selectFinalRounds } from "@/lib/majors/resolveEventRoundForRound";
 import type {
   MajorGroup,
   MajorGroupMembershipWithProfile,
@@ -146,18 +147,29 @@ export async function getEventParticipants(eventId: string): Promise<
   return (data ?? []) as any;
 }
 
+/**
+ * profile_id → the round_id the leaderboard's "open scorecard" link points at.
+ *
+ * On a multi-round event this must be the player's LATEST round. It used to be
+ * whichever row the database happened to return last (no ORDER BY, last-write-
+ * wins), so the link landed on an arbitrary round.
+ */
 export async function getEventSubmissionMap(eventId: string): Promise<Record<string, string>> {
   const { data, error } = await supabaseAdmin
     .from("event_round_submissions")
-    .select("profile_id, round_id")
+    .select("profile_id, round_id, submitted_at, event_round:event_rounds(round_number)")
     .eq("event_id", eventId)
     .eq("accepted", true);
   if (error) throw error;
-  const map: Record<string, string> = {};
-  for (const row of data ?? []) {
-    if ((row as any).round_id) map[(row as any).profile_id] = (row as any).round_id;
-  }
-  return map;
+
+  return selectFinalRounds(
+    ((data ?? []) as any[]).map((row) => ({
+      profileId: row.profile_id as string,
+      roundId: row.round_id as string | null,
+      submittedAt: (row.submitted_at as string | null) ?? "",
+      roundNumber: (row.event_round?.round_number as number | undefined) ?? null,
+    }))
+  );
 }
 
 // ─── Leaderboard ─────────────────────────────────────────────────────────────
