@@ -36,9 +36,24 @@ type RoundForm = {
   course_name: string;
   tee_male_id: string;
   tee_female_id: string;
+  /** Per-round date — what makes a two-day event legible. Round 1 defaults to
+   *  the event date server-side when left blank. */
+  scheduled_date: string;
 };
 
-const EMPTY_ROUND: RoundForm = { course_id: "", course_name: "", tee_male_id: "", tee_female_id: "" };
+const EMPTY_ROUND: RoundForm = {
+  course_id: "", course_name: "", tee_male_id: "", tee_female_id: "", scheduled_date: "",
+};
+
+/** Grow or shrink the per-round form array to exactly `n` rounds, keeping any
+ *  rounds the organiser has already filled in. */
+function resizeRounds(rounds: RoundForm[], n: number): RoundForm[] {
+  if (n === rounds.length) return rounds;
+  if (n > rounds.length) {
+    return [...rounds, ...Array.from({ length: n - rounds.length }, () => ({ ...EMPTY_ROUND }))];
+  }
+  return rounds.slice(0, n);
+}
 
 type FormState = {
   name: string;
@@ -1039,10 +1054,20 @@ export default function CreateEventClient() {
     const appliedModel = explicitModel
       ?? (appliedType !== prevForm.event_type ? FORMAT_DEFAULT_SCORING[appliedType] : prevForm.scoring_model);
 
+    // A template that says "36 holes" should create a 2-round event. This was
+    // the one template field that never carried over, so a multi-round
+    // competition silently produced single-round events.
+    const appliedNumRounds = Math.max(
+      1,
+      s.template_num_rounds ?? (parseInt(prevForm.num_rounds, 10) || 1),
+    );
+
     return {
       event_category: s.template_event_category ?? prevForm.event_category,
       event_type: appliedType,
       scoring_model: appliedModel,
+      num_rounds: String(appliedNumRounds),
+      rounds: resizeRounds(prevForm.rounds, appliedNumRounds),
       points_model: (et?.template_points_model ?? s.template_points_model) ?? prevForm.points_model,
       rules_text: (et?.template_rules_text ?? s.template_rules_text) ?? prevForm.rules_text,
       handicap_mode: (mergedSettings.handicap_mode as PlayingHandicapMode | undefined) ?? prevForm.handicap_mode,
@@ -1206,10 +1231,8 @@ export default function CreateEventClient() {
       // When num_rounds changes, resize the rounds array
       if (field === "num_rounds") {
         const n = Math.max(1, parseInt(value as string, 10) || 1);
-        if (n > prev.rounds.length) {
-          next.rounds = [...prev.rounds, ...Array.from({ length: n - prev.rounds.length }, () => ({ ...EMPTY_ROUND }))];
-        } else if (n < prev.rounds.length) {
-          next.rounds = prev.rounds.slice(0, n);
+        next.rounds = resizeRounds(prev.rounds, n);
+        if (n < prev.rounds.length) {
           // Remove tee box data for dropped rounds
           setRoundTeeBoxes((rb) => {
             const updated = { ...rb };
@@ -1312,6 +1335,7 @@ export default function CreateEventClient() {
           event_date: form.event_date || null,
           rounds: form.rounds.map((r) => ({
             course_id: r.course_id || null,
+            scheduled_date: r.scheduled_date || null,
             default_tee_male_id: r.tee_male_id || null,
             default_tee_female_id: r.tee_female_id || null,
           })),
@@ -1774,6 +1798,19 @@ export default function CreateEventClient() {
             <div className="text-[10px] uppercase tracking-wider text-emerald-200/55 font-semibold">
               {form.rounds.length > 1 ? `Round ${idx + 1} — Course` : "Course (optional)"}
             </div>
+            {form.rounds.length > 1 && (
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase tracking-wider text-emerald-200/65">
+                  Date {idx === 0 ? "(defaults to the event date)" : "(optional)"}
+                </label>
+                <input
+                  type="date"
+                  value={r.scheduled_date}
+                  onChange={(e) => updateRound(idx, { scheduled_date: e.target.value })}
+                  className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2 text-[12px] text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
+                />
+              </div>
+            )}
             {r.course_id ? (
               <div className="flex items-center justify-between rounded-xl border border-emerald-600/60 bg-emerald-900/30 px-3 py-2">
                 <span className="text-sm text-emerald-50 truncate">{r.course_name}</span>

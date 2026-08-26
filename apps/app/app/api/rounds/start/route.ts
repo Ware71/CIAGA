@@ -235,6 +235,40 @@ export async function POST(req: Request) {
 
     const teeSnapId = defaultSnapId;
 
+    // If this round belongs to an event, fix the field's handicaps for the whole
+    // event before snapshotting them. A committee sets handicaps once for a
+    // championship — without this, round 2 of a 36-hole event would play off an
+    // index that had already absorbed round 1. Must run BEFORE
+    // ciaga_persist_playing_handicaps, which reads the lock.
+    const { data: eventLink } = await supabaseAdmin
+      .from("event_tee_times")
+      .select("event_id, event_round_id")
+      .eq("round_id", round.id)
+      .maybeSingle();
+
+    if (eventLink?.event_id) {
+      const { error: lockErr } = await supabaseAdmin.rpc("ciaga_lock_event_handicaps", {
+        p_event_id: (eventLink as any).event_id,
+      });
+      // Non-fatal: without the lock the round falls back to the live index,
+      // which is the pre-existing behaviour rather than a broken one.
+      if (lockErr) {
+        console.error("[rounds/start] handicap lock failed:", lockErr.message);
+      }
+
+      // Mark the event round live. Nothing used to write this status, so
+      // reconcileEventStatus could only ever infer live-ness from the played
+      // rounds, and the admin round list showed 'scheduled' mid-play.
+      const eventRoundId = (eventLink as any).event_round_id as string | null;
+      if (eventRoundId) {
+        await supabaseAdmin
+          .from("event_rounds")
+          .update({ status: "live" })
+          .eq("id", eventRoundId)
+          .eq("status", "scheduled");
+      }
+    }
+
     // Persist resolved handicaps (snapshot at start to prevent mid-round drift)
     const { error: handicapErr } = await supabaseAdmin.rpc("ciaga_persist_playing_handicaps", {
       p_round_id: round.id,

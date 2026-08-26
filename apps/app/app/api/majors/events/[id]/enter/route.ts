@@ -207,12 +207,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
 
     // ── Create entry ──────────────────────────────────────────────────────────
+    // If the event has already started, its field's handicaps are fixed. A late
+    // entrant locks at their own entry index rather than being left to drift
+    // between rounds — see ciaga_lock_event_handicaps.
+    const alreadyLocked = (event as any).handicap_locked_at != null;
+
     const { data: entry, error } = await supabaseAdmin
       .from("event_entries")
       .insert({
         event_id: id,
         profile_id: profileId,
         assigned_handicap_index: handicapIndex,
+        locked_handicap_index: alreadyLocked ? handicapIndex : null,
         source: "manual",
         locked: false,
       })

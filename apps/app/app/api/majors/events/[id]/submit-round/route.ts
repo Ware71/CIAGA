@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 import { getEventById } from "@/lib/majors/queries";
+import { resolveEventRoundForRound } from "@/lib/majors/resolveEventRoundForRound";
 
 export const runtime = "nodejs";
 
@@ -113,11 +114,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
     }
 
+    // Stamp which event round this card belongs to. Without it the frozen
+    // leaderboard and countback fall back to ordering by submitted_at.
+    const resolved = await resolveEventRoundForRound(round_id);
+
     // Upsert submission (idempotent — player can resubmit, replaces existing)
     const { data: submission, error: subErr } = await supabaseAdmin
       .from("event_round_submissions")
       .upsert({
         event_id: eventId,
+        event_round_id: resolved?.eventRoundId ?? null,
         round_id,
         profile_id: profileId,
         score_used,

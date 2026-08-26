@@ -72,24 +72,34 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // For single-round events, auto-link to the sole event_round.
     let eventRoundId: string | null = bodyEventRoundId ?? null;
     let eventRoundLabel: string | null = null;
+    // The round's OWN course. A multi-round event can visit a different course
+    // each round, and the played round must be created on that course — the
+    // event-level course_id is only round 1's.
+    let eventRoundCourseId: string | null = null;
     if (!eventRoundId) {
       const { data: rounds } = await supabaseAdmin
         .from("event_rounds")
-        .select("id, round_number, name, default_tee_box_id_male, default_tee_box_id_female")
+        .select("id, round_number, name, course_id, default_tee_box_id_male, default_tee_box_id_female")
         .eq("event_id", id)
         .order("round_number", { ascending: true });
       if (rounds && rounds.length === 1) {
         eventRoundId = (rounds[0] as any).id;
         eventRoundLabel = (rounds[0] as any).name ?? `Round ${(rounds[0] as any).round_number}`;
+        eventRoundCourseId = (rounds[0] as any).course_id ?? null;
       }
     } else {
       const { data: er } = await supabaseAdmin
         .from("event_rounds")
-        .select("round_number, name, default_tee_box_id_male, default_tee_box_id_female")
+        .select("round_number, name, course_id, default_tee_box_id_male, default_tee_box_id_female")
         .eq("id", eventRoundId)
         .maybeSingle();
-      if (er) eventRoundLabel = (er as any).name ?? `Round ${(er as any).round_number}`;
+      if (er) {
+        eventRoundLabel = (er as any).name ?? `Round ${(er as any).round_number}`;
+        eventRoundCourseId = (er as any).course_id ?? null;
+      }
     }
+
+    const roundCourseId = eventRoundCourseId ?? event.course_id ?? null;
 
     const playerList = players ?? [];
     if (playerList.length > 4) {
@@ -155,7 +165,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         created_by: profileId,
         status: "scheduled",
         scheduled_at: tee_time,
-        course_id: event.course_id ?? null,
+        course_id: roundCourseId,
         name: eventRoundLabel ? `${event.name} · ${eventRoundLabel}` : event.name,
         visibility: "private",
         format_type: formatType,

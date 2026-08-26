@@ -30,6 +30,8 @@ import type {
 import { EVENT_TYPES, SCORING_MODELS, POINTS_MODELS, FEDEX_POINTS, computeFormulaPoints } from "@/lib/events/constants";
 import { isMatchplayLeague, isMatchplayKnockout } from "@/lib/majors/labels";
 import { useDebouncedRefresh } from "@/lib/majors/useDebouncedRefresh";
+import { splitCumulativeHoles } from "@/lib/majors/cumulativeHoles";
+import { eventDateRange } from "@/lib/majors/eventDates";
 import { runGuarded } from "@/lib/guardedAction";
 import type { EventDetailSnapshot } from "@/lib/majors/getEventDetailSnapshot";
 import type { PointsConfig } from "@/lib/majors/types";
@@ -285,6 +287,8 @@ function AddTeeTimeSheet({
   courseId,
   groupMembers,
   entrantProfileIds,
+  cutProfileIds,
+  cutAfterRound,
   entryFeeAmount,
   entryFeeCurrency,
   teeTimes,
@@ -296,6 +300,9 @@ function AddTeeTimeSheet({
   courseId: string | null;
   groupMembers: GroupMember[];
   entrantProfileIds: Set<string>;
+  /** Players who missed the cut — not eligible for rounds after it. */
+  cutProfileIds: Set<string>;
+  cutAfterRound: number | null;
   entryFeeAmount: number | null;
   entryFeeCurrency: string;
   teeTimes: EventTeeTime[];
@@ -318,17 +325,39 @@ function AddTeeTimeSheet({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch tee boxes for the event's course
+  // A multi-round event can visit a different course each round, so the tee
+  // list must follow the SELECTED round's course, not the event's. Falls back
+  // to the event course for rounds that don't override it.
+  const activeCourseId =
+    eventRounds.find((r) => r.id === selectedRoundId)?.course_id ?? courseId;
+
+  // Players who missed the cut don't play the rounds after it, so they should
+  // not be offered for those tee times. They stay selectable for earlier rounds
+  // (an organiser may still be tidying up a round that has already been played).
+  const selectedRoundNumber =
+    eventRounds.find((r) => r.id === selectedRoundId)?.round_number ?? null;
+  const hiddenByCut = (profileId: string) =>
+    cutAfterRound != null &&
+    selectedRoundNumber != null &&
+    selectedRoundNumber > cutAfterRound &&
+    cutProfileIds.has(profileId);
+
+  // Fetch tee boxes for the active round's course. Switching round can switch
+  // course, so drop any per-player tee already picked — those ids belong to the
+  // previous course and would be submitted as-is.
   useEffect(() => {
-    if (!courseId) return;
+    if (!activeCourseId) return;
+    let cancelled = false;
     (async () => {
-      const res = await fetch(`/api/courses/tee-boxes?course_id=${courseId}`);
-      if (res.ok) {
+      const res = await fetch(`/api/courses/tee-boxes?course_id=${activeCourseId}`);
+      if (res.ok && !cancelled) {
         const j = await res.json();
         setTeeBoxes(j.tee_boxes ?? []);
       }
     })();
-  }, [courseId]);
+    setPlayerTees({});
+    return () => { cancelled = true; };
+  }, [activeCourseId]);
 
   const totalPlayers = selectedPlayers.length + guests.length;
 
@@ -520,7 +549,7 @@ function AddTeeTimeSheet({
             <span className="text-[10px] text-emerald-200/50">{totalPlayers}/4</span>
           </div>
           <div className="space-y-1.5 max-h-48 overflow-y-auto">
-            {groupMembers.filter((m) => entrantProfileIds.has(m.profile_id)).map((m) => {
+            {groupMembers.filter((m) => entrantProfileIds.has(m.profile_id) && !hiddenByCut(m.profile_id)).map((m) => {
               const selected = selectedPlayers.includes(m.profile_id);
               const disabled = !selected && totalPlayers >= 4;
               const assignment = !selected ? assignedMap.get(m.profile_id) : undefined;
@@ -1174,6 +1203,13 @@ function EventSetupSheet({
   const [pointsModel, setPointsModel] = useState<string>(event.points_model ?? "none");
   const [standingsContrib, setStandingsContrib] = useState(event.standings_contribution ?? "event_only");
   const [teeTimeMode, setTeeTimeMode] = useState<"admin_assigned" | "self_select">((event as any).tee_time_mode ?? "admin_assigned");
+  // Cut: "after round N, top X and ties play on". Blank round = no cut.
+  const cutCfg = ((event as any).cut_config ?? {}) as Record<string, unknown>;
+  const [cutAfter, setCutAfter] = useState(cutCfg.after_round != null ? String(cutCfg.after_round) : "");
+  const [cutTopN, setCutTopN] = useState<number | null>(
+    cutCfg.top_n != null ? Number(cutCfg.top_n) : null,
+  );
+  const [cutTies, setCutTies] = useState(cutCfg.include_ties !== false);
   const [rulesText, setRulesText] = useState(event.rules_text ?? "");
   const [handicapMode, setHandicapMode] = useState<string>((handicap.mode as string) ?? "allowance_pct");
   const [handicapPct, setHandicapPct] = useState(handicap.allowance_pct != null ? String(handicap.allowance_pct) : "100");
@@ -1252,12 +1288,17 @@ function EventSetupSheet({
       return next;
     });
 
+  // Numbered by POSITION, not max(round_number) + 1. The old form counted
+  // rounds already marked for deletion, which is how The International 2026
+  // ended up with two rounds numbered 5 and 6.
   const addRound = () => {
-    const nextNum = Math.max(0, ...rounds.map((r) => r.round_number)) + 1;
-    setRounds((prev) => [
-      ...prev,
-      { id: null, round_number: nextNum, name: `Round ${nextNum}`, course_id: "", course_name: "", tee_male_id: "", tee_female_id: "", tee_boxes: [], status: "scheduled" },
-    ]);
+    setRounds((prev) => {
+      const nextNum = prev.length + 1;
+      return [
+        ...prev,
+        { id: null, round_number: nextNum, name: `Round ${nextNum}`, course_id: "", course_name: "", tee_male_id: "", tee_female_id: "", tee_boxes: [], status: "scheduled" },
+      ];
+    });
   };
 
   const removeRound = (idx: number) => {
@@ -1314,6 +1355,15 @@ function EventSetupSheet({
           num_rounds: rounds.length,
           rules_text: rulesText.trim() || null,
           standings_contribution: standingsContrib,
+          // Only a round AND a size make a cut; either alone is not a rule.
+          cut_config: cutAfter && cutTopN != null
+            ? {
+                after_round: parseInt(cutAfter, 10),
+                top_n: cutTopN,
+                include_ties: cutTies,
+                within_strokes: null,
+              }
+            : null,
           tee_time_mode: teeTimeMode,
           majors_status: majorsStatus,
         }),
@@ -1321,20 +1371,34 @@ function EventSetupSheet({
       const json = await res.json();
       if (!res.ok) { setError(json.error ?? "Save failed"); return; }
 
-      // 4. PATCH existing rounds / POST new rounds
-      await Promise.all(
-        rounds.map((r) =>
-          r.id
-            ? fetch(`/api/majors/events/${event.id}/rounds/${r.id}`, {
-                method: "PATCH", headers,
-                body: JSON.stringify({ course_id: r.course_id || null, default_tee_box_id_male: r.tee_male_id || null, default_tee_box_id_female: r.tee_female_id || null }),
-              })
-            : fetch(`/api/majors/events/${event.id}/rounds`, {
-                method: "POST", headers,
-                body: JSON.stringify({ round_number: r.round_number, name: r.name, course_id: r.course_id || null, default_tee_box_id_male: r.tee_male_id || null, default_tee_box_id_female: r.tee_female_id || null }),
-              })
-        )
-      );
+      // 4. PATCH existing rounds / POST new rounds.
+      // New rounds are numbered by ARRAY POSITION; the POST and DELETE routes
+      // then renumber the whole set to 1..N server-side, so the client never
+      // has to swap numbers through the UNIQUE(event_id, round_number).
+      // Sequential because those POSTs share that constraint.
+      for (const [idx, r] of rounds.entries()) {
+        if (r.id) {
+          await fetch(`/api/majors/events/${event.id}/rounds/${r.id}`, {
+            method: "PATCH", headers,
+            body: JSON.stringify({
+              course_id: r.course_id || null,
+              default_tee_box_id_male: r.tee_male_id || null,
+              default_tee_box_id_female: r.tee_female_id || null,
+            }),
+          });
+        } else {
+          await fetch(`/api/majors/events/${event.id}/rounds`, {
+            method: "POST", headers,
+            body: JSON.stringify({
+              round_number: idx + 1,
+              name: `Round ${idx + 1}`,
+              course_id: r.course_id || null,
+              default_tee_box_id_male: r.tee_male_id || null,
+              default_tee_box_id_female: r.tee_female_id || null,
+            }),
+          });
+        }
+      }
 
       onSaved({ ...event, ...json.event, group: event.group, course: newCourseId ? { id: newCourseId, name: newCourseName ?? "" } : event.course });
     } finally {
@@ -1407,6 +1471,60 @@ function EventSetupSheet({
                   value={entryEnd} onChange={(e) => setEntryEnd(e.target.value)} />
               </div>
             </div>
+
+            {/* Cut — only meaningful once there is a round to cut after */}
+            {!isAggregate && rounds.length > 1 && (
+              <div className="space-y-2">
+                <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Cut (optional)</label>
+                <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/30 p-3 space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase tracking-wider text-emerald-200/65">After round</label>
+                      <select
+                        value={cutAfter}
+                        onChange={(e) => setCutAfter(e.target.value)}
+                        className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-2 py-1.5 text-[11px] text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
+                      >
+                        <option value="">No cut</option>
+                        {/* Cutting after the final round would decide nothing.
+                            Value is round_number, which ciaga_apply_event_cut
+                            matches on; rounds are kept contiguous 1..N. */}
+                        {rounds.slice(0, -1).map((r, idx) => (
+                          <option key={r.id ?? idx} value={String(r.round_number)}>
+                            {r.name || `Round ${r.round_number}`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] uppercase tracking-wider text-emerald-200/65">Top</label>
+                      <NumberField
+                        value={cutTopN}
+                        onValueChange={setCutTopN}
+                        min={1}
+                        disabled={!cutAfter}
+                        placeholder="e.g. 10"
+                      />
+                    </div>
+                  </div>
+                  {cutAfter && (
+                    <label className="flex items-center gap-2 text-[11px] text-emerald-100/70">
+                      <input
+                        type="checkbox"
+                        checked={cutTies}
+                        onChange={(e) => setCutTies(e.target.checked)}
+                        className="accent-emerald-600"
+                      />
+                      Include ties (everyone level with the last qualifier plays on)
+                    </label>
+                  )}
+                  <p className="text-[10px] text-emerald-200/40 leading-relaxed">
+                    Players outside the cut keep their total and take no further part.
+                    They earn no season points.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Per-round course + tees */}
             {!isAggregate && (
@@ -1638,6 +1756,23 @@ export default function EventDetailClient({
   const [tab, setTab] = useState<Tab>(tabParam && VALID_TABS.includes(tabParam) ? tabParam : "overview");
   const [event, setCompetition] = useState<EventWithGroup | null>(null);
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
+  // Cut results ride along on the leaderboard rows (sourced from event_entries,
+  // which survives recomputes). null cut_config means no cut on this event.
+  const cutAfterRound: number | null =
+    ((event as any)?.cut_config?.after_round as number | undefined) ?? null;
+  const cutProfileIds = useMemo(
+    () => new Set(leaderboard.filter((r) => r.cut_status === "missed").map((r) => r.profile_id)),
+    [leaderboard],
+  );
+  // Changes only when scores actually move, so the per-round board can refresh
+  // off it without refetching on every render.
+  const leaderboardSig = useMemo(
+    () =>
+      leaderboard
+        .map((r: any) => `${r.profile_id}:${r.holes_completed ?? 0}:${r.net_score ?? ""}`)
+        .join("|"),
+    [leaderboard],
+  );
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [teeTimes, setTeeTimes] = useState<EventTeeTime[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1679,6 +1814,9 @@ export default function EventDetailClient({
     freeze_top_x: number | null;
     reveal_style: string;
     reveal_top_x: number | null;
+    total_holes?: number;
+    /** Holes in each round, in round order. Absent on older payloads. */
+    round_holes?: number[];
   } | null>(null);
   const [showReveal, setShowReveal] = useState(false);
   const [revealLoading, setRevealLoading] = useState(false);
@@ -1696,6 +1834,9 @@ export default function EventDetailClient({
     }>;
   } | null>(null);
   const [lbView, setLbView] = useState<"score" | "gross">("score");
+  /** null = the cumulative event board; otherwise an event_rounds.id. */
+  const [lbRoundId, setLbRoundId] = useState<string | null>(null);
+  const [roundLeaderboard, setRoundLeaderboard] = useState<any[] | null>(null);
   const [detailPlayer, setDetailPlayer] = useState<any | null>(null);
   const [playerRounds, setPlayerRounds] = useState<any[] | null>(null);
   const [playerRoundsLoading, setPlayerRoundsLoading] = useState(false);
@@ -1924,6 +2065,32 @@ export default function EventDetailClient({
 
   // Realtime: recompute leaderboard whenever event_leaderboard_entries changes
   // or the event freeze state transitions.
+  // Switching round drops the previous round's rows, which is what puts the
+  // board into its loading state.
+  useEffect(() => { setRoundLeaderboard(null); }, [lbRoundId]);
+
+  // Per-round standings, fetched on demand when the organiser picks a round.
+  // The cumulative board stays in state so switching back is instant.
+  //
+  // Keyed on a VALUE signature of the cumulative board rather than the array
+  // itself: `leaderboard` gets a new identity on every background refresh, so
+  // depending on it refetched continuously and left the spinner up for good.
+  useEffect(() => {
+    if (!lbRoundId) return;
+    let cancelled = false;
+    (async () => {
+      const session = await getViewerSession();
+      const res = await fetch(
+        `/api/majors/events/${eventId}/round-leaderboard?event_round_id=${lbRoundId}`,
+        { headers: { Authorization: `Bearer ${session?.accessToken}` } }
+      );
+      if (!res.ok || cancelled) return;
+      const json = await res.json();
+      if (!cancelled) setRoundLeaderboard(json.rows ?? []);
+    })();
+    return () => { cancelled = true; };
+  }, [lbRoundId, eventId, leaderboardSig]);
+
   useEffect(() => {
     const channel = supabase
       .channel(`event-lb:${eventId}`)
@@ -2372,12 +2539,22 @@ export default function EventDetailClient({
         {/* Date / course */}
         {(event.event_date || event.course || eventRounds.length > 0) && (
           <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 space-y-1">
-            {event.event_date && (
-              <div className="flex items-center gap-2 text-[12px] text-emerald-100/70">
-                <span className="text-emerald-200/40">📅</span>
-                {new Date(event.event_date).toLocaleDateString([], { weekday: "short", year: "numeric", month: "long", day: "numeric" })}
-              </div>
-            )}
+            {event.event_date && (() => {
+              // A multi-day event's span lives on the rounds, not on event_date.
+              const { start, end } = eventDateRange(event.event_date, eventRounds);
+              const long = (iso: string) =>
+                new Date(iso).toLocaleDateString([], { weekday: "short", year: "numeric", month: "long", day: "numeric" });
+              const short = (iso: string) =>
+                new Date(iso).toLocaleDateString([], { weekday: "short", month: "long", day: "numeric" });
+              return (
+                <div className="flex items-center gap-2 text-[12px] text-emerald-100/70">
+                  <span className="text-emerald-200/40">📅</span>
+                  {start && end && start !== end
+                    ? `${short(start)} – ${long(end)}`
+                    : long(start ?? event.event_date)}
+                </div>
+              );
+            })()}
             {eventRounds.length > 0 ? (
               <div className="space-y-0.5">
                 {eventRounds.map((r) => (
@@ -2819,11 +2996,21 @@ export default function EventDetailClient({
     leaderboard: (() => {
       const isFrozen = leaderboardFreeze?.freeze_state === "frozen";
       function getThruLabel(row: any): string {
-        const holesPerRound = 18;
         const holesShown = row.holes_completed ?? row.holes_shown ?? 0;
         if (holesShown === 0) return "";
-        const completedRounds = Math.floor(holesShown / holesPerRound);
-        const holesInRound = holesShown % holesPerRound;
+        // In the single-round view holes_completed is within that round, not
+        // cumulative, so there is no round to name — just how far they are.
+        if (viewingRound) {
+          return row.is_live ? `thru ${holesShown}` : "[F]";
+        }
+        // holes_completed is cumulative across the event, so walk the rounds to
+        // work out which one the player is in. Rounds aren't necessarily 18
+        // holes — a 9-hole leg would shift every later round.
+        const { completedRounds, holesInRound, holesPerRound } = splitCumulativeHoles(
+          holesShown,
+          leaderboardFreeze?.round_holes,
+          event?.num_rounds ?? 1,
+        );
 
         const isFrozenRow = isFrozen && !row.is_live && (
           leaderboardFreeze?.freeze_scope !== "top_x" ||
@@ -2852,17 +3039,27 @@ export default function EventDetailClient({
         }
         return `R${completedRounds + 1} thru ${holesInRound}`;
       }
-      const rankedIds = new Set(leaderboard.map((r) => r.profile_id));
-      const unranked = participants.filter((p) => !rankedIds.has(p.profile_id));
-      const showPts = event?.points_model && event.points_model !== "none"
+      // Viewing one round rather than the cumulative event. The rows come from
+      // ciaga_event_round_leaderboard in the same shape, so the table below
+      // renders either without knowing the difference.
+      const viewingRound = lbRoundId != null;
+      const baseRows: any[] = viewingRound ? roundLeaderboard ?? [] : leaderboard;
+
+      const rankedIds = new Set(baseRows.map((r) => r.profile_id));
+      const unranked = viewingRound
+        ? []
+        : participants.filter((p) => !rankedIds.has(p.profile_id));
+      // Season points are earned by the event, not by one round of it.
+      const showPts = !viewingRound
+        && event?.points_model && event.points_model !== "none"
         && event.standings_contribution !== "event_only";
       const displayRows = lbView === "gross"
-        ? [...leaderboard].sort((a, b) => {
+        ? [...baseRows].sort((a, b) => {
             const aToPar = (a.gross_score ?? Infinity) - (a.course_par ?? 0);
             const bToPar = (b.gross_score ?? Infinity) - (b.course_par ?? 0);
             return aToPar - bToPar;
           })
-        : leaderboard;
+        : baseRows;
 
       const handleRoundCardClick = async (roundId: string) => {
         if (scorecardRoundId === roundId) { setScorecardRoundId(null); return; }
@@ -2964,6 +3161,46 @@ export default function EventDetailClient({
               ))}
             </div>
           )}
+          {/* Round-by-round view. Only worth showing when there is more than
+              one round, and pointless while the board is frozen — the freeze
+              is hiding exactly the holes a round view would reveal. */}
+          {eventRounds.length > 1 && leaderboardFreeze?.freeze_state !== "frozen" && (
+            <div className="flex gap-1 mb-2 overflow-x-auto">
+              <button
+                type="button"
+                onClick={() => setLbRoundId(null)}
+                className={`px-3 py-1 rounded-full text-[11px] font-semibold shrink-0 transition-colors ${
+                  lbRoundId === null
+                    ? "bg-emerald-700 text-white"
+                    : "border border-emerald-900/60 text-emerald-200/70 hover:text-emerald-50"
+                }`}
+              >
+                Overall
+              </button>
+              {eventRounds.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => setLbRoundId(r.id)}
+                  className={`px-3 py-1 rounded-full text-[11px] font-semibold shrink-0 transition-colors ${
+                    lbRoundId === r.id
+                      ? "bg-emerald-700 text-white"
+                      : "border border-emerald-900/60 text-emerald-200/70 hover:text-emerald-50"
+                  }`}
+                >
+                  {`R${r.round_number}`}
+                </button>
+              ))}
+            </div>
+          )}
+          {viewingRound && roundLeaderboard === null && (
+            <div className="text-sm text-emerald-100/60 text-center py-8">Loading round…</div>
+          )}
+          {viewingRound && roundLeaderboard !== null && roundLeaderboard.length === 0 && (
+            <div className="text-sm text-emerald-100/60 text-center py-8">
+              No scores in this round yet.
+            </div>
+          )}
           {leaderboard.length === 0 && unranked.length === 0 && (
             <div className="text-sm text-emerald-100/60 text-center py-8">
               No participants yet. Enter to appear here.
@@ -2973,7 +3210,10 @@ export default function EventDetailClient({
             const pts = showPts
               ? (row.points_earned ?? getPointsForPosition(row.position ?? null, event.points_model, event.points_table as Record<string, unknown>, event.points_config, event.num_rounds))
               : null;
-            const thru = getThruLabel(row);
+            // A cut player's total stands, but they play no further, so say so
+            // instead of showing a "thru" that will never advance.
+            const missedCut = row.cut_status === "missed" && !viewingRound;
+            const thru = missedCut ? "CUT" : getThruLabel(row);
             const frozenThreshold =
               ((leaderboardFreeze as any)?.total_holes ?? (event?.num_rounds ?? 1) * 18)
               - (leaderboardFreeze?.freeze_last_holes ?? 0);
@@ -5105,6 +5345,8 @@ export default function EventDetailClient({
           courseId={event.course_id ?? null}
           groupMembers={groupMembers}
           entrantProfileIds={new Set(participants.map((p) => p.profile_id))}
+          cutProfileIds={cutProfileIds}
+          cutAfterRound={cutAfterRound}
           entryFeeAmount={(event as any).entry_fee_amount ?? null}
           entryFeeCurrency={(event as any).entry_fee_currency ?? "GBP"}
           teeTimes={teeTimes}

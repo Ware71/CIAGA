@@ -3,6 +3,7 @@ import { emitRoundPlayedFeedItem } from "@/lib/feed/generators/roundPlayed";
 import { emitHoleEventFeedItems } from "@/lib/feed/generators/holeEvents";
 import { emitAchievementFeedItems } from "@/lib/feed/generators/achievements";
 import { tryCompleteEventRound } from "@/lib/majors/tryCompleteEventRound";
+import { resolveEventRoundForRound } from "@/lib/majors/resolveEventRoundForRound";
 import { notifyFollowersOfRoundActivity, type RoundResult } from "@/lib/notifications/roundActivity";
 
 /**
@@ -105,20 +106,11 @@ async function autoSubmitEventRound(roundId: string, teeTimeId: string) {
     .maybeSingle();
   const isStableford = (evt as any)?.scoring_model === "stableford_points";
 
-  let eventRoundId: string | null = (teeTime as any).event_round_id ?? null;
-
-  // For single-round events the tee time may not have event_round_id set yet;
-  // fall back to the first (and only) event round.
-  if (!eventRoundId) {
-    const { data: er } = await supabaseAdmin
-      .from("event_rounds")
-      .select("id")
-      .eq("event_id", (teeTime as any).event_id)
-      .order("round_number", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    eventRoundId = (er as any)?.id ?? null;
-  }
+  // The tee time is the authority; the sole-round fallback only applies to
+  // single-round events. See resolveEventRoundForRound for why a multi-round
+  // event must not fall back to round 1.
+  const resolved = await resolveEventRoundForRound(roundId);
+  const eventRoundId: string | null = resolved?.eventRoundId ?? null;
 
   // Get all non-guest participants in the round who have profiles
   const { data: participants } = await supabaseAdmin

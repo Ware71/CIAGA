@@ -1,5 +1,10 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { emitCompetitionRoundFeedItems } from "@/lib/feed/generators/competitionRound";
+import {
+  computeRoundCompletion,
+  isEventComplete,
+  newlyCompletedRoundIds,
+} from "@/lib/majors/eventRoundCompletion";
 
 export type EventStatus =
   | "upcoming"
@@ -35,16 +40,16 @@ export async function reconcileEventStatus(
   const [eventResult, roundsResult, teeTimesResult] = await Promise.all([
     supabaseAdmin
       .from("events")
-      .select("majors_status, event_date, leaderboard_freeze_state")
+      .select("majors_status, event_date, leaderboard_freeze_state, num_rounds")
       .eq("id", eventId)
       .maybeSingle(),
     supabaseAdmin
       .from("event_rounds")
-      .select("status")
+      .select("id, status")
       .eq("event_id", eventId),
     supabaseAdmin
       .from("event_tee_times")
-      .select("id, round_id")
+      .select("id, round_id, event_round_id")
       .eq("event_id", eventId),
   ]);
 
@@ -59,6 +64,7 @@ export async function reconcileEventStatus(
     majors_status: EventStatus;
     event_date: string | null;
     leaderboard_freeze_state: string | null;
+    num_rounds: number | null;
   } | null;
   if (!evt) return;
 
@@ -69,9 +75,13 @@ export async function reconcileEventStatus(
   // taps Reveal Results, which un-freezes and then calls this function again.
   const isFrozen = evt.leaderboard_freeze_state === "frozen";
 
-  const rounds = (roundsResult.data ?? []) as { status: string }[];
+  const rounds = (roundsResult.data ?? []) as { id: string; status: string }[];
 
-  const slots = (teeTimesResult.data ?? []) as { id: string; round_id: string | null }[];
+  const slots = (teeTimesResult.data ?? []) as {
+    id: string;
+    round_id: string | null;
+    event_round_id: string | null;
+  }[];
   const linkedRoundIds = slots
     .map((s) => s.round_id)
     .filter((id): id is string => id != null);
@@ -94,10 +104,12 @@ export async function reconcileEventStatus(
   const teeTimeRows: Array<{
     id: string;
     round_id: string | null;
+    event_round_id: string | null;
     rounds: { id: string; status: string } | null;
   }> = slots.map((s) => ({
     id: s.id,
     round_id: s.round_id,
+    event_round_id: s.event_round_id,
     rounds: s.round_id ? roundById.get(s.round_id) ?? null : null,
   }));
 
@@ -122,19 +134,41 @@ export async function reconcileEventStatus(
   const anyLinkedRoundEverStarted = activeLinkedRounds.some(
     (r) => r.status === "live" || r.status === "starting" || r.status === "finished"
   );
-  // All active linked rounds finished (cancelled ones disregarded)
+  // All active linked rounds finished (cancelled ones disregarded).
+  // NOTE: this spans the WHOLE event, so on a multi-round event it goes true as
+  // soon as the rounds that HAVE tee times are done. It is only safe to act on
+  // for the legacy single-round path below — never as an event-completion test.
   const allActiveLinkedRoundsFinished =
     activeLinkedRounds.length > 0 &&
     activeLinkedRounds.every((r) => r.status === "finished");
 
-  // If all active tee-time rounds are done, propagate to event_rounds so later
-  // calls see event_rounds.status = 'completed' consistently
-  if (allActiveLinkedRoundsFinished) {
+  // Completion is decided per event round — see lib/majors/eventRoundCompletion.
+  const eventRoundCompletion = computeRoundCompletion(
+    rounds,
+    teeTimeRows.map((tt) => ({
+      event_round_id: tt.event_round_id,
+      roundStatus: tt.rounds?.status ?? null,
+    })),
+  );
+
+  // Persist completion for the rounds that actually finished, and only those.
+  const newlyComplete = newlyCompletedRoundIds(eventRoundCompletion);
+
+  if (newlyComplete.length > 0) {
     await supabaseAdmin
       .from("event_rounds")
       .update({ status: "completed" })
-      .eq("event_id", eventId)
-      .not("status", "in", '("completed","cancelled")');
+      .in("id", newlyComplete);
+
+    // A round finishing may be the cut round. The function is a no-op unless
+    // the event has a cut configured and that round is complete, and it is
+    // idempotent, so calling it on every round completion is safe.
+    const { error: cutErr } = await supabaseAdmin.rpc("ciaga_apply_event_cut", {
+      p_event_id: eventId,
+    });
+    if (cutErr) {
+      console.error("[reconcileEventStatus] cut failed:", cutErr.message);
+    }
   }
 
   // Keep original check: if every defined event_round is cancelled, cancel the event
@@ -164,14 +198,28 @@ export async function reconcileEventStatus(
 
     const daysDiff = (today.getTime() - evtDate.getTime()) / (1000 * 60 * 60 * 24);
 
-    const allRoundsCompleted =
-      (activeEventRounds.length > 0 && activeEventRounds.every((r) => r.status === "completed")) ||
+    // The event is done only when EVERY non-cancelled round is. A round with no
+    // tee times (round 2 of a deferred draw) is not complete, so the event
+    // correctly stays live.
+    const allRoundsCompleted = isEventComplete(eventRoundCompletion);
+
+    // Legacy events that never had event_rounds rows created. Only trust the
+    // event-wide "all linked rounds finished" test when there is a single round
+    // to finish; a multi-round event in this state needs its rounds initialising
+    // (the event page shows an "Initialise rounds" banner for exactly this).
+    const legacySingleRoundComplete =
+      activeEventRounds.length === 0 &&
+      (evt.num_rounds ?? 1) <= 1 &&
       allActiveLinkedRoundsFinished;
 
     const anyRoundLive =
       activeEventRounds.some((r) => r.status === "live") || anyLinkedRoundLive;
 
-    if (activeTeeTimeCount > 0 && allRoundsCompleted && !isFrozen) {
+    if (
+      activeTeeTimeCount > 0 &&
+      (allRoundsCompleted || legacySingleRoundComplete) &&
+      !isFrozen
+    ) {
       target = "completed";
     } else if (daysDiff >= 0 || anyRoundLive || anyLinkedRoundEverStarted) {
       target = "live";
