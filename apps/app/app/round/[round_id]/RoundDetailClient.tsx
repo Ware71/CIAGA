@@ -286,6 +286,12 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     teams,
     teeSnapshotId,
     holes,
+    teeSets,
+    teeSetIdByParticipantId,
+    holesByTeeSetId,
+    holeMetaByParticipant,
+    defaultTeeSetId,
+    viewerTeeSetId,
     defaultTeeName,
     playingHandicapMode,
     playingHandicapValue,
@@ -426,18 +432,75 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
 
   const isFinished = status === "completed" || status === "finished" || status === "ended";
 
+  // Which tee's Par/Yds/SI the meta columns show. Purely presentational — each
+  // player's own scoring still comes from THEIR tee, via holeFor below.
+  const [displayTeeSetId, setDisplayTeeSetId] = useState<string | null>(null);
+
+  // Default to the viewer's own tee, else the round default. Re-syncs as those
+  // resolve, and repairs itself if the selected tee goes away.
+  useEffect(() => {
+    const preferred = viewerTeeSetId ?? defaultTeeSetId;
+    setDisplayTeeSetId((cur) => (cur && teeSets.some((t) => t.id === cur) ? cur : preferred));
+  }, [viewerTeeSetId, defaultTeeSetId, teeSets]);
+
+  const displayHoles = useMemo(
+    () => (displayTeeSetId ? holesByTeeSetId[displayTeeSetId] : undefined) ?? holes,
+    [displayTeeSetId, holesByTeeSetId, holes]
+  );
+
   const holesList: Hole[] = useMemo(() => {
-    return holes.length > 0
-      ? holes
+    return displayHoles.length > 0
+      ? displayHoles
       : (Array.from({ length: holeCount }, (_, i) => ({
           hole_number: i + 1,
           par: null,
           yardage: null,
           stroke_index: null,
         })) as Hole[]);
-  }, [holes, holeCount]);
+  }, [displayHoles, holeCount]);
 
   const metaSums = useMemo(() => sumMeta(holesList), [holesList]);
+
+  /**
+   * This player's own hole — their tee's par, yardage and stroke index. Falls
+   * back to the displayed hole, so callers never need to know whether the round
+   * is multi-tee.
+   */
+  const holeFor = useCallback(
+    (participantId: string, hole: Hole): Hole =>
+      holeMetaByParticipant[participantId]?.[hole.hole_number] ?? hole,
+    [holeMetaByParticipant]
+  );
+
+  /** Same, for the callers that only have a hole number. */
+  const holeNumFor = useCallback(
+    (participantId: string, holeNumber: number): Hole | undefined =>
+      holeMetaByParticipant[participantId]?.[holeNumber] ??
+      holesList.find((h) => h.hole_number === holeNumber),
+    [holeMetaByParticipant, holesList]
+  );
+
+  /** Never 0 — strokesReceivedOnHole divides by this. */
+  const holeCountFor = useCallback(
+    (participantId: string): number => {
+      const t = teeSets.find((s) => s.id === teeSetIdByParticipantId[participantId]);
+      return t?.holes.length || holesList.length || 18;
+    },
+    [teeSets, teeSetIdByParticipantId, holesList.length]
+  );
+
+  const scoringCtx = useMemo(() => ({ holeFor, holeCountFor }), [holeFor, holeCountFor]);
+
+  const multiTee = teeSets.length > 1;
+
+  /** Tee name against each player, only worth the space when tees differ. */
+  const teeLabelFor = useCallback(
+    (p: Participant): string | null => {
+      if (!multiTee) return null;
+      return teeSets.find((t) => t.id === teeSetIdByParticipantId[p.id])?.name ?? null;
+    },
+    [multiTee, teeSets, teeSetIdByParticipantId]
+  );
 
   const getParticipantLabel = useCallback((p: Participant) => {
     const prof = pickProfile(p);
@@ -483,10 +546,10 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
   }, [isFinished, formatType, participants, holesList, holeStatesByKey]);
 
   const formatDisplays = useMemo<FormatDisplayData[]>(() => {
-    const main = computeFormatDisplay(formatType, formatConfig, participants, holesList, scoresByKey, holeStatesByKey, teams, getParticipantLabel, notAcceptedIds, wolfPicksByHole, startingHole);
-    const side = computeSideGameDisplays(sideGames, participants, holesList, scoresByKey, holeStatesByKey, wolfPicksByHole);
+    const main = computeFormatDisplay(formatType, formatConfig, participants, holesList, scoresByKey, holeStatesByKey, teams, getParticipantLabel, notAcceptedIds, wolfPicksByHole, startingHole, scoringCtx);
+    const side = computeSideGameDisplays(sideGames, participants, holesList, scoresByKey, holeStatesByKey, wolfPicksByHole, scoringCtx);
     return [...main, ...side];
-  }, [formatType, formatConfig, sideGames, participants, holesList, scoresByKey, holeStatesByKey, teams, getParticipantLabel, notAcceptedIds, wolfPicksByHole, startingHole]);
+  }, [formatType, formatConfig, sideGames, participants, holesList, scoresByKey, holeStatesByKey, teams, getParticipantLabel, notAcceptedIds, wolfPicksByHole, startingHole, scoringCtx]);
 
   // ── Wolf live state ────────────────────────────────────────────────────
   const wolfActive = useMemo(
@@ -606,7 +669,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
 
       const st = holeStateFor(participantId, holeNumber);
       const p = participants.find((x) => x.id === participantId);
-      const h = holesList.find((x) => x.hole_number === holeNumber);
+      const h = holeNumFor(participantId, holeNumber);
 
       if (st === "not_started") {
         // Rule 3.2: never played, never scored.
@@ -615,7 +678,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
 
       if (st === "picked_up") {
         if (!h?.par) return null;
-        if (scoreView === "gross") return puPenaltyGross(h.par, p?.course_handicap ?? null, h.stroke_index, holesList.length);
+        if (scoreView === "gross") return puPenaltyGross(h.par, p?.course_handicap ?? null, h.stroke_index, holeCountFor(participantId));
         return h.par + 2;
       }
 
@@ -623,10 +686,10 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
       if (typeof gross !== "number") return null;
       if (scoreView === "gross") return gross;
 
-      const recv = strokesReceivedOnHole(p?.course_handicap ?? null, h?.stroke_index ?? null, holesList.length);
+      const recv = strokesReceivedOnHole(p?.course_handicap ?? null, h?.stroke_index ?? null, holeCountFor(participantId));
       return netFromGross(gross, recv);
     },
-    [holeStateFor, scoreFor, scoreView, participants, holesList, activeFormatDisplay]
+    [holeStateFor, scoreFor, scoreView, participants, holeNumFor, holeCountFor, activeFormatDisplay]
   );
 
   // Numeric scoring value for totals (includes PU penalty, unlike displayedScoreFor which returns "PU")
@@ -643,11 +706,11 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
       }
 
       if (st === "picked_up") {
-        const h = holesList.find((x) => x.hole_number === holeNumber);
+        const h = holeNumFor(participantId, holeNumber);
         if (!h?.par) return null;
         const p = participants.find((x) => x.id === participantId);
         const courseHcp = p?.course_handicap ?? null;
-        if (scoreView === "gross") return puPenaltyGross(h.par, courseHcp, h.stroke_index, holesList.length);
+        if (scoreView === "gross") return puPenaltyGross(h.par, courseHcp, h.stroke_index, holeCountFor(participantId));
         return h.par + 2; // net: strokes received cancel out
       }
 
@@ -656,11 +719,11 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
       if (scoreView === "gross") return gross;
 
       const p = participants.find((x) => x.id === participantId);
-      const h = holesList.find((x) => x.hole_number === holeNumber);
-      const recv = strokesReceivedOnHole(p?.course_handicap ?? null, h?.stroke_index ?? null, holesList.length);
+      const h = holeNumFor(participantId, holeNumber);
+      const recv = strokesReceivedOnHole(p?.course_handicap ?? null, h?.stroke_index ?? null, holeCountFor(participantId));
       return netFromGross(gross, recv);
     },
-    [holeStateFor, scoreFor, scoreView, participants, holesList]
+    [holeStateFor, scoreFor, scoreView, participants, holeNumFor, holeCountFor]
   );
 
   const totals = useMemo(() => {
@@ -701,19 +764,25 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     return byParticipant;
   }, [participants, holesList, scoringValueFor, scoreView, activeFormatDisplay]);
 
+  // Each player is measured against THEIR OWN tee's par total. Using the
+  // displayed tee's would make a player's to-par swing as the toggle moved.
   const toParTotalByParticipant = useMemo(() => {
     const map: Record<string, number | null> = {};
-    const parTot = metaSums.parTot;
     for (const p of participants) {
-      if (typeof parTot !== "number") {
-        map[p.id] = null;
-        continue;
+      let parTot = 0;
+      let hasPar = false;
+      for (const h of holesList) {
+        const par = holeFor(p.id, h).par;
+        if (typeof par === "number") {
+          parTot += par;
+          hasPar = true;
+        }
       }
       const t = totals[p.id]?.total ?? 0;
-      map[p.id] = typeof t === "number" ? t - parTot : null;
+      map[p.id] = hasPar && typeof t === "number" ? t - parTot : null;
     }
     return map;
-  }, [participants, totals, metaSums.parTot]);
+  }, [participants, totals, holesList, holeFor]);
 
   const holesCompletedByParticipantId = useMemo(() => {
     const map: Record<string, number> = {};
@@ -731,8 +800,9 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
       const courseHcp = typeof p.course_handicap === "number" ? p.course_handicap : null;
       for (const h of holesList) {
         const st = holeStatesByKey[`${p.id}:${h.hole_number}`] ?? "not_started";
-        if (st === "picked_up" && h.par) {
-          const penalty = puPenaltyGross(h.par, courseHcp, h.stroke_index);
+        const hp = holeFor(p.id, h);
+        if (st === "picked_up" && hp.par) {
+          const penalty = puPenaltyGross(hp.par, courseHcp, hp.stroke_index, holeCountFor(p.id));
           total += penalty;
           if (h.hole_number <= 9) out += penalty; else inn += penalty;
         } else {
@@ -746,7 +816,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
       byPid[p.id] = { out, in: inn, total };
     }
     return byPid;
-  }, [participants, holesList, scoreFor, holeStatesByKey]);
+  }, [participants, holesList, scoreFor, holeStatesByKey, holeFor, holeCountFor]);
 
   // Always-available net totals for leaderboard
   const netTotals = useMemo(() => {
@@ -759,14 +829,15 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
         : typeof p.course_handicap === "number" ? p.course_handicap : 0;
       for (const h of holesList) {
         const st = holeStatesByKey[`${p.id}:${h.hole_number}`] ?? "not_started";
-        if (st === "picked_up" && h.par) {
-          const net = h.par + 2; // PU net penalty (strokes received cancel out)
+        const hp = holeFor(p.id, h);
+        if (st === "picked_up" && hp.par) {
+          const net = hp.par + 2; // PU net penalty (strokes received cancel out)
           total += net;
           if (h.hole_number <= 9) out += net; else inn += net;
         } else {
           const gross = scoreFor(p.id, h.hole_number);
-          if (typeof gross === "number" && h.par) {
-            const recv = strokesReceivedOnHole(hcp, h.stroke_index, holesList.length);
+          if (typeof gross === "number" && hp.par) {
+            const recv = strokesReceivedOnHole(hcp, hp.stroke_index, holeCountFor(p.id));
             const net = netFromGross(gross, recv);
             total += net;
             if (h.hole_number <= 9) out += net;
@@ -777,7 +848,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
       byPid[p.id] = { out, in: inn, total };
     }
     return byPid;
-  }, [participants, holesList, scoreFor, holeStatesByKey]);
+  }, [participants, holesList, scoreFor, holeStatesByKey, holeFor, holeCountFor]);
 
   const parThroughByParticipantId = useMemo(() => {
     const map: Record<string, number | null> = {};
@@ -787,15 +858,16 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
       for (const h of holesList) {
         const st = holeStatesByKey[`${p.id}:${h.hole_number}`] ?? "not_started";
         const s = scoreFor(p.id, h.hole_number);
-        if ((st === "picked_up" || typeof s === "number") && typeof h.par === "number") {
-          parThrough += h.par;
+        const par = holeFor(p.id, h).par;
+        if ((st === "picked_up" || typeof s === "number") && typeof par === "number") {
+          parThrough += par;
           hasAny = true;
         }
       }
       map[p.id] = hasAny ? parThrough : null;
     }
     return map;
-  }, [participants, holesList, holeStatesByKey, scoreFor]);
+  }, [participants, holesList, holeStatesByKey, scoreFor, holeFor]);
 
   const landscapePlan: LandscapeCol[] = useMemo(() => {
     const front = holesList.filter((h) => h.hole_number <= 9);
@@ -1795,6 +1867,35 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
 
         {!needsSetup && isFinished && winner ? <FinalResultsPanel winner={winner} finalRows={finalRows} formatDisplay={formatDisplays[0] ?? null} notAcceptedIds={handicapRejection?.ids} notAcceptedReason={handicapRejection?.label} handicaps={scoreView === "gross" ? undefined : finalHandicapsByParticipant} /> : null}
 
+        {!needsSetup && multiTee ? (
+          <div className="flex items-center justify-center gap-2 flex-wrap">
+            <span className="text-[10px] uppercase tracking-[0.14em] text-emerald-200/70">Tee</span>
+            <div className="rounded-xl border border-emerald-900/70 bg-[#0b3b21]/50 p-1 flex items-center gap-0.5">
+              {teeSets.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setDisplayTeeSetId(t.id)}
+                  className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg transition-colors ${
+                    displayTeeSetId === t.id
+                      ? "bg-[#f5e6b0] text-[#042713]"
+                      : "text-emerald-100/80 hover:bg-emerald-900/30"
+                  }`}
+                >
+                  {t.name ?? "Tee"}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setMenuOpen(true)}
+              className="text-[10px] text-emerald-100/70 underline underline-offset-2"
+            >
+              Compare
+            </button>
+          </div>
+        ) : null}
+
         {!needsSetup ? (
           isPortrait ? (
             <ScorecardPortrait
@@ -1819,6 +1920,9 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
               getParticipantAvatar={singleBallGetAvatar}
               getParticipantAvatarList={getParticipantAvatarList}
               wolfRoleByKey={wolfActive ? wolfRoleByKey : undefined}
+              holeFor={holeFor}
+              holeCountFor={holeCountFor}
+              teeLabelFor={teeLabelFor}
             />
           ) : (
             <ScorecardLandscape
@@ -1841,6 +1945,9 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
               getParticipantLabel={singleBallGetLabel}
               getParticipantAvatar={singleBallGetAvatar}
               wolfRoleByKey={wolfActive ? wolfRoleByKey : undefined}
+              holeFor={holeFor}
+              holeCountFor={holeCountFor}
+              teeLabelFor={teeLabelFor}
             />
           )
         ) : null}
@@ -1864,6 +1971,8 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
             courseLabel={courseLabel}
             formatType={formatType}
             defaultTeeName={defaultTeeName}
+            teeSets={teeSets}
+            teeSetIdByParticipantId={teeSetIdByParticipantId}
             playingHandicapMode={playingHandicapMode}
             playingHandicapValue={playingHandicapValue}
             holesCompletedByParticipantId={holesCompletedByParticipantId}
@@ -1902,7 +2011,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
         {!isFinished && entryOpen && entryPid && entryHole ? (
           <ScoreEntrySheet
             participants={participants}
-            holes={holesList}
+            holes={(entryPid ? holesByTeeSetId[teeSetIdByParticipantId[entryPid] ?? ""] : undefined) ?? holesList}
             pid={entryPid}
             holeNumber={entryHole}
             mode={entryMode}
@@ -1948,7 +2057,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
                 <HoleDetailPanel
                   detail={holeDetailFor(entryPid, entryHole)}
                   holeNumber={entryHole}
-                  par={holesList.find((h) => h.hole_number === entryHole)?.par ?? null}
+                  par={holeNumFor(entryPid, entryHole)?.par ?? null}
                   disabled={!canScore || isFinished}
                   onChange={(next) => saveHoleDetail(entryPid, entryHole, next)}
                 />

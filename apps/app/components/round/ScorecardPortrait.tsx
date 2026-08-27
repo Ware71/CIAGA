@@ -118,6 +118,17 @@ export default function ScorecardPortrait(props: {
   getParticipantAvatarList?: (p: Participant) => Array<{ name: string; url: string | null }> | null;
   /** Wolf role tag per `${participantId}:${holeNumber}` (W/WP/LW/BW). */
   wolfRoleByKey?: Record<string, "W" | "WP" | "LW" | "BW">;
+
+  /**
+   * This player's own hole. The meta columns show ONE tee (whichever the toggle
+   * selects), but a player on a different tee has their own par and stroke
+   * index, so their badges and stroke dots must come from here. Defaults to
+   * identity for a single-tee round.
+   */
+  holeFor?: (participantId: string, hole: Hole) => Hole;
+  holeCountFor?: (participantId: string) => number;
+  /** Short tee name shown against each player when the round has >1 tee. */
+  teeLabelFor?: (p: Participant) => string | null;
 }) {
   const {
     participants,
@@ -141,7 +152,13 @@ export default function ScorecardPortrait(props: {
     getParticipantAvatar,
     getParticipantAvatarList,
     wolfRoleByKey,
+    holeFor,
+    holeCountFor,
+    teeLabelFor,
   } = props;
+
+  const holeOf = (pid: string, h: Hole): Hole => (holeFor ? holeFor(pid, h) : h);
+  const countOf = (pid: string): number => (holeCountFor ? holeCountFor(pid) : holesList.length);
 
   const portraitTag = (text: string) => <div className="text-[10px] font-semibold leading-none">{text}</div>;
 
@@ -192,7 +209,10 @@ export default function ScorecardPortrait(props: {
                 ? `HI ${hi} · CH ${ch}`
                 : "";
 
-            const title = `${name} · HI ${hi} · CH ${ch}${ph != null ? ` · PH ${ph}` : ""}`;
+            const teeLabel = teeLabelFor?.(p) ?? null;
+            const title = `${name} · HI ${hi} · CH ${ch}${ph != null ? ` · PH ${ph}` : ""}${
+              teeLabel ? ` · ${teeLabel} tee` : ""
+            }`;
 
             // Team avatar stack rendering (scramble and other team formats)
             if (avatarList && avatarList.length > 0) {
@@ -234,12 +254,18 @@ export default function ScorecardPortrait(props: {
                 title={title}
               >
                 {compactPlayers ? (
-                  <div className="text-[10px] font-semibold text-emerald-50">{initialsFrom(name)}</div>
+                  <div className="flex flex-col items-center leading-none">
+                    <div className="text-[10px] font-semibold text-emerald-50">{initialsFrom(name)}</div>
+                    {teeLabel ? <div className="text-[8px] text-emerald-100/55 mt-0.5">{teeLabel}</div> : null}
+                  </div>
                 ) : avatarOnlyPlayers ? (
-                  <Avatar className="h-5 w-5 border border-emerald-200/70 shrink-0">
-                    {avatarUrl ? <AvatarImage src={avatarUrl} /> : null}
-                    <AvatarFallback className="text-[8px]">{initialsFrom(name)}</AvatarFallback>
-                  </Avatar>
+                  <div className="flex flex-col items-center gap-0.5">
+                    <Avatar className="h-5 w-5 border border-emerald-200/70 shrink-0">
+                      {avatarUrl ? <AvatarImage src={avatarUrl} /> : null}
+                      <AvatarFallback className="text-[8px]">{initialsFrom(name)}</AvatarFallback>
+                    </Avatar>
+                    {teeLabel ? <div className="text-[8px] text-emerald-100/55 leading-none">{teeLabel}</div> : null}
+                  </div>
                 ) : (
                   <div className="flex items-center gap-1 min-w-0">
                     <Avatar className="h-4.5 w-4.5 border border-emerald-200/70 shrink-0">
@@ -248,9 +274,9 @@ export default function ScorecardPortrait(props: {
                     </Avatar>
                     <div className="flex flex-col items-start min-w-0">
                       <div className="text-[10px] text-emerald-50 truncate min-w-0 leading-none">{name}</div>
-                      {hcpLabel ? (
+                      {hcpLabel || teeLabel ? (
                         <div className="text-[9px] text-emerald-100/60 leading-none">
-                          {hcpLabel}
+                          {[teeLabel, hcpLabel].filter(Boolean).join(" · ")}
                         </div>
                       ) : null}
                     </div>
@@ -304,14 +330,17 @@ export default function ScorecardPortrait(props: {
               const state = holeStateFor(p.id, h.hole_number);
               const puLabel = state === "picked_up" ? "PU" : (isFinished && state === "not_started" && s !== null) ? "NS" : null;
 
+              // This player's tee, not the displayed one.
+              const hp = holeOf(p.id, h);
+
               const recv =
                 scoreView === "net" && !puLabel
-                  ? strokesReceivedOnHole(p.course_handicap ?? null, h.stroke_index ?? null, holesList.length)
+                  ? strokesReceivedOnHole(p.course_handicap ?? null, hp.stroke_index ?? null, countOf(p.id))
                   : isFormatView(scoreView) && formatDisplay && !puLabel
                   ? strokesReceivedOnHole(
                       formatDisplay.playingHandicaps?.[p.id] ?? p.course_handicap ?? null,
-                      h.stroke_index ?? null,
-                      holesList.length
+                      hp.stroke_index ?? null,
+                      countOf(p.id)
                     )
                   : 0;
 
@@ -328,7 +357,7 @@ export default function ScorecardPortrait(props: {
                 fmtHint === "halved" ? "text-emerald-100/70" :
                 "";
 
-              const badge = savingKey !== key ? scoreBadgeType(s, h.par, scoreView, formatIsBadgeable) : null;
+              const badge = savingKey !== key ? scoreBadgeType(s, hp.par, scoreView, formatIsBadgeable) : null;
 
             const wolfTag = wolfRoleByKey?.[key] ?? null;
 
@@ -397,7 +426,7 @@ export default function ScorecardPortrait(props: {
 
               participants.forEach((p) => {
                 const val = totals[p.id]?.out ?? 0;
-                const toPar = suppressToPar ? null : relToParForRange(p.id, holesList, displayedScoreFor, 1, 9);
+                const toPar = suppressToPar ? null : relToParForRange(p.id, holesList, displayedScoreFor, 1, 9, holeFor);
 
                 nodes.push(
                   <div
@@ -450,7 +479,7 @@ export default function ScorecardPortrait(props: {
               const t = totals[p.id];
               const val = label === "OUT" ? t?.out ?? 0 : label === "IN" ? t?.in ?? 0 : t?.total ?? 0;
               const [from, to] = label === "OUT" ? [1, 9] : label === "IN" ? [10, 18] : [1, 18];
-              const toPar = suppressToPar ? null : relToParForRange(p.id, holesList, displayedScoreFor, from, to);
+              const toPar = suppressToPar ? null : relToParForRange(p.id, holesList, displayedScoreFor, from, to, holeFor);
 
               nodes.push(
                 <div

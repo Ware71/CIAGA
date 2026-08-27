@@ -95,6 +95,30 @@ export type Participant = {
 export type Hole = { hole_number: number; par: number | null; yardage: number | null; stroke_index: number | null };
 export type Score = { participant_id: string; hole_number: number; strokes: number | null; created_at: string };
 
+/**
+ * One tee in play on this round, with its own hole card. A round can have
+ * players on different tees — 3 men off White, 1 woman off Red — and par,
+ * yardage AND stroke index all differ per tee. Never assume one card fits the
+ * whole field; map players onto these via `teeSetIdByParticipantId`.
+ *
+ * `id` is a `round_tee_snapshots.id` once the round is live, and a
+ * `course_tee_boxes.id` in the pre-round preview. Both are only ever compared
+ * against ids from the same source, so the overload is safe.
+ */
+export type TeeSet = {
+  id: string;
+  sourceTeeBoxId: string | null;
+  name: string | null;
+  gender: string | null;
+  rating: number | null;
+  slope: number | null;
+  parTotal: number | null;
+  yardsTotal: number | null;
+  holesCount: number;
+  isDefault: boolean;
+  holes: Hole[];
+};
+
 // B: Hole states
 export type HoleState = "completed" | "picked_up" | "not_started";
 export type HoleStateRow = { participant_id: string; hole_number: number; status: HoleState };
@@ -201,7 +225,11 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [teeSnapshotId, setTeeSnapshotId] = useState<string | null>(null);
+  // The default tee's holes. Kept as-is for every existing consumer; the tee a
+  // given PLAYER is on lives in `teeSets` / `holeMetaByParticipant` below.
   const [holes, setHoles] = useState<Hole[]>([]);
+  const [teeSets, setTeeSets] = useState<TeeSet[]>([]);
+  const [teeSetIdByParticipantId, setTeeSetIdByParticipantId] = useState<Record<string, string>>({});
   const [scoresByKey, setScoresByKey] = useState<Record<string, Score>>({});
 
   // B: hole states keyed by `${participant_id}:${hole_number}`
@@ -332,7 +360,14 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
       });
     }
 
-    const teeId = mappedParticipants.find((p: any) => p.tee_snapshot_id)?.tee_snapshot_id ?? null;
+    // Prefer the server's own choice of default tee — it is deterministic
+    // (round pending_tee_box_id, else oldest, else id). The participant scan is
+    // only a fallback for a database that predates that migration; on its own it
+    // picks an arbitrary player's tee, which is the bug this replaced.
+    const teeId =
+      (snap.tee_snapshot?.id as string | undefined) ??
+      mappedParticipants.find((p: any) => p.tee_snapshot_id)?.tee_snapshot_id ??
+      null;
     setTeeSnapshotId(teeId);
     setTeams((snap.teams ?? []) as Team[]);
     // Only replace holes when the snapshot actually has some. Preview rounds have
@@ -343,6 +378,56 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
     if (snapHoles.length) {
       setHoles([...snapHoles].sort((a, b) => a.hole_number - b.hole_number));
     }
+
+    // Every tee in play. Same "only replace when non-empty" rule as holes above:
+    // a reconcile that fires mid-activation must not blank the tee toggle.
+    const rawTeeSets = Array.isArray(snap.tee_snapshots) ? (snap.tee_snapshots as any[]) : [];
+    if (rawTeeSets.length) {
+      setTeeSets(
+        rawTeeSets.map((t: any) => ({
+          id: t.id,
+          sourceTeeBoxId: t.source_tee_box_id ?? null,
+          name: t.name ?? null,
+          gender: t.gender ?? null,
+          rating: toNumOrNull(t.rating),
+          slope: toNumOrNull(t.slope),
+          parTotal: toNumOrNull(t.par_total),
+          yardsTotal: toNumOrNull(t.yards_total),
+          holesCount: (t.holes_count as number | null) ?? 18,
+          isDefault: !!t.is_default,
+          holes: ([...((t.holes ?? []) as Hole[])]).sort((a, b) => a.hole_number - b.hole_number),
+        }))
+      );
+    } else if (snapHoles.length && (snap.tee_snapshot || teeId)) {
+      // Database predates the multi-tee migration: synthesise the single tee set
+      // the old payload implies. Every participant then resolves to it, holeFor
+      // becomes identity, no toggle renders, and the page behaves as it did
+      // before. This is what makes the migration and the app deploy in any order.
+      const ts = snap.tee_snapshot ?? {};
+      setTeeSets([
+        {
+          id: (ts.id as string) ?? teeId ?? "legacy",
+          sourceTeeBoxId: ts.source_tee_box_id ?? null,
+          name: ts.name ?? null,
+          gender: ts.gender ?? null,
+          rating: toNumOrNull(ts.rating),
+          slope: toNumOrNull(ts.slope),
+          parTotal: toNumOrNull(ts.par_total),
+          yardsTotal: toNumOrNull(ts.yards_total),
+          holesCount: (ts.holes_count as number | null) ?? snapHoles.length ?? 18,
+          isDefault: true,
+          holes: [...snapHoles].sort((a, b) => a.hole_number - b.hole_number),
+        },
+      ]);
+    }
+
+    // Pre-activation every tee_snapshot_id is null and the preview effect owns
+    // this map, so only write when the round actually has tee assignments.
+    const liveTeeMap: Record<string, string> = {};
+    for (const p of mappedParticipants) {
+      if (p.tee_snapshot_id) liveTeeMap[p.id] = p.tee_snapshot_id;
+    }
+    if (Object.keys(liveTeeMap).length) setTeeSetIdByParticipantId(liveTeeMap);
 
     // Merge (server-wins) rather than replace, so a re-hydrate that fires mid
     // first-score activation (the status='starting' update) doesn't momentarily
@@ -718,8 +803,10 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
               ];
             }),
         });
-        // Already built for this exact input set + we have holes → nothing to do.
-        if (previewBuiltRef.current === signature && holes.length > 0) return;
+        // Already built for this exact input set + we have holes AND tee sets →
+        // nothing to do. The teeSets check matters for a page that hydrated holes
+        // from a build that predates tee sets; without it, it never gets them.
+        if (previewBuiltRef.current === signature && holes.length > 0 && teeSets.length > 0) return;
 
         const teeIds = Array.from(
           new Set([
@@ -731,18 +818,32 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
         const [{ data: teeBoxes }, { data: holeRows }] = await Promise.all([
           supabase
             .from("course_tee_boxes")
-            .select("id, name, rating, slope, par, holes_count")
+            .select("id, name, gender, rating, slope, par, yards, holes_count")
             .in("id", teeIds),
+          // Every tee in play, not just the round default — players on an
+          // override tee have their own par, yardage and stroke index.
           supabase
             .from("course_tee_holes")
-            .select("hole_number, par, yardage, handicap")
-            .eq("tee_box_id", defaultTeeBoxId)
+            .select("tee_box_id, hole_number, par, yardage, handicap")
+            .in("tee_box_id", teeIds)
             .order("hole_number", { ascending: true }),
         ]);
         if (cancelled) return;
 
         const teeById = new Map((teeBoxes ?? []).map((t: any) => [t.id, t]));
         const defaultTee = teeById.get(defaultTeeBoxId);
+
+        const holesByTeeBox = new Map<string, Hole[]>();
+        for (const h of (holeRows ?? []) as any[]) {
+          const arr = holesByTeeBox.get(h.tee_box_id) ?? [];
+          arr.push({
+            hole_number: h.hole_number,
+            par: h.par,
+            yardage: h.yardage,
+            stroke_index: h.handicap,
+          });
+          holesByTeeBox.set(h.tee_box_id, arr);
+        }
 
         const chWith = (hi: number | null, tee: any): number | null => {
           if (hi == null || !tee || tee.rating == null || tee.slope == null || tee.par == null) return null;
@@ -762,16 +863,39 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
         const chVals = Array.from(chById.values()).filter((v): v is number => v != null);
         const lowestCH = chVals.length ? Math.min(...chVals) : null;
 
-        const previewHoles: Hole[] = (holeRows ?? [])
-          .map((h: any) => ({
-            hole_number: h.hole_number,
-            par: h.par,
-            yardage: h.yardage,
-            stroke_index: h.handicap,
-          }))
-          .sort((a, b) => a.hole_number - b.hole_number);
+        const previewHoles: Hole[] = [...(holesByTeeBox.get(defaultTeeBoxId) ?? [])].sort(
+          (a, b) => a.hole_number - b.hole_number
+        );
 
         setHoles(previewHoles);
+        setTeeSets(
+          teeIds
+            .map((id) => {
+              const t = teeById.get(id);
+              return {
+                id,
+                sourceTeeBoxId: id,
+                name: t?.name ?? null,
+                gender: t?.gender ?? null,
+                rating: toNumOrNull(t?.rating),
+                slope: toNumOrNull(t?.slope),
+                parTotal: toNumOrNull(t?.par),
+                yardsTotal: toNumOrNull(t?.yards),
+                holesCount: (t?.holes_count as number | null) ?? 18,
+                isDefault: id === defaultTeeBoxId,
+                holes: [...(holesByTeeBox.get(id) ?? [])].sort((a, b) => a.hole_number - b.hole_number),
+              };
+            })
+            .sort((a, b) => Number(b.isDefault) - Number(a.isDefault))
+        );
+        setTeeSetIdByParticipantId(
+          Object.fromEntries(
+            participants.map((p) => [
+              p.id,
+              (partById.get(p.id)?.pending_tee_box_id as string) ?? defaultTeeBoxId,
+            ])
+          )
+        );
         setDefaultTeeName(defaultTee?.name ?? null);
         setParticipants((prev) =>
           prev.map((p) => {
@@ -802,13 +926,57 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roundId, status, participantIdsKey, holes.length, previewHydrateTick]);
+  }, [roundId, status, participantIdsKey, holes.length, teeSets.length, previewHydrateTick]);
 
   // Permission: any participant can score (you already changed this; keep it)
   const canScore = useMemo(() => {
     if (!meId) return false;
     return participants.some((p) => p.profile_id === meId);
   }, [participants, meId]);
+
+  // ── Per-tee lookups ────────────────────────────────────────────────────
+  // Memoised here rather than in the components: the scorecards hit these once
+  // per cell, so an 18 × N-player grid would otherwise rebuild them constantly.
+
+  const holesByTeeSetId = useMemo(() => {
+    const m: Record<string, Hole[]> = {};
+    for (const t of teeSets) m[t.id] = t.holes;
+    return m;
+  }, [teeSets]);
+
+  const defaultTeeSetId = useMemo(
+    () => teeSets.find((t) => t.isDefault)?.id ?? teeSets[0]?.id ?? null,
+    [teeSets]
+  );
+
+  /**
+   * participantId → holeNumber → that player's own hole (their tee's par,
+   * yardage and stroke index).
+   *
+   * The `?? fallback` chain is load-bearing: a player with no tee assignment, or
+   * a database that predates the multi-tee payload, resolves to the default
+   * tee's card — exactly the single shared array the app used before. That is
+   * what lets every caller treat this as the only source of hole meta without
+   * needing to know whether the round is multi-tee.
+   */
+  const holeMetaByParticipant = useMemo(() => {
+    const fallback = (defaultTeeSetId ? holesByTeeSetId[defaultTeeSetId] : undefined) ?? holes;
+    const out: Record<string, Record<number, Hole>> = {};
+    for (const p of participants) {
+      const arr = holesByTeeSetId[teeSetIdByParticipantId[p.id] ?? ""] ?? fallback;
+      const byNum: Record<number, Hole> = {};
+      for (const h of arr) byNum[h.hole_number] = h;
+      out[p.id] = byNum;
+    }
+    return out;
+  }, [participants, teeSetIdByParticipantId, holesByTeeSetId, defaultTeeSetId, holes]);
+
+  /** The viewer's own tee, or null when they aren't playing (spectator). */
+  const viewerTeeSetId = useMemo(() => {
+    if (!meId) return null;
+    const me = participants.find((p) => p.profile_id === meId);
+    return me ? teeSetIdByParticipantId[me.id] ?? null : null;
+  }, [participants, meId, teeSetIdByParticipantId]);
 
   return {
     loading,
@@ -830,6 +998,14 @@ export function useRoundDetail(roundId: string, initialSnapshot?: any) {
     teams,
     teeSnapshotId,
     holes,
+
+    // Multi-tee
+    teeSets,
+    teeSetIdByParticipantId,
+    holesByTeeSetId,
+    holeMetaByParticipant,
+    defaultTeeSetId,
+    viewerTeeSetId,
 
     defaultTeeName,
     playingHandicapMode,

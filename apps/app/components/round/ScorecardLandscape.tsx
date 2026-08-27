@@ -63,6 +63,16 @@ export default function ScorecardLandscape(props: {
   getParticipantAvatar: (p: Participant) => string | null;
   /** Wolf role tag per `${participantId}:${holeNumber}` (W/WP/LW/BW). */
   wolfRoleByKey?: Record<string, "W" | "WP" | "LW" | "BW">;
+
+  /**
+   * This player's own hole. The PAR/YDS/SI rows show ONE tee (whichever the
+   * toggle selects), but a player on a different tee has their own par and
+   * stroke index. Defaults to identity for a single-tee round.
+   */
+  holeFor?: (participantId: string, hole: Hole) => Hole;
+  holeCountFor?: (participantId: string) => number;
+  /** Short tee name shown against each player when the round has >1 tee. */
+  teeLabelFor?: (p: Participant) => string | null;
 }) {
   const {
     participants,
@@ -84,7 +94,13 @@ export default function ScorecardLandscape(props: {
     getParticipantLabel,
     getParticipantAvatar,
     wolfRoleByKey,
+    holeFor,
+    holeCountFor,
+    teeLabelFor,
   } = props;
+
+  const holeOf = (pid: string, h: Hole): Hole => (holeFor ? holeFor(pid, h) : h);
+  const countOf = (pid: string): number => (holeCountFor ? holeCountFor(pid) : holesList.length);
 
   const sumPar = (k: SumKind) => (k === "OUT" ? metaSums.parOut : k === "IN" ? metaSums.parIn : metaSums.parTot);
   const sumYds = (k: SumKind) => (k === "OUT" ? metaSums.ydsOut : k === "IN" ? metaSums.ydsIn : metaSums.ydsTot);
@@ -177,11 +193,13 @@ export default function ScorecardLandscape(props: {
               const ph = isFormat && formatDisplay?.playingHandicaps?.[p.id] != null
                 ? String(formatDisplay.playingHandicaps[p.id])
                 : null;
-              const hcpLabel = isFormat
+              const teeLabel = teeLabelFor?.(p) ?? null;
+              const hcpText = isFormat
                 ? `HI ${hi} · PH ${ph ?? "–"}`
                 : scoreView === "net"
                   ? `HI ${hi} · CH ${ch}`
                   : "";
+              const hcpLabel = [teeLabel, hcpText].filter(Boolean).join(" · ");
 
               return (
                 <div key={p.id} className="grid" style={{ gridTemplateColumns: landscapeCols }}>
@@ -213,14 +231,17 @@ export default function ScorecardLandscape(props: {
                       const state = holeStateFor(p.id, h.hole_number);
                       const puLabel = state === "picked_up" ? "PU" : (isFinished && state === "not_started" && s !== null) ? "NS" : null;
 
+                      // This player's tee, not the displayed one.
+                      const hp = holeOf(p.id, h);
+
                       const recv =
                         scoreView === "net" && !puLabel
-                          ? strokesReceivedOnHole(p.course_handicap ?? null, h.stroke_index ?? null, holesList.length)
+                          ? strokesReceivedOnHole(p.course_handicap ?? null, hp.stroke_index ?? null, countOf(p.id))
                           : isFormatView(scoreView) && formatDisplay && !puLabel
                           ? strokesReceivedOnHole(
                               formatDisplay.playingHandicaps?.[p.id] ?? p.course_handicap ?? null,
-                              h.stroke_index ?? null,
-                              holesList.length
+                              hp.stroke_index ?? null,
+                              countOf(p.id)
                             )
                           : 0;
 
@@ -237,7 +258,7 @@ export default function ScorecardLandscape(props: {
                         fmtHint === "halved" ? "text-emerald-100/70" :
                         "";
 
-                      const badge = savingKey !== key ? scoreBadgeType(s, h.par, scoreView, formatIsBadgeable) : null;
+                      const badge = savingKey !== key ? scoreBadgeType(s, hp.par, scoreView, formatIsBadgeable) : null;
 
                       const wolfTag = wolfRoleByKey?.[key] ?? null;
 
@@ -288,7 +309,7 @@ export default function ScorecardLandscape(props: {
                       c.kind === "outMid" || c.kind === "outEnd" ? "OUT" : c.kind === "inEnd" ? "IN" : "TOT";
 
                     const [from, to] = label === "OUT" ? [1, 9] : label === "IN" ? [10, 18] : [1, 18];
-                    const toPar = suppressToPar ? null : relToParForRange(p.id, holesList, displayedScoreFor, from, to);
+                    const toPar = suppressToPar ? null : relToParForRange(p.id, holesList, displayedScoreFor, from, to, holeFor);
 
                     const isTot = c.kind === "totEnd";
 
