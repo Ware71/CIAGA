@@ -52,6 +52,41 @@ export type FormatDisplayData = {
   playingHandicaps?: Record<string, number>;
 };
 
+/**
+ * Per-participant hole meta.
+ *
+ * A round can have players on different tees — 3 men off White, 1 woman off Red
+ * — and par, yardage AND stroke index all differ per tee. Every calculation done
+ * ON BEHALF OF a player (their stableford points, their strokes received, their
+ * net double bogey) must use THEIR tee, not whichever tee the scorecard happens
+ * to be displaying.
+ *
+ * The `holes` array each calculator already takes stays the round's *geometry*:
+ * iteration order, hole numbers, and how many holes the round has. Only par and
+ * stroke_index are resolved per player, through here.
+ *
+ * Both members default to identity, so a caller that doesn't pass a context
+ * behaves exactly as it did before this existed.
+ */
+export type ScoringContext = {
+  holeFor?: (participantId: string, hole: Hole) => Hole;
+  holeCountFor?: (participantId: string) => number;
+};
+
+type ResolvedScoringContext = {
+  holeFor: (participantId: string, hole: Hole) => Hole;
+  holeCountFor: (participantId: string) => number;
+};
+
+function resolveCtx(holes: Hole[], ctx?: ScoringContext): ResolvedScoringContext {
+  const n = holes.length || 18;
+  return {
+    holeFor: ctx?.holeFor ?? ((_pid: string, h: Hole) => h),
+    // Never 0 — strokesReceivedOnHole divides by this.
+    holeCountFor: ctx?.holeCountFor ?? (() => n),
+  };
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────
 
 function grossFor(
@@ -144,15 +179,18 @@ export function relToParForRange(
   holes: Hole[],
   displayedScoreFor: (pid: string, hole: number) => string | number | null,
   from: number,
-  to: number
+  to: number,
+  /** Resolves this player's own tee card. Omit for a single-tee round. */
+  holeFor?: (participantId: string, hole: Hole) => Hole
 ): number | null {
   let sum = 0;
   let any = false;
   for (const h of holes) {
     if (h.hole_number < from || h.hole_number > to) continue;
     const v = displayedScoreFor(pid, h.hole_number);
-    if (typeof v === "number" && typeof h.par === "number") {
-      sum += v - h.par;
+    const par = (holeFor ? holeFor(pid, h) : h).par;
+    if (typeof v === "number" && typeof par === "number") {
+      sum += v - par;
       any = true;
     }
   }
@@ -189,7 +227,7 @@ function playerStablefordPtsOnHole(
   holeStatesByKey: Record<string, HoleState>,
   pointsTable: Record<string, number>,
   notAcceptedIds: Set<string> = new Set(),
-  holeCount: number = 18
+  ctx: ResolvedScoringContext
 ): number | null {
   const state = holeStatesByKey[`${p.id}:${h.hole_number}`] ?? "not_started";
   // PU holes always score 0 stableford points (WHS: net double bogey or worse)
@@ -200,10 +238,14 @@ function playerStablefordPtsOnHole(
   }
 
   const gross = grossFor(p.id, h.hole_number, scoresByKey, holeStatesByKey);
-  if (gross === null || !h.par) return null;
-  const recv = strokesReceivedOnHole(playingHcp(p), h.stroke_index, holeCount);
+  // This player's own tee: par and SI both differ between, say, White and Red.
+  // Fixing it here covers stableford, team stableford, best-ball-stableford and
+  // pairs stableford at once — they all route through this function.
+  const hp = ctx.holeFor(p.id, h);
+  if (gross === null || !hp.par) return null;
+  const recv = strokesReceivedOnHole(playingHcp(p), hp.stroke_index, ctx.holeCountFor(p.id));
   const net = netFromGross(gross, recv);
-  return stablefordPoints(net - h.par, pointsTable);
+  return stablefordPoints(net - hp.par, pointsTable);
 }
 
 // ── Per-format calculators ─────────────────────────────────────────────
@@ -214,16 +256,17 @@ function computeStableford(
   scoresByKey: Record<string, Score>,
   holeStatesByKey: Record<string, HoleState>,
   formatConfig: Record<string, any>,
-  notAcceptedIds: Set<string> = new Set()
+  notAcceptedIds: Set<string> = new Set(),
+  ctx?: ScoringContext
 ): FormatDisplayData {
-  const holeCount = holes.length;
+  const c = resolveCtx(holes, ctx);
   const pointsTable = { ...DEFAULT_STABLEFORD, ...(formatConfig.points_table ?? {}) };
   const holeResults: Record<string, FormatHoleResult> = {};
 
   for (const p of participants) {
     for (const h of holes) {
       const key = `${p.id}:${h.hole_number}`;
-      const pts = playerStablefordPtsOnHole(p, h, scoresByKey, holeStatesByKey, pointsTable, notAcceptedIds, holeCount);
+      const pts = playerStablefordPtsOnHole(p, h, scoresByKey, holeStatesByKey, pointsTable, notAcceptedIds, c);
       if (pts === null) {
         holeResults[key] = { displayValue: null };
       } else {
@@ -252,7 +295,8 @@ function computeMatchPlay(
   holeStatesByKey: Record<string, HoleState>,
   formatConfig: Record<string, any>,
   getName: (p: Participant) => string,
-  startingHole: number = 1
+  startingHole: number = 1,
+  ctx?: ScoringContext
 ): FormatDisplayData[] {
   const matchups: Array<{ player_a_id: string; player_b_id: string }> = formatConfig.matchups || [];
 
@@ -260,7 +304,7 @@ function computeMatchPlay(
   if (matchups.length === 0) {
     if (participants.length !== 2) return [];
     const pA = participants[0], pB = participants[1];
-    const result = computeMatchPlayPair(pA, pB, participants, holes, scoresByKey, holeStatesByKey, startingHole);
+    const result = computeMatchPlayPair(pA, pB, participants, holes, scoresByKey, holeStatesByKey, startingHole, ctx);
     result.tabLabel = `${getName(pA)} vs ${getName(pB)}`;
     result.filteredParticipantIds = [pA.id, pB.id];
     result.playingHandicaps = { [pA.id]: playingHcp(pA), [pB.id]: playingHcp(pB) };
@@ -273,7 +317,7 @@ function computeMatchPlay(
       const pA = participants.find((p) => p.id === m.player_a_id);
       const pB = participants.find((p) => p.id === m.player_b_id);
       if (!pA || !pB) return null;
-      const result = computeMatchPlayPair(pA, pB, participants, holes, scoresByKey, holeStatesByKey, startingHole);
+      const result = computeMatchPlayPair(pA, pB, participants, holes, scoresByKey, holeStatesByKey, startingHole, ctx);
       result.tabLabel = `${getName(pA)} vs ${getName(pB)}`;
       result.filteredParticipantIds = [pA.id, pB.id];
       result.playingHandicaps = { [pA.id]: playingHcp(pA), [pB.id]: playingHcp(pB) };
@@ -304,16 +348,20 @@ function computeMatchPlayPair(
   holes: Hole[],
   scoresByKey: Record<string, Score>,
   holeStatesByKey: Record<string, HoleState>,
-  startingHole: number = 1
+  startingHole: number = 1,
+  ctx?: ScoringContext
 ): FormatDisplayData {
+  const c = resolveCtx(holes, ctx);
   const hcpA = playingHcp(pA);
   const hcpB = playingHcp(pB);
   const holeResults: Record<string, FormatHoleResult> = {};
   let cumulativeState = 0;
   let holesPlayed = 0;
   let matchDecidedAtHole: number | null = null;
+  // Match geometry — how many holes the MATCH has. Deliberately not per-player:
+  // if the two sides disagreed on holes remaining, formatMatchPlayResult would
+  // emit nonsense like "3&-1".
   const totalHoles = holes.length;
-  const holeCount = holes.length;
   // Dormie/"match decided" detection and the running up/down state need true
   // chronological order — if the round didn't start on hole 1, holes before
   // startingHole were actually played last.
@@ -327,7 +375,12 @@ function computeMatchPlayPair(
       continue;
     }
 
-    if (!h.par) {
+    // Each side reads their own tee: a hole that plays as a par 4 off White can
+    // be a par 5 off Red, which changes the net double bogey a pickup is charged.
+    const hA = c.holeFor(pA.id, h);
+    const hB = c.holeFor(pB.id, h);
+
+    if (!hA.par || !hB.par) {
       holeResults[`${pA.id}:${h.hole_number}`] = { displayValue: null };
       holeResults[`${pB.id}:${h.hole_number}`] = { displayValue: null };
       continue;
@@ -356,8 +409,8 @@ function computeMatchPlayPair(
       continue;
     }
 
-    const grossA = grossForMatchplay(pA.id, h.hole_number, scoresByKey, holeStatesByKey, h.par, hcpA, h.stroke_index, holeCount);
-    const grossB = grossForMatchplay(pB.id, h.hole_number, scoresByKey, holeStatesByKey, h.par, hcpB, h.stroke_index, holeCount);
+    const grossA = grossForMatchplay(pA.id, h.hole_number, scoresByKey, holeStatesByKey, hA.par, hcpA, hA.stroke_index, c.holeCountFor(pA.id));
+    const grossB = grossForMatchplay(pB.id, h.hole_number, scoresByKey, holeStatesByKey, hB.par, hcpB, hB.stroke_index, c.holeCountFor(pB.id));
 
     // Neither player has a score yet — hole not yet in play
     if (grossA === null && grossB === null) {
@@ -374,8 +427,8 @@ function computeMatchPlayPair(
     } else if (grossB === null) {
       cumulativeState += 1;
     } else {
-      const netA = netFromGross(grossA, strokesReceivedOnHole(hcpA, h.stroke_index, holeCount));
-      const netB = netFromGross(grossB, strokesReceivedOnHole(hcpB, h.stroke_index, holeCount));
+      const netA = netFromGross(grossA, strokesReceivedOnHole(hcpA, hA.stroke_index, c.holeCountFor(pA.id)));
+      const netB = netFromGross(grossB, strokesReceivedOnHole(hcpB, hB.stroke_index, c.holeCountFor(pB.id)));
       if (netA < netB) {
         cumulativeState += 1;
       } else if (netB < netA) {
@@ -435,14 +488,15 @@ function computeSkins(
   holes: Hole[],
   scoresByKey: Record<string, Score>,
   holeStatesByKey: Record<string, HoleState>,
-  config?: Record<string, any>
+  config?: Record<string, any>,
+  ctx?: ScoringContext
 ): FormatDisplayData {
+  const c = resolveCtx(holes, ctx);
   const useGross = config?.scoring === "gross";
   const valuePerSkin =
     typeof config?.value_per_skin === "number" && config.value_per_skin > 0
       ? config.value_per_skin
       : 1;
-  const holeCount = holes.length;
   const holeResults: Record<string, FormatHoleResult> = {};
   const skinCounts: Record<string, number> = {};
   for (const p of participants) skinCounts[p.id] = 0;
@@ -455,8 +509,9 @@ function computeSkins(
 
     for (const p of participants) {
       const gross = grossFor(p.id, h.hole_number, scoresByKey, holeStatesByKey);
-      if (gross === null || !h.par) continue;
-      const score = useGross ? gross : netFromGross(gross, strokesReceivedOnHole(playingHcp(p), h.stroke_index, holeCount));
+      const hp = c.holeFor(p.id, h);
+      if (gross === null || !hp.par) continue;
+      const score = useGross ? gross : netFromGross(gross, strokesReceivedOnHole(playingHcp(p), hp.stroke_index, c.holeCountFor(p.id)));
       if (score < best) {
         best = score;
         bestPids = [p.id];
@@ -553,10 +608,11 @@ function computeTeamStableford(
   holeStatesByKey: Record<string, HoleState>,
   teams: Team[],
   formatConfig: Record<string, any>,
-  notAcceptedIds: Set<string> = new Set()
+  notAcceptedIds: Set<string> = new Set(),
+  ctx?: ScoringContext
 ): FormatDisplayData | null {
   if (!teams.length) return null;
-  const holeCount = holes.length;
+  const c = resolveCtx(holes, ctx);
   const teamMap = buildTeamMap(participants, teams);
   const pointsTable = { ...DEFAULT_STABLEFORD, ...(formatConfig.points_table ?? {}) };
   const holeResults: Record<string, FormatHoleResult> = {};
@@ -566,7 +622,7 @@ function computeTeamStableford(
       let sum = 0;
       let anyScore = false;
       for (const p of members) {
-        const pts = playerStablefordPtsOnHole(p, h, scoresByKey, holeStatesByKey, pointsTable, notAcceptedIds, holeCount);
+        const pts = playerStablefordPtsOnHole(p, h, scoresByKey, holeStatesByKey, pointsTable, notAcceptedIds, c);
         if (pts !== null) { sum += pts; anyScore = true; }
       }
       holeResults[`${teamId}:${h.hole_number}`] = anyScore
@@ -593,10 +649,11 @@ function computeTeamBestBall(
   holeStatesByKey: Record<string, HoleState>,
   teams: Team[],
   formatConfig: Record<string, any>,
-  notAcceptedIds: Set<string> = new Set()
+  notAcceptedIds: Set<string> = new Set(),
+  ctx?: ScoringContext
 ): FormatDisplayData | null {
   if (!teams.length) return null;
-  const holeCount = holes.length;
+  const c = resolveCtx(holes, ctx);
   const teamMap = buildTeamMap(participants, teams);
   const holeResults: Record<string, FormatHoleResult> = {};
 
@@ -610,7 +667,7 @@ function computeTeamBestBall(
         // Best X stableford points
         const allPts: number[] = [];
         for (const p of members) {
-          const pts = playerStablefordPtsOnHole(p, h, scoresByKey, holeStatesByKey, pointsTable, notAcceptedIds, holeCount);
+          const pts = playerStablefordPtsOnHole(p, h, scoresByKey, holeStatesByKey, pointsTable, notAcceptedIds, c);
           if (pts !== null) allPts.push(pts);
         }
         if (allPts.length === 0) {
@@ -630,7 +687,8 @@ function computeTeamBestBall(
         for (const p of members) {
           const gross = grossFor(p.id, h.hole_number, scoresByKey, holeStatesByKey);
           if (gross === null) continue;
-          const recv = strokesReceivedOnHole(playingHcp(p), h.stroke_index, holeCount);
+          const hp = c.holeFor(p.id, h);
+          const recv = strokesReceivedOnHole(playingHcp(p), hp.stroke_index, c.holeCountFor(p.id));
           allNets.push(netFromGross(gross, recv));
         }
         if (allNets.length === 0) {
@@ -666,10 +724,11 @@ function computePairsStableford(
   holeStatesByKey: Record<string, HoleState>,
   teams: Team[],
   formatConfig: Record<string, any>,
-  notAcceptedIds: Set<string> = new Set()
+  notAcceptedIds: Set<string> = new Set(),
+  ctx?: ScoringContext
 ): FormatDisplayData | null {
   if (!teams.length) return null;
-  const holeCount = holes.length;
+  const c = resolveCtx(holes, ctx);
   const teamMap = buildTeamMap(participants, teams);
   const pointsTable = { ...DEFAULT_STABLEFORD, ...(formatConfig.points_table ?? {}) };
   const scoringMode: string = formatConfig.scoring_mode || "best";
@@ -680,7 +739,7 @@ function computePairsStableford(
     for (const h of holes) {
       const allPts: number[] = [];
       for (const p of members) {
-        const pts = playerStablefordPtsOnHole(p, h, scoresByKey, holeStatesByKey, pointsTable, notAcceptedIds, holeCount);
+        const pts = playerStablefordPtsOnHole(p, h, scoresByKey, holeStatesByKey, pointsTable, notAcceptedIds, c);
         if (pts !== null) allPts.push(pts);
       }
 
@@ -729,14 +788,15 @@ function computeTeamSingleScore(
   holes: Hole[],
   scoresByKey: Record<string, Score>,
   holeStatesByKey: Record<string, HoleState>,
-  teams: Team[]
+  teams: Team[],
+  ctx?: ScoringContext
 ): FormatDisplayData | null {
   // Scramble, Greensomes, Foursomes — all team members share the same score
   // In practice the first member's score is the team score
   if (!teams.length) return null;
+  const c = resolveCtx(holes, ctx);
   const teamMap = buildTeamMap(participants, teams);
   const holeResults: Record<string, FormatHoleResult> = {};
-  const holeCount = holes.length;
 
   // Build playing handicaps map keyed by teamId for dot indicators
   const playingHandicaps: Record<string, number> = {};
@@ -745,6 +805,12 @@ function computeTeamSingleScore(
     const team = teams.find((t) => t.id === teamId);
     const teamHcp = typeof team?.playing_handicap_used === "number" ? team.playing_handicap_used : null;
     if (teamHcp !== null) playingHandicaps[teamId] = teamHcp;
+
+    // One ball per team, so one tee has to stand for the team. Use the first
+    // member's — the same rule the team gross above already follows.
+    const teeRef = members[0] ?? null;
+    const teamHole = (h: Hole) => (teeRef ? c.holeFor(teeRef.id, h) : h);
+    const teamHoleCount = teeRef ? c.holeCountFor(teeRef.id) : holes.length || 18;
 
     for (const h of holes) {
       let teamGross: number | null = null;
@@ -758,11 +824,13 @@ function computeTeamSingleScore(
         continue;
       }
 
+      const ht = teamHole(h);
+
       if (teamHcp !== null) {
         // Show net score using team handicap
-        const recv = strokesReceivedOnHole(teamHcp, h.stroke_index ?? null, holeCount);
+        const recv = strokesReceivedOnHole(teamHcp, ht.stroke_index ?? null, teamHoleCount);
         const net = netFromGross(teamGross, recv);
-        const diff = h.par ? net - h.par : null;
+        const diff = ht.par ? net - ht.par : null;
         const cssHint: FormatHoleResult["cssHint"] =
           diff === null ? undefined :
           diff <= -1 ? "positive" :
@@ -800,7 +868,8 @@ function computeStrokeplayFormatTab(
   participants: Participant[],
   holes: Hole[],
   scoresByKey: Record<string, Score>,
-  holeStatesByKey: Record<string, HoleState>
+  holeStatesByKey: Record<string, HoleState>,
+  ctx?: ScoringContext
 ): FormatDisplayData | null {
   // Only show format tab if any player's playing_handicap_used differs from course_handicap_used
   // (meaning an allowance %, manual override, or compare_against_lowest was applied)
@@ -814,7 +883,7 @@ function computeStrokeplayFormatTab(
   if (!hasAdjustedHandicap) return null;
 
   // Show net scores using the playing handicap
-  const holeCount = holes.length;
+  const c = resolveCtx(holes, ctx);
   const holeResults: Record<string, FormatHoleResult> = {};
 
   for (const p of participants) {
@@ -822,11 +891,12 @@ function computeStrokeplayFormatTab(
     for (const h of holes) {
       const key = `${p.id}:${h.hole_number}`;
       const gross = grossFor(p.id, h.hole_number, scoresByKey, holeStatesByKey);
-      if (gross === null || !h.par) {
+      const hp = c.holeFor(p.id, h);
+      if (gross === null || !hp.par) {
         holeResults[key] = { displayValue: null };
         continue;
       }
-      const recv = strokesReceivedOnHole(hcp, h.stroke_index, holeCount);
+      const recv = strokesReceivedOnHole(hcp, hp.stroke_index, c.holeCountFor(p.id));
       const net = netFromGross(gross, recv);
       holeResults[key] = { displayValue: net, recv };
     }
@@ -849,10 +919,11 @@ function computeNassauSideGame(
   holes: Hole[],
   scoresByKey: Record<string, Score>,
   holeStatesByKey: Record<string, HoleState>,
-  config?: Record<string, any>
+  config?: Record<string, any>,
+  ctx?: ScoringContext
 ): FormatDisplayData {
   const points = typeof config?.points === "number" && config.points > 0 ? config.points : 2;
-  const holeCount = holes.length;
+  const c = resolveCtx(holes, ctx);
   const holeResults: Record<string, FormatHoleResult> = {};
 
   // Build per-hole net scores for display context
@@ -861,11 +932,12 @@ function computeNassauSideGame(
     for (const h of holes) {
       const key = `${p.id}:${h.hole_number}`;
       const gross = grossFor(p.id, h.hole_number, scoresByKey, holeStatesByKey);
-      if (gross === null || !h.par) {
+      const hp = c.holeFor(p.id, h);
+      if (gross === null || !hp.par) {
         holeResults[key] = { displayValue: null };
         continue;
       }
-      const recv = strokesReceivedOnHole(hcp, h.stroke_index, holeCount);
+      const recv = strokesReceivedOnHole(hcp, hp.stroke_index, c.holeCountFor(p.id));
       const net = netFromGross(gross, recv);
       holeResults[key] = { displayValue: net };
     }
@@ -977,8 +1049,10 @@ function computeWolf(
   holeStatesByKey: Record<string, HoleState>,
   config: Record<string, any>,
   wolfPicksByHole: Record<number, WolfPick>,
-  tabLabel: string = "Wolf"
+  tabLabel: string = "Wolf",
+  ctx?: ScoringContext
 ): FormatDisplayData {
+  const c = resolveCtx(holes, ctx);
   const useGross = config?.scoring === "gross";
   const tieCarry = (config?.tie_mode ?? "carryover") === "carryover";
   const partnerWolfPts = posNum(config?.partner_wolf_points, 2);
@@ -987,7 +1061,6 @@ function computeWolf(
   const loneOthersPts = posNum(config?.lone_others_points, 1);
   const blindWolfPts = posNum(config?.blind_wolf_points, 8);
   const blindOthersPts = posNum(config?.blind_others_points, 1);
-  const holeCount = holes.length;
 
   const participantIds = participants.map((p) => p.id);
   const order: string[] =
@@ -1010,7 +1083,8 @@ function computeWolf(
       if (!p) continue;
       const gross = grossFor(id, h.hole_number, scoresByKey, holeStatesByKey);
       if (gross === null) continue;
-      const score = useGross ? gross : netFromGross(gross, strokesReceivedOnHole(playingHcp(p), h.stroke_index, holeCount));
+      const hp = c.holeFor(id, h);
+      const score = useGross ? gross : netFromGross(gross, strokesReceivedOnHole(playingHcp(p), hp.stroke_index, c.holeCountFor(id)));
       if (best === null || score < best) best = score;
     }
     return best;
@@ -1024,7 +1098,9 @@ function computeWolf(
     const mode: WolfMode = pick?.wolf_mode ?? "partner";
     const partnerId = mode === "partner" ? pick?.partner_participant_id ?? null : null;
 
-    if (!h.par || !wolfId || !participantIds.includes(wolfId)) {
+    // Par here is only a "does this hole have data" probe; read it off the
+    // wolf's own card so a tee with a missing hole row can't blank the hole.
+    if (!wolfId || !participantIds.includes(wolfId) || !c.holeFor(wolfId, h).par) {
       setAll(h.hole_number, null);
       return;
     }
@@ -1106,7 +1182,9 @@ export function computeFormatDisplay(
   getName?: (p: Participant) => string,
   notAcceptedIds: Set<string> = new Set(),
   wolfPicksByHole: Record<number, WolfPick> = {},
-  startingHole: number = 1
+  startingHole: number = 1,
+  /** Per-player tee card. Omit for a single-tee round — behaviour is identical. */
+  ctx?: ScoringContext
 ): FormatDisplayData[] {
   const nameOf = getName ?? ((p: Participant) => p.display_name || "Player");
 
@@ -1114,40 +1192,40 @@ export function computeFormatDisplay(
 
   switch (formatType) {
     case "strokeplay":
-      return wrap(computeStrokeplayFormatTab(participants, holes, scoresByKey, holeStatesByKey));
+      return wrap(computeStrokeplayFormatTab(participants, holes, scoresByKey, holeStatesByKey, ctx));
 
     case "stableford":
-      return [computeStableford(participants, holes, scoresByKey, holeStatesByKey, formatConfig, notAcceptedIds)];
+      return [computeStableford(participants, holes, scoresByKey, holeStatesByKey, formatConfig, notAcceptedIds, ctx)];
 
     case "matchplay":
-      return computeMatchPlay(participants, holes, scoresByKey, holeStatesByKey, formatConfig, nameOf, startingHole);
+      return computeMatchPlay(participants, holes, scoresByKey, holeStatesByKey, formatConfig, nameOf, startingHole, ctx);
 
     case "skins":
-      return [computeSkins(participants, holes, scoresByKey, holeStatesByKey, formatConfig)];
+      return [computeSkins(participants, holes, scoresByKey, holeStatesByKey, formatConfig, ctx)];
 
     case "pairs_stableford":
-      return wrap(computePairsStableford(participants, holes, scoresByKey, holeStatesByKey, teams, formatConfig, notAcceptedIds));
+      return wrap(computePairsStableford(participants, holes, scoresByKey, holeStatesByKey, teams, formatConfig, notAcceptedIds, ctx));
 
     case "team_strokeplay":
       return wrap(computeTeamStrokeplay(participants, holes, scoresByKey, holeStatesByKey, teams));
 
     case "team_stableford":
-      return wrap(computeTeamStableford(participants, holes, scoresByKey, holeStatesByKey, teams, formatConfig, notAcceptedIds));
+      return wrap(computeTeamStableford(participants, holes, scoresByKey, holeStatesByKey, teams, formatConfig, notAcceptedIds, ctx));
 
     case "team_bestball":
-      return wrap(computeTeamBestBall(participants, holes, scoresByKey, holeStatesByKey, teams, formatConfig, notAcceptedIds));
+      return wrap(computeTeamBestBall(participants, holes, scoresByKey, holeStatesByKey, teams, formatConfig, notAcceptedIds, ctx));
 
     case "scramble":
-      return wrap(computeTeamSingleScore("Scramble", participants, holes, scoresByKey, holeStatesByKey, teams));
+      return wrap(computeTeamSingleScore("Scramble", participants, holes, scoresByKey, holeStatesByKey, teams, ctx));
 
     case "greensomes":
-      return wrap(computeTeamSingleScore("Greensomes", participants, holes, scoresByKey, holeStatesByKey, teams));
+      return wrap(computeTeamSingleScore("Greensomes", participants, holes, scoresByKey, holeStatesByKey, teams, ctx));
 
     case "foursomes":
-      return wrap(computeTeamSingleScore("Foursomes", participants, holes, scoresByKey, holeStatesByKey, teams));
+      return wrap(computeTeamSingleScore("Foursomes", participants, holes, scoresByKey, holeStatesByKey, teams, ctx));
 
     case "wolf":
-      return [computeWolf(participants, holes, scoresByKey, holeStatesByKey, formatConfig, wolfPicksByHole, "Wolf")];
+      return [computeWolf(participants, holes, scoresByKey, holeStatesByKey, formatConfig, wolfPicksByHole, "Wolf", ctx)];
 
     default:
       return [];
@@ -1168,7 +1246,9 @@ export function computeSideGameDisplays(
   holes: Hole[],
   scoresByKey: Record<string, Score>,
   holeStatesByKey: Record<string, HoleState>,
-  wolfPicksByHole: Record<number, WolfPick> = {}
+  wolfPicksByHole: Record<number, WolfPick> = {},
+  /** Per-player tee card. Omit for a single-tee round — behaviour is identical. */
+  ctx?: ScoringContext
 ): FormatDisplayData[] {
   const results: FormatDisplayData[] = [];
 
@@ -1177,17 +1257,17 @@ export function computeSideGameDisplays(
 
     switch (sg.name) {
       case "skins": {
-        const data = computeSkins(participants, holes, scoresByKey, holeStatesByKey, sg.config);
+        const data = computeSkins(participants, holes, scoresByKey, holeStatesByKey, sg.config, ctx);
         data.tabLabel = "Skins (Side)";
         results.push(data);
         break;
       }
       case "nassau": {
-        results.push(computeNassauSideGame(participants, holes, scoresByKey, holeStatesByKey, sg.config));
+        results.push(computeNassauSideGame(participants, holes, scoresByKey, holeStatesByKey, sg.config, ctx));
         break;
       }
       case "wolf": {
-        results.push(computeWolf(participants, holes, scoresByKey, holeStatesByKey, sg.config, wolfPicksByHole, "Wolf (Side)"));
+        results.push(computeWolf(participants, holes, scoresByKey, holeStatesByKey, sg.config, wolfPicksByHole, "Wolf (Side)", ctx));
         break;
       }
     }

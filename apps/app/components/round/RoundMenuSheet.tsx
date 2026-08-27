@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import type { Participant } from "@/lib/rounds/hooks/useRoundDetail";
+import type { Participant, TeeSet } from "@/lib/rounds/hooks/useRoundDetail";
 import type { RoundFormatType } from "@/lib/rounds/hooks/useRoundDetail";
 import type { FormatDisplayData } from "@/lib/rounds/formatScoring";
 import { supabase } from "@/lib/supabaseClient";
@@ -167,6 +167,9 @@ export default function RoundMenuSheet(props: {
   courseLabel: string;
   formatType: RoundFormatType;
   defaultTeeName?: string | null;
+  /** Every tee in play. More than one ⇒ the Tees section replaces the single row. */
+  teeSets?: TeeSet[];
+  teeSetIdByParticipantId?: Record<string, string>;
   playingHandicapMode?: string | null;
   playingHandicapValue?: number | null;
   holesCompletedByParticipantId: Record<string, number>;
@@ -200,6 +203,8 @@ export default function RoundMenuSheet(props: {
     courseLabel,
     formatType,
     defaultTeeName,
+    teeSets,
+    teeSetIdByParticipantId,
     playingHandicapMode,
     playingHandicapValue,
     holesCompletedByParticipantId,
@@ -223,6 +228,9 @@ export default function RoundMenuSheet(props: {
 
   const [startingHolePickerOpen, setStartingHolePickerOpen] = useState(false);
   const [startingHoleSaving, setStartingHoleSaving] = useState(false);
+
+  /** Which tee's hole table is expanded. One at a time, as on the courses page. */
+  const [openTeeId, setOpenTeeId] = useState<string | null>(null);
 
   async function submitStartingHole(value: number | "auto") {
     if (!roundId || startingHoleSaving) return;
@@ -866,12 +874,117 @@ export default function RoundMenuSheet(props: {
                     <span className="text-[12px] font-semibold text-emerald-50 truncate ml-4 text-right">{courseLabel}</span>
                   </div>
                 )}
-                {defaultTeeName && (
+                {(teeSets?.length ?? 0) > 1 ? (
+                  (teeSets ?? []).map((t) => {
+                    const on = participants.filter((p) => teeSetIdByParticipantId?.[p.id] === t.id);
+                    const open = openTeeId === t.id;
+                    const genderLabel =
+                      t.gender === "female" ? "Women" : t.gender === "male" ? "Men" : null;
+                    return (
+                      <div key={t.id}>
+                        <button
+                          type="button"
+                          onClick={() => setOpenTeeId(open ? null : t.id)}
+                          className="w-full px-3 py-2.5 text-left"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="text-[12px] font-semibold text-emerald-50">
+                                {t.name ?? "Tee"}
+                                {t.isDefault ? (
+                                  <span className="ml-1.5 text-[9px] font-medium text-emerald-100/50">DEFAULT</span>
+                                ) : null}
+                              </div>
+                              <div className="text-[10px] text-emerald-100/60 leading-tight mt-0.5">
+                                {[
+                                  genderLabel,
+                                  t.parTotal != null ? `Par ${t.parTotal}` : null,
+                                  t.yardsTotal != null ? `${t.yardsTotal.toLocaleString()} yds` : null,
+                                  t.rating != null && t.slope != null ? `${t.rating}/${t.slope}` : null,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · ")}
+                              </div>
+                              <div className="text-[10px] text-emerald-100/45 leading-tight mt-0.5 truncate">
+                                {on.length ? on.map(getParticipantLabel).join(", ") : "No players"}
+                              </div>
+                            </div>
+                            <span className="text-[11px] text-emerald-100/60 shrink-0 mt-0.5">
+                              {open ? "▾" : "▸"}
+                            </span>
+                          </div>
+                        </button>
+                        {open ? (
+                          <div className="px-3 pb-3">
+                            <div className="grid grid-cols-4 gap-2 text-[10px] uppercase tracking-[0.18em] text-emerald-200/70 px-1 pb-1">
+                              <div>Hole</div>
+                              <div className="text-center">Par</div>
+                              <div className="text-center">Yds</div>
+                              <div className="text-center">SI</div>
+                            </div>
+                            <div className="rounded-xl border border-emerald-900/70 divide-y divide-emerald-900/50">
+                              {t.holes.map((h) => (
+                                <div
+                                  key={h.hole_number}
+                                  className="grid grid-cols-4 gap-2 px-1 py-1 text-[11px] tabular-nums"
+                                >
+                                  <div className="font-medium text-emerald-50">{h.hole_number}</div>
+                                  <div className="text-center text-emerald-100/80">{h.par ?? "—"}</div>
+                                  <div className="text-center text-emerald-100/80">{h.yardage ?? "—"}</div>
+                                  <div className="text-center text-emerald-100/80">{h.stroke_index ?? "—"}</div>
+                                </div>
+                              ))}
+                              {(() => {
+                                const sum = (
+                                  pick: (h: TeeSet["holes"][number]) => number | null,
+                                  from: number,
+                                  to: number
+                                ) => {
+                                  let acc = 0;
+                                  let any = false;
+                                  for (const h of t.holes) {
+                                    if (h.hole_number < from || h.hole_number > to) continue;
+                                    const v = pick(h);
+                                    if (typeof v === "number") {
+                                      acc += v;
+                                      any = true;
+                                    }
+                                  }
+                                  return any ? acc : null;
+                                };
+                                const rows: Array<[string, number, number]> = [
+                                  ["OUT", 1, 9],
+                                  ["IN", 10, 18],
+                                  ["TOT", 1, 18],
+                                ];
+                                return rows.map(([label, from, to]) => (
+                                  <div
+                                    key={label}
+                                    className="grid grid-cols-4 gap-2 px-1 py-1 text-[11px] font-semibold tabular-nums bg-[#0b3b21]/50"
+                                  >
+                                    <div className="text-emerald-100/80">{label}</div>
+                                    <div className="text-center text-emerald-100/80">
+                                      {sum((h) => h.par, from, to) ?? "—"}
+                                    </div>
+                                    <div className="text-center text-emerald-100/80">
+                                      {sum((h) => h.yardage, from, to) ?? "—"}
+                                    </div>
+                                    <div className="text-center text-emerald-100/40">—</div>
+                                  </div>
+                                ));
+                              })()}
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })
+                ) : defaultTeeName ? (
                   <div className="px-3 py-2.5 flex justify-between items-center">
                     <span className="text-[11px] text-emerald-100/70">Default tee</span>
                     <span className="text-[12px] font-semibold text-emerald-50 truncate ml-4 text-right">{defaultTeeName}</span>
                   </div>
-                )}
+                ) : null}
                 {allowanceLabel(playingHandicapMode, playingHandicapValue) && (
                   <div className="px-3 py-2.5 flex justify-between items-center">
                     <span className="text-[11px] text-emerald-100/70">Allowance</span>
