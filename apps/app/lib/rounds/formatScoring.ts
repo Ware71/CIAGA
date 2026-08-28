@@ -38,10 +38,30 @@ export type FormatSummary = {
 export type FormatDisplayData = {
   /** Label for the tab button (e.g. "Stableford", "Match", "Best Ball") */
   tabLabel: string;
-  /** Keyed by `${participantId}:${holeNumber}` — same as scoresByKey */
+  /**
+   * Keyed by `${participantId}:${holeNumber}` — same as scoresByKey. Team
+   * formats ALSO write `${teamId}:${holeNumber}` for the team's combined value;
+   * the participant keys carry each player's own contribution, because the
+   * scorecard renders one column per player.
+   */
   holeResults: Record<string, FormatHoleResult>;
-  /** One entry per participant (or per team for team formats) */
+  /**
+   * The entities this format RANKS: participants normally, TEAMS on a team
+   * format (where `participantId` holds the team id and `teamId` is set).
+   *
+   * Never mix the two. The social feed picks a round's winner straight off this
+   * array (`determineWinner` in lib/feed/helpers/formatSummary.ts), and on
+   * team_strokeplay a team's total is by definition larger than any one member's
+   * — so a stray player entry would sort first and get named as the winner of a
+   * team competition. Per-player figures live in `playerSummaries`.
+   */
   summaries: FormatSummary[];
+  /**
+   * Team formats only: one entry per participant carrying that player's OWN
+   * contribution, for the scorecard's column totals. Absent means `summaries` is
+   * already per-player — read it through `playerSummariesOf()`.
+   */
+  playerSummaries?: FormatSummary[];
   /** If true, higher total is better (stableford). Affects leaderboard sort. */
   higherIsBetter: boolean;
   /** If true, summaries are per-team rather than per-participant */
@@ -87,7 +107,45 @@ function resolveCtx(holes: Hole[], ctx?: ScoringContext): ResolvedScoringContext
   };
 }
 
+/** The per-player view of a format, whatever shape the calculator emitted. */
+export function playerSummariesOf(fd: FormatDisplayData): FormatSummary[] {
+  return fd.playerSummaries ?? fd.summaries;
+}
+
+/**
+ * Formats scored as teams. All seven put team-keyed rows in `summaries`; the
+ * three single-ball ones additionally play one ball per team, so the scorecard
+ * collapses to a column per team rather than per player.
+ */
+export const TEAM_FORMATS: RoundFormatType[] = [
+  "pairs_stableford",
+  "team_strokeplay",
+  "team_stableford",
+  "team_bestball",
+  "scramble",
+  "greensomes",
+  "foursomes",
+];
+
+export function isTeamFormat(format: RoundFormatType): boolean {
+  return TEAM_FORMATS.includes(format);
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────
+
+/** Per-player column totals, summed off each player's own hole keys. */
+function buildPlayerSummaries(
+  participants: Participant[],
+  holeResults: Record<string, FormatHoleResult>,
+  holes: Hole[]
+): FormatSummary[] {
+  return participants.map((p) => ({
+    participantId: p.id,
+    out: sumRange(holeResults, p.id, holes, 1, 9),
+    inn: sumRange(holeResults, p.id, holes, 10, 18),
+    total: sumRange(holeResults, p.id, holes, 1, 18),
+  }));
+}
 
 function grossFor(
   pid: string,
@@ -582,6 +640,9 @@ function computeTeamStrokeplay(
       let anyScore = false;
       for (const p of members) {
         const gross = grossFor(p.id, h.hole_number, scoresByKey, holeStatesByKey);
+        // Each player plays their own ball, so their column shows their own
+        // gross. The combined figure stays on the team key.
+        holeResults[`${p.id}:${h.hole_number}`] = { displayValue: gross };
         if (gross !== null) { sum += gross; anyScore = true; }
       }
       holeResults[`${teamId}:${h.hole_number}`] = anyScore
@@ -598,7 +659,15 @@ function computeTeamStrokeplay(
     total: sumRange(holeResults, t.id, holes, 1, 18),
   }));
 
-  return { tabLabel: "Team", holeResults, summaries, higherIsBetter: false, isTeamView: true };
+  return {
+    tabLabel: "Team",
+    holeResults,
+    summaries,
+    playerSummaries: buildPlayerSummaries(participants, holeResults, holes),
+    higherIsBetter: false,
+    isTeamView: true,
+    playingHandicaps: buildPlayingHandicaps(participants),
+  };
 }
 
 function computeTeamStableford(
@@ -623,6 +692,14 @@ function computeTeamStableford(
       let anyScore = false;
       for (const p of members) {
         const pts = playerStablefordPtsOnHole(p, h, scoresByKey, holeStatesByKey, pointsTable, notAcceptedIds, c);
+        // Each player plays their own ball, so their column shows the points
+        // THEY earned. Repeating the team total in every column would say
+        // nothing about who earned it — that figure belongs on the leaderboard.
+        // Threshold is 3 here (a birdie for one player) vs 4 on the team row.
+        holeResults[`${p.id}:${h.hole_number}`] =
+          pts === null
+            ? { displayValue: null }
+            : { displayValue: pts, cssHint: pts >= 3 ? "positive" : pts === 0 ? "negative" : "neutral" };
         if (pts !== null) { sum += pts; anyScore = true; }
       }
       holeResults[`${teamId}:${h.hole_number}`] = anyScore
@@ -639,7 +716,15 @@ function computeTeamStableford(
     total: sumRange(holeResults, t.id, holes, 1, 18),
   }));
 
-  return { tabLabel: "Team Stblfd", holeResults, summaries, higherIsBetter: true, isTeamView: true };
+  return {
+    tabLabel: "Team Stblfd",
+    holeResults,
+    summaries,
+    playerSummaries: buildPlayerSummaries(participants, holeResults, holes),
+    higherIsBetter: true,
+    isTeamView: true,
+    playingHandicaps: buildPlayingHandicaps(participants),
+  };
 }
 
 function computeTeamBestBall(
@@ -668,6 +753,12 @@ function computeTeamBestBall(
         const allPts: number[] = [];
         for (const p of members) {
           const pts = playerStablefordPtsOnHole(p, h, scoresByKey, holeStatesByKey, pointsTable, notAcceptedIds, c);
+          // Written before the sort below, which discards which player produced
+          // which value.
+          holeResults[`${p.id}:${h.hole_number}`] =
+            pts === null
+              ? { displayValue: null }
+              : { displayValue: pts, cssHint: pts >= 3 ? "positive" : pts === 0 ? "negative" : "neutral" };
           if (pts !== null) allPts.push(pts);
         }
         if (allPts.length === 0) {
@@ -686,10 +777,17 @@ function computeTeamBestBall(
         const allNets: number[] = [];
         for (const p of members) {
           const gross = grossFor(p.id, h.hole_number, scoresByKey, holeStatesByKey);
-          if (gross === null) continue;
+          if (gross === null) {
+            holeResults[`${p.id}:${h.hole_number}`] = { displayValue: null };
+            continue;
+          }
           const hp = c.holeFor(p.id, h);
           const recv = strokesReceivedOnHole(playingHcp(p), hp.stroke_index, c.holeCountFor(p.id));
-          allNets.push(netFromGross(gross, recv));
+          const net = netFromGross(gross, recv);
+          // The player's own net is exactly the quantity the team metric selects
+          // from, so that is what their column shows. `recv` drives stroke dots.
+          holeResults[`${p.id}:${h.hole_number}`] = { displayValue: net, recv };
+          allNets.push(net);
         }
         if (allNets.length === 0) {
           holeResults[`${teamId}:${h.hole_number}`] = { displayValue: null };
@@ -712,7 +810,15 @@ function computeTeamBestBall(
     total: sumRange(holeResults, t.id, holes, 1, 18),
   }));
 
-  return { tabLabel: "Best Ball", holeResults, summaries, higherIsBetter, isTeamView: true };
+  return {
+    tabLabel: "Best Ball",
+    holeResults,
+    summaries,
+    playerSummaries: buildPlayerSummaries(participants, holeResults, holes),
+    higherIsBetter,
+    isTeamView: true,
+    playingHandicaps: buildPlayingHandicaps(participants),
+  };
 }
 
 // ── Pairs Stableford ──────────────────────────────────────────────────
@@ -740,6 +846,12 @@ function computePairsStableford(
       const allPts: number[] = [];
       for (const p of members) {
         const pts = playerStablefordPtsOnHole(p, h, scoresByKey, holeStatesByKey, pointsTable, notAcceptedIds, c);
+        // Identical under best/worst/combined — only the team row changes, which
+        // is exactly why showing each player's own points is worth doing.
+        holeResults[`${p.id}:${h.hole_number}`] =
+          pts === null
+            ? { displayValue: null }
+            : { displayValue: pts, cssHint: pts >= 3 ? "positive" : pts === 0 ? "negative" : "neutral" };
         if (pts !== null) allPts.push(pts);
       }
 
@@ -777,7 +889,15 @@ function computePairsStableford(
     total: sumRange(holeResults, t.id, holes, 1, 18),
   }));
 
-  return { tabLabel: "Pairs Stblfd", holeResults, summaries, higherIsBetter: true, isTeamView: true };
+  return {
+    tabLabel: "Pairs Stblfd",
+    holeResults,
+    summaries,
+    playerSummaries: buildPlayerSummaries(participants, holeResults, holes),
+    higherIsBetter: true,
+    isTeamView: true,
+    playingHandicaps: buildPlayingHandicaps(participants),
+  };
 }
 
 // ── Single-score team formats ─────────────────────────────────────────
@@ -804,7 +924,13 @@ function computeTeamSingleScore(
   for (const [teamId, members] of teamMap) {
     const team = teams.find((t) => t.id === teamId);
     const teamHcp = typeof team?.playing_handicap_used === "number" ? team.playing_handicap_used : null;
-    if (teamHcp !== null) playingHandicaps[teamId] = teamHcp;
+    if (teamHcp !== null) {
+      playingHandicaps[teamId] = teamHcp;
+      // The scorecard's virtual team column is keyed by the FIRST member's id
+      // (see singleBallTeamParticipants), so the handicap has to be reachable
+      // under member ids too or the header PH and stroke dots go blank.
+      for (const p of members) playingHandicaps[p.id] = teamHcp;
+    }
 
     // One ball per team, so one tee has to stand for the team. Use the first
     // member's — the same rule the team gross above already follows.
@@ -819,8 +945,17 @@ function computeTeamSingleScore(
         if (gross !== null) { teamGross = gross; break; }
       }
 
+      // One ball per team: the team's value IS every member's value, so build
+      // the cell once and write it to the team key and every member key. The
+      // member writes are what actually fill the scramble scorecard, whose
+      // virtual column is keyed by the first member's id.
+      const writeCell = (cell: FormatHoleResult) => {
+        holeResults[`${teamId}:${h.hole_number}`] = cell;
+        for (const p of members) holeResults[`${p.id}:${h.hole_number}`] = { ...cell };
+      };
+
       if (teamGross === null) {
-        holeResults[`${teamId}:${h.hole_number}`] = { displayValue: null };
+        writeCell({ displayValue: null });
         continue;
       }
 
@@ -836,9 +971,9 @@ function computeTeamSingleScore(
           diff <= -1 ? "positive" :
           diff === 1 ? "neutral" :
           diff >= 2 ? "negative" : undefined;
-        holeResults[`${teamId}:${h.hole_number}`] = { displayValue: net, recv, cssHint };
+        writeCell({ displayValue: net, recv, cssHint });
       } else {
-        holeResults[`${teamId}:${h.hole_number}`] = { displayValue: teamGross };
+        writeCell({ displayValue: teamGross });
       }
     }
   }
@@ -856,6 +991,8 @@ function computeTeamSingleScore(
     tabLabel,
     holeResults,
     summaries,
+    // Mirrors the team totals — one ball, so a member's total is their team's.
+    playerSummaries: buildPlayerSummaries(participants, holeResults, holes),
     higherIsBetter: false,
     isTeamView: true,
     playingHandicaps: Object.keys(playingHandicaps).length > 0 ? playingHandicaps : undefined,

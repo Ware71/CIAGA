@@ -264,7 +264,19 @@ function buildFormatChart(
   holesCount: number,
   formatLabel: any,
 ): FormatChart | null {
-  if (!formatType || formatType === "strokeplay" || formatType === "team_strokeplay") return null;
+  // Single-ball formats share one score across a team, so every member's line
+  // would be identical — a chart of duplicate lines labelled with individual
+  // player names. The multi-ball team formats do chart usefully: each member
+  // contributes their own ball, so the lines are a genuine race.
+  const SINGLE_BALL = ["scramble", "greensomes", "foursomes"];
+  if (
+    !formatType ||
+    formatType === "strokeplay" ||
+    formatType === "team_strokeplay" ||
+    SINGLE_BALL.includes(formatType)
+  ) {
+    return null;
+  }
 
   const { participants, holes, scoresByKey, holeStatesByKey, teams, formatConfig, nameById } = inputs;
 

@@ -17,19 +17,9 @@ export type RoundFormatType =
   | "skins"
   | "wolf";
 
-export const TEAM_FORMATS: RoundFormatType[] = [
-  "pairs_stableford",
-  "team_strokeplay",
-  "team_stableford",
-  "team_bestball",
-  "scramble",
-  "greensomes",
-  "foursomes",
-];
-
-export function isTeamFormat(format: RoundFormatType): boolean {
-  return TEAM_FORMATS.includes(format);
-}
+// Single source of truth, next to the calculators that set `isTeamView`. Kept
+// re-exported here so the existing import sites don't have to move.
+export { TEAM_FORMATS, isTeamFormat } from "@/lib/rounds/formatScoring";
 
 const FORMAT_LABELS: Record<RoundFormatType, string> = {
   strokeplay: "Stroke Play",
