@@ -73,6 +73,21 @@ function formatLeaderboardLabel(scoringModel?: string): string {
   return "to par";
 }
 
+/**
+ * Holes the team has a value on — exactly the set its total is summed over.
+ * Not max-of-members: the calculators count a hole for the team when ANY member
+ * has a value, so if A played 1-3 and B played 4-6 the total covers six holes
+ * while the members' own counts top out at three.
+ */
+function teamHolesScored(fd: FormatDisplayData, teamId: string): number {
+  const prefix = `${teamId}:`;
+  let n = 0;
+  for (const key of Object.keys(fd.holeResults)) {
+    if (key.startsWith(prefix) && typeof fd.holeResults[key]?.displayValue === "number") n++;
+  }
+  return n;
+}
+
 function formatTeeTime(iso: string) {
   try {
     return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
@@ -105,6 +120,9 @@ type LeaderboardRow = {
   hi?: number | null;
   ch?: number | null;
   ph?: number | null;
+  /** Set on team rows. Presence swaps the handicap line for member chips. */
+  teamId?: string;
+  members?: Participant[];
 };
 
 type CompetitionStandingEntry = {
@@ -175,7 +193,13 @@ export default function RoundMenuSheet(props: {
   holesCompletedByParticipantId: Record<string, number>;
   teams?: Array<{ id: string; name: string }>;
   allParticipants?: Participant[];
-  isTeamFormat?: boolean;
+  /**
+   * Single-ball rounds (scramble/greensomes/foursomes) pass VIRTUAL participants
+   * — one per team, carrying the first member's id — so the Gross and Net tabs
+   * are team-shaped too. Team-ness of a FORMAT tab is decided per tab from
+   * `fd.isTeamView`, not from this.
+   */
+  isSingleBallTeamView?: boolean;
   eventId?: string;
   competitionPointsModel?: string;
   competitionPointsTable?: Record<string, number>;
@@ -210,7 +234,7 @@ export default function RoundMenuSheet(props: {
     holesCompletedByParticipantId,
     teams,
     allParticipants,
-    isTeamFormat,
+    isSingleBallTeamView,
     eventId,
     competitionPointsModel,
     competitionPointsTable,
@@ -427,17 +451,27 @@ export default function RoundMenuSheet(props: {
     };
   }, [seasonId, groupId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Map from first-member participant ID → all team members (for showing players under each team row)
-  const teamMembersByFirstId = useMemo<Record<string, Participant[]>>(() => {
-    if (!isTeamFormat || !teams?.length || !allParticipants?.length) return {};
+  const teamMembersByTeamId = useMemo<Record<string, Participant[]>>(() => {
+    if (!teams?.length || !allParticipants?.length) return {};
     const map: Record<string, Participant[]> = {};
     for (const t of teams) {
-      const members = allParticipants.filter((p) => (p as any).team_id === t.id);
+      map[t.id] = allParticipants.filter((p) => (p as any).team_id === t.id);
+    }
+    return map;
+  }, [teams, allParticipants]);
+
+  // Single-ball rounds pass virtual participants keyed by the first member's id,
+  // so the Gross and Net tabs are team rows under that id — they'd otherwise
+  // lose their member chips.
+  const teamMembersByFirstId = useMemo<Record<string, Participant[]>>(() => {
+    if (!isSingleBallTeamView) return {};
+    const map: Record<string, Participant[]> = {};
+    for (const members of Object.values(teamMembersByTeamId)) {
       const first = members[0];
       if (first) map[first.id] = members;
     }
     return map;
-  }, [isTeamFormat, teams, allParticipants]);
+  }, [isSingleBallTeamView, teamMembersByTeamId]);
 
   // Build leaderboard rows for the active tab
   function buildRows(): LeaderboardRow[] {
@@ -484,6 +518,37 @@ export default function RoundMenuSheet(props: {
     const idx = parseInt(activeTab.split(":")[1], 10);
     const fd = formatDisplays[idx];
     if (!fd) return [];
+
+    // A team format ranks TEAMS — the same array the feed reads for its winner
+    // line. Seeding from `participants` here is what produced a row per player
+    // with a "–" score.
+    if (fd.isTeamView && teams?.length) {
+      return teams.map((t) => {
+        const summary = fd.summaries.find((s) => s.teamId === t.id);
+        const members = teamMembersByTeamId[t.id] ?? [];
+        const rawScore = summary?.total ?? "–";
+        // A team total is measured against a par only when one ball plays it.
+        const parThru =
+          isSingleBallTeamView && members[0]
+            ? parThroughByParticipantId[members[0].id] ?? null
+            : null;
+        const toPar =
+          !fd.higherIsBetter && typeof rawScore === "number" && rawScore > 0 && typeof parThru === "number"
+            ? rawScore - parThru
+            : null;
+        const thru = teamHolesScored(fd, t.id);
+        return {
+          participantId: t.id,
+          name: t.name,
+          avatarUrl: null,
+          score: rawScore,
+          toPar,
+          thru: thru > 0 ? thru : null,
+          teamId: t.id,
+          members,
+        };
+      });
+    }
 
     return participants
       .filter((p) => !fd.filteredParticipantIds || fd.filteredParticipantIds.includes(p.id))
@@ -633,7 +698,9 @@ export default function RoundMenuSheet(props: {
                           ? (compEntry.points_earned ?? projectedPoints(compEntry.position, competitionPointsModel, competitionPointsTable))
                           : null)
                       : null;
-                    const teamMembers = teamMembersByFirstId[r.participantId];
+                    // Format tabs on a team round carry their members on the row;
+                    // Gross/Net on a single-ball round key off the first member.
+                    const teamMembers = r.members ?? teamMembersByFirstId[r.participantId];
 
                     return (
                       <div key={r.participantId}>
@@ -670,8 +737,8 @@ export default function RoundMenuSheet(props: {
                             </div>
                           </div>
                         </div>
-                        {/* HI / CH / PH — shown on Net & Format tabs for individual players */}
-                        {!isTeamFormat && activeTab !== "gross" && (r.hi != null || r.ch != null || r.ph != null) && (
+                        {/* HI / CH / PH — individual rows only; a team has no single handicap */}
+                        {!teamMembers && activeTab !== "gross" && (r.hi != null || r.ch != null || r.ph != null) && (
                           <div className="pl-11 pr-3 pb-2 flex items-center gap-3 text-[9px] tabular-nums text-emerald-100/55">
                             {r.hi != null && (
                               <span><span className="text-emerald-200/45">HI</span> {formatHI(r.hi)}</span>
@@ -684,7 +751,7 @@ export default function RoundMenuSheet(props: {
                             )}
                           </div>
                         )}
-                        {isTeamFormat && teamMembers && teamMembers.length > 0 && (
+                        {teamMembers && teamMembers.length > 0 && (
                           <div className="pl-11 pr-3 pb-2 flex flex-wrap gap-1.5">
                             {teamMembers.map((m) => {
                               const mName = getParticipantLabel(m);

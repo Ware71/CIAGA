@@ -15,7 +15,7 @@ import WolfHoleDetails from "@/components/round/WolfHoleDetails";
 import HoleDetailPanel from "@/components/round/HoleDetailPanel";
 import { strokesReceivedOnHole, netFromGross, netDoubleBogeyGross } from "@/lib/rounds/handicapUtils";
 import { minHolesForAcceptance, isAuthorisedFormat, REJECTED_REASON_LABELS } from "@/lib/whs/acceptability";
-import { computeFormatDisplay, computeSideGameDisplays, isFormatView, formatViewIndex, type FormatScoreView, type FormatDisplayData } from "@/lib/rounds/formatScoring";
+import { computeFormatDisplay, computeSideGameDisplays, isFormatView, formatViewIndex, playerSummariesOf, isTeamFormat, type FormatScoreView, type FormatDisplayData } from "@/lib/rounds/formatScoring";
 import { useOrientationLock } from "@/lib/useOrientationLock";
 
 import { Menu } from "lucide-react";
@@ -491,7 +491,26 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
 
   const scoringCtx = useMemo(() => ({ holeFor, holeCountFor }), [holeFor, holeCountFor]);
 
-  const multiTee = teeSets.length > 1;
+  // Two snapshots of the same tee box are the same tee — one button, not two.
+  // A round with nothing to switch between renders no toggle at all.
+  const teeToggleOptions = useMemo(() => {
+    const byKey = new Map<string, { id: string; name: string | null; ids: string[] }>();
+    const out: Array<{ id: string; name: string | null; ids: string[] }> = [];
+    for (const t of teeSets) {
+      const key = t.sourceTeeBoxId ?? t.id;
+      const seen = byKey.get(key);
+      if (seen) {
+        seen.ids.push(t.id);
+        continue;
+      }
+      const entry = { id: t.id, name: t.name, ids: [t.id] };
+      byKey.set(key, entry);
+      out.push(entry);
+    }
+    return out;
+  }, [teeSets]);
+
+  const multiTee = teeToggleOptions.length > 1;
 
   /** Tee name against each player, only worth the space when tees differ. */
   const teeLabelFor = useCallback(
@@ -730,7 +749,9 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
     // Format view uses its own summaries (may include string values like "2 UP")
     if (isFormatView(scoreView) && activeFormatDisplay) {
       const byId: Record<string, { out: number | string; in: number | string; total: number | string }> = {};
-      for (const s of activeFormatDisplay.summaries) {
+      // On a team format `summaries` ranks TEAMS; the column totals come from
+      // the per-player view instead.
+      for (const s of playerSummariesOf(activeFormatDisplay)) {
         byId[s.participantId] = {
           out: s.out,
           in: s.inn,
@@ -884,8 +905,32 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
 
   const playedOnLabel = playedOnIso ? formatPlayedOn(playedOnIso) : "";
 
+  /**
+   * A finished team round is won by a TEAM. Only on a format view — gross/net
+   * are showing individual balls, so the panel should list players there.
+   */
+  const teamFinalRows = useMemo<FinalRow[] | null>(() => {
+    const fd = formatDisplays[0];
+    if (!fd?.isTeamView || !teams.length || !isFormatView(scoreView)) return null;
+    return teams.map((t) => {
+      const s = fd.summaries.find((x) => x.teamId === t.id);
+      return {
+        participantId: t.id,
+        name: t.name,
+        avatarUrl: null,
+        total: s?.total ?? "–",
+        out: s?.out ?? "–",
+        in: s?.inn ?? "–",
+        // A combined team total is not measured against a single par.
+        toPar: null,
+      };
+    });
+  }, [formatDisplays, teams, scoreView]);
+
   const finalRows = useMemo(() => {
-    const rows = buildFinalRows(participants, totals, toParTotalByParticipant, getParticipantLabel, getParticipantAvatar);
+    const rows =
+      teamFinalRows ??
+      buildFinalRows(participants, totals, toParTotalByParticipant, getParticipantLabel, getParticipantAvatar);
     const primaryFormat = formatDisplays[0] ?? null;
     const hasStringTotals = rows.some((r) => typeof r.total === "string");
     // Only apply higherIsBetter when we are actually on a format view (e.g. Stableford points).
@@ -906,14 +951,16 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
       rows.sort((a, b) => (a.total as number) - (b.total as number) || a.name.localeCompare(b.name));
     }
     return rows;
-  }, [participants, totals, toParTotalByParticipant, getParticipantLabel, getParticipantAvatar, formatDisplays, scoreView]);
+  }, [teamFinalRows, participants, totals, toParTotalByParticipant, getParticipantLabel, getParticipantAvatar, formatDisplays, scoreView]);
 
   const winner = useMemo(() => {
     if (!finalRows.length) return null;
     const primaryFormat = formatDisplays[0] ?? null;
     const hasStringTotals = finalRows.some((r) => typeof r.total === "string");
-    // For stroke-based formats (lower score wins), players with incomplete holes can't win
-    if (!hasStringTotals && primaryFormat && !primaryFormat.higherIsBetter) {
+    // For stroke-based formats (lower score wins), players with incomplete holes
+    // can't win. Skipped for team rows: a team id has no hole states, so this
+    // would reject every row.
+    if (!teamFinalRows && !hasStringTotals && primaryFormat && !primaryFormat.higherIsBetter) {
       return (
         finalRows.find((r) => !hasIncompleteHoles(r.participantId, holesList, holeStatesByKey)) ??
         finalRows[0] ??
@@ -921,7 +968,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
       );
     }
     return finalRows[0] ?? null;
-  }, [finalRows, formatDisplays, holesList, holeStatesByKey]);
+  }, [finalRows, teamFinalRows, formatDisplays, holesList, holeStatesByKey]);
 
   // HI / CH / PH per participant for the final-results handicap line.
   const finalHandicapsByParticipant = useMemo(() => {
@@ -1850,6 +1897,14 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
           </div>
         ) : null}
 
+        {/* A team format with no teams scores nothing, and teams can't be added
+            once the round is live — so say so rather than showing an empty tab. */}
+        {!needsSetup && isTeamFormat(formatType) && !teams.length ? (
+          <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100/90">
+            This round has no teams, so team scoring is unavailable. Gross and Net still work.
+          </div>
+        ) : null}
+
         {isPreview ? (
           <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100/90">
             Preview — entering a score will start the round. First check the course setup is
@@ -1868,28 +1923,30 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
         {!needsSetup && isFinished && winner ? <FinalResultsPanel winner={winner} finalRows={finalRows} formatDisplay={formatDisplays[0] ?? null} notAcceptedIds={handicapRejection?.ids} notAcceptedReason={handicapRejection?.label} handicaps={scoreView === "gross" ? undefined : finalHandicapsByParticipant} /> : null}
 
         {!needsSetup && multiTee ? (
-          <div className="flex items-center justify-center gap-2 flex-wrap">
-            <span className="text-[10px] uppercase tracking-[0.14em] text-emerald-200/70">Tee</span>
-            <div className="rounded-xl border border-emerald-900/70 bg-[#0b3b21]/50 p-1 flex items-center gap-0.5">
-              {teeSets.map((t) => (
+          <div className="flex items-center gap-1.5 flex-wrap px-0.5">
+            <span className="text-[9px] uppercase tracking-[0.14em] text-emerald-200/50">Tee</span>
+            {teeToggleOptions.map((t) => {
+              // A deduped option stands for several snapshot ids.
+              const active = t.ids.includes(displayTeeSetId ?? "");
+              return (
                 <button
                   key={t.id}
                   type="button"
                   onClick={() => setDisplayTeeSetId(t.id)}
-                  className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg transition-colors ${
-                    displayTeeSetId === t.id
-                      ? "bg-[#f5e6b0] text-[#042713]"
-                      : "text-emerald-100/80 hover:bg-emerald-900/30"
+                  className={`px-2 py-0.5 text-[10px] font-medium rounded-md transition-colors ${
+                    active
+                      ? "bg-emerald-900/50 text-[#f5e6b0]"
+                      : "text-emerald-100/50 hover:text-emerald-100/80"
                   }`}
                 >
                   {t.name ?? "Tee"}
                 </button>
-              ))}
-            </div>
+              );
+            })}
             <button
               type="button"
               onClick={() => setMenuOpen(true)}
-              className="text-[10px] text-emerald-100/70 underline underline-offset-2"
+              className="text-[9px] text-emerald-100/45 underline underline-offset-2 hover:text-emerald-100/70"
             >
               Compare
             </button>
@@ -1981,9 +2038,9 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
             startingHoleSource={startingHoleSource}
             holeCount={holesList.length || 18}
             canEditStartingHole={canScore && !isFinished}
-            teams={isSingleBall ? teams : undefined}
-            allParticipants={isSingleBall ? participants : undefined}
-            isTeamFormat={isSingleBall}
+            teams={teams.length ? teams : undefined}
+            allParticipants={participants}
+            isSingleBallTeamView={isSingleBall}
             eventId={eventId ?? undefined}
             competitionPointsModel={competitionPointsModel}
             competitionPointsTable={competitionPointsTable}
