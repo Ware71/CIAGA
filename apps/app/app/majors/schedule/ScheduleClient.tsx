@@ -54,7 +54,7 @@ export default function ScheduleClient() {
         <button type="button" onClick={() => router.push("/")} className="text-[11px] text-emerald-100/70 hover:text-emerald-50">
           ← Home
         </button>
-        <h1 className="text-lg font-semibold tracking-wide text-[#f5e6b0]">Schedule</h1>
+        <h1 className="text-lg font-semibold tracking-wide text-[#ffd666]">Schedule</h1>
         <div className="w-14" />
       </div>
 

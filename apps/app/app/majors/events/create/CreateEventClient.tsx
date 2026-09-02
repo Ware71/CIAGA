@@ -189,7 +189,7 @@ function FormulaConfigEditor({
             placeholder="Auto (actual finishers)"
             value={form.formula_num_participants}
             onChange={(e) => update("formula_num_participants", e.target.value)}
-            className="w-full rounded-lg border border-emerald-900/60 bg-[#042713] px-2 py-1.5 text-[12px] text-emerald-50 placeholder:text-emerald-100/30 focus:outline-none focus:border-emerald-600"
+            className="w-full rounded-lg border border-emerald-900/60 bg-[#03150C] px-2 py-1.5 text-[12px] text-emerald-50 placeholder:text-emerald-100/30 focus:outline-none focus:border-emerald-600"
           />
           <div className="text-[9px] text-emerald-200/40">Leave blank to use actual finisher count</div>
         </div>
@@ -215,7 +215,7 @@ function FormulaConfigEditor({
                   placeholder={placeholder}
                   value={form[key] as string}
                   onChange={(e) => update(key, e.target.value)}
-                  className="w-full rounded-lg border border-emerald-900/60 bg-[#042713] px-2 py-1.5 text-[12px] text-emerald-50 placeholder:text-emerald-100/30 focus:outline-none focus:border-emerald-600"
+                  className="w-full rounded-lg border border-emerald-900/60 bg-[#03150C] px-2 py-1.5 text-[12px] text-emerald-50 placeholder:text-emerald-100/30 focus:outline-none focus:border-emerald-600"
                 />
               </div>
             ))}
@@ -234,7 +234,7 @@ function FormulaConfigEditor({
                 <span className="text-[11px] text-emerald-200/60">
                   {pos}{pos === 1 ? "st" : pos === 2 ? "nd" : pos === 3 ? "rd" : "th"}
                 </span>
-                <span className="text-[11px] font-semibold text-[#f5e6b0]">{pts}</span>
+                <span className="text-[11px] font-semibold text-[#ffd666]">{pts}</span>
               </div>
             );
           })}
@@ -266,7 +266,7 @@ function PointsTableEditor({
               <span className="text-[11px] text-emerald-200/60">
                 {i + 1}{i === 0 ? "st" : i === 1 ? "nd" : i === 2 ? "rd" : "th"}
               </span>
-              <span className="text-[11px] font-semibold text-[#f5e6b0]">{pts}</span>
+              <span className="text-[11px] font-semibold text-[#ffd666]">{pts}</span>
             </div>
           ))}
         </div>
@@ -298,7 +298,7 @@ function PointsTableEditor({
               value={pointsTable[String(pos)]}
               onValueChange={(v) => handleChange(pos, v)}
               placeholder="0"
-              className="w-16 rounded-lg border border-emerald-900/60 bg-[#042713] px-2 py-1 text-[11px] text-emerald-50 placeholder:text-emerald-100/30 focus:outline-none focus:border-emerald-600 text-right"
+              className="w-16 rounded-lg border border-emerald-900/60 bg-[#03150C] px-2 py-1 text-[11px] text-emerald-50 placeholder:text-emerald-100/30 focus:outline-none focus:border-emerald-600 text-right"
             />
           </div>
         ))}
@@ -334,9 +334,9 @@ function SuspensePreviewCard({ row, flipped }: { row: typeof PREVIEW_ROWS[0]; fl
   const isWinner = row.pos === 1;
   return (
     <div className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${
-      isWinner && flipped ? "border-[#f5e6b0]/50 bg-[#f5e6b0]/10" : "border-emerald-900/50 bg-[#0b3b21]/70"
+      isWinner && flipped ? "border-[#ffd666]/50 bg-[#ffd666]/10" : "border-emerald-900/50 bg-[#0b3b21]/70"
     }`}>
-      <span className="w-5 text-center text-[10px] font-extrabold text-[#f5e6b0]/70">
+      <span className="w-5 text-center text-[10px] font-extrabold text-[#ffd666]/70">
         {isWinner && flipped ? "🏆" : row.pos}
       </span>
       <AnimatePresence mode="wait">
@@ -344,13 +344,13 @@ function SuspensePreviewCard({ row, flipped }: { row: typeof PREVIEW_ROWS[0]; fl
           <motion.div key="hidden" exit={{ rotateY: 90 }} transition={{ duration: 0.2 }} className="flex flex-1 items-center gap-2">
             <div className="h-6 w-6 rounded-full bg-emerald-900/60 grid place-items-center text-[9px] text-emerald-200/40 shrink-0">?</div>
             <span className="flex-1 text-[11px] text-emerald-200/30 tracking-widest">— — —</span>
-            <span className="text-[10px] text-[#f5e6b0]/25">??</span>
+            <span className="text-[10px] text-[#ffd666]/25">??</span>
           </motion.div>
         ) : (
           <motion.div key="shown" initial={{ rotateY: -90 }} animate={{ rotateY: 0 }} transition={{ duration: 0.3, type: "spring", stiffness: 280, damping: 24 }} className="flex flex-1 items-center gap-2">
             <div className="h-6 w-6 rounded-full bg-emerald-900/60 grid place-items-center text-[9px] font-bold text-emerald-200 shrink-0">{row.initials}</div>
-            <span className={`flex-1 text-[11px] font-semibold truncate ${isWinner ? "text-[#f5e6b0]" : "text-emerald-50"}`}>{row.name}</span>
-            <span className={`text-[10px] font-extrabold shrink-0 ${isWinner ? "text-[#f5e6b0]" : "text-[#f5e6b0]/80"}`}>{row.score}</span>
+            <span className={`flex-1 text-[11px] font-semibold truncate ${isWinner ? "text-[#ffd666]" : "text-emerald-50"}`}>{row.name}</span>
+            <span className={`text-[10px] font-extrabold shrink-0 ${isWinner ? "text-[#ffd666]" : "text-[#ffd666]/80"}`}>{row.score}</span>
           </motion.div>
         )}
       </AnimatePresence>
@@ -368,7 +368,7 @@ const PODIUM_PREVIEW_POSITIONS = [
   {
     pos: 1 as const, initials: "JS", name: "J. Smith", score: "-2",
     gradient: "linear-gradient(180deg, #c9a227 0%, #9a7b1a 40%, #6b5112 100%)",
-    ring: "ring-[#f5e6b0]", text: "text-[#f5e6b0]", h: 70, label: "1",
+    ring: "ring-[#ffd666]", text: "text-[#ffd666]", h: 70, label: "1",
     bLeft: "44%", bTop: "4%",  bSize: "w-11 h-11", pulsePeak: 1.35, pulseDur: 2.7,
   },
   {
@@ -397,7 +397,7 @@ function MiniPreviewTicker() {
         className="flex items-center gap-1.5 rounded-full border border-emerald-900/50 bg-[#0b3b21]/60 px-2.5 py-0.5 text-[9px]"
       >
         <span className="text-emerald-200/70">{row.name}</span>
-        <span className="font-bold text-[#f5e6b0]">- -</span>
+        <span className="font-bold text-[#ffd666]">- -</span>
       </motion.div>
     </AnimatePresence>
   );
@@ -454,7 +454,7 @@ function PodiumPreview() {
             transition={{ duration: 0.3 }}
             className="absolute inset-0 flex items-center justify-center z-20"
           >
-            <p className="text-[#f5e6b0] text-[11px] font-bold tracking-widest uppercase">
+            <p className="text-[#ffd666] text-[11px] font-bold tracking-widest uppercase">
               The results are in…
             </p>
           </motion.div>
@@ -649,13 +649,13 @@ function RevealModePreview({ mode }: { mode: "animated" | "suspense" | "rapid" |
                 {mode === "suspense" ? (
                   <>
                     <AnimatePresence mode="wait">
-                      <motion.p key={labelIdx} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} className="text-[#f5e6b0] text-xs font-bold tracking-widest uppercase">
+                      <motion.p key={labelIdx} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} className="text-[#ffd666] text-xs font-bold tracking-widest uppercase">
                         {SUSPENSE_LABELS[labelIdx]}
                       </motion.p>
                     </AnimatePresence>
                     <div className="flex justify-center gap-1.5">
                       {[0, 1, 2, 3].map((i) => (
-                        <motion.div key={i} className="w-1.5 h-1.5 rounded-full bg-[#f5e6b0]"
+                        <motion.div key={i} className="w-1.5 h-1.5 rounded-full bg-[#ffd666]"
                           animate={{ opacity: [0.15, 1, 0.15], scale: [0.8, 1.2, 0.8] }}
                           transition={{ duration: 1.6, repeat: Infinity, delay: i * 0.4 }} />
                       ))}
@@ -663,7 +663,7 @@ function RevealModePreview({ mode }: { mode: "animated" | "suspense" | "rapid" |
                   </>
                 ) : (
                   <>
-                    <p className="text-[#f5e6b0] text-xs font-bold tracking-widest uppercase">
+                    <p className="text-[#ffd666] text-xs font-bold tracking-widest uppercase">
                       {mode === "rapid" ? "Stand by…" : "Results incoming"}
                     </p>
                     <div className="flex justify-center gap-1">
@@ -693,19 +693,19 @@ function RevealModePreview({ mode }: { mode: "animated" | "suspense" | "rapid" |
                             animate={{ opacity: 1, y: 0, scale: 1 }}
                             transition={springProps}
                             className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${
-                              isWinner ? "border-[#f5e6b0]/50 bg-[#f5e6b0]/10" : "border-emerald-900/50 bg-[#0b3b21]/70"
+                              isWinner ? "border-[#ffd666]/50 bg-[#ffd666]/10" : "border-emerald-900/50 bg-[#0b3b21]/70"
                             }`}
                           >
-                            <span className="w-5 text-center text-[10px] font-extrabold text-[#f5e6b0]/70">
+                            <span className="w-5 text-center text-[10px] font-extrabold text-[#ffd666]/70">
                               {isWinner ? "🏆" : row.pos}
                             </span>
                             <div className="h-6 w-6 rounded-full bg-emerald-900/60 grid place-items-center text-[9px] font-bold text-emerald-200 shrink-0">
                               {row.initials}
                             </div>
-                            <span className={`flex-1 text-[11px] font-semibold truncate ${isWinner ? "text-[#f5e6b0]" : "text-emerald-50"}`}>
+                            <span className={`flex-1 text-[11px] font-semibold truncate ${isWinner ? "text-[#ffd666]" : "text-emerald-50"}`}>
                               {row.name}
                             </span>
-                            <span className={`text-[10px] font-extrabold shrink-0 ${isWinner ? "text-[#f5e6b0]" : "text-[#f5e6b0]/80"}`}>
+                            <span className={`text-[10px] font-extrabold shrink-0 ${isWinner ? "text-[#ffd666]" : "text-[#ffd666]/80"}`}>
                               {row.score}
                             </span>
                           </motion.div>
@@ -749,7 +749,7 @@ function LeaderboardFreezeSection({
             className={`w-full text-left rounded-xl border px-4 py-3 text-sm transition-colors ${
               form.freeze_enabled
                 ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                : "border-emerald-900/50 bg-[#042713] text-emerald-200/60"
+                : "border-emerald-900/50 bg-[#03150C] text-emerald-200/60"
             }`}
           >
             <div className="font-semibold">Hide results for ceremony</div>
@@ -768,7 +768,7 @@ function LeaderboardFreezeSection({
                   value={form.freeze_last_holes}
                   onChange={(e) => update("freeze_last_holes", e.target.value)}
                   placeholder="e.g. 5"
-                  className="w-full rounded-xl border border-emerald-900/60 bg-[#042713] px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
+                  className="w-full rounded-xl border border-emerald-900/60 bg-[#03150C] px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
                 />
                 <p className="text-[10px] text-emerald-100/40">
                   Scores through the earlier holes remain visible. Final holes are hidden until the reveal.
@@ -787,7 +787,7 @@ function LeaderboardFreezeSection({
                       className={`flex-1 rounded-xl border px-3 py-2 text-xs transition-colors ${
                         form.freeze_scope === v
                           ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                          : "border-emerald-900/50 bg-[#042713] text-emerald-200/60"
+                          : "border-emerald-900/50 bg-[#03150C] text-emerald-200/60"
                       }`}
                     >
                       {v === "all" ? "Entire field" : "Top X only"}
@@ -801,7 +801,7 @@ function LeaderboardFreezeSection({
                     value={form.freeze_top_x}
                     onChange={(e) => update("freeze_top_x", e.target.value)}
                     placeholder="How many top positions to hide"
-                    className="w-full rounded-xl border border-emerald-900/60 bg-[#042713] px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
+                    className="w-full rounded-xl border border-emerald-900/60 bg-[#03150C] px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
                   />
                 )}
               </div>
@@ -813,7 +813,7 @@ function LeaderboardFreezeSection({
                 className={`w-full text-left rounded-xl border px-4 py-2 text-sm transition-colors ${
                   form.freeze_auto_reveal
                     ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                    : "border-emerald-900/50 bg-[#042713] text-emerald-200/60"
+                    : "border-emerald-900/50 bg-[#03150C] text-emerald-200/60"
                 }`}
               >
                 <div className="font-semibold">Auto-reveal when all finish</div>
@@ -832,7 +832,7 @@ function LeaderboardFreezeSection({
                       className={`rounded-xl border px-3 py-2.5 text-left transition-colors ${
                         form.reveal_style === m.value
                           ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                          : "border-emerald-900/50 bg-[#042713] text-emerald-200/60"
+                          : "border-emerald-900/50 bg-[#03150C] text-emerald-200/60"
                       }`}
                     >
                       <div className="text-xs font-semibold">{m.label}</div>
@@ -857,7 +857,7 @@ function LeaderboardFreezeSection({
                     value={form.reveal_top_x}
                     onChange={(e) => update("reveal_top_x", e.target.value)}
                     placeholder="e.g. 10 — blank = entire field"
-                    className="w-full rounded-xl border border-emerald-900/60 bg-[#042713] px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
+                    className="w-full rounded-xl border border-emerald-900/60 bg-[#03150C] px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
                   />
                 </div>
               )}
@@ -892,7 +892,7 @@ function EntryWindowSection({
               type="datetime-local"
               value={start}
               onChange={(e) => onChangeStart(e.target.value)}
-              className="w-full rounded-xl border border-emerald-900/60 bg-[#042713] px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
+              className="w-full rounded-xl border border-emerald-900/60 bg-[#03150C] px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
             />
           </div>
           <div className="space-y-1">
@@ -901,7 +901,7 @@ function EntryWindowSection({
               type="datetime-local"
               value={end}
               onChange={(e) => onChangeEnd(e.target.value)}
-              className="w-full rounded-xl border border-emerald-900/60 bg-[#042713] px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
+              className="w-full rounded-xl border border-emerald-900/60 bg-[#03150C] px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
             />
           </div>
         </div>
@@ -929,7 +929,7 @@ function RulesTextSection({ value, onChange }: { value: string; onChange: (v: st
             onChange={(e) => onChange(e.target.value)}
             rows={4}
             placeholder="Any specific rules or conditions for this event…"
-            className="w-full rounded-xl border border-emerald-900/60 bg-[#042713] px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600 resize-none"
+            className="w-full rounded-xl border border-emerald-900/60 bg-[#03150C] px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600 resize-none"
           />
         </div>
       )}
@@ -1959,7 +1959,7 @@ export default function CreateEventClient() {
               placeholder={`${form.name || "Event"} Prize`}
               value={eventPot.name}
               onChange={(e) => setEventPot((p) => ({ ...p, name: e.target.value }))}
-              className="w-full rounded-xl border border-emerald-900/60 bg-[#042713] px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/30 focus:outline-none focus:border-emerald-600"
+              className="w-full rounded-xl border border-emerald-900/60 bg-[#03150C] px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/30 focus:outline-none focus:border-emerald-600"
             />
           </div>
           <div className="space-y-1.5">
@@ -1967,7 +1967,7 @@ export default function CreateEventClient() {
             <select
               value={eventPot.distribution_type}
               onChange={(e) => setEventPot((p) => ({ ...p, distribution_type: e.target.value }))}
-              className="w-full rounded-xl border border-emerald-900/60 bg-[#042713] px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
+              className="w-full rounded-xl border border-emerald-900/60 bg-[#03150C] px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
             >
               <option value="winner_takes_all">Winner takes all</option>
               <option value="position_based">By finishing position (custom splits)</option>
@@ -1985,7 +1985,7 @@ export default function CreateEventClient() {
               placeholder="e.g. 10"
               value={eventPot.entry_fee_amount}
               onChange={(e) => setEventPot((p) => ({ ...p, entry_fee_amount: e.target.value }))}
-              className="w-full rounded-xl border border-emerald-900/60 bg-[#042713] px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/30 focus:outline-none focus:border-emerald-600"
+              className="w-full rounded-xl border border-emerald-900/60 bg-[#03150C] px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/30 focus:outline-none focus:border-emerald-600"
             />
           </div>
           <div className="flex items-center justify-between">
@@ -2066,7 +2066,7 @@ export default function CreateEventClient() {
         >
           ← {step === 0 ? "Back" : "Previous"}
         </button>
-        <h1 className="text-base font-semibold text-[#f5e6b0]">Create Event</h1>
+        <h1 className="text-base font-semibold text-[#ffd666]">Create Event</h1>
         <div className="text-[11px] text-emerald-200/55">
           {step + 1}/{totalSteps}
         </div>

@@ -56,7 +56,7 @@ export default function HistoryClient() {
         <button type="button" onClick={() => router.push("/")} className="text-[11px] text-emerald-100/70 hover:text-emerald-50">
           ← Home
         </button>
-        <h1 className="text-lg font-semibold tracking-wide text-[#f5e6b0]">History</h1>
+        <h1 className="text-lg font-semibold tracking-wide text-[#ffd666]">History</h1>
         <div className="w-14" />
       </div>
 
@@ -97,7 +97,7 @@ export default function HistoryClient() {
                     </div>
                   </div>
                   <div className="shrink-0 text-right">
-                    <div className="text-sm font-extrabold text-[#f5e6b0]">
+                    <div className="text-sm font-extrabold text-[#ffd666]">
                       {finishLabel(entry?.position ?? null)}
                     </div>
                     {entry?.net_score != null && (

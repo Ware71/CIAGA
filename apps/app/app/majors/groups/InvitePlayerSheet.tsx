@@ -226,7 +226,7 @@ export function InvitePlayerSheet({ groupId, onInvite, title, excludedProfileIds
               <div className="text-[10px] uppercase tracking-wider text-emerald-200/40 font-semibold mb-1.5">
                 Following
               </div>
-              <div className="rounded-xl border border-emerald-900/50 bg-[#042713] overflow-hidden divide-y divide-emerald-900/40">
+              <div className="rounded-xl border border-emerald-900/50 bg-[#03150C] overflow-hidden divide-y divide-emerald-900/40">
                 {filteredFollowing.map((p) => (
                   <ProfileRow
                     key={p.id}
@@ -253,7 +253,7 @@ export function InvitePlayerSheet({ groupId, onInvite, title, excludedProfileIds
             <div className="text-[11px] text-emerald-200/40 text-center py-2">Searching…</div>
           )}
           {!searching && filteredSearch.length > 0 && (
-            <div className="rounded-xl border border-emerald-900/50 bg-[#042713] overflow-hidden divide-y divide-emerald-900/40">
+            <div className="rounded-xl border border-emerald-900/50 bg-[#03150C] overflow-hidden divide-y divide-emerald-900/40">
               {filteredSearch.map((p) => (
                 <ProfileRow
                   key={p.id}

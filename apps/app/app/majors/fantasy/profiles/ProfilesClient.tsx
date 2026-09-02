@@ -103,7 +103,7 @@ export default function ProfilesClient() {
         >
           ← Fantasy
         </button>
-        <h1 className="text-lg font-bold tracking-wide text-[#f5e6b0]">Profiles</h1>
+        <h1 className="text-lg font-bold tracking-wide text-[#ffd666]">Profiles</h1>
         <div className="w-12" />
       </div>
 

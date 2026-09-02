@@ -32,7 +32,7 @@ type AnyStatus = "open" | SettledStatus;
 
 const STATUS_STYLES: Record<AnyStatus, { label: string; cls: string }> = {
   open: { label: "Open", cls: "text-emerald-300 border-emerald-700/50" },
-  won: { label: "Won", cls: "text-[#f5e6b0] border-[#f5e6b0]/40" },
+  won: { label: "Won", cls: "text-[#ffd666] border-[#ffd666]/40" },
   lost: { label: "Lost", cls: "text-red-300/80 border-red-900/50" },
   void: { label: "Void", cls: "text-emerald-200/50 border-emerald-900/50" },
   cashed_out: { label: "Cashed out", cls: "text-amber-300/80 border-amber-800/40" },
@@ -319,7 +319,7 @@ export default function MyPicksClient() {
           <span className="text-[11px] text-emerald-200/60">
             {p.stake} pts @ <OddsValue odds={Number(p.decimal_odds)} />
           </span>
-          <span className="text-[11px] font-bold text-[#f5e6b0]">
+          <span className="text-[11px] font-bold text-[#ffd666]">
             {outcomeLine(p.status, p.potential_return, p.cashout_value, p.stake)}
           </span>
         </div>
@@ -377,7 +377,7 @@ export default function MyPicksClient() {
         <span className="text-[11px] text-emerald-200/60">
           {parlay.stake} pts @ <OddsValue odds={parlay.combined_decimal_odds} />
         </span>
-        <span className="text-[11px] font-bold text-[#f5e6b0]">
+        <span className="text-[11px] font-bold text-[#ffd666]">
           {outcomeLine(parlay.status, parlay.potential_return, parlay.cashout_value, parlay.stake)}
         </span>
       </div>
@@ -420,7 +420,7 @@ export default function MyPicksClient() {
           <span className="text-[11px] text-emerald-200/60">
             {s.stake} pts @ <OddsValue odds={Number(s.decimal_odds)} />
           </span>
-          <span className="text-[11px] font-bold text-[#f5e6b0]">
+          <span className="text-[11px] font-bold text-[#ffd666]">
             {outcomeLine(s.status, s.potential_return, s.cashout_value, s.stake)}
           </span>
         </div>
@@ -451,7 +451,7 @@ export default function MyPicksClient() {
         >
           ← Fantasy
         </button>
-        <h1 className="text-lg font-bold tracking-wide text-[#f5e6b0]">My Picks</h1>
+        <h1 className="text-lg font-bold tracking-wide text-[#ffd666]">My Picks</h1>
         <div className="w-12" />
       </div>
 
@@ -501,7 +501,7 @@ export default function MyPicksClient() {
               className="absolute inset-0 bg-black/60"
             />
             <div className="relative w-full max-w-sm mx-auto rounded-t-3xl border border-emerald-900/70 bg-[#07301a] px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+20px)]">
-              <div className="text-sm font-bold text-[#f5e6b0] mb-0.5 truncate">
+              <div className="text-sm font-bold text-[#ffd666] mb-0.5 truncate">
                 {cashoutTarget.title}
               </div>
               <div className="text-[11px] text-emerald-200/60 mb-4 truncate">
@@ -528,7 +528,7 @@ export default function MyPicksClient() {
               ) : offer && secondsLeft > 0 ? (
                 <div className="space-y-3">
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-[#f5e6b0]">{offer.offer_value} pts</div>
+                    <div className="text-3xl font-bold text-[#ffd666]">{offer.offer_value} pts</div>
                     <div className="text-[10px] text-emerald-200/50 mt-1">
                       Offer expires in {secondsLeft}s
                     </div>

@@ -288,11 +288,11 @@ function MajorsSnapshotInner({ initialHub }: { initialHub?: MajorHubSummary | nu
             className={`${MAJORS_CARD_INTERACTIVE} w-full p-4 text-left`}
           >
             <div className="mb-3 flex items-center gap-3">
-              <div className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.22em] text-[#f5e6b0]/80">
+              <div className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.22em] text-[#ffd666]/80">
                 Season
               </div>
-              <div className="h-px flex-1 bg-gradient-to-r from-[#f5e6b0]/30 to-transparent" />
-              <div className="shrink-0 text-xs text-[#f5e6b0]/50">›</div>
+              <div className="h-px flex-1 bg-gradient-to-r from-[#ffd666]/30 to-transparent" />
+              <div className="shrink-0 text-xs text-[#ffd666]/50">›</div>
             </div>
             <div className="grid grid-cols-4 gap-2 text-center">
               {[
@@ -302,7 +302,7 @@ function MajorsSnapshotInner({ initialHub }: { initialHub?: MajorHubSummary | nu
                 { label: "Earnings", value: hub.season_earnings === 0 ? "—" : `£${hub.season_earnings.toFixed(0)}` },
               ].map((stat) => (
                 <div key={stat.label}>
-                  <div className="text-2xl font-extrabold leading-none text-[#f5e6b0] tabular-nums">
+                  <div className="text-2xl font-extrabold leading-none text-[#ffd666] tabular-nums">
                     {stat.value}
                   </div>
                   <div className="mt-1.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-emerald-200/50">
@@ -363,7 +363,7 @@ function AllTimeVsSeasonSection({ hub }: { hub: MajorHubSummary }) {
       {rows.map((row) => (
         <div key={row.label} className="grid grid-cols-3 px-3 py-2 border-t border-emerald-900/40">
           <div className="text-[11px] text-emerald-200/60 self-center">{row.label}</div>
-          <div className="text-center text-sm font-bold text-[#f5e6b0]">
+          <div className="text-center text-sm font-bold text-[#ffd666]">
             {row.isCurrency ? fmt(row.season) : (row.season || "—")}
           </div>
           <div className="text-center text-sm font-semibold text-emerald-100/80">
@@ -443,7 +443,7 @@ function SeasonStatsDrawer({ hub, onClose }: { hub: MajorHubSummary; onClose: ()
         <div className="mx-4 border-t border-emerald-900/50 my-3" />
 
         <div className="px-4 pb-4 space-y-2">
-          <div className="text-[10px] uppercase tracking-[0.18em] text-[#f5e6b0]/75 mb-2">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-[#ffd666]/75 mb-2">
             By Group · Season
           </div>
           {hub.group_stats.length === 0 ? (

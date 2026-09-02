@@ -64,7 +64,7 @@ function PreviewTable({ model }: { model: PreviewTableModel }) {
               {row.cells.map((cell, i) => (
                 <td key={model.columns[i]?.id ?? i} className="px-1 py-1 text-center">
                   {cell ? (
-                    <span className="inline-block min-w-[46px] rounded-lg border border-emerald-800/50 bg-emerald-950/40 px-1.5 py-0.5 text-[11px] font-bold text-[#f5e6b0]">
+                    <span className="inline-block min-w-[46px] rounded-lg border border-emerald-800/50 bg-emerald-950/40 px-1.5 py-0.5 text-[11px] font-bold text-[#ffd666]">
                       <OddsValue odds={cell.decimal_odds} />
                     </span>
                   ) : (
@@ -219,7 +219,7 @@ export default function GroupMarketsClient({ groupId }: { groupId: string }) {
           <div className="rounded-2xl border border-emerald-900/70 bg-gradient-to-br from-[#0b3b21]/90 to-[#07301a]/90 px-4 py-3.5">
             <div className="flex items-center justify-between">
               <div className="min-w-0">
-                <h1 className="text-lg font-bold text-[#f5e6b0] truncate">{group.group.name}</h1>
+                <h1 className="text-lg font-bold text-[#ffd666] truncate">{group.group.name}</h1>
                 <div className="text-[10px] text-emerald-200/50 mt-0.5">
                   {group.config.mode === "topup" ? "Top-up" : "Fixed"} ·{" "}
                   {group.config.budgetScope === "event" ? "per event" : "per season"}
@@ -227,7 +227,7 @@ export default function GroupMarketsClient({ groupId }: { groupId: string }) {
               </div>
               <div className="text-right shrink-0">
                 {group.balance !== null && (
-                  <div className="text-base font-bold text-[#f5e6b0]">{formatPoints(group.balance)} pts</div>
+                  <div className="text-base font-bold text-[#ffd666]">{formatPoints(group.balance)} pts</div>
                 )}
                 {group.config.mode === "topup" && (
                   <button
@@ -251,7 +251,7 @@ export default function GroupMarketsClient({ groupId }: { groupId: string }) {
               <button
                 type="button"
                 onClick={() => router.push(`/majors/fantasy/seasons/${season.seasonId}`)}
-                className="w-full text-left rounded-2xl border border-[#f5e6b0]/25 bg-[#0b3b21]/70 px-3.5 py-3 hover:bg-emerald-900/30 transition-colors"
+                className="w-full text-left rounded-2xl border border-[#ffd666]/25 bg-[#0b3b21]/70 px-3.5 py-3 hover:bg-emerald-900/30 transition-colors"
               >
                 <PreviewTable model={season.preview} />
                 <div className="mt-1.5 text-right text-[11px] font-semibold text-emerald-400">Markets →</div>
@@ -295,7 +295,7 @@ export default function GroupMarketsClient({ groupId }: { groupId: string }) {
                     </div>
                     {e.narrative && (
                       <div className="mt-2 pt-2 border-t border-emerald-900/30">
-                        <div className="text-[8px] uppercase tracking-[0.2em] text-[#f5e6b0]/55 mb-0.5">
+                        <div className="text-[8px] uppercase tracking-[0.2em] text-[#ffd666]/55 mb-0.5">
                           Preview
                         </div>
                         <p className="text-[11px] leading-snug text-emerald-100/75 line-clamp-2">
@@ -321,7 +321,7 @@ export default function GroupMarketsClient({ groupId }: { groupId: string }) {
           <div className="fixed inset-0 z-50 flex items-end">
             <button type="button" aria-label="Close" onClick={() => setTopupOpen(false)} className="absolute inset-0 bg-black/60" />
             <div className="relative w-full max-w-sm mx-auto rounded-t-3xl border border-emerald-900/70 bg-[#07301a] px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+20px)]">
-              <div className="text-sm font-bold text-[#f5e6b0] mb-1">Top up wallet</div>
+              <div className="text-sm font-bold text-[#ffd666] mb-1">Top up wallet</div>
               <div className="text-[11px] text-emerald-200/60 mb-4">
                 {formatPoints(group?.config.topupIncrement ?? 0)} pts per unit. Top-ups don&apos;t count toward PnL.
               </div>

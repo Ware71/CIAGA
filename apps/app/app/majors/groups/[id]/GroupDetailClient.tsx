@@ -105,7 +105,7 @@ function PositionBadge({ position }: { position: number | null }) {
   if (position == null) return <span className="w-7 text-center text-xs text-emerald-200/40">—</span>;
   const colours =
     position === 1
-      ? "bg-[#f5e6b0]/20 text-[#f5e6b0] border-[#f5e6b0]/40"
+      ? "bg-[#ffd666]/20 text-[#ffd666] border-[#ffd666]/40"
       : position === 2
       ? "bg-[#c0c0c0]/15 text-[#c0c0c0] border-[#c0c0c0]/30"
       : position === 3
@@ -150,7 +150,7 @@ function MemberDetailDrawer({
 
   const roleCls =
     member.role === "owner"
-      ? "text-[#f5e6b0] border-[#f5e6b0]/30 bg-[#f5e6b0]/10"
+      ? "text-[#ffd666] border-[#ffd666]/30 bg-[#ffd666]/10"
       : member.role === "admin"
       ? "text-emerald-300 border-emerald-700/50 bg-emerald-900/30"
       : "text-emerald-200/50 border-emerald-900/50 bg-transparent";
@@ -347,7 +347,7 @@ function MemberRow({
 
   const roleCls =
     member.role === "owner"
-      ? "text-[#f5e6b0] border-[#f5e6b0]/30 bg-[#f5e6b0]/10"
+      ? "text-[#ffd666] border-[#ffd666]/30 bg-[#ffd666]/10"
       : member.role === "admin"
       ? "text-emerald-300 border-emerald-700/50 bg-emerald-900/30"
       : "text-emerald-200/50 border-emerald-900/50 bg-transparent";
@@ -999,7 +999,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
   const roleBadge = (role: string) =>
     role === "owner"
-      ? "text-[#f5e6b0] border-[#f5e6b0]/30 bg-[#f5e6b0]/10"
+      ? "text-[#ffd666] border-[#ffd666]/30 bg-[#ffd666]/10"
       : role === "admin"
       ? "text-emerald-300 border-emerald-700/50 bg-emerald-900/30"
       : "text-emerald-200/50 border-emerald-900/50 bg-transparent";
@@ -1036,7 +1036,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                 const pos = s.live_position ?? s.confirmed_position;
                 return (
                   <div key={s.profile_id} className="flex items-center gap-2">
-                    <span className={`w-5 text-center text-[11px] font-bold ${i === 0 ? "text-[#f5e6b0]" : i === 1 ? "text-[#c0c0c0]" : "text-[#cd7f32]"}`}>{pos}</span>
+                    <span className={`w-5 text-center text-[11px] font-bold ${i === 0 ? "text-[#ffd666]" : i === 1 ? "text-[#c0c0c0]" : "text-[#cd7f32]"}`}>{pos}</span>
                     <span className="flex-1 text-[12px] font-semibold text-emerald-100 truncate">{s.profile?.name ?? "—"}</span>
                     <span className="text-[11px] text-emerald-200/60">{s.confirmed_points} pts</span>
                   </div>
@@ -1054,7 +1054,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             className="w-full text-left rounded-2xl border border-emerald-900/60 bg-gradient-to-br from-[#0b3b21]/90 to-[#07301a]/90 px-4 py-3 hover:from-[#0b3b21] hover:to-[#07301a] transition-colors"
           >
             <div className="flex items-center justify-between mb-1">
-              <div className="text-[9px] uppercase tracking-[0.2em] text-[#f5e6b0]/60">Season story</div>
+              <div className="text-[9px] uppercase tracking-[0.2em] text-[#ffd666]/60">Season story</div>
               <span className="text-[10px] text-emerald-400/80">Markets →</span>
             </div>
             <p className="text-[12px] leading-relaxed text-emerald-100/85">{seasonNarrative.text}</p>
@@ -1134,7 +1134,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 flex items-center justify-between">
             <div>
               <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider mb-0.5">Join Code</div>
-              <div className="text-base font-mono font-bold text-[#f5e6b0] tracking-widest">{group.join_code}</div>
+              <div className="text-base font-mono font-bold text-[#ffd666] tracking-widest">{group.join_code}</div>
             </div>
             <button
               type="button"
@@ -1360,7 +1360,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       };
 
       const podiumClass = (pos: number | null) =>
-        pos === 1 ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5"
+        pos === 1 ? "border-[#ffd666]/25 bg-[#ffd666]/5"
         : pos === 2 ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5"
         : pos === 3 ? "border-[#cd7f32]/20 bg-[#cd7f32]/5"
         : "border-emerald-900/50 bg-[#0b3b21]/60";
@@ -1397,14 +1397,14 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                   <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
                   <div className="text-right shrink-0 space-y-0.5">
                     <div className="flex items-baseline justify-end gap-1">
-                      <span className="text-xs font-extrabold text-[#f5e6b0]">{fmtPts(s.display_points)} pts</span>
+                      <span className="text-xs font-extrabold text-[#ffd666]">{fmtPts(s.display_points)} pts</span>
                       {s.live_points_pending > 0 && (
                         <span className="text-[10px] font-semibold text-amber-400/90">+{Math.round(s.live_points_pending)}</span>
                       )}
                     </div>
                     <div className="flex gap-1 justify-end">
                       <span className="text-[9px] text-emerald-100/50 bg-emerald-900/40 rounded px-1">{s.events_played} evts</span>
-                      {s.wins > 0 && <span className="text-[9px] text-[#f5e6b0]/70 bg-[#f5e6b0]/10 rounded px-1">{s.wins}W</span>}
+                      {s.wins > 0 && <span className="text-[9px] text-[#ffd666]/70 bg-[#ffd666]/10 rounded px-1">{s.wins}W</span>}
                     </div>
                   </div>
                 </button>
@@ -1442,7 +1442,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                 <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
                 <div className="flex gap-4 shrink-0">
                   <span className={`text-xs font-bold w-12 text-right ${(s as any).total_gross_to_par != null && (s as any).total_gross_to_par < 0 ? "text-emerald-400" : (s as any).total_gross_to_par != null && (s as any).total_gross_to_par > 0 ? "text-red-400" : "text-emerald-100/80"}`}>{formatToPar((s as any).total_gross_to_par ?? null)}</span>
-                  <span className={`text-xs font-bold w-12 text-right ${(s as any).total_net_to_par != null && (s as any).total_net_to_par < 0 ? "text-emerald-400" : (s as any).total_net_to_par != null && (s as any).total_net_to_par > 0 ? "text-red-400" : "text-[#f5e6b0]/80"}`}>{formatToPar((s as any).total_net_to_par ?? null)}</span>
+                  <span className={`text-xs font-bold w-12 text-right ${(s as any).total_net_to_par != null && (s as any).total_net_to_par < 0 ? "text-emerald-400" : (s as any).total_net_to_par != null && (s as any).total_net_to_par > 0 ? "text-red-400" : "text-[#ffd666]/80"}`}>{formatToPar((s as any).total_net_to_par ?? null)}</span>
                 </div>
               </button>
             ))}
@@ -1551,7 +1551,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                       </div>
                     )}
                     <span className="flex-1 text-sm text-emerald-100 truncate">{w.profile?.name ?? "Unknown"}</span>
-                    <span className="text-sm font-bold text-[#f5e6b0]">£{w.all_time_won.toFixed(2)}</span>
+                    <span className="text-sm font-bold text-[#ffd666]">£{w.all_time_won.toFixed(2)}</span>
                   </div>
                 ))}
             </div>
@@ -1778,7 +1778,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         );
 
       const podiumClass = (pos: number | null) =>
-        pos === 1 ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5"
+        pos === 1 ? "border-[#ffd666]/25 bg-[#ffd666]/5"
         : pos === 2 ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5"
         : pos === 3 ? "border-[#cd7f32]/20 bg-[#cd7f32]/5"
         : "border-emerald-900/50 bg-[#0b3b21]/60";
@@ -1807,7 +1807,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                     <PositionBadge position={i + 1} />
                     {avatarEl(pr.profile)}
                     <span className="flex-1 text-sm font-semibold text-emerald-100 truncate">{pr.profile.name ?? "Unknown"}</span>
-                    <span className="text-[11px] font-bold text-[#f5e6b0]">{pr.total_wins} {pr.total_wins === 1 ? "win" : "wins"}</span>
+                    <span className="text-[11px] font-bold text-[#ffd666]">{pr.total_wins} {pr.total_wins === 1 ? "win" : "wins"}</span>
                   </div>
                   {pr.competition_records.length > 0 && (
                     <div className="space-y-1 pl-9">
@@ -1826,7 +1826,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                       {pr.standalone_wins.map((w: any) => (
                         <div key={w.event_id} className="flex items-center justify-between gap-2">
                           <span className="text-[11px] text-emerald-200/70 truncate">{w.name ?? "Event"}</span>
-                          <span className="text-[10px] text-[#f5e6b0]/70 shrink-0">{w.year ?? ""}</span>
+                          <span className="text-[10px] text-[#ffd666]/70 shrink-0">{w.year ?? ""}</span>
                         </div>
                       ))}
                     </div>
@@ -1850,7 +1850,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                   {avatarEl(pr.profile)}
                   <span className="flex-1 text-sm font-semibold text-emerald-100 truncate">{pr.profile.name ?? "Unknown"}</span>
                   <div className="text-right shrink-0">
-                    <div className="text-xs font-extrabold text-[#f5e6b0]">{(pr as any).career_points} pts</div>
+                    <div className="text-xs font-extrabold text-[#ffd666]">{(pr as any).career_points} pts</div>
                     <div className="text-[9px] text-emerald-100/40">{(pr as any).career_events_played} evts</div>
                   </div>
                 </button>
@@ -1876,7 +1876,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                   <span className="flex-1 text-sm font-semibold text-emerald-100 truncate">{pr.profile.name ?? "Unknown"}</span>
                   <div className="flex gap-4 shrink-0">
                     <span className="text-xs font-bold text-emerald-100/80 w-12 text-right">{fmtTopar((pr as any).career_total_gross_to_par)}</span>
-                    <span className="text-xs font-bold text-[#f5e6b0]/80 w-12 text-right">{fmtTopar((pr as any).career_total_net_to_par)}</span>
+                    <span className="text-xs font-bold text-[#ffd666]/80 w-12 text-right">{fmtTopar((pr as any).career_total_net_to_par)}</span>
                   </div>
                 </button>
               ))}
@@ -1902,7 +1902,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                   <span className="flex-1 text-sm font-semibold text-emerald-100 truncate">{pr.profile.name ?? "Unknown"}</span>
                   <div className="flex gap-4 shrink-0">
                     <span className="text-xs font-bold text-emerald-100/80 w-12 text-right">{fmtTopar((pr as any).career_avg_gross_to_par)}</span>
-                    <span className="text-xs font-bold text-[#f5e6b0]/80 w-12 text-right">{fmtTopar((pr as any).career_avg_net_to_par)}</span>
+                    <span className="text-xs font-bold text-[#ffd666]/80 w-12 text-right">{fmtTopar((pr as any).career_avg_net_to_par)}</span>
                   </div>
                 </button>
               ))}
@@ -1944,7 +1944,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                   {avatarEl(s.profile)}
                   <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
                   <div className="text-right shrink-0">
-                    <div className="text-xs font-extrabold text-[#f5e6b0]">{s.wins}W</div>
+                    <div className="text-xs font-extrabold text-[#ffd666]">{s.wins}W</div>
                     <div className="text-[9px] text-emerald-100/50">{s.events_played} evts</div>
                   </div>
                 </button>
@@ -1964,10 +1964,10 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                   {avatarEl(s.profile)}
                   <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
                   <div className="text-right shrink-0">
-                    <div className="text-xs font-extrabold text-[#f5e6b0]">{fmtPts(s.season_points)} pts</div>
+                    <div className="text-xs font-extrabold text-[#ffd666]">{fmtPts(s.season_points)} pts</div>
                     <div className="flex gap-1 justify-end">
                       <span className="text-[9px] text-emerald-100/50 bg-emerald-900/40 rounded px-1">{s.events_played} evts</span>
-                      {s.wins > 0 && <span className="text-[9px] text-[#f5e6b0]/70 bg-[#f5e6b0]/10 rounded px-1">{s.wins}W</span>}
+                      {s.wins > 0 && <span className="text-[9px] text-[#ffd666]/70 bg-[#ffd666]/10 rounded px-1">{s.wins}W</span>}
                     </div>
                   </div>
                 </button>
@@ -1997,7 +1997,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                   <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
                   <div className="flex gap-4 shrink-0">
                     <span className={`text-xs font-bold w-12 text-right ${(s as any).total_gross_to_par != null && (s as any).total_gross_to_par < 0 ? "text-emerald-400" : (s as any).total_gross_to_par != null && (s as any).total_gross_to_par > 0 ? "text-red-400" : "text-emerald-100/80"}`}>{fmtTopar((s as any).total_gross_to_par ?? null)}</span>
-                    <span className={`text-xs font-bold w-12 text-right ${(s as any).total_net_to_par != null && (s as any).total_net_to_par < 0 ? "text-emerald-400" : (s as any).total_net_to_par != null && (s as any).total_net_to_par > 0 ? "text-red-400" : "text-[#f5e6b0]/80"}`}>{fmtTopar((s as any).total_net_to_par ?? null)}</span>
+                    <span className={`text-xs font-bold w-12 text-right ${(s as any).total_net_to_par != null && (s as any).total_net_to_par < 0 ? "text-emerald-400" : (s as any).total_net_to_par != null && (s as any).total_net_to_par > 0 ? "text-red-400" : "text-[#ffd666]/80"}`}>{fmtTopar((s as any).total_net_to_par ?? null)}</span>
                   </div>
                 </button>
               ))}
@@ -2027,7 +2027,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                   <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
                   <div className="flex gap-4 shrink-0">
                     <span className="text-xs font-bold text-emerald-100/80 w-12 text-right">{fmtTopar(s.avg_gross_to_par)}</span>
-                    <span className="text-xs font-bold text-[#f5e6b0]/80 w-12 text-right">{fmtTopar(s.avg_net_to_par)}</span>
+                    <span className="text-xs font-bold text-[#ffd666]/80 w-12 text-right">{fmtTopar(s.avg_net_to_par)}</span>
                   </div>
                 </button>
               ))}
@@ -2369,7 +2369,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                               {s.current_holder.name?.slice(0, 1).toUpperCase() ?? "?"}
                             </div>
                           )}
-                          <span className="text-[10px] text-emerald-200/70">Holder: <span className="text-[#f5e6b0]/80 font-semibold">{s.current_holder.name}</span></span>
+                          <span className="text-[10px] text-emerald-200/70">Holder: <span className="text-[#ffd666]/80 font-semibold">{s.current_holder.name}</span></span>
                         </>
                       ) : (
                         <span className="text-[10px] text-emerald-200/35">No current holder</span>
@@ -2942,7 +2942,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             ) : fantasyWallet ? (
               <div className="flex items-end justify-between">
                 <div>
-                  <div className="text-xl font-bold text-[#f5e6b0]">{fmtPts(fantasyWallet.balance)} pts</div>
+                  <div className="text-xl font-bold text-[#ffd666]">{fmtPts(fantasyWallet.balance)} pts</div>
                   <div className="text-[10px] text-emerald-200/50">available balance</div>
                 </div>
                 <div className={`text-sm font-semibold ${fantasyWallet.pnl > 0 ? "text-emerald-300" : fantasyWallet.pnl < 0 ? "text-red-300" : "text-emerald-100/60"}`}>
@@ -3034,7 +3034,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                     type="text"
                     value={details.name}
                     onChange={(e) => setDetails({ name: e.target.value })}
-                    className="w-full rounded-xl bg-[#042713] border border-emerald-900/60 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none focus:border-emerald-600"
+                    className="w-full rounded-xl bg-[#03150C] border border-emerald-900/60 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none focus:border-emerald-600"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -3044,7 +3044,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                     value={details.description}
                     onChange={(e) => setDetails({ description: e.target.value })}
                     placeholder="What is this group about?"
-                    className="w-full rounded-xl bg-[#042713] border border-emerald-900/60 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none focus:border-emerald-600 resize-none"
+                    className="w-full rounded-xl bg-[#03150C] border border-emerald-900/60 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none focus:border-emerald-600 resize-none"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -3075,7 +3075,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                     value={details.max_members}
                     onChange={(e) => setDetails({ max_members: e.target.value })}
                     placeholder="Unlimited"
-                    className="w-full rounded-xl bg-[#042713] border border-emerald-900/60 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none focus:border-emerald-600"
+                    className="w-full rounded-xl bg-[#03150C] border border-emerald-900/60 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none focus:border-emerald-600"
                   />
                 </div>
                 <button
@@ -3257,7 +3257,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                       const hr = { ...((prefs as any).handicap_rules ?? {}), mode: e.target.value };
                       setPrefs({ handicap_rules: hr });
                     }}
-                    className="w-full bg-[#042713] border border-emerald-900/60 rounded-lg px-2 py-1.5 text-[12px] text-emerald-100 focus:outline-none [color-scheme:dark]"
+                    className="w-full bg-[#03150C] border border-emerald-900/60 rounded-lg px-2 py-1.5 text-[12px] text-emerald-100 focus:outline-none [color-scheme:dark]"
                   >
                     <option value="allowance_pct">Percentage Allowance</option>
                     <option value="compare_against_lowest">Off the Lowest</option>
@@ -3280,7 +3280,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                               setPrefs({ handicap_rules: hr });
                             }}
                             placeholder="100"
-                            className="w-16 bg-[#042713] border border-emerald-900/60 rounded-lg px-2 py-1 text-[12px] text-emerald-100 text-center"
+                            className="w-16 bg-[#03150C] border border-emerald-900/60 rounded-lg px-2 py-1 text-[12px] text-emerald-100 text-center"
                           />
                           <span className="text-[11px] text-emerald-200/50">%</span>
                         </div>
@@ -3298,7 +3298,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                               setPrefs({ handicap_rules: hr });
                             }}
                             placeholder="No limit"
-                            className="w-full bg-[#042713] border border-emerald-900/60 rounded-lg px-2 py-1 text-[12px] text-emerald-100 text-center"
+                            className="w-full bg-[#03150C] border border-emerald-900/60 rounded-lg px-2 py-1 text-[12px] text-emerald-100 text-center"
                           />
                         </div>
                       )}
@@ -3317,7 +3317,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                           setPrefs({ handicap_rules: hr });
                         }}
                         placeholder="No limit"
-                        className="w-full bg-[#042713] border border-emerald-900/60 rounded-lg px-2 py-1 text-[12px] text-emerald-100 text-center"
+                        className="w-full bg-[#03150C] border border-emerald-900/60 rounded-lg px-2 py-1 text-[12px] text-emerald-100 text-center"
                       />
                     </div>
                   )}
@@ -3446,7 +3446,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                           min={1}
                           value={form.budgetAmount}
                           onChange={(e) => setForm({ budgetAmount: e.target.value })}
-                          className="w-full bg-[#042713] border border-emerald-900/60 rounded-lg px-2 py-1 text-[12px] text-emerald-100 text-center"
+                          className="w-full bg-[#03150C] border border-emerald-900/60 rounded-lg px-2 py-1 text-[12px] text-emerald-100 text-center"
                         />
                       </div>
                       {form.mode === "topup" && (
@@ -3457,7 +3457,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                             min={1}
                             value={form.topupIncrement}
                             onChange={(e) => setForm({ topupIncrement: e.target.value })}
-                            className="w-full bg-[#042713] border border-emerald-900/60 rounded-lg px-2 py-1 text-[12px] text-emerald-100 text-center"
+                            className="w-full bg-[#03150C] border border-emerald-900/60 rounded-lg px-2 py-1 text-[12px] text-emerald-100 text-center"
                           />
                         </div>
                       )}
@@ -3724,7 +3724,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           </div>
         )}
         <div className="min-w-0 pt-0.5">
-          <h1 className="text-xl font-bold text-[#f5e6b0] leading-tight truncate">{group.name}</h1>
+          <h1 className="text-xl font-bold text-[#ffd666] leading-tight truncate">{group.name}</h1>
           <div className="flex items-center gap-2 flex-wrap mt-1">
             <span className="text-[10px] text-emerald-200/55 border border-emerald-900/50 rounded-full px-2 py-0.5 capitalize">
               {group.type.replace(/_/g, " ")}
@@ -3813,7 +3813,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                     </div>
                     <div className="text-right shrink-0 space-y-0.5">
                       {e.points_earned != null && (
-                        <div className="text-[11px] font-bold text-[#f5e6b0]">{fmtPts(e.points_earned)} pts</div>
+                        <div className="text-[11px] font-bold text-[#ffd666]">{fmtPts(e.points_earned)} pts</div>
                       )}
                       {e.gross_score != null && (
                         <div className="text-[10px] text-emerald-200/55">{e.gross_score} gross</div>
@@ -3826,7 +3826,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                 ))}
                 <div className="flex items-center justify-between pt-1 border-t border-emerald-900/40">
                   <span className="text-[11px] text-emerald-200/50">{playerBreakdownEntries.length} event{playerBreakdownEntries.length !== 1 ? "s" : ""}</span>
-                  <span className="text-[11px] font-bold text-[#f5e6b0]">
+                  <span className="text-[11px] font-bold text-[#ffd666]">
                     {fmtPts(playerBreakdownEntries.reduce((sum, e) => sum + (e.points_earned ?? 0), 0))} pts total
                   </span>
                 </div>

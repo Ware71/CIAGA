@@ -181,7 +181,7 @@ export default function MajorsHubClient() {
   const filteredDiscover = discoverGroups.filter((g) => !myGroupIds.has(g.id));
 
   return (
-    <div className="min-h-[100dvh] bg-[radial-gradient(120%_60%_at_50%_0%,rgba(245,230,176,0.10)_0%,rgba(245,230,176,0.03)_35%,transparent_70%)]">
+    <div className="min-h-[100dvh] bg-[radial-gradient(130%_65%_at_50%_0%,rgba(255,214,102,0.20)_0%,rgba(255,214,102,0.06)_38%,transparent_68%)]">
       <div className="pb-[env(safe-area-inset-bottom)] max-w-sm mx-auto">
       <MajorsMasthead
         subtitle="Groups · Events · Standings"
@@ -212,7 +212,7 @@ export default function MajorsHubClient() {
                   className={`${MAJORS_CARD} px-3 py-3 space-y-2`}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-amber-800/60 to-amber-950 flex items-center justify-center text-sm font-bold text-amber-200 shrink-0">
+                    <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-[#0D5E33] to-[#062C17] flex items-center justify-center text-sm font-bold text-[#ffd666] shrink-0 border border-[#ffd666]/25">
                       {invite.group?.name.slice(0, 2).toUpperCase() ?? "?"}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -261,7 +261,7 @@ export default function MajorsHubClient() {
                 <button
                   type="button"
                   onClick={() => router.push("/majors/groups/create")}
-                  className="text-[11px] font-semibold text-[#f5e6b0]/80 hover:text-[#f5e6b0]"
+                  className="text-[11px] font-semibold text-[#ffd666]/80 hover:text-[#ffd666]"
                 >
                   + New
                 </button>
@@ -295,7 +295,7 @@ export default function MajorsHubClient() {
                     {g.image_url ? (
                       <img src={g.image_url} alt="" className="h-10 w-10 rounded-xl object-cover shrink-0" loading="lazy" decoding="async" />
                     ) : (
-                      <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-800 to-emerald-950 flex items-center justify-center text-sm font-bold text-emerald-200 shrink-0">
+                      <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#0D5E33] to-[#062C17] flex items-center justify-center text-sm font-bold text-[#ffd666] shrink-0 border border-[#ffd666]/25">
                         {g.name.slice(0, 2).toUpperCase()}
                       </div>
                     )}
@@ -303,7 +303,7 @@ export default function MajorsHubClient() {
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-semibold text-emerald-50 truncate">{g.name}</span>
                         {g.role === "owner" && (
-                          <span className="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border border-[#f5e6b0]/30 bg-[#f5e6b0]/10 text-[#f5e6b0]">
+                          <span className="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border border-[#ffd666]/30 bg-[#ffd666]/10 text-[#ffd666]">
                             Owner
                           </span>
                         )}
@@ -345,7 +345,7 @@ export default function MajorsHubClient() {
                       {g.image_url ? (
                         <img src={g.image_url} alt="" className="h-10 w-10 rounded-xl object-cover shrink-0" loading="lazy" decoding="async" />
                       ) : (
-                        <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-800 to-emerald-950 flex items-center justify-center text-sm font-bold text-emerald-200 shrink-0">
+                        <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#0D5E33] to-[#062C17] flex items-center justify-center text-sm font-bold text-[#ffd666] shrink-0 border border-[#ffd666]/25">
                           {g.name.slice(0, 2).toUpperCase()}
                         </div>
                       )}

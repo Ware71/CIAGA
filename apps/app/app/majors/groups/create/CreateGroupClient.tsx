@@ -564,7 +564,7 @@ export default function CreateGroupClient() {
         >
           ← {step === 0 ? "Back" : "Previous"}
         </button>
-        <h1 className="text-base font-semibold text-[#f5e6b0]">Create Group</h1>
+        <h1 className="text-base font-semibold text-[#ffd666]">Create Group</h1>
         <div className="text-[11px] text-emerald-200/55">
           {step + 1}/{totalSteps}
         </div>

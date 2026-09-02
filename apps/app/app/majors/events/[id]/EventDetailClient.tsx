@@ -918,7 +918,7 @@ function TeeTimeCard({
               Group {tt.group_number}
             </span>
           )}
-          <span className="text-sm font-semibold text-[#f5e6b0]">{timeStr}</span>
+          <span className="text-sm font-semibold text-[#ffd666]">{timeStr}</span>
           <span className="text-[11px] text-emerald-100/55 ml-2">{dateStr}</span>
         </div>
         <div className="flex items-center gap-2">
@@ -1030,7 +1030,7 @@ function FixtureCard({ fixture }: { fixture: MatchplayFixture & { home_entry?: a
         {/* Result */}
         <div className="shrink-0 text-center w-14">
           {fixture.status === "completed" && resultLabel ? (
-            <span className="text-xs font-bold text-[#f5e6b0]">{resultLabel}</span>
+            <span className="text-xs font-bold text-[#ffd666]">{resultLabel}</span>
           ) : fixture.scheduled_at ? (
             <span className="text-[10px] text-emerald-200/50">
               {new Date(fixture.scheduled_at).toLocaleDateString([], { month: "short", day: "numeric" })}
@@ -1101,9 +1101,9 @@ function MiniScorecard({
     const base = "flex items-center justify-center w-7 h-6 text-xs tabular-nums font-semibold";
     const cls =
       b === "eagle"
-        ? `${base} rounded-full bg-[#f5e6b0] text-[#042713]`
+        ? `${base} rounded-full bg-[#ffd666] text-[#042713]`
         : b === "birdie"
-        ? `${base} rounded-full ring-1 ring-[#f5e6b0] text-emerald-50`
+        ? `${base} rounded-full ring-1 ring-[#ffd666] text-emerald-50`
         : b === "bogey"
         ? `${base} ring-1 ring-white/50 text-emerald-50`
         : b === "double"
@@ -1145,7 +1145,7 @@ function MiniScorecard({
         <div className="flex flex-col items-center gap-0.5 w-9 border-l border-emerald-900/40 ml-0.5 pl-1">
           <div className="text-[9px] text-emerald-200/30 leading-none">{label}</div>
           <div className="text-[9px] text-emerald-200/40 leading-none">{totals.par}</div>
-          <div className="text-xs font-bold text-[#f5e6b0] tabular-nums">{totals.score || "—"}</div>
+          <div className="text-xs font-bold text-[#ffd666] tabular-nums">{totals.score || "—"}</div>
         </div>
       </div>
     );
@@ -1725,7 +1725,7 @@ function PositionBadge({ position }: { position: number | null }) {
   if (position == null) return <span className="w-7 text-center text-xs text-emerald-200/40">—</span>;
   const colours =
     position === 1
-      ? "bg-[#f5e6b0]/20 text-[#f5e6b0] border-[#f5e6b0]/40"
+      ? "bg-[#ffd666]/20 text-[#ffd666] border-[#ffd666]/40"
       : position === 2
       ? "bg-[#c0c0c0]/15 text-[#c0c0c0] border-[#c0c0c0]/30"
       : position === 3
@@ -2514,7 +2514,7 @@ export default function EventDetailClient({
             className="w-full text-left rounded-2xl border border-emerald-900/60 bg-gradient-to-br from-[#0b3b21]/90 to-[#07301a]/90 px-4 py-3 hover:from-[#0b3b21] hover:to-[#07301a] transition-colors"
           >
             <div className="flex items-center justify-between mb-1">
-              <div className="text-[9px] uppercase tracking-[0.2em] text-[#f5e6b0]/60">Event preview</div>
+              <div className="text-[9px] uppercase tracking-[0.2em] text-[#ffd666]/60">Event preview</div>
               <span className="text-[10px] text-emerald-400/80">Picks →</span>
             </div>
             <p className="text-[12px] leading-relaxed text-emerald-100/85">{fantasyNarrative}</p>
@@ -2606,7 +2606,7 @@ export default function EventDetailClient({
         {(event as any).entry_fee_amount > 0 && (
           <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 flex items-center justify-between">
             <span className="text-[12px] text-emerald-200/60">Entry Fee</span>
-            <span className="text-sm font-bold text-[#f5e6b0]">
+            <span className="text-sm font-bold text-[#ffd666]">
               {((event as any).entry_fee_currency ?? "GBP") === "GBP" ? "£" : ""}
               {((event as any).entry_fee_amount as number).toFixed(2)}
             </span>
@@ -3106,14 +3106,14 @@ export default function EventDetailClient({
               <button
                 type="button"
                 onClick={() => { setTieDrawerScreen("playoff_setup"); setShowTieDrawer(true); }}
-                className="flex-1 py-2 rounded-full bg-[#f5e6b0] text-[#042713] text-xs font-semibold"
+                className="flex-1 py-2 rounded-full bg-[#ffd666] text-[#042713] text-xs font-semibold"
               >
                 Playoff
               </button>
               <button
                 type="button"
                 onClick={() => { setTieDrawerScreen("choice"); setShowTieDrawer(true); }}
-                className="flex-1 py-2 rounded-full border border-[#f5e6b0]/50 text-[#f5e6b0] text-xs font-semibold"
+                className="flex-1 py-2 rounded-full border border-[#ffd666]/50 text-[#ffd666] text-xs font-semibold"
               >
                 Countback
               </button>
@@ -3261,7 +3261,7 @@ export default function EventDetailClient({
                   {(row as any).playoff_result && (
                     <span className={`inline-block mt-0.5 text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full ${
                       String((row as any).playoff_result).startsWith("won")
-                        ? "bg-[#f5e6b0] text-[#042713]"
+                        ? "bg-[#ffd666] text-[#042713]"
                         : "border border-emerald-700/50 text-emerald-200/70"
                     }`}>
                       {String((row as any).playoff_result).includes("countback")
@@ -3277,7 +3277,7 @@ export default function EventDetailClient({
                   </div>
                 )}
                 <div className="text-right shrink-0">
-                  <div className="text-xs font-extrabold text-[#f5e6b0]">{mainScoreText}</div>
+                  <div className="text-xs font-extrabold text-[#ffd666]">{mainScoreText}</div>
                   {bracketText ? (
                     <div className="text-[10px] text-emerald-100/50">{subLabel} {bracketText}</div>
                   ) : (
@@ -3291,7 +3291,7 @@ export default function EventDetailClient({
               isFrozenRow
                 ? "border-cyan-700/40 bg-cyan-900/30"
                 : row.position === 1
-                ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5"
+                ? "border-[#ffd666]/25 bg-[#ffd666]/5"
                 : row.position === 2
                 ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5"
                 : row.position === 3
@@ -3516,7 +3516,7 @@ export default function EventDetailClient({
                               );
                             })()}
                           </div>
-                          <div className="text-sm font-bold tabular-nums text-[#f5e6b0] text-right w-12">
+                          <div className="text-sm font-bold tabular-nums text-[#ffd666] text-right w-12">
                             {r.gross_score != null ? r.gross_score : "—"}
                           </div>
                           <div className="text-sm font-bold tabular-nums text-emerald-300 text-right w-12">
@@ -3542,7 +3542,7 @@ export default function EventDetailClient({
                     return (
                       <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-center rounded-xl border border-emerald-700/40 bg-emerald-900/20 px-3 py-2 mt-1">
                         <div className="text-[11px] font-bold text-emerald-300 uppercase tracking-wider">Total</div>
-                        <div className="text-sm font-bold tabular-nums text-[#f5e6b0] text-right w-12">
+                        <div className="text-sm font-bold tabular-nums text-[#ffd666] text-right w-12">
                           {totalGross != null ? totalGross : "—"}
                         </div>
                         <div className="text-sm font-bold tabular-nums text-emerald-300 text-right w-12">
@@ -3860,7 +3860,7 @@ export default function EventDetailClient({
                 <span className="text-center text-xs text-emerald-100/70">{row.played}</span>
                 <span className="text-center text-xs text-emerald-100/70">{row.won}</span>
                 <span className="text-center text-xs text-emerald-100/70">{row.halved}</span>
-                <span className="text-center text-xs font-bold text-[#f5e6b0]">{row.league_points}</span>
+                <span className="text-center text-xs font-bold text-[#ffd666]">{row.league_points}</span>
               </div>
             ))}
           </>
@@ -4268,7 +4268,7 @@ export default function EventDetailClient({
                 </div>
                 <div className="text-center">
                   <div className="text-[10px] text-emerald-200/50">Total Pot</div>
-                  <div className="text-sm font-bold text-[#f5e6b0]">{currencySymbol}{pot.toFixed(2)}</div>
+                  <div className="text-sm font-bold text-[#ffd666]">{currencySymbol}{pot.toFixed(2)}</div>
                 </div>
                 <div className="text-center">
                   <div className="text-[10px] text-emerald-200/50">Paid Out</div>
@@ -4664,7 +4664,7 @@ export default function EventDetailClient({
                         </div>
                         <div className="text-right shrink-0">
                           {pot.is_monetary && (
-                            <div className="text-sm font-bold text-[#f5e6b0]">{currencySymbol}{pot.total_pot.toFixed(2)} pot</div>
+                            <div className="text-sm font-bold text-[#ffd666]">{currencySymbol}{pot.total_pot.toFixed(2)} pot</div>
                           )}
                           {pot.entry_fee_amount && pot.entry_fee_amount > 0 && (
                             <div className="text-[10px] text-emerald-200/50">{currencySymbol}{pot.entry_fee_amount.toFixed(2)}/player</div>
@@ -4930,7 +4930,7 @@ export default function EventDetailClient({
                                 {p.position ? `${p.position}. ` : ""}{p.profile?.name ?? p.profile_id}
                               </span>
                               <div className="text-right">
-                                <span className="text-[#f5e6b0] font-semibold">
+                                <span className="text-[#ffd666] font-semibold">
                                   {p.amount != null ? `${currencySymbol}${p.amount.toFixed(2)}` : pot.prize_description ?? "Prize"}
                                 </span>
                                 <span className="text-emerald-200/30 ml-1.5 text-[9px]">{p.note}</span>
@@ -4988,7 +4988,7 @@ export default function EventDetailClient({
                               {pot.payouts.map((p) => (
                                 <div key={p.id} className="flex items-center justify-between text-[11px]">
                                   <span className="text-emerald-200/80">{p.position ? `${p.position}. ` : ""}{p.profile.name}</span>
-                                  <span className="text-[#f5e6b0] font-semibold">
+                                  <span className="text-[#ffd666] font-semibold">
                                     {p.amount != null ? `${currencySymbol}${p.amount.toFixed(2)}` : (pot.prize_description ?? "Prize")}
                                   </span>
                                 </div>
@@ -5189,7 +5189,7 @@ export default function EventDetailClient({
                   <div key={pw.profile_id} className="flex items-center gap-3">
                     <PositionBadge position={pw.position} />
                     <span className="flex-1 text-sm text-emerald-50">{pw.profile?.name ?? "?"}</span>
-                    <span className="text-sm font-bold text-[#f5e6b0]">£{pw.amount.toFixed(2)}</span>
+                    <span className="text-sm font-bold text-[#ffd666]">£{pw.amount.toFixed(2)}</span>
                   </div>
                 ))}
                 <div className="flex gap-2 pt-1">
@@ -5223,7 +5223,7 @@ export default function EventDetailClient({
                   </div>
                 )}
                 <span className="flex-1 text-sm font-semibold text-emerald-50">{w.profile?.name ?? "Unknown"}</span>
-                <span className="text-sm font-bold text-[#f5e6b0]">£{w.amount.toFixed(2)}</span>
+                <span className="text-sm font-bold text-[#ffd666]">£{w.amount.toFixed(2)}</span>
               </div>
             ))}
           </div>
@@ -5286,7 +5286,7 @@ export default function EventDetailClient({
             )}
           </button>
         )}
-        <h1 className="text-xl font-bold text-[#f5e6b0] leading-tight">{event.name}</h1>
+        <h1 className="text-xl font-bold text-[#ffd666] leading-tight">{event.name}</h1>
         <div className="flex items-center gap-2 flex-wrap">
           <span className={`text-[10px] font-medium px-2.5 py-1 rounded-full border capitalize ${statusColour}`}>
             {event.majors_status}

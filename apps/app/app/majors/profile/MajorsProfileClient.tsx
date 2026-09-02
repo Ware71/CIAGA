@@ -36,7 +36,7 @@ export default function MajorsProfileClient() {
         <button type="button" onClick={() => router.push("/majors")} className="text-[11px] text-emerald-100/70 hover:text-emerald-50">
           ← Hub
         </button>
-        <h1 className="text-lg font-semibold tracking-wide text-[#f5e6b0]">Majors Profile</h1>
+        <h1 className="text-lg font-semibold tracking-wide text-[#ffd666]">Majors Profile</h1>
         <div className="w-14" />
       </div>
 
@@ -74,7 +74,7 @@ export default function MajorsProfileClient() {
                 { label: "Podiums", value: data.season_summary.podiums },
               ].map((stat) => (
                 <div key={stat.label}>
-                  <div className="text-base font-extrabold text-[#f5e6b0]">{stat.value}</div>
+                  <div className="text-base font-extrabold text-[#ffd666]">{stat.value}</div>
                   <div className="text-[10px] text-emerald-200/60">{stat.label}</div>
                 </div>
               ))}
@@ -124,7 +124,7 @@ export default function MajorsProfileClient() {
                     </div>
                   </div>
                   <div className="shrink-0 text-right ml-3">
-                    <div className="text-sm font-extrabold text-[#f5e6b0]">
+                    <div className="text-sm font-extrabold text-[#ffd666]">
                       {item.entry?.position != null ? `#${item.entry.position}` : "—"}
                     </div>
                     {item.entry?.points_earned != null && item.entry.points_earned > 0 && (
@@ -157,7 +157,7 @@ export default function MajorsProfileClient() {
                   </div>
                   {m.standing && (
                     <div className="text-right">
-                      <div className="text-xs font-extrabold text-[#f5e6b0]">
+                      <div className="text-xs font-extrabold text-[#ffd666]">
                         {m.standing.position != null ? `#${m.standing.position}` : "—"}
                       </div>
                       <div className="text-[10px] text-emerald-100/50">{m.standing.season_points} pts</div>

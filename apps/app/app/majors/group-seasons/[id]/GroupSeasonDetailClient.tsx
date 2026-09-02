@@ -288,7 +288,7 @@ export default function GroupSeasonDetailClient({ groupSeasonId }: { groupSeason
             {season.group.name}
           </button>
         )}
-        <h1 className="text-xl font-bold text-[#f5e6b0] leading-tight">{season.name}</h1>
+        <h1 className="text-xl font-bold text-[#ffd666] leading-tight">{season.name}</h1>
         <div className="flex items-center gap-2 flex-wrap">
           <span className={`text-[10px] font-medium px-2.5 py-1 rounded-full capitalize ${statusColour(season.status)}`}>
             {season.status}
@@ -369,7 +369,7 @@ export default function GroupSeasonDetailClient({ groupSeasonId }: { groupSeason
                   key={row.profile_id}
                   className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 ${
                     row.position === 1
-                      ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5"
+                      ? "border-[#ffd666]/25 bg-[#ffd666]/5"
                       : "border-emerald-900/50 bg-[#0b3b21]/60"
                   }`}
                 >
@@ -390,7 +390,7 @@ export default function GroupSeasonDetailClient({ groupSeasonId }: { groupSeason
                     </div>
                   </div>
                   <div className="text-right shrink-0">
-                    <div className="text-xs font-extrabold text-[#f5e6b0]">{row.season_points}</div>
+                    <div className="text-xs font-extrabold text-[#ffd666]">{row.season_points}</div>
                     <div className="text-[10px] text-emerald-100/50">pts</div>
                   </div>
                 </div>
@@ -416,7 +416,7 @@ export default function GroupSeasonDetailClient({ groupSeasonId }: { groupSeason
                   ].map((item) => (
                     <div key={item.label} className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5">
                       <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider mb-0.5">{item.label}</div>
-                      <div className={`text-sm font-bold ${item.label === "Pot Balance" && item.value < 0 ? "text-red-400" : "text-[#f5e6b0]"}`}>
+                      <div className={`text-sm font-bold ${item.label === "Pot Balance" && item.value < 0 ? "text-red-400" : "text-[#ffd666]"}`}>
                         £{item.value.toFixed(2)}
                       </div>
                     </div>
@@ -496,7 +496,7 @@ export default function GroupSeasonDetailClient({ groupSeasonId }: { groupSeason
                           </span>
                         </div>
                         {pot.is_monetary && (
-                          <div className="text-sm font-bold text-[#f5e6b0] shrink-0">£{pot.total_pot.toFixed(2)}</div>
+                          <div className="text-sm font-bold text-[#ffd666] shrink-0">£{pot.total_pot.toFixed(2)}</div>
                         )}
                         {!pot.is_monetary && pot.prize_description && (
                           <div className="text-[10px] text-amber-200/70 text-right shrink-0 max-w-[100px]">{pot.prize_description}</div>
@@ -544,7 +544,7 @@ export default function GroupSeasonDetailClient({ groupSeasonId }: { groupSeason
                           {proposedDist.proposed.map((p, i) => (
                             <div key={i} className="flex items-center justify-between text-[11px]">
                               <span className="text-emerald-200/80">{p.position ? `${p.position}. ` : ""}{p.profile?.name ?? p.profile_id}</span>
-                              <span className="text-[#f5e6b0] font-semibold">
+                              <span className="text-[#ffd666] font-semibold">
                                 {p.amount != null ? `£${p.amount.toFixed(2)}` : pot.prize_description ?? "Prize"}
                               </span>
                             </div>
@@ -575,7 +575,7 @@ export default function GroupSeasonDetailClient({ groupSeasonId }: { groupSeason
                         {pot.payouts.map((p) => (
                           <div key={p.id} className="flex items-center justify-between text-[11px]">
                             <span className="text-emerald-200/80">{p.position ? `${p.position}. ` : ""}{p.profile.name}</span>
-                            <span className="text-[#f5e6b0] font-semibold">
+                            <span className="text-[#ffd666] font-semibold">
                               {p.amount != null ? `£${p.amount.toFixed(2)}` : (pot.prize_description ?? "Prize")}
                             </span>
                           </div>
