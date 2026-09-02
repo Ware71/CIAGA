@@ -28,9 +28,9 @@ function formatPoints(n: number): string {
 }
 
 function pnlClass(pnl: number): string {
-  if (pnl > 0) return "text-emerald-300";
-  if (pnl < 0) return "text-red-300";
-  return "text-emerald-100/60";
+  if (pnl > 0) return "text-[color:var(--sec-good)]";
+  if (pnl < 0) return "text-[color:var(--sec-bad)]";
+  return "text-[color:var(--sec-muted)]";
 }
 
 type FantasyPayload = { groups: FantasyGroupSummary[]; events: FantasyEventSummary[] };
@@ -156,25 +156,25 @@ export default function FantasyHubClient() {
         <button
           type="button"
           onClick={() => router.push("/majors")}
-          className="text-[11px] text-emerald-100/70 hover:text-emerald-50 flex items-center gap-1"
+          className="text-[11px] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)] flex items-center gap-1"
         >
           ← Majors
         </button>
-        <h1 className="text-lg font-bold tracking-wide text-[#7CF0BE]">Fantasy Picks</h1>
+        <h1 className="text-lg font-bold tracking-wide text-[color:var(--sec-accent)]">Fantasy Picks</h1>
         <div className="w-12" />
       </div>
 
       {loading ? (
-        <div className="text-sm text-emerald-100/60 text-center py-20">Loading…</div>
+        <div className="text-sm text-[color:var(--sec-muted)] text-center py-20">Loading…</div>
       ) : (
         <div className="px-4 pb-8">
-          <h2 className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/50 mb-2">My Wallets</h2>
+          <h2 className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--sec-muted)] mb-2">My Wallets</h2>
           {groups.length === 0 ? (
-            <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 px-4 py-6 text-center">
-              <div className="text-sm text-emerald-100/70">
+            <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_80%,transparent)] px-4 py-6 text-center">
+              <div className="text-sm text-[color:var(--sec-muted)]">
                 Fantasy picks aren&apos;t enabled in any of your groups yet.
               </div>
-              <div className="text-[11px] text-emerald-200/50 mt-1">
+              <div className="text-[11px] text-[color:var(--sec-muted)] mt-1">
                 Group admins can enable it from the group&apos;s Settings tab.
               </div>
             </div>
@@ -185,27 +185,27 @@ export default function FantasyHubClient() {
                 return (
                   <div
                     key={g.group.id}
-                    className="rounded-2xl border border-emerald-900/70 bg-gradient-to-br from-[#0b3b21]/90 to-[#07301a]/90 overflow-hidden"
+                    className="rounded-2xl border border-[color:var(--sec-hair)] bg-gradient-to-br from-[color:color-mix(in_srgb,var(--sec-surface)_90%,transparent)] to-[color:color-mix(in_srgb,var(--sec-surface)_90%,transparent)] overflow-hidden"
                   >
                     <button
                       type="button"
                       onClick={() => router.push(`/majors/fantasy/groups/${g.group.id}`)}
-                      className="w-full text-left px-3.5 py-3 hover:bg-emerald-900/20 transition-colors"
+                      className="w-full text-left px-3.5 py-3 hover:bg-[color:var(--sec-surface-2)] transition-colors"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-800/60 to-emerald-950 flex items-center justify-center text-sm font-bold text-emerald-200 shrink-0">
+                        <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[color:var(--sec-surface-2)] to-[color:var(--sec-surface)] flex items-center justify-center text-sm font-bold text-[color:var(--sec-text-2)] shrink-0">
                           {g.group.name.slice(0, 2).toUpperCase()}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-semibold text-emerald-50 truncate">{g.group.name}</div>
-                          <div className="text-[10px] text-emerald-200/50 mt-0.5">
+                          <div className="text-sm font-semibold text-[color:var(--sec-text)] truncate">{g.group.name}</div>
+                          <div className="text-[10px] text-[color:var(--sec-muted)] mt-0.5">
                             {g.config.mode === "topup" ? "Top-up budget" : "Fixed budget"} ·{" "}
                             {g.config.budgetScope === "event" ? "per event" : "per season"}
                           </div>
                         </div>
                         <div className="text-right shrink-0">
                           {g.balance !== null && (
-                            <div className="text-sm font-bold text-[#7CF0BE]">{formatPoints(g.balance)} pts</div>
+                            <div className="text-sm font-bold text-[color:var(--sec-accent)]">{formatPoints(g.balance)} pts</div>
                           )}
                           <div className={`text-[11px] font-semibold ${pnlClass(g.pnl)}`}>
                             {g.pnl > 0 ? "+" : ""}
@@ -215,18 +215,18 @@ export default function FantasyHubClient() {
                       </div>
                       <div className="mt-2.5 flex items-center gap-1.5">
                         {counts.live > 0 && (
-                          <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-red-300">
+                          <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[color:var(--sec-bad)]">
                             {counts.live} Live
                           </span>
                         )}
-                        <span className="rounded-full border border-emerald-800/50 px-2 py-0.5 text-[9px] font-semibold text-emerald-200/70">
+                        <span className="rounded-full border border-[color:var(--sec-hair)] px-2 py-0.5 text-[9px] font-semibold text-[color:var(--sec-muted)]">
                           {counts.open} event{counts.open === 1 ? "" : "s"} + season
                         </span>
-                        <span className="ml-auto text-[11px] font-semibold text-emerald-400">Markets →</span>
+                        <span className="ml-auto text-[11px] font-semibold text-[color:var(--sec-good)]">Markets →</span>
                       </div>
                     </button>
                     {g.config.mode === "topup" && (
-                      <div className="flex justify-end border-t border-emerald-900/50 px-3.5 py-1.5">
+                      <div className="flex justify-end border-t border-[color:var(--sec-hair)] px-3.5 py-1.5">
                         <button
                           type="button"
                           onClick={() => {
@@ -234,7 +234,7 @@ export default function FantasyHubClient() {
                             setTopupUnits(1);
                             setTopupError(null);
                           }}
-                          className="text-[11px] font-semibold text-emerald-400 hover:text-emerald-300"
+                          className="text-[11px] font-semibold text-[color:var(--sec-good)] hover:text-[color:var(--sec-good)]"
                         >
                           + Top up
                         </button>
@@ -257,9 +257,9 @@ export default function FantasyHubClient() {
               onClick={() => setTopupGroup(null)}
               className="absolute inset-0 bg-black/60"
             />
-            <div className="relative w-full max-w-sm mx-auto rounded-t-3xl border border-emerald-900/70 bg-[#07301a] px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+20px)]">
-              <div className="text-sm font-bold text-[#7CF0BE] mb-1">Top up wallet</div>
-              <div className="text-[11px] text-emerald-200/60 mb-4">
+            <div className="relative w-full max-w-sm mx-auto rounded-t-3xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+20px)]">
+              <div className="text-sm font-bold text-[color:var(--sec-accent)] mb-1">Top up wallet</div>
+              <div className="text-[11px] text-[color:var(--sec-muted)] mb-4">
                 {topupGroup.group.name} · {formatPoints(topupGroup.config.topupIncrement ?? 0)} pts per unit.
                 Top-ups don&apos;t count toward PnL.
               </div>
@@ -267,30 +267,30 @@ export default function FantasyHubClient() {
                 <button
                   type="button"
                   onClick={() => setTopupUnits((u) => Math.max(1, u - 1))}
-                  className="h-10 w-10 rounded-full border border-emerald-900/60 text-emerald-200 text-lg"
+                  className="h-10 w-10 rounded-full border border-[color:var(--sec-hair)] text-[color:var(--sec-text-2)] text-lg"
                 >
                   −
                 </button>
                 <div className="text-center min-w-[90px]">
-                  <div className="text-2xl font-bold text-emerald-50">
+                  <div className="text-2xl font-bold text-[color:var(--sec-text)]">
                     {formatPoints(topupUnits * (topupGroup.config.topupIncrement ?? 0))}
                   </div>
-                  <div className="text-[10px] text-emerald-200/50">points</div>
+                  <div className="text-[10px] text-[color:var(--sec-muted)]">points</div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setTopupUnits((u) => Math.min(100, u + 1))}
-                  className="h-10 w-10 rounded-full border border-emerald-900/60 text-emerald-200 text-lg"
+                  className="h-10 w-10 rounded-full border border-[color:var(--sec-hair)] text-[color:var(--sec-text-2)] text-lg"
                 >
                   +
                 </button>
               </div>
-              {topupError && <div className="text-[11px] text-red-300 text-center mb-3">{topupError}</div>}
+              {topupError && <div className="text-[11px] text-[color:var(--sec-bad)] text-center mb-3">{topupError}</div>}
               <button
                 type="button"
                 onClick={handleTopUp}
                 disabled={toppingUp}
-                className="w-full py-2.5 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
+                className="w-full py-2.5 rounded-full bg-[color:var(--sec-primary)] text-sm font-semibold text-white hover:bg-[color:var(--sec-primary-hover)] disabled:opacity-50"
               >
                 {toppingUp ? "Topping up…" : "Confirm top-up"}
               </button>

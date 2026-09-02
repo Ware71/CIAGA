@@ -150,7 +150,7 @@ export default function PostComposer({ onPosted, onCancel }: Props) {
   }
 
   return (
-    <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 shadow-sm space-y-3">
+    <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4 shadow-sm space-y-3">
       {/* Caption — supports @mentions */}
       <MentionInput
         value={text}
@@ -158,7 +158,7 @@ export default function PostComposer({ onPosted, onCancel }: Props) {
         mentions={mentions}
         onMentionsChange={setMentions}
         placeholder="Add a caption… use @ to tag people"
-        className="w-full min-h-[90px] rounded-md border border-emerald-900/70 bg-[#042713] px-3 py-2 text-base text-emerald-50 placeholder:text-emerald-100/40 outline-none focus:ring-2 focus:ring-emerald-600/40"
+        className="w-full min-h-[90px] rounded-md border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] px-3 py-2 text-base text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] outline-none focus:ring-2 focus:ring-[color:var(--sec-accent)]"
       />
 
       {/* Image picker */}
@@ -176,14 +176,14 @@ export default function PostComposer({ onPosted, onCancel }: Props) {
           <Button
             type="button"
             variant="secondary"
-            className="bg-emerald-900/35 text-emerald-50 hover:bg-emerald-900/50 font-extrabold"
+            className="bg-[color:var(--sec-surface)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)] font-extrabold"
             onClick={pickImages}
             disabled={isPosting || isUploading}
           >
             Add images
           </Button>
 
-          <div className="text-xs font-semibold text-emerald-100/60">
+          <div className="text-xs font-semibold text-[color:var(--sec-muted)]">
             {images.length > 0 ? `${images.length}/4 selected` : "Up to 4"}
           </div>
         </div>
@@ -193,7 +193,7 @@ export default function PostComposer({ onPosted, onCancel }: Props) {
             <Button
               type="button"
               variant="ghost"
-              className="text-emerald-100 hover:bg-emerald-900/30 font-semibold"
+              className="text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)] font-semibold"
               onClick={onCancel}
               disabled={isPosting || isUploading}
             >
@@ -205,7 +205,7 @@ export default function PostComposer({ onPosted, onCancel }: Props) {
             type="button"
             onClick={handlePost}
             disabled={!canPost}
-            className="bg-[#f5e6b0] text-[#042713] hover:bg-[#f5e6b0]/90 font-extrabold"
+            className="bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] hover:bg-[color:color-mix(in_srgb,var(--sec-accent)_90%,transparent)] font-extrabold"
           >
             {isUploading ? "Uploading…" : isPosting ? "Posting…" : "Post"}
           </Button>
@@ -218,7 +218,7 @@ export default function PostComposer({ onPosted, onCancel }: Props) {
           {images.map((img, idx) => (
             <div
               key={img.previewUrl}
-              className="relative overflow-hidden rounded-xl border border-emerald-900/60 bg-[#042713]"
+              className="relative overflow-hidden rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)]"
             >
               <img
                 src={img.previewUrl}

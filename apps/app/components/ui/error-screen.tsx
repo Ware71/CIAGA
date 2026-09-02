@@ -28,16 +28,16 @@ export function ErrorScreen({
   homeHref = "/home",
 }: Props) {
   return (
-    <div className="min-h-[100dvh] bg-[#042713] text-slate-100 grid place-items-center px-4 pb-[env(safe-area-inset-bottom)]">
+    <div className="min-h-[100dvh] bg-[color:var(--ciaga-ground)] text-slate-100 grid place-items-center px-4 pb-[env(safe-area-inset-bottom)]">
       <div className="w-full max-w-sm space-y-4 text-center">
-        <div className="text-lg font-semibold tracking-wide text-[#f5e6b0]">{title}</div>
-        <p className="text-sm font-medium text-emerald-100/70">{message}</p>
+        <div className="text-lg font-semibold tracking-wide text-[color:var(--sec-accent)]">{title}</div>
+        <p className="text-sm font-medium text-[color:var(--sec-muted)]">{message}</p>
 
         <div className="flex items-center justify-center gap-2 pt-2">
           {onRetry ? (
             <Button
               variant="secondary"
-              className="bg-emerald-900/40 text-emerald-50 hover:bg-emerald-900/55"
+              className="bg-[color:var(--sec-surface)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
               onClick={onRetry}
             >
               Try again
@@ -47,14 +47,14 @@ export function ErrorScreen({
           <Button
             asChild
             variant="ghost"
-            className="text-emerald-100 hover:bg-emerald-900/30"
+            className="text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
           >
             <Link href={homeHref}>Go home</Link>
           </Button>
         </div>
 
         {digest ? (
-          <div className="pt-2 text-[10px] font-mono uppercase tracking-[0.16em] text-emerald-200/35">
+          <div className="pt-2 text-[10px] font-mono uppercase tracking-[0.16em] text-[color:var(--sec-muted)]">
             {digest}
           </div>
         ) : null}

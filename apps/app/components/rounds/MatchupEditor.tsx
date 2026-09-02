@@ -128,7 +128,7 @@ export function MatchupEditor({
 
   if (items.length < 2) {
     return (
-      <div className="text-[11px] text-emerald-100/60">
+      <div className="text-[11px] text-[color:var(--sec-muted)]">
         {mode === "individual"
           ? "Add at least 2 players to configure matchups."
           : "Create at least 2 teams to configure matchups."}
@@ -139,7 +139,7 @@ export function MatchupEditor({
   return (
     <div className="space-y-3">
       {isAutoPaired ? (
-        <div className="text-[11px] text-emerald-100/70">
+        <div className="text-[11px] text-[color:var(--sec-muted)]">
           Auto-paired: {nameMap.get(items[0].id)} vs {nameMap.get(items[1].id)}
         </div>
       ) : (
@@ -151,9 +151,9 @@ export function MatchupEditor({
               checked={roundRobin}
               onChange={(e) => handleRoundRobinToggle(e.target.checked)}
               disabled={disabled}
-              className="rounded border-emerald-700 text-emerald-600 focus:ring-emerald-500 disabled:opacity-50"
+              className="rounded border-[color:var(--sec-line)] text-emerald-600 focus:ring-[color:var(--sec-accent)] disabled:opacity-50"
             />
-            <label className="text-xs text-emerald-100">
+            <label className="text-xs text-[color:var(--sec-text)]">
               Round robin (everyone plays each other)
             </label>
           </div>
@@ -162,11 +162,11 @@ export function MatchupEditor({
           {!roundRobin && !disabled && (
             <div className="flex items-end gap-2">
               <div className="flex-1 min-w-0">
-                <label className="text-[10px] text-emerald-100/50 uppercase tracking-wider block mb-1">Player A</label>
+                <label className="text-[10px] text-[color:var(--sec-muted)] uppercase tracking-wider block mb-1">Player A</label>
                 <select
                   value={newA}
                   onChange={(e) => setNewA(e.target.value)}
-                  className="w-full rounded-lg border border-emerald-900/50 bg-[#042713]/70 px-2 py-1.5 text-xs text-emerald-100 focus:outline-none focus:ring-1 focus:ring-emerald-600"
+                  className="w-full rounded-lg border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_70%,transparent)] px-2 py-1.5 text-xs text-[color:var(--sec-text)] focus:outline-none focus:ring-1 focus:ring-[color:var(--sec-accent)]"
                 >
                   <option value="">Select…</option>
                   {items.map((item) => (
@@ -176,13 +176,13 @@ export function MatchupEditor({
                   ))}
                 </select>
               </div>
-              <span className="text-[10px] text-emerald-100/50 pb-2">vs</span>
+              <span className="text-[10px] text-[color:var(--sec-muted)] pb-2">vs</span>
               <div className="flex-1 min-w-0">
-                <label className="text-[10px] text-emerald-100/50 uppercase tracking-wider block mb-1">Player B</label>
+                <label className="text-[10px] text-[color:var(--sec-muted)] uppercase tracking-wider block mb-1">Player B</label>
                 <select
                   value={newB}
                   onChange={(e) => setNewB(e.target.value)}
-                  className="w-full rounded-lg border border-emerald-900/50 bg-[#042713]/70 px-2 py-1.5 text-xs text-emerald-100 focus:outline-none focus:ring-1 focus:ring-emerald-600"
+                  className="w-full rounded-lg border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_70%,transparent)] px-2 py-1.5 text-xs text-[color:var(--sec-text)] focus:outline-none focus:ring-1 focus:ring-[color:var(--sec-accent)]"
                 >
                   <option value="">Select…</option>
                   {items.map((item) => (
@@ -195,7 +195,7 @@ export function MatchupEditor({
               <button
                 onClick={handleAddMatchup}
                 disabled={!newA || !newB || newA === newB}
-                className="shrink-0 rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-emerald-50 hover:bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="shrink-0 rounded-lg bg-[color:var(--sec-primary)] px-3 py-1.5 text-xs font-semibold text-[color:var(--sec-text)] hover:bg-[color:var(--sec-primary-hover)] disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Add
               </button>
@@ -207,7 +207,7 @@ export function MatchupEditor({
       {/* Display matchups */}
       {displayMatchups && displayMatchups.length > 0 && (
         <div className="space-y-1.5">
-          <div className="text-[10px] text-emerald-100/50 uppercase tracking-wider">Matchups</div>
+          <div className="text-[10px] text-[color:var(--sec-muted)] uppercase tracking-wider">Matchups</div>
           {displayMatchups.map((m, i) => {
             const aId = "player_a_id" in m ? m.player_a_id : (m as TeamMatchup).team_a_id;
             const bId = "player_b_id" in m ? m.player_b_id : (m as TeamMatchup).team_b_id;
@@ -215,15 +215,15 @@ export function MatchupEditor({
             return (
               <div
                 key={i}
-                className="flex items-center gap-2 rounded-lg border border-emerald-900/50 bg-[#042713]/50 px-3 py-2 text-xs text-emerald-100"
+                className="flex items-center gap-2 rounded-lg border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_50%,transparent)] px-3 py-2 text-xs text-[color:var(--sec-text)]"
               >
                 <span className="font-medium">{nameMap.get(aId) ?? "?"}</span>
-                <span className="text-emerald-100/50">vs</span>
+                <span className="text-[color:var(--sec-muted)]">vs</span>
                 <span className="font-medium flex-1">{nameMap.get(bId) ?? "?"}</span>
                 {canRemove && (
                   <button
                     onClick={() => handleRemoveMatchup(i)}
-                    className="shrink-0 text-emerald-100/40 hover:text-red-300 text-sm leading-none"
+                    className="shrink-0 text-[color:var(--sec-muted)] hover:text-[color:var(--sec-bad)] text-sm leading-none"
                     title="Remove matchup"
                   >
                     ✕
@@ -236,7 +236,7 @@ export function MatchupEditor({
       )}
 
       {!isAutoPaired && !roundRobin && (!displayMatchups || displayMatchups.length === 0) && (
-        <div className="text-[11px] text-emerald-100/60">
+        <div className="text-[11px] text-[color:var(--sec-muted)]">
           Add matches above or enable round robin.
         </div>
       )}

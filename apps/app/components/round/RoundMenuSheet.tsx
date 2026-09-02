@@ -630,12 +630,12 @@ export default function RoundMenuSheet(props: {
     <div className="fixed inset-0 z-50">
       <button className="absolute inset-0 bg-black/60" onClick={onClose} aria-label="Close" />
       <div className="absolute left-0 right-0 bottom-0 px-3 pb-[env(safe-area-inset-bottom)]">
-        <div className="mx-auto w-full max-w-[520px] rounded-t-3xl border border-emerald-900/70 bg-[#061f12] shadow-2xl overflow-hidden max-h-[80vh] flex flex-col">
+        <div className="mx-auto w-full max-w-[520px] rounded-t-3xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] shadow-2xl overflow-hidden max-h-[80vh] flex flex-col">
           {/* Header */}
-          <div className="p-4 border-b border-emerald-900/60 flex items-center justify-between shrink-0">
-            <div className="text-sm font-semibold text-emerald-50">Round Menu</div>
+          <div className="p-4 border-b border-[color:var(--sec-hair)] flex items-center justify-between shrink-0">
+            <div className="text-sm font-semibold text-[color:var(--sec-text)]">Round Menu</div>
             <button
-              className="text-emerald-100/70 hover:text-emerald-50 text-lg px-1"
+              className="text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)] text-lg px-1"
               onClick={onClose}
               aria-label="Close"
             >
@@ -646,9 +646,9 @@ export default function RoundMenuSheet(props: {
           <div className="overflow-y-auto flex-1" style={{ scrollbarWidth: "thin" }}>
             {/* Finish Round */}
             {canFinish && (
-              <div className="p-4 border-b border-emerald-900/60">
+              <div className="p-4 border-b border-[color:var(--sec-hair)]">
                 <Button
-                  className="w-full rounded-2xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c]"
+                  className="w-full rounded-2xl bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] hover:bg-[color:var(--sec-accent)]"
                   onClick={onFinishRound}
                 >
                   Finish Round
@@ -657,21 +657,21 @@ export default function RoundMenuSheet(props: {
             )}
 
             {/* Leaderboard */}
-            <div className="p-4 border-b border-emerald-900/60">
-              <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 mb-2">
+            <div className="p-4 border-b border-[color:var(--sec-hair)]">
+              <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] mb-2">
                 Leaderboard
               </div>
 
               {/* Tab bar */}
-              <div className="rounded-xl border border-emerald-900/70 bg-[#0b3b21]/50 p-1 flex items-center overflow-hidden mb-3">
+              <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_50%,transparent)] p-1 flex items-center overflow-hidden mb-3">
                 <div className="flex overflow-x-auto w-full" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
                   {tabs.map((tab) => (
                     <button
                       key={tab.key}
                       className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 whitespace-nowrap ${
                         activeTab === tab.key
-                          ? "bg-[#f5e6b0] text-[#042713]"
-                          : "text-emerald-100/80 hover:bg-emerald-900/20"
+                          ? "bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)]"
+                          : "text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]"
                       }`}
                       onClick={() => handleTabChange(tab.key)}
                     >
@@ -683,7 +683,7 @@ export default function RoundMenuSheet(props: {
 
               {/* Round leaderboard rows (only when a round tab is active) */}
               {isRoundTab && (
-                <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/60 overflow-hidden divide-y divide-emerald-900/60">
+                <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_60%,transparent)] overflow-hidden divide-y divide-[color:var(--sec-hair)]">
                   {rows.map((r, idx) => {
                     const prev = rows[idx - 1];
                     const sameScore = prev && prev.score === r.score;
@@ -706,48 +706,48 @@ export default function RoundMenuSheet(props: {
                       <div key={r.participantId}>
                         <div className="px-3 py-2.5 flex items-center justify-between gap-3">
                           <div className="flex items-center gap-2.5 min-w-0">
-                            <div className="w-6 text-center text-[11px] font-bold text-emerald-100/90">
+                            <div className="w-6 text-center text-[11px] font-bold text-[color:var(--sec-muted)]">
                               {rank ?? "•"}
                             </div>
-                            <Avatar className="h-7 w-7 border border-emerald-200/70 shrink-0">
+                            <Avatar className="h-7 w-7 border border-[color:var(--sec-line)] shrink-0">
                               {r.avatarUrl ? <AvatarImage src={r.avatarUrl} /> : null}
                               <AvatarFallback className="text-[9px]">{initialsFrom(r.name)}</AvatarFallback>
                             </Avatar>
                             <div className="min-w-0">
-                              <div className="text-[12px] font-semibold text-emerald-50 truncate">{r.name}</div>
+                              <div className="text-[12px] font-semibold text-[color:var(--sec-text)] truncate">{r.name}</div>
                               {r.thru != null && (
-                                <div className="text-[10px] text-emerald-100/55 leading-none mt-0.5">Thru {r.thru}</div>
+                                <div className="text-[10px] text-[color:var(--sec-muted)] leading-none mt-0.5">Thru {r.thru}</div>
                               )}
                             </div>
                           </div>
                           <div className="flex items-center gap-3 shrink-0">
                             {showPts && (
                               <div className="text-right">
-                                <div className="text-[9px] text-emerald-200/50 uppercase tracking-wider leading-none">Pts</div>
-                                <div className="text-[11px] font-bold text-emerald-300 tabular-nums">{pts ?? "—"}</div>
+                                <div className="text-[9px] text-[color:var(--sec-muted)] uppercase tracking-wider leading-none">Pts</div>
+                                <div className="text-[11px] font-bold text-[color:var(--sec-good)] tabular-nums">{pts ?? "—"}</div>
                               </div>
                             )}
                             <div className="text-right">
-                              <div className="text-[15px] font-extrabold tabular-nums text-[#f5e6b0]">
+                              <div className="text-[15px] font-extrabold tabular-nums text-[color:var(--sec-accent)]">
                                 {r.toPar != null ? formatToPar(r.toPar) : r.score}
                               </div>
                               {r.toPar != null && (
-                                <div className="text-[9px] text-emerald-100/50">({r.score})</div>
+                                <div className="text-[9px] text-[color:var(--sec-muted)]">({r.score})</div>
                               )}
                             </div>
                           </div>
                         </div>
                         {/* HI / CH / PH — individual rows only; a team has no single handicap */}
                         {!teamMembers && activeTab !== "gross" && (r.hi != null || r.ch != null || r.ph != null) && (
-                          <div className="pl-11 pr-3 pb-2 flex items-center gap-3 text-[9px] tabular-nums text-emerald-100/55">
+                          <div className="pl-11 pr-3 pb-2 flex items-center gap-3 text-[9px] tabular-nums text-[color:var(--sec-muted)]">
                             {r.hi != null && (
-                              <span><span className="text-emerald-200/45">HI</span> {formatHI(r.hi)}</span>
+                              <span><span className="text-[color:var(--sec-muted)]">HI</span> {formatHI(r.hi)}</span>
                             )}
                             {r.ch != null && (
-                              <span><span className="text-emerald-200/45">CH</span> {r.ch}</span>
+                              <span><span className="text-[color:var(--sec-muted)]">CH</span> {r.ch}</span>
                             )}
                             {r.ph != null && (
-                              <span><span className="text-emerald-200/45">PH</span> {r.ph}</span>
+                              <span><span className="text-[color:var(--sec-muted)]">PH</span> {r.ph}</span>
                             )}
                           </div>
                         )}
@@ -757,8 +757,8 @@ export default function RoundMenuSheet(props: {
                               const mName = getParticipantLabel(m);
                               const mUrl = getParticipantAvatar(m);
                               return (
-                                <div key={m.id} className="flex items-center gap-1 text-[10px] text-emerald-100/60">
-                                  <Avatar className="h-4 w-4 border border-emerald-200/50 shrink-0">
+                                <div key={m.id} className="flex items-center gap-1 text-[10px] text-[color:var(--sec-muted)]">
+                                  <Avatar className="h-4 w-4 border border-[color:var(--sec-line)] shrink-0">
                                     {mUrl ? <AvatarImage src={mUrl} /> : null}
                                     <AvatarFallback className="text-[7px]">{initialsFrom(mName)}</AvatarFallback>
                                   </Avatar>
@@ -772,7 +772,7 @@ export default function RoundMenuSheet(props: {
                     );
                   })}
                   {rows.length === 0 && (
-                    <div className="px-3 py-4 text-center text-[11px] text-emerald-100/50">
+                    <div className="px-3 py-4 text-center text-[11px] text-[color:var(--sec-muted)]">
                       No scores yet
                     </div>
                   )}
@@ -798,9 +798,9 @@ export default function RoundMenuSheet(props: {
                     </div>
                   </div>
                 )}
-                <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/60 overflow-hidden divide-y divide-emerald-900/60">
+                <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_60%,transparent)] overflow-hidden divide-y divide-[color:var(--sec-hair)]">
                   {compLoading && (
-                    <div className="px-3 py-4 text-center text-[11px] text-emerald-100/50">Loading…</div>
+                    <div className="px-3 py-4 text-center text-[11px] text-[color:var(--sec-muted)]">Loading…</div>
                   )}
                   {!compLoading && (compStandings ?? []).map((s) => {
                     const freezeThreshold = compFreeze
@@ -827,23 +827,23 @@ export default function RoundMenuSheet(props: {
                         key={s.profile_id}
                         className={`px-3 py-2.5 flex items-center gap-2.5 ${isFrozenRow ? "bg-cyan-900/20" : ""}`}
                       >
-                        <div className="w-6 text-center text-[11px] font-bold text-emerald-100/90">{s.position ?? "—"}</div>
-                        <Avatar className="h-7 w-7 border border-emerald-200/70 shrink-0">
+                        <div className="w-6 text-center text-[11px] font-bold text-[color:var(--sec-muted)]">{s.position ?? "—"}</div>
+                        <Avatar className="h-7 w-7 border border-[color:var(--sec-line)] shrink-0">
                           {s.avatar_url ? <AvatarImage src={s.avatar_url} /> : null}
                           <AvatarFallback className="text-[9px]">{initialsFrom(s.name ?? "")}</AvatarFallback>
                         </Avatar>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1">
-                            <div className="text-[12px] font-semibold text-emerald-50 truncate">{s.name ?? "—"}</div>
+                            <div className="text-[12px] font-semibold text-[color:var(--sec-text)] truncate">{s.name ?? "—"}</div>
                             {isFrozenRow && <span className="text-[10px] leading-none shrink-0">❄️</span>}
                           </div>
-                          <div className={`text-[10px] leading-none mt-0.5 ${isFrozenRow ? "text-cyan-300/70" : "text-emerald-100/55"}`}>{thruText}</div>
+                          <div className={`text-[10px] leading-none mt-0.5 ${isFrozenRow ? "text-cyan-300/70" : "text-[color:var(--sec-muted)]"}`}>{thruText}</div>
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
                           {showPts && (
                             <div className="text-right">
-                              <div className="text-[9px] text-emerald-200/50 uppercase tracking-wider leading-none">Pts</div>
-                              <div className="text-[11px] font-bold text-emerald-300 tabular-nums">
+                              <div className="text-[9px] text-[color:var(--sec-muted)] uppercase tracking-wider leading-none">Pts</div>
+                              <div className="text-[11px] font-bold text-[color:var(--sec-good)] tabular-nums">
                                 {(s.points_earned ?? projectedPoints(s.position, competitionPointsModel, competitionPointsTable)) ?? "—"}
                               </div>
                             </div>
@@ -851,16 +851,16 @@ export default function RoundMenuSheet(props: {
                           <div className="text-right">
                             {scoringModel === "stableford_points" ? (
                               <>
-                                <div className="text-[15px] font-extrabold tabular-nums text-[#f5e6b0]">
+                                <div className="text-[15px] font-extrabold tabular-nums text-[color:var(--sec-accent)]">
                                   {s.format_points != null ? `${s.format_points} pts` : "—"}
                                 </div>
                                 {s.to_par != null && (
-                                  <div className="text-[9px] text-emerald-100/50">
+                                  <div className="text-[9px] text-[color:var(--sec-muted)]">
                                     {s.to_par === 0 ? "E" : s.to_par > 0 ? `+${s.to_par}` : String(s.to_par)}
                                   </div>
                                 )}
                                 {s.gross_score != null && (
-                                  <div className="text-[9px] text-emerald-100/50">({s.gross_score} gross)</div>
+                                  <div className="text-[9px] text-[color:var(--sec-muted)]">({s.gross_score} gross)</div>
                                 )}
                               </>
                             ) : (() => {
@@ -872,11 +872,11 @@ export default function RoundMenuSheet(props: {
                               const rawScore = scoringModel === "gross" ? s.gross_score : s.net_score;
                               return (
                                 <>
-                                  <div className="text-[15px] font-extrabold tabular-nums text-[#f5e6b0]">
+                                  <div className="text-[15px] font-extrabold tabular-nums text-[color:var(--sec-accent)]">
                                     {displayToPar != null ? formatToPar(displayToPar) : (rawScore ?? s.gross_score ?? "—")}
                                   </div>
                                   {displayToPar != null && rawScore != null && (
-                                    <div className="text-[9px] text-emerald-100/50">({rawScore})</div>
+                                    <div className="text-[9px] text-[color:var(--sec-muted)]">({rawScore})</div>
                                   )}
                                 </>
                               );
@@ -887,7 +887,7 @@ export default function RoundMenuSheet(props: {
                     );
                   })}
                   {!compLoading && (compStandings ?? []).length === 0 && (
-                    <div className="px-3 py-4 text-center text-[11px] text-emerald-100/50">No scores yet</div>
+                    <div className="px-3 py-4 text-center text-[11px] text-[color:var(--sec-muted)]">No scores yet</div>
                   )}
                 </div>
                 </>
@@ -895,31 +895,31 @@ export default function RoundMenuSheet(props: {
 
               {/* Season tab */}
               {activeTab === "season" && (
-                <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/60 overflow-hidden divide-y divide-emerald-900/60">
+                <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_60%,transparent)] overflow-hidden divide-y divide-[color:var(--sec-hair)]">
                   {seasonLoading && (
-                    <div className="px-3 py-4 text-center text-[11px] text-emerald-100/50">Loading…</div>
+                    <div className="px-3 py-4 text-center text-[11px] text-[color:var(--sec-muted)]">Loading…</div>
                   )}
                   {!seasonLoading && (seasonStandings ?? []).map((s) => (
                     <div key={s.profile_id} className="px-3 py-2.5 flex items-center gap-2.5">
-                      <div className="w-6 text-center text-[11px] font-bold text-emerald-100/90">{s.position ?? "—"}</div>
-                      <Avatar className="h-7 w-7 border border-emerald-200/70 shrink-0">
+                      <div className="w-6 text-center text-[11px] font-bold text-[color:var(--sec-muted)]">{s.position ?? "—"}</div>
+                      <Avatar className="h-7 w-7 border border-[color:var(--sec-line)] shrink-0">
                         {s.avatar_url ? <AvatarImage src={s.avatar_url} /> : null}
                         <AvatarFallback className="text-[9px]">{initialsFrom(s.name ?? "")}</AvatarFallback>
                       </Avatar>
                       <div className="min-w-0 flex-1">
-                        <div className="text-[12px] font-semibold text-emerald-50 truncate">{s.name ?? "—"}</div>
-                        <div className="text-[10px] text-emerald-100/55 leading-none mt-0.5">
+                        <div className="text-[12px] font-semibold text-[color:var(--sec-text)] truncate">{s.name ?? "—"}</div>
+                        <div className="text-[10px] text-[color:var(--sec-muted)] leading-none mt-0.5">
                           {s.events_played} event{s.events_played !== 1 ? "s" : ""}{s.wins > 0 ? ` · ${s.wins}W` : ""}
                         </div>
                       </div>
                       <div className="text-right shrink-0">
-                        <div className="text-[15px] font-extrabold tabular-nums text-[#f5e6b0]">{s.season_points}</div>
-                        <div className="text-[9px] text-emerald-100/50">pts</div>
+                        <div className="text-[15px] font-extrabold tabular-nums text-[color:var(--sec-accent)]">{s.season_points}</div>
+                        <div className="text-[9px] text-[color:var(--sec-muted)]">pts</div>
                       </div>
                     </div>
                   ))}
                   {!seasonLoading && (seasonStandings ?? []).length === 0 && (
-                    <div className="px-3 py-4 text-center text-[11px] text-emerald-100/50">No standings yet</div>
+                    <div className="px-3 py-4 text-center text-[11px] text-[color:var(--sec-muted)]">No standings yet</div>
                   )}
                 </div>
               )}
@@ -927,18 +927,18 @@ export default function RoundMenuSheet(props: {
 
             {/* Round Settings */}
             <div className="p-4">
-              <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 mb-2">
+              <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] mb-2">
                 Round Settings
               </div>
-              <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/60 divide-y divide-emerald-900/60">
+              <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_60%,transparent)] divide-y divide-[color:var(--sec-hair)]">
                 <div className="px-3 py-2.5 flex justify-between items-center">
-                  <span className="text-[11px] text-emerald-100/70">Format</span>
-                  <span className="text-[12px] font-semibold text-emerald-50">{FORMAT_LABELS[formatType] ?? formatType}</span>
+                  <span className="text-[11px] text-[color:var(--sec-muted)]">Format</span>
+                  <span className="text-[12px] font-semibold text-[color:var(--sec-text)]">{FORMAT_LABELS[formatType] ?? formatType}</span>
                 </div>
                 {courseLabel && (
                   <div className="px-3 py-2.5 flex justify-between items-center">
-                    <span className="text-[11px] text-emerald-100/70">Course</span>
-                    <span className="text-[12px] font-semibold text-emerald-50 truncate ml-4 text-right">{courseLabel}</span>
+                    <span className="text-[11px] text-[color:var(--sec-muted)]">Course</span>
+                    <span className="text-[12px] font-semibold text-[color:var(--sec-text)] truncate ml-4 text-right">{courseLabel}</span>
                   </div>
                 )}
                 {(teeSets?.length ?? 0) > 1 ? (
@@ -956,13 +956,13 @@ export default function RoundMenuSheet(props: {
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
-                              <div className="text-[12px] font-semibold text-emerald-50">
+                              <div className="text-[12px] font-semibold text-[color:var(--sec-text)]">
                                 {t.name ?? "Tee"}
                                 {t.isDefault ? (
-                                  <span className="ml-1.5 text-[9px] font-medium text-emerald-100/50">DEFAULT</span>
+                                  <span className="ml-1.5 text-[9px] font-medium text-[color:var(--sec-muted)]">DEFAULT</span>
                                 ) : null}
                               </div>
-                              <div className="text-[10px] text-emerald-100/60 leading-tight mt-0.5">
+                              <div className="text-[10px] text-[color:var(--sec-muted)] leading-tight mt-0.5">
                                 {[
                                   genderLabel,
                                   t.parTotal != null ? `Par ${t.parTotal}` : null,
@@ -972,33 +972,33 @@ export default function RoundMenuSheet(props: {
                                   .filter(Boolean)
                                   .join(" · ")}
                               </div>
-                              <div className="text-[10px] text-emerald-100/45 leading-tight mt-0.5 truncate">
+                              <div className="text-[10px] text-[color:var(--sec-muted)] leading-tight mt-0.5 truncate">
                                 {on.length ? on.map(getParticipantLabel).join(", ") : "No players"}
                               </div>
                             </div>
-                            <span className="text-[11px] text-emerald-100/60 shrink-0 mt-0.5">
+                            <span className="text-[11px] text-[color:var(--sec-muted)] shrink-0 mt-0.5">
                               {open ? "▾" : "▸"}
                             </span>
                           </div>
                         </button>
                         {open ? (
                           <div className="px-3 pb-3">
-                            <div className="grid grid-cols-4 gap-2 text-[10px] uppercase tracking-[0.18em] text-emerald-200/70 px-1 pb-1">
+                            <div className="grid grid-cols-4 gap-2 text-[10px] uppercase tracking-[0.18em] text-[color:var(--sec-muted)] px-1 pb-1">
                               <div>Hole</div>
                               <div className="text-center">Par</div>
                               <div className="text-center">Yds</div>
                               <div className="text-center">SI</div>
                             </div>
-                            <div className="rounded-xl border border-emerald-900/70 divide-y divide-emerald-900/50">
+                            <div className="rounded-xl border border-[color:var(--sec-hair)] divide-y divide-[color:var(--sec-hair)]">
                               {t.holes.map((h) => (
                                 <div
                                   key={h.hole_number}
                                   className="grid grid-cols-4 gap-2 px-1 py-1 text-[11px] tabular-nums"
                                 >
-                                  <div className="font-medium text-emerald-50">{h.hole_number}</div>
-                                  <div className="text-center text-emerald-100/80">{h.par ?? "—"}</div>
-                                  <div className="text-center text-emerald-100/80">{h.yardage ?? "—"}</div>
-                                  <div className="text-center text-emerald-100/80">{h.stroke_index ?? "—"}</div>
+                                  <div className="font-medium text-[color:var(--sec-text)]">{h.hole_number}</div>
+                                  <div className="text-center text-[color:var(--sec-muted)]">{h.par ?? "—"}</div>
+                                  <div className="text-center text-[color:var(--sec-muted)]">{h.yardage ?? "—"}</div>
+                                  <div className="text-center text-[color:var(--sec-muted)]">{h.stroke_index ?? "—"}</div>
                                 </div>
                               ))}
                               {(() => {
@@ -1027,16 +1027,16 @@ export default function RoundMenuSheet(props: {
                                 return rows.map(([label, from, to]) => (
                                   <div
                                     key={label}
-                                    className="grid grid-cols-4 gap-2 px-1 py-1 text-[11px] font-semibold tabular-nums bg-[#0b3b21]/50"
+                                    className="grid grid-cols-4 gap-2 px-1 py-1 text-[11px] font-semibold tabular-nums bg-[color:color-mix(in_srgb,var(--sec-surface)_50%,transparent)]"
                                   >
-                                    <div className="text-emerald-100/80">{label}</div>
-                                    <div className="text-center text-emerald-100/80">
+                                    <div className="text-[color:var(--sec-muted)]">{label}</div>
+                                    <div className="text-center text-[color:var(--sec-muted)]">
                                       {sum((h) => h.par, from, to) ?? "—"}
                                     </div>
-                                    <div className="text-center text-emerald-100/80">
+                                    <div className="text-center text-[color:var(--sec-muted)]">
                                       {sum((h) => h.yardage, from, to) ?? "—"}
                                     </div>
-                                    <div className="text-center text-emerald-100/40">—</div>
+                                    <div className="text-center text-[color:var(--sec-muted)]">—</div>
                                   </div>
                                 ));
                               })()}
@@ -1048,14 +1048,14 @@ export default function RoundMenuSheet(props: {
                   })
                 ) : defaultTeeName ? (
                   <div className="px-3 py-2.5 flex justify-between items-center">
-                    <span className="text-[11px] text-emerald-100/70">Default tee</span>
-                    <span className="text-[12px] font-semibold text-emerald-50 truncate ml-4 text-right">{defaultTeeName}</span>
+                    <span className="text-[11px] text-[color:var(--sec-muted)]">Default tee</span>
+                    <span className="text-[12px] font-semibold text-[color:var(--sec-text)] truncate ml-4 text-right">{defaultTeeName}</span>
                   </div>
                 ) : null}
                 {allowanceLabel(playingHandicapMode, playingHandicapValue) && (
                   <div className="px-3 py-2.5 flex justify-between items-center">
-                    <span className="text-[11px] text-emerald-100/70">Allowance</span>
-                    <span className="text-[12px] font-semibold text-emerald-50">{allowanceLabel(playingHandicapMode, playingHandicapValue)}</span>
+                    <span className="text-[11px] text-[color:var(--sec-muted)]">Allowance</span>
+                    <span className="text-[12px] font-semibold text-[color:var(--sec-text)]">{allowanceLabel(playingHandicapMode, playingHandicapValue)}</span>
                   </div>
                 )}
                 {roundId && (
@@ -1066,8 +1066,8 @@ export default function RoundMenuSheet(props: {
                       onClick={() => setStartingHolePickerOpen((v) => !v)}
                       className="w-full flex justify-between items-center disabled:cursor-default"
                     >
-                      <span className="text-[11px] text-emerald-100/70">Starting hole</span>
-                      <span className="text-[12px] font-semibold text-emerald-50">
+                      <span className="text-[11px] text-[color:var(--sec-muted)]">Starting hole</span>
+                      <span className="text-[12px] font-semibold text-[color:var(--sec-text)]">
                         {startingHole}
                         {startingHoleSource === "auto" ? " (Auto)" : ""}
                         {canEditStartingHole ? " ›" : ""}
@@ -1081,8 +1081,8 @@ export default function RoundMenuSheet(props: {
                           onClick={() => submitStartingHole("auto")}
                           className={`px-2.5 h-7 rounded-full text-[11px] font-semibold ${
                             startingHoleSource === "auto"
-                              ? "bg-[#f5e6b0] text-[#042713]"
-                              : "bg-[#0b3b21]/70 text-emerald-100/80 ring-1 ring-emerald-900/70"
+                              ? "bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)]"
+                              : "bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] text-[color:var(--sec-muted)] ring-1 ring-[color:var(--sec-hair)]"
                           }`}
                         >
                           Auto
@@ -1095,8 +1095,8 @@ export default function RoundMenuSheet(props: {
                             onClick={() => submitStartingHole(n)}
                             className={`w-7 h-7 rounded-full text-[11px] font-semibold ${
                               startingHoleSource === "manual" && startingHole === n
-                                ? "bg-[#f5e6b0] text-[#042713]"
-                                : "bg-[#0b3b21]/70 text-emerald-100/80 ring-1 ring-emerald-900/70"
+                                ? "bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)]"
+                                : "bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] text-[color:var(--sec-muted)] ring-1 ring-[color:var(--sec-hair)]"
                             }`}
                           >
                             {n}
@@ -1107,8 +1107,8 @@ export default function RoundMenuSheet(props: {
                   </div>
                 )}
                 <div className="px-3 py-2.5 flex justify-between items-center">
-                  <span className="text-[11px] text-emerald-100/70">Status</span>
-                  <span className="text-[12px] font-semibold text-emerald-50">{isFinished ? "Completed" : "In Progress"}</span>
+                  <span className="text-[11px] text-[color:var(--sec-muted)]">Status</span>
+                  <span className="text-[12px] font-semibold text-[color:var(--sec-text)]">{isFinished ? "Completed" : "In Progress"}</span>
                 </div>
               </div>
             </div>

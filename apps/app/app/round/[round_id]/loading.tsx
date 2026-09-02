@@ -2,7 +2,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 
 export default function RoundDetailLoading() {
   return (
-    <div className="min-h-screen bg-[#042713] text-slate-100 px-1.5 sm:px-2 pt-4 pb-[env(safe-area-inset-bottom)]">
+    <div className="min-h-screen bg-[color:var(--ciaga-ground)] text-slate-100 px-1.5 sm:px-2 pt-4 pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto w-full max-w-none space-y-2">
         {/* Header row */}
         <div className="flex items-center gap-2">
@@ -15,15 +15,15 @@ export default function RoundDetailLoading() {
         </div>
         {/* Scorecard skeleton */}
         <div className="space-y-1.5 pt-2">
-          <Skeleton className="h-8 w-full rounded-lg bg-emerald-900/20" />
+          <Skeleton className="h-8 w-full rounded-lg bg-[color:var(--sec-surface)]" />
           {Array.from({ length: 9 }).map((_, i) => (
-            <Skeleton key={i} className="h-9 w-full rounded-lg bg-emerald-900/20" />
+            <Skeleton key={i} className="h-9 w-full rounded-lg bg-[color:var(--sec-surface)]" />
           ))}
-          <Skeleton className="h-9 w-full rounded-lg bg-emerald-900/30" />
+          <Skeleton className="h-9 w-full rounded-lg bg-[color:var(--sec-surface)]" />
           {Array.from({ length: 9 }).map((_, i) => (
-            <Skeleton key={i + 9} className="h-9 w-full rounded-lg bg-emerald-900/20" />
+            <Skeleton key={i + 9} className="h-9 w-full rounded-lg bg-[color:var(--sec-surface)]" />
           ))}
-          <Skeleton className="h-10 w-full rounded-lg bg-emerald-900/30" />
+          <Skeleton className="h-10 w-full rounded-lg bg-[color:var(--sec-surface)]" />
         </div>
       </div>
     </div>

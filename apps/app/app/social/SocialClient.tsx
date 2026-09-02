@@ -36,7 +36,7 @@ export default function SocialClient({ initialFeedData, focusId }: Props) {
       <button
         type="button"
         onClick={() => setComposerOpen(true)}
-        className="fixed bottom-[calc(env(safe-area-inset-bottom)+var(--ciaga-nav-h)+12px)] right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full border border-emerald-900/60 bg-[#0b3b21] text-[#f5e6b0] shadow-lg hover:bg-[#0b3b21]/85 active:scale-95"
+        className="fixed bottom-[calc(env(safe-area-inset-bottom)+var(--ciaga-nav-h)+12px)] right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] text-[color:var(--sec-accent)] shadow-lg hover:bg-[color:color-mix(in_srgb,var(--sec-surface)_85%,transparent)] active:scale-95"
         aria-label="Create post"
         title="Create post"
       >
@@ -51,15 +51,15 @@ export default function SocialClient({ initialFeedData, focusId }: Props) {
             if (e.target === e.currentTarget) setComposerOpen(false);
           }}
         >
-          <div className="w-full max-w-sm rounded-2xl border border-emerald-900/60 bg-[#062a18] p-4 shadow-xl">
+          <div className="w-full max-w-sm rounded-2xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] p-4 shadow-xl">
             <div className="mb-3 flex items-center justify-between">
-              <div className="text-sm font-extrabold tracking-wide text-[#f5e6b0]">
+              <div className="text-sm font-extrabold tracking-wide text-[color:var(--sec-accent)]">
                 New Post
               </div>
 
               <button
                 type="button"
-                className="rounded-full px-2 py-1 text-emerald-100/80 hover:bg-emerald-900/30"
+                className="rounded-full px-2 py-1 text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]"
                 onClick={() => setComposerOpen(false)}
                 aria-label="Close"
                 title="Close"

@@ -90,7 +90,7 @@ export function StablefordConfigEditor({ value, onChange, disabled }: Stableford
     <div className="space-y-4">
       {/* Preset Selector */}
       <div>
-        <label className="text-xs text-emerald-100/80 mb-2 block">Points Table</label>
+        <label className="text-xs text-[color:var(--sec-muted)] mb-2 block">Points Table</label>
         <div className="grid grid-cols-3 gap-2">
           <button
             onClick={() => handlePresetChange("default")}
@@ -99,8 +99,8 @@ export function StablefordConfigEditor({ value, onChange, disabled }: Stableford
               px-3 py-2 rounded-lg text-xs font-medium transition-colors
               ${
                 preset === "default"
-                  ? "bg-emerald-700 text-white"
-                  : "border border-emerald-900/70 bg-[#0b3b21]/40 text-emerald-100 hover:bg-[#0b3b21]/60"
+                  ? "bg-[color:var(--sec-primary)] text-white"
+                  : "border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-text)] hover:bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)]"
               }
               disabled:opacity-50 disabled:cursor-not-allowed
             `}
@@ -114,8 +114,8 @@ export function StablefordConfigEditor({ value, onChange, disabled }: Stableford
               px-3 py-2 rounded-lg text-xs font-medium transition-colors
               ${
                 preset === "modified"
-                  ? "bg-emerald-700 text-white"
-                  : "border border-emerald-900/70 bg-[#0b3b21]/40 text-emerald-100 hover:bg-[#0b3b21]/60"
+                  ? "bg-[color:var(--sec-primary)] text-white"
+                  : "border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-text)] hover:bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)]"
               }
               disabled:opacity-50 disabled:cursor-not-allowed
             `}
@@ -128,15 +128,15 @@ export function StablefordConfigEditor({ value, onChange, disabled }: Stableford
               px-3 py-2 rounded-lg text-xs font-medium
               ${
                 preset === "custom"
-                  ? "bg-emerald-700 text-white"
-                  : "border border-emerald-900/70 bg-[#0b3b21]/40 text-emerald-100/50"
+                  ? "bg-[color:var(--sec-primary)] text-white"
+                  : "border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-muted)]"
               }
             `}
           >
             Custom
           </button>
         </div>
-        <p className="text-[10px] text-emerald-100/60 mt-1">
+        <p className="text-[10px] text-[color:var(--sec-muted)] mt-1">
           {preset === "default"
             ? "Standard stableford: +2 for par, +1 for bogey"
             : preset === "modified"
@@ -149,9 +149,9 @@ export function StablefordConfigEditor({ value, onChange, disabled }: Stableford
       <div className="space-y-1.5">
         {scores.map(({ key, label, relative }) => (
           <div key={key} className="flex items-center gap-3">
-            <div className="flex-1 text-xs text-emerald-100">
+            <div className="flex-1 text-xs text-[color:var(--sec-text)]">
               <span className="font-medium">{relative}</span>
-              <span className="text-emerald-100/60 ml-2">{label.split("(")[0]}</span>
+              <span className="text-[color:var(--sec-muted)] ml-2">{label.split("(")[0]}</span>
             </div>
             <NumberField
               allowNegative
@@ -162,9 +162,9 @@ export function StablefordConfigEditor({ value, onChange, disabled }: Stableford
               value={points[key] ?? 0}
               onValueChange={(v) => handlePointChange(key, v ?? 0)}
               disabled={disabled}
-              className="w-16 px-2 py-1 rounded border border-emerald-900/70 bg-[#0b3b21]/70 text-xs text-emerald-50 text-right tabular-nums focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-50"
+              className="w-16 px-2 py-1 rounded border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] text-xs text-[color:var(--sec-text)] text-right tabular-nums focus:outline-none focus:ring-1 focus:ring-[color:var(--sec-accent)] disabled:opacity-50"
             />
-            <span className="text-xs text-emerald-100/60 w-8">pts</span>
+            <span className="text-xs text-[color:var(--sec-muted)] w-8">pts</span>
           </div>
         ))}
       </div>

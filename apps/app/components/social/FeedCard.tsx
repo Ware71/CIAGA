@@ -144,13 +144,13 @@ function Avatar({ name, url, size = 28 }: { name: string; url: string | null; si
       src={url}
       alt=""
       style={{ width: s, height: s }}
-      className="rounded-full object-cover border border-emerald-900/60"
+      className="rounded-full object-cover border border-[color:var(--sec-hair)]"
       loading="lazy"
     />
   ) : (
     <div
       style={{ width: s, height: s }}
-      className="rounded-full border border-emerald-900/60 bg-emerald-950/20 flex items-center justify-center text-[11px] font-extrabold text-emerald-50"
+      className="rounded-full border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] flex items-center justify-center text-[11px] font-extrabold text-[color:var(--sec-text)]"
     >
       {avatarInitial(name)}
     </div>
@@ -174,7 +174,7 @@ function AvatarStack({
       ))}
       {people.length > max ? (
         <div className="-ml-2">
-          <div className="h-7 w-7 rounded-full border border-emerald-900/60 bg-emerald-950/20 flex items-center justify-center text-[10px] font-extrabold text-emerald-50">
+          <div className="h-7 w-7 rounded-full border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] flex items-center justify-center text-[10px] font-extrabold text-[color:var(--sec-text)]">
             +{people.length - max}
           </div>
         </div>
@@ -192,16 +192,16 @@ function ReactionSummary({ counts }: { counts: Record<string, number> }) {
   const total = entries.reduce((acc, [, n]) => acc + n, 0);
 
   return (
-    <div className="flex items-center gap-2 text-[11px] font-semibold text-emerald-100/65">
+    <div className="flex items-center gap-2 text-[11px] font-semibold text-[color:var(--sec-muted)]">
       <div className="flex items-center gap-1">
         {top.map(([emoji, n]) => (
           <span key={emoji} className="inline-flex items-center gap-1">
             <span>{emoji}</span>
-            <span className="text-emerald-100/55">{n}</span>
+            <span className="text-[color:var(--sec-muted)]">{n}</span>
           </span>
         ))}
       </div>
-      <span className="text-emerald-100/40">·</span>
+      <span className="text-[color:var(--sec-muted)]">·</span>
       <span>{total} reactions</span>
     </div>
   );
@@ -217,7 +217,7 @@ function UserPostBody({ payload }: { payload: any }) {
   return (
     <div className="space-y-3">
       {text ? (
-        <div className="text-sm font-semibold text-emerald-50/95 whitespace-pre-wrap">
+        <div className="text-sm font-semibold text-[color:var(--sec-text)] whitespace-pre-wrap">
           {renderWithMentions(text, tagged)}
         </div>
       ) : null}
@@ -234,7 +234,7 @@ function UserPostBody({ payload }: { payload: any }) {
               key={src}
               src={src}
               alt=""
-              className="h-36 w-full rounded-xl object-cover border border-emerald-900/60"
+              className="h-36 w-full rounded-xl object-cover border border-[color:var(--sec-hair)]"
               loading="lazy"
             />
           ))}
@@ -276,7 +276,7 @@ function RoundPlayedBody({ payload, isLive }: { payload: any; isLive: boolean })
             return (
               <div
                 key={`${p?.profile_id ?? p?.name ?? idx}`}
-                className={`rounded-xl border px-2 py-2 ${isFrozenCard ? "border-cyan-700/40 bg-cyan-900/20" : "border-emerald-900/40 bg-emerald-950/10"}`}
+                className={`rounded-xl border px-2 py-2 ${isFrozenCard ? "border-cyan-700/40 bg-cyan-900/20" : "border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)]"}`}
               >
                 {/* Line 1: Avatar | Name | Gross | Net */}
                 <div className="flex items-center gap-2">
@@ -284,16 +284,16 @@ function RoundPlayedBody({ payload, isLive }: { payload: any; isLive: boolean })
                     <img
                       src={p.avatar_url}
                       alt=""
-                      className="h-7 w-7 rounded-full object-cover border border-emerald-900/60"
+                      className="h-7 w-7 rounded-full object-cover border border-[color:var(--sec-hair)]"
                       loading="lazy"
                     />
                   ) : (
-                    <div className="h-7 w-7 rounded-full border border-emerald-900/60 bg-emerald-950/20" />
+                    <div className="h-7 w-7 rounded-full border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)]" />
                   )}
 
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1">
-                      <div className="text-sm font-extrabold text-emerald-50 truncate">{p?.name ?? "Player"}</div>
+                      <div className="text-sm font-extrabold text-[color:var(--sec-text)] truncate">{p?.name ?? "Player"}</div>
                       {isFrozenCard && <span className="text-[11px] leading-none shrink-0">❄️</span>}
                     </div>
                     {isFrozenCard ? (
@@ -301,39 +301,39 @@ function RoundPlayedBody({ payload, isLive }: { payload: any; isLive: boolean })
                         Thru {compHolesShown} ({holesCompleted})
                       </div>
                     ) : holesCompleted !== null ? (
-                      <div className="text-[11px] font-semibold text-emerald-100/55">Thru {holesCompleted}</div>
+                      <div className="text-[11px] font-semibold text-[color:var(--sec-muted)]">Thru {holesCompleted}</div>
                     ) : parTotal !== null ? (
-                      <div className="text-[11px] font-semibold text-emerald-100/55">Par {parTotal}</div>
+                      <div className="text-[11px] font-semibold text-[color:var(--sec-muted)]">Par {parTotal}</div>
                     ) : null}
                   </div>
 
                   <div className="flex items-center gap-2">
                     <div className="text-right">
                       {isStrokeplay && gross !== null ? (
-                        <div className="text-[10px] font-semibold text-emerald-100/50">{gross}</div>
+                        <div className="text-[10px] font-semibold text-[color:var(--sec-muted)]">{gross}</div>
                       ) : null}
-                      <div className="text-[10px] font-extrabold text-emerald-100/50">GROSS</div>
+                      <div className="text-[10px] font-extrabold text-[color:var(--sec-muted)]">GROSS</div>
                       {isStrokeplay && grossToPar !== null ? (
-                        <div className="text-sm font-extrabold text-[#f5e6b0]">{formatToPar(grossToPar)}</div>
+                        <div className="text-sm font-extrabold text-[color:var(--sec-accent)]">{formatToPar(grossToPar)}</div>
                       ) : (
-                        <div className="text-sm font-extrabold text-[#f5e6b0]">{gross ?? "—"}</div>
+                        <div className="text-sm font-extrabold text-[color:var(--sec-accent)]">{gross ?? "—"}</div>
                       )}
                     </div>
 
-                    <div className="w-px h-8 bg-emerald-900/40" />
+                    <div className="w-px h-8 bg-[color:var(--sec-surface)]" />
 
                     <div className="text-right">
                       {isStrokeplay && net !== null ? (
-                        <div className="text-[10px] font-semibold text-emerald-100/50">{net}</div>
+                        <div className="text-[10px] font-semibold text-[color:var(--sec-muted)]">{net}</div>
                       ) : null}
-                      <div className="text-[10px] font-extrabold text-emerald-100/50">NET</div>
+                      <div className="text-[10px] font-extrabold text-[color:var(--sec-muted)]">NET</div>
                       {isStrokeplay && netToPar !== null ? (
-                        <div className="text-sm font-extrabold text-emerald-50">{formatToPar(netToPar)}</div>
+                        <div className="text-sm font-extrabold text-[color:var(--sec-text)]">{formatToPar(netToPar)}</div>
                       ) : (
-                        <div className="text-sm font-extrabold text-emerald-50">
+                        <div className="text-sm font-extrabold text-[color:var(--sec-text)]">
                           {net ?? "—"}
                           {!isStrokeplay && typeof netToPar === "number" ? (
-                            <span className="ml-2 text-[11px] font-extrabold text-emerald-100/65">
+                            <span className="ml-2 text-[11px] font-extrabold text-[color:var(--sec-muted)]">
                               ({formatToPar(netToPar)})
                             </span>
                           ) : null}
@@ -345,7 +345,7 @@ function RoundPlayedBody({ payload, isLive }: { payload: any; isLive: boolean })
 
                 {/* Line 2: Format score */}
                 {hasFormatScore && formatLabel ? (
-                  <div className="mt-1 pl-9 text-[11px] font-semibold text-emerald-100/55">
+                  <div className="mt-1 pl-9 text-[11px] font-semibold text-[color:var(--sec-muted)]">
                     {formatLabel}: {formatScore}
                   </div>
                 ) : null}
@@ -354,19 +354,19 @@ function RoundPlayedBody({ payload, isLive }: { payload: any; isLive: boolean })
           })}
         </div>
       ) : (
-        <div className="text-sm font-semibold text-emerald-100/70">Round completed.</div>
+        <div className="text-sm font-semibold text-[color:var(--sec-muted)]">Round completed.</div>
       )}
 
       {/* Format winner summary */}
       {formatWinner ? (
-        <div className="text-xs font-extrabold text-[#f5e6b0]">{formatWinner}</div>
+        <div className="text-xs font-extrabold text-[color:var(--sec-accent)]">{formatWinner}</div>
       ) : null}
 
       {/* Side game results */}
       {sideGameResults.length > 0 ? (
         <div className="space-y-0.5">
           {sideGameResults.map((sg: any, i: number) => (
-            <div key={i} className="text-[11px] font-semibold text-emerald-100/50">
+            <div key={i} className="text-[11px] font-semibold text-[color:var(--sec-muted)]">
               {sg?.label}: {sg?.winner ?? "No winner"}
             </div>
           ))}
@@ -383,15 +383,15 @@ function PbOrRecordBody({ item }: { item: FeedItemVM }) {
   const tee = p?.tee_name ? ` · ${p.tee_name}` : "";
 
   return (
-    <div className="rounded-2xl border border-emerald-900/50 bg-emerald-950/10 p-3">
+    <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] p-3">
       <div className="flex items-end justify-between">
-        <div className="text-sm font-extrabold text-emerald-50">
+        <div className="text-sm font-extrabold text-[color:var(--sec-text)]">
           {course}
           {tee}
         </div>
         <div className="text-right">
-          <div className="text-[10px] font-extrabold text-emerald-100/50">GROSS</div>
-          <div className="text-2xl font-extrabold text-[#f5e6b0] leading-none">{gross ?? "—"}</div>
+          <div className="text-[10px] font-extrabold text-[color:var(--sec-muted)]">GROSS</div>
+          <div className="text-2xl font-extrabold text-[color:var(--sec-accent)] leading-none">{gross ?? "—"}</div>
         </div>
       </div>
     </div>
@@ -407,8 +407,8 @@ function HoleEventBody({ item }: { item: FeedItemVM }) {
   const tee = p?.tee_name ? ` · ${p.tee_name}` : "";
 
   return (
-    <div className="rounded-2xl border border-emerald-900/50 bg-emerald-950/10 p-3 space-y-2">
-      <div className="text-xs font-semibold text-emerald-100/60">
+    <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] p-3 space-y-2">
+      <div className="text-xs font-semibold text-[color:var(--sec-muted)]">
         {course ? (
           <span>
             {course}
@@ -420,16 +420,16 @@ function HoleEventBody({ item }: { item: FeedItemVM }) {
       </div>
 
       <div className="flex items-center justify-between gap-3">
-        <div className="text-sm font-extrabold text-emerald-50">
+        <div className="text-sm font-extrabold text-[color:var(--sec-text)]">
           {hole !== null ? `Hole ${hole}` : "Hole"}{" "}
-          {par !== null ? <span className="text-emerald-100/70">· Par {par}</span> : null}
+          {par !== null ? <span className="text-[color:var(--sec-muted)]">· Par {par}</span> : null}
         </div>
 
-        {yardage !== null ? <div className="text-[11px] font-extrabold text-[#f5e6b0]">{yardage} yd</div> : null}
+        {yardage !== null ? <div className="text-[11px] font-extrabold text-[color:var(--sec-accent)]">{yardage} yd</div> : null}
       </div>
 
       {typeof p?.strokes === "number" || typeof p?.score === "number" ? (
-        <div className="text-xs font-semibold text-emerald-100/70">
+        <div className="text-xs font-semibold text-[color:var(--sec-muted)]">
           Strokes: {safeNum(p?.strokes) ?? safeNum(p?.score) ?? "—"}
         </div>
       ) : null}
@@ -460,15 +460,15 @@ function CompetitionRoundBody({ payload }: { payload: any }) {
   return (
     <div className="space-y-2">
       {groupName ? (
-        <div className="text-[10px] uppercase tracking-[0.16em] text-emerald-200/50">{groupName}</div>
+        <div className="text-[10px] uppercase tracking-[0.16em] text-[color:var(--sec-muted)]">{groupName}</div>
       ) : null}
       {dateLine ? (
-        <div className="text-xs font-semibold text-emerald-100/60">{dateLine}</div>
+        <div className="text-xs font-semibold text-[color:var(--sec-muted)]">{dateLine}</div>
       ) : null}
       {isComplete && winner ? (
         <div className="flex items-center gap-2 mt-1">
           <Avatar name={winner.name} url={winner.avatar_url ?? null} size={24} />
-          <span className="text-xs font-semibold text-[#f5e6b0]">
+          <span className="text-xs font-semibold text-[color:var(--sec-accent)]">
             Winner: {winner.name}
           </span>
         </div>
@@ -478,7 +478,7 @@ function CompetitionRoundBody({ payload }: { payload: any }) {
             people={livePlayers.map((p) => ({ name: p.name, avatar_url: p.avatar_url ?? null }))}
             max={4}
           />
-          <span className="text-xs font-semibold text-emerald-100/60">
+          <span className="text-xs font-semibold text-[color:var(--sec-muted)]">
             {livePlayers.length === 1 ? livePlayers[0].name : `${livePlayers.length} playing`}
           </span>
         </div>
@@ -648,8 +648,8 @@ export default function FeedCard({
   return (
     <div
       className={[
-        "rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/60 p-3 shadow-sm",
-        isClickable ? "cursor-pointer hover:bg-[#0b3b21]/75" : "",
+        "rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] p-3 shadow-sm",
+        isClickable ? "cursor-pointer hover:bg-[color:color-mix(in_srgb,var(--sec-surface)_75%,transparent)]" : "",
       ].join(" ")}
       onClick={() => handleCardClick()}
       role={isClickable ? "button" : undefined}
@@ -669,8 +669,8 @@ export default function FeedCard({
             <div className="mb-2 flex items-center gap-2">
               {collaborationAvatars ? <AvatarStack people={collaborationAvatars} max={3} /> : null}
               <div className="min-w-0">
-                <div className="text-sm font-extrabold truncate text-emerald-50">{collaborationLabel}</div>
-                <div className="text-[11px] font-semibold text-emerald-100/60">{timeLabel}</div>
+                <div className="text-sm font-extrabold truncate text-[color:var(--sec-text)]">{collaborationLabel}</div>
+                <div className="text-[11px] font-semibold text-[color:var(--sec-muted)]">{timeLabel}</div>
               </div>
             </div>
           ) : primaryPerson ? (
@@ -683,35 +683,35 @@ export default function FeedCard({
                 <img
                   src={primaryPerson.avatar_url}
                   alt=""
-                  className="h-8 w-8 rounded-full object-cover border border-emerald-900/60"
+                  className="h-8 w-8 rounded-full object-cover border border-[color:var(--sec-hair)]"
                   loading="lazy"
                 />
               ) : (
-                <div className="h-8 w-8 rounded-full border border-emerald-900/60 bg-emerald-950/20 flex items-center justify-center text-[11px] font-extrabold text-emerald-50">
+                <div className="h-8 w-8 rounded-full border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] flex items-center justify-center text-[11px] font-extrabold text-[color:var(--sec-text)]">
                   {avatarInitial(primaryPerson.display_name ?? "P")}
                 </div>
               )}
               <div className="min-w-0 text-left">
-                <div className="text-sm font-extrabold truncate text-emerald-50">
+                <div className="text-sm font-extrabold truncate text-[color:var(--sec-text)]">
                   {primaryPerson.display_name ?? "Player"}
                 </div>
-                <div className="text-[11px] font-semibold text-emerald-100/60">{timeLabel}</div>
+                <div className="text-[11px] font-semibold text-[color:var(--sec-muted)]">{timeLabel}</div>
               </div>
             </button>
           ) : (
-            <div className="mb-2 text-[11px] font-semibold text-emerald-100/60">{timeLabel}</div>
+            <div className="mb-2 text-[11px] font-semibold text-[color:var(--sec-muted)]">{timeLabel}</div>
           )}
 
           {/* Event title row */}
           <div className="flex items-center gap-2 min-w-0">
-            <div className="text-sm font-extrabold truncate text-[#f5e6b0]">{headerTitle}</div>
+            <div className="text-sm font-extrabold truncate text-[color:var(--sec-accent)]">{headerTitle}</div>
 
             {item.type === "competition_round" ? (
               (() => {
                 const p: any = item.payload ?? {};
                 const roundStatus: string = p.round_status ?? "live";
                 return roundStatus === "completed" ? (
-                  <span className="shrink-0 rounded-full border border-emerald-800/50 bg-emerald-900/40 px-2 py-0.5 text-[10px] font-extrabold tracking-wide text-emerald-300">
+                  <span className="shrink-0 rounded-full border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-2 py-0.5 text-[10px] font-extrabold tracking-wide text-[color:var(--sec-good)]">
                     FINAL
                   </span>
                 ) : (
@@ -721,7 +721,7 @@ export default function FeedCard({
                 );
               })()
             ) : isLive ? (
-              <span className="shrink-0 rounded-full border border-emerald-900/50 bg-emerald-950/10 px-2 py-0.5 text-[10px] font-extrabold tracking-wide text-[#f5e6b0]">
+              <span className="shrink-0 rounded-full border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-2 py-0.5 text-[10px] font-extrabold tracking-wide text-[color:var(--sec-accent)]">
                 LIVE
               </span>
             ) : null}
@@ -734,7 +734,7 @@ export default function FeedCard({
           </div>
 
           {item.type === "round_played" ? (
-            <div className="mt-0.5 text-xs font-semibold text-emerald-100/60">
+            <div className="mt-0.5 text-xs font-semibold text-[color:var(--sec-muted)]">
               <RoundMetaLine payload={item.payload as any} timeLabel={""} />
             </div>
           ) : null}
@@ -763,7 +763,7 @@ export default function FeedCard({
                 <Button
                   variant="secondary"
                   size="sm"
-                  className="bg-emerald-900/40 text-emerald-50 hover:bg-emerald-900/55"
+                  className="bg-[color:var(--sec-surface)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
                   onClick={goToDetail}
                 >
                   💬 {commentCount}
@@ -787,7 +787,7 @@ export default function FeedCard({
         ) : item.type === "competition_round" ? (
           <CompetitionRoundBody payload={item.payload as any} />
         ) : (
-          <div className="text-sm font-semibold text-emerald-100/80">Activity</div>
+          <div className="text-sm font-semibold text-[color:var(--sec-muted)]">Activity</div>
         )}
 
         {/* Footer: subtle reactions + top comment preview */}
@@ -795,14 +795,14 @@ export default function FeedCard({
           <ReactionSummary counts={reactionCounts} />
 
           {topComment && !isDetail ? (
-            <div className="rounded-xl border border-emerald-900/40 bg-emerald-950/10 px-3 py-2">
+            <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-3 py-2">
               <div className="flex items-center justify-between gap-2">
-                <div className="text-[11px] font-extrabold text-emerald-50 truncate">
+                <div className="text-[11px] font-extrabold text-[color:var(--sec-text)] truncate">
                   Top comment · {topComment.author}
                 </div>
-                <div className="text-[11px] font-semibold text-emerald-100/60">👍 {topComment.like_count}</div>
+                <div className="text-[11px] font-semibold text-[color:var(--sec-muted)]">👍 {topComment.like_count}</div>
               </div>
-              <div className="mt-1 text-xs font-semibold text-emerald-100/80 line-clamp-2">{topComment.body}</div>
+              <div className="mt-1 text-xs font-semibold text-[color:var(--sec-muted)] line-clamp-2">{topComment.body}</div>
             </div>
           ) : null}
         </div>

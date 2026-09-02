@@ -94,10 +94,10 @@ export function RoundFormatSection({
   return (
     <div className="space-y-6">
       {/* Format Section */}
-      <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
+      <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4">
         <div className="mb-3">
-          <div className="text-sm font-semibold text-emerald-50">Round Format</div>
-          <div className="text-[11px] text-emerald-100/70">
+          <div className="text-sm font-semibold text-[color:var(--sec-text)]">Round Format</div>
+          <div className="text-[11px] text-[color:var(--sec-muted)]">
             {isOwner ? "Choose the scoring format" : "View current format"}
           </div>
         </div>
@@ -114,10 +114,10 @@ export function RoundFormatSection({
       </div>
 
       {/* Playing Handicap Section */}
-      <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
+      <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4">
         <div className="mb-3">
-          <div className="text-sm font-semibold text-emerald-50">Handicap Settings</div>
-          <div className="text-[11px] text-emerald-100/70">
+          <div className="text-sm font-semibold text-[color:var(--sec-text)]">Handicap Settings</div>
+          <div className="text-[11px] text-[color:var(--sec-muted)]">
             {isOwner
               ? "Set default handicap calculation for all players"
               : "View current handicap settings"}

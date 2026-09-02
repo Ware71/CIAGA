@@ -59,7 +59,7 @@ export default function WolfHoleDetails({
       disabled={disabled || isDisabled}
       onClick={onClick}
       className={`${CHIP_BASE} ${
-        active ? activeClass : "border-emerald-900/70 bg-[#0b3b21]/40 text-emerald-100/70 hover:bg-emerald-900/25"
+        active ? activeClass : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]"
       }`}
     >
       {label}
@@ -79,7 +79,7 @@ export default function WolfHoleDetails({
           const isPartner = partnerId === p.id;
           return (
             <div key={p.id} className="flex items-center justify-between gap-2">
-              <div className="text-xs text-emerald-50 truncate min-w-0 flex-1">{getParticipantLabel(p)}</div>
+              <div className="text-xs text-[color:var(--sec-text)] truncate min-w-0 flex-1">{getParticipantLabel(p)}</div>
               <div className="flex items-center gap-1 shrink-0">
                 {chip(
                   isWolf && mode === "partner",
@@ -91,7 +91,7 @@ export default function WolfHoleDetails({
                   isPartner,
                   "Partner",
                   () => togglePartner(p.id),
-                  "border-emerald-500 bg-emerald-500/20 text-emerald-100",
+                  "border-[color:var(--sec-accent)] bg-emerald-500/20 text-[color:var(--sec-text)]",
                   !wolfId || isWolf || mode !== "partner",
                 )}
                 {chip(

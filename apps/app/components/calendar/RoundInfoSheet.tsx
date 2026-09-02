@@ -16,11 +16,11 @@ function statusBadge(status: RoundInfo["status"]): { label: string; cls: string 
     case "starting":
       return { label: "Live", cls: "bg-red-500/20 text-red-200 border-red-500/40" };
     case "finished":
-      return { label: "Finished", cls: "bg-[#f5e6b0]/20 text-[#f5e6b0] border-[#f5e6b0]/40" };
+      return { label: "Finished", cls: "bg-[color:color-mix(in_srgb,var(--sec-accent)_20%,transparent)] text-[color:var(--sec-accent)] border-[color:color-mix(in_srgb,var(--sec-accent)_40%,transparent)]" };
     case "scheduled":
-      return { label: "Scheduled", cls: "bg-emerald-500/20 text-emerald-100 border-emerald-400/40" };
+      return { label: "Scheduled", cls: "bg-emerald-500/20 text-[color:var(--sec-text)] border-[color:var(--sec-accent)]" };
     default:
-      return { label: "Draft", cls: "bg-emerald-900/40 text-emerald-200/80 border-emerald-800/50" };
+      return { label: "Draft", cls: "bg-[color:var(--sec-surface)] text-[color:var(--sec-muted)] border-[color:var(--sec-hair)]" };
   }
 }
 
@@ -80,19 +80,19 @@ export function RoundInfoSheet(props: { roundId: string; onClose: () => void }) 
           exit={{ y: "100%" }}
           transition={{ type: "spring", damping: 30, stiffness: 300 }}
         >
-          <div className="mx-auto w-full max-w-[520px] max-h-[85vh] overflow-y-auto rounded-t-3xl border border-emerald-900/70 bg-[#061f12] shadow-2xl">
-            <div className="sticky top-0 flex items-start justify-between border-b border-emerald-900/60 bg-[#061f12] p-4">
+          <div className="mx-auto w-full max-w-[520px] max-h-[85vh] overflow-y-auto rounded-t-3xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] shadow-2xl">
+            <div className="sticky top-0 flex items-start justify-between border-b border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] p-4">
               <div className="min-w-0">
-                <div className="truncate text-base font-semibold text-emerald-50">
+                <div className="truncate text-base font-semibold text-[color:var(--sec-text)]">
                   {info?.name ?? info?.course_name ?? "Round"}
                 </div>
                 {info?.course_name ? (
-                  <div className="mt-0.5 flex items-center gap-1 text-[11px] text-emerald-100/60">
+                  <div className="mt-0.5 flex items-center gap-1 text-[11px] text-[color:var(--sec-muted)]">
                     <MapPin size={12} /> {info.course_name}
                   </div>
                 ) : null}
               </div>
-              <button onClick={onClose} className="ml-2 text-emerald-100/70 hover:text-emerald-50" aria-label="Close">
+              <button onClick={onClose} className="ml-2 text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]" aria-label="Close">
                 <X size={18} aria-hidden="true" />
               </button>
             </div>
@@ -103,12 +103,12 @@ export function RoundInfoSheet(props: { roundId: string; onClose: () => void }) 
                   {badge.label}
                 </span>
                 {prettyFormat(info?.format_type ?? null) ? (
-                  <span className="rounded-full border border-emerald-900/60 bg-[#0b3b21]/50 px-2 py-0.5 text-[10px] text-emerald-100/80">
+                  <span className="rounded-full border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_50%,transparent)] px-2 py-0.5 text-[10px] text-[color:var(--sec-muted)]">
                     {prettyFormat(info?.format_type ?? null)}
                   </span>
                 ) : null}
                 {when ? (
-                  <span className="text-[11px] text-emerald-100/60">
+                  <span className="text-[11px] text-[color:var(--sec-muted)]">
                     {new Date(when).toLocaleString(undefined, {
                       weekday: "short",
                       day: "numeric",
@@ -121,17 +121,17 @@ export function RoundInfoSheet(props: { roundId: string; onClose: () => void }) 
               </div>
 
               {err ? (
-                <div className="text-[11px] text-red-300">{err}</div>
+                <div className="text-[11px] text-[color:var(--sec-bad)]">{err}</div>
               ) : !info ? (
-                <div className="flex items-center gap-2 py-6 text-emerald-100/60">
+                <div className="flex items-center gap-2 py-6 text-[color:var(--sec-muted)]">
                   <Loader2 className="animate-spin" size={16} /> Loading…
                 </div>
               ) : (
                 <div>
-                  <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-200/50">
+                  <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-[color:var(--sec-muted)]">
                     Players
                   </div>
-                  <div className="divide-y divide-emerald-900/40 rounded-xl border border-emerald-900/50 bg-[#042713]">
+                  <div className="divide-y divide-[color:var(--sec-hair)] rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)]">
                     {info.participants.map((p) => {
                       const net =
                         p.ags != null && p.course_handicap != null ? p.ags - p.course_handicap : null;
@@ -153,16 +153,16 @@ export function RoundInfoSheet(props: { roundId: string; onClose: () => void }) 
                         <div key={p.profile_id} className="px-3 py-2">
                           <div className="flex items-center gap-2.5">
                             <InitialsAvatar profileId={p.profile_id} name={p.name} size={26} />
-                            <span className="min-w-0 flex-1 truncate text-sm text-emerald-50">
+                            <span className="min-w-0 flex-1 truncate text-sm text-[color:var(--sec-text)]">
                               {p.name ?? "Player"}
                             </span>
                           </div>
                           {stats.length > 0 ? (
                             <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 pl-[38px]">
                               {stats.map((s) => (
-                                <span key={s.label} className="text-[11px] text-emerald-100/60">
+                                <span key={s.label} className="text-[11px] text-[color:var(--sec-muted)]">
                                   {s.label}{" "}
-                                  <span className="font-semibold tabular-nums text-emerald-50">
+                                  <span className="font-semibold tabular-nums text-[color:var(--sec-text)]">
                                     {s.value}
                                   </span>
                                 </span>
@@ -173,7 +173,7 @@ export function RoundInfoSheet(props: { roundId: string; onClose: () => void }) 
                       );
                     })}
                     {info.participants.length === 0 ? (
-                      <div className="px-3 py-3 text-center text-[11px] text-emerald-100/50">
+                      <div className="px-3 py-3 text-center text-[11px] text-[color:var(--sec-muted)]">
                         No players yet.
                       </div>
                     ) : null}
@@ -182,7 +182,7 @@ export function RoundInfoSheet(props: { roundId: string; onClose: () => void }) 
               )}
 
               <Button
-                className="w-full rounded-2xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c]"
+                className="w-full rounded-2xl bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] hover:bg-[color:var(--sec-accent)]"
                 onClick={() => router.push(action.path)}
               >
                 {action.label}

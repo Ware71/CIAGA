@@ -42,8 +42,8 @@ function ViewTooltip({ active, payload, label, series, mode }: any) {
   if (!active || !payload?.length) return null;
   const row = payload[0]?.payload ?? {};
   return (
-    <div className="rounded-lg border border-emerald-900/70 bg-[#04240f] px-3 py-2 shadow-lg">
-      <div className="text-[11px] font-extrabold text-emerald-100/70">Hole {label}</div>
+    <div className="rounded-lg border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] px-3 py-2 shadow-lg">
+      <div className="text-[11px] font-extrabold text-[color:var(--sec-muted)]">Hole {label}</div>
       <div className="mt-1 space-y-0.5">
         {series.map((s: ViewSeries, i: number) => {
           const v = row[s.key];
@@ -51,10 +51,10 @@ function ViewTooltip({ active, payload, label, series, mode }: any) {
           return (
             <div key={s.key} className="flex items-center gap-2 text-[11px] font-semibold">
               <span className="inline-block h-2 w-2 rounded-full" style={{ background: PALETTE[i % PALETTE.length] }} />
-              <span className="text-emerald-50">{s.name}</span>
-              <span className="ml-auto text-[#f5e6b0]">{fmtValue(v, mode)}</span>
+              <span className="text-[color:var(--sec-text)]">{s.name}</span>
+              <span className="ml-auto text-[color:var(--sec-accent)]">{fmtValue(v, mode)}</span>
               {mode === "topar" && typeof row[`${s.key}_rank`] === "number" ? (
-                <span className="text-emerald-100/50">P{row[`${s.key}_rank`]}</span>
+                <span className="text-[color:var(--sec-muted)]">P{row[`${s.key}_rank`]}</span>
               ) : null}
             </div>
           );
@@ -114,9 +114,9 @@ export default function RoundProgressionChart({
   }, [mode, formatChart, grossRows, netRows, players]);
 
   return (
-    <div className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/40 p-3">
+    <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="text-xs font-extrabold text-[#f5e6b0]">Through the round</div>
+        <div className="text-xs font-extrabold text-[color:var(--sec-accent)]">Through the round</div>
         <div className="flex flex-wrap gap-1">
           {toggles.map((t) => (
             <button
@@ -126,8 +126,8 @@ export default function RoundProgressionChart({
               className={[
                 "rounded-full px-2.5 py-1 text-[10px] font-extrabold tracking-wide transition",
                 mode === t.key
-                  ? "bg-[#f5e6b0] text-[#042713]"
-                  : "border border-emerald-800/60 bg-emerald-950/30 text-emerald-100/70 hover:bg-emerald-900/40",
+                  ? "bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)]"
+                  : "border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]",
               ].join(" ")}
             >
               {t.label}
@@ -136,12 +136,12 @@ export default function RoundProgressionChart({
         </div>
       </div>
 
-      <div className="mb-2 text-[10px] font-semibold text-emerald-100/50">{view.caption}</div>
+      <div className="mb-2 text-[10px] font-semibold text-[color:var(--sec-muted)]">{view.caption}</div>
 
       {/* Legend */}
       <div className="mb-2 flex flex-wrap gap-x-3 gap-y-1">
         {view.series.map((s, i) => (
-          <div key={s.key} className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-50">
+          <div key={s.key} className="flex items-center gap-1.5 text-[11px] font-semibold text-[color:var(--sec-text)]">
             <span className="inline-block h-2 w-2 rounded-full" style={{ background: PALETTE[i % PALETTE.length] }} />
             {s.name}
           </div>
@@ -150,12 +150,12 @@ export default function RoundProgressionChart({
 
       <ResponsiveContainer width="100%" height={220}>
         <LineChart data={view.data} margin={{ top: 6, right: 8, bottom: 0, left: -20 }}>
-          <CartesianGrid stroke="#0e4a2a" strokeDasharray="3 3" />
-          <XAxis dataKey="hole" tick={{ fill: "#8fd4ad", fontSize: 10 }} stroke="#0e4a2a" />
+          <CartesianGrid stroke="#0b3b21" strokeDasharray="3 3" />
+          <XAxis dataKey="hole" tick={{ fill: "#8fd4ad", fontSize: 10 }} stroke="#0b3b21" />
           <YAxis
             reversed={view.reversed}
             tick={{ fill: "#8fd4ad", fontSize: 10 }}
-            stroke="#0e4a2a"
+            stroke="#0b3b21"
             allowDecimals={false}
             tickFormatter={(v) =>
               view.valueMode === "topar"

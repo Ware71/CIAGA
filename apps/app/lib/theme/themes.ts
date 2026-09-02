@@ -13,7 +13,17 @@
  * otherwise.
  */
 
-export type ThemeId = "emerald" | "night" | "claret" | "linen";
+export type ThemeId = "default" | "dark" | "claret" | "light" | "sky";
+
+/**
+ * Themes were first shipped under their design names. Anyone carrying one of
+ * those in localStorage is mapped forward rather than reset to the default.
+ */
+const RENAMED: Record<string, ThemeId> = {
+  emerald: "default",
+  night: "dark",
+  linen: "light",
+};
 
 export type Theme = {
   id: ThemeId;
@@ -23,44 +33,59 @@ export type Theme = {
   scheme: "dark" | "light";
   /** Ground, surface, accent — drawn as a three-band chip in the picker. */
   swatch: [string, string, string];
+  /** The same three for the Majors section, so the picker shows both rooms. */
+  majorsSwatch: [string, string, string];
   /** Ground colour, used for the PWA status bar before CSS has resolved. */
   ground: string;
 };
 
-export const DEFAULT_THEME: ThemeId = "emerald";
+export const DEFAULT_THEME: ThemeId = "default";
 
 export const THEMES: Theme[] = [
   {
-    id: "emerald",
-    name: "Emerald Foil",
-    blurb: "Bottle green and gold. Majors goes cold — mint on near-black.",
+    id: "default",
+    name: "Default",
+    blurb: "Bottle green and gold. Majors goes mint on near-black.",
     scheme: "dark",
     swatch: ["#042713", "#0a3520", "#f5e6b0"],
+    majorsSwatch: ["#01100A", "#06301e", "#7CF0BE"],
     ground: "#042713",
   },
   {
-    id: "night",
-    name: "Night Course",
-    blurb: "Neutral near-black with a single mint accent. Majors goes bone.",
+    id: "dark",
+    name: "Dark",
+    blurb: "Neutral near-black with one mint accent. Majors goes bone on black.",
     scheme: "dark",
     swatch: ["#0A0D0B", "#141917", "#6EE7B7"],
+    majorsSwatch: ["#050605", "#0F110F", "#E8E4D6"],
     ground: "#0A0D0B",
   },
   {
     id: "claret",
     name: "Claret",
-    blurb: "The jug, not the fairway — deep burgundy and cream.",
+    blurb: "The jug, not the fairway. Majors goes oxblood and silver.",
     scheme: "dark",
     swatch: ["#2A0E16", "#3A141F", "#F0D6A8"],
+    majorsSwatch: ["#150409", "#230810", "#D8DCE0"],
     ground: "#2A0E16",
   },
   {
-    id: "linen",
-    name: "Linen",
-    blurb: "Daylight. Ink on warm paper, brass figures, the bar stays green.",
+    id: "light",
+    name: "Light",
+    blurb: "Ink on warm paper, brass figures. Majors goes green on green.",
     scheme: "light",
     swatch: ["#F2F0E7", "#FFFFFF", "#7A5C12"],
+    majorsSwatch: ["#E4EDE6", "#FFFFFF", "#075E3C"],
     ground: "#F2F0E7",
+  },
+  {
+    id: "sky",
+    name: "Sky",
+    blurb: "The other kind of good day — cool blue and azure. Majors goes navy.",
+    scheme: "light",
+    swatch: ["#EDF3FA", "#FFFFFF", "#1D5FA8"],
+    majorsSwatch: ["#DCE7F5", "#FFFFFF", "#123A6B"],
+    ground: "#EDF3FA",
   },
 ];
 
@@ -79,8 +104,9 @@ export const THEME_EVENT = "ciaga:theme";
 export function readStoredTheme(): ThemeId {
   if (typeof window === "undefined") return DEFAULT_THEME;
   try {
-    const v = window.localStorage.getItem(THEME_STORAGE_KEY);
-    return (THEME_IDS as string[]).includes(v ?? "") ? (v as ThemeId) : DEFAULT_THEME;
+    const v = window.localStorage.getItem(THEME_STORAGE_KEY) ?? "";
+    if ((THEME_IDS as string[]).includes(v)) return v as ThemeId;
+    return RENAMED[v] ?? DEFAULT_THEME;
   } catch {
     return DEFAULT_THEME;
   }
@@ -111,8 +137,10 @@ export function applyTheme(id: ThemeId) {
  */
 export const THEME_BOOTSTRAP_SCRIPT = `(function(){try{var t=localStorage.getItem(${JSON.stringify(
   THEME_STORAGE_KEY
-)});var ok=${JSON.stringify(THEME_IDS)};document.documentElement.dataset.theme=ok.indexOf(t)>-1?t:${JSON.stringify(
+)});var ok=${JSON.stringify(THEME_IDS)};var ren=${JSON.stringify(
+  RENAMED
+)};document.documentElement.dataset.theme=ok.indexOf(t)>-1?t:(ren[t]||${JSON.stringify(
   DEFAULT_THEME
-)};}catch(e){document.documentElement.dataset.theme=${JSON.stringify(
+)});}catch(e){document.documentElement.dataset.theme=${JSON.stringify(
   DEFAULT_THEME
 )};}})();`;

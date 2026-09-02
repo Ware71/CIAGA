@@ -23,7 +23,7 @@ import {
  */
 
 function Icon({ as: As }: { as: LucideIcon }) {
-  return <As className="h-[18px] w-[18px] text-[#f5e6b0]" strokeWidth={2} />;
+  return <As className="h-[18px] w-[18px] text-[color:var(--sec-accent)]" strokeWidth={2} />;
 }
 
 const YOU_TILES: Tile[] = [

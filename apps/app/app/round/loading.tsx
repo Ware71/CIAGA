@@ -2,7 +2,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 
 export default function RoundListLoading() {
   return (
-    <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
+    <div className="min-h-screen bg-[color:var(--ciaga-ground)] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto w-full max-w-sm space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -18,7 +18,7 @@ export default function RoundListLoading() {
         {/* Round card skeletons */}
         <div className="space-y-3">
           {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-20 w-full rounded-2xl bg-emerald-900/20" />
+            <Skeleton key={i} className="h-20 w-full rounded-2xl bg-[color:var(--sec-surface)]" />
           ))}
         </div>
       </div>

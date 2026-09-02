@@ -78,13 +78,13 @@ export default function ProfilePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
+      <div className="min-h-screen bg-[color:var(--ciaga-ground)] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
         <div className="mx-auto w-full max-w-sm space-y-4">
           <header className="flex items-center justify-between">
             <BackButton onClick={() => router.back()} />
             <div className="text-center flex-1">
-              <div className="text-lg font-semibold tracking-wide text-[#f5e6b0]">Profile</div>
-              <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">Account</div>
+              <div className="text-lg font-semibold tracking-wide text-[color:var(--sec-accent)]">Profile</div>
+              <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--sec-muted)]">Account</div>
             </div>
             <div className="w-[60px]" />
           </header>
@@ -95,8 +95,8 @@ export default function ProfilePage() {
               <Skeleton className="h-5 w-32" />
               <Skeleton className="h-3 w-24" />
             </div>
-            <Skeleton className="h-24 w-full rounded-2xl bg-emerald-900/20" />
-            <Skeleton className="h-16 w-full rounded-2xl bg-emerald-900/20" />
+            <Skeleton className="h-24 w-full rounded-2xl bg-[color:var(--sec-surface)]" />
+            <Skeleton className="h-16 w-full rounded-2xl bg-[color:var(--sec-surface)]" />
           </div>
         </div>
       </div>
@@ -105,18 +105,18 @@ export default function ProfilePage() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
+      <div className="min-h-screen bg-[color:var(--ciaga-ground)] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
         <div className="mx-auto w-full max-w-sm space-y-4">
           <header className="flex items-center justify-between">
             <BackButton onClick={() => router.back()} />
             <div className="text-center flex-1">
-              <div className="text-lg font-semibold tracking-wide text-[#f5e6b0]">Profile</div>
-              <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">Account</div>
+              <div className="text-lg font-semibold tracking-wide text-[color:var(--sec-accent)]">Profile</div>
+              <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--sec-muted)]">Account</div>
             </div>
             <div className="w-[60px]" />
           </header>
 
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">
+          <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4 text-sm text-[color:var(--sec-muted)]">
             You’re not signed in.
           </div>
         </div>
@@ -126,18 +126,18 @@ export default function ProfilePage() {
 
   if (!profile?.id) {
     return (
-      <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
+      <div className="min-h-screen bg-[color:var(--ciaga-ground)] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
         <div className="mx-auto w-full max-w-sm space-y-4">
           <header className="flex items-center justify-between">
             <BackButton onClick={() => router.back()} />
             <div className="text-center flex-1">
-              <div className="text-lg font-semibold tracking-wide text-[#f5e6b0]">Profile</div>
-              <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">Account</div>
+              <div className="text-lg font-semibold tracking-wide text-[color:var(--sec-accent)]">Profile</div>
+              <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--sec-muted)]">Account</div>
             </div>
             <div className="w-[60px]" />
           </header>
 
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">
+          <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4 text-sm text-[color:var(--sec-muted)]">
             Could not load your profile.
           </div>
         </div>

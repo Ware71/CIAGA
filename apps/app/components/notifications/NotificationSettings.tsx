@@ -206,7 +206,7 @@ export function NotificationSettings({ profileId }: { profileId: string | null }
           />
         )}
         {error ? (
-          <div className="py-2 text-[length:var(--t-sec)] text-red-300">{error}</div>
+          <div className="py-2 text-[length:var(--t-sec)] text-[color:var(--sec-bad)]">{error}</div>
         ) : null}
       </Group>
 

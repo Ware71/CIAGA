@@ -1677,7 +1677,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
   // the "Round not started" panel never flashes while preview is loading.
   if (loading || (previewLoading && holes.length === 0 && !isFinished)) {
     return (
-      <div className="min-h-screen bg-[#042713] text-slate-100 px-1.5 sm:px-2 pt-4 pb-[env(safe-area-inset-bottom)]">
+      <div className="min-h-screen bg-[color:var(--ciaga-ground)] text-slate-100 px-1.5 sm:px-2 pt-4 pb-[env(safe-area-inset-bottom)]">
         <div className="mx-auto w-full max-w-none space-y-2">
           <div className="flex items-center gap-2">
             <Skeleton className="h-8 w-16 shrink-0" />
@@ -1688,15 +1688,15 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
             </div>
           </div>
           <div className="space-y-1.5 pt-2">
-            <Skeleton className="h-8 w-full rounded-lg bg-emerald-900/20" />
+            <Skeleton className="h-8 w-full rounded-lg bg-[color:var(--sec-surface)]" />
             {Array.from({ length: 9 }).map((_, i) => (
-              <Skeleton key={i} className="h-9 w-full rounded-lg bg-emerald-900/20" />
+              <Skeleton key={i} className="h-9 w-full rounded-lg bg-[color:var(--sec-surface)]" />
             ))}
-            <Skeleton className="h-9 w-full rounded-lg bg-emerald-900/30" />
+            <Skeleton className="h-9 w-full rounded-lg bg-[color:var(--sec-surface)]" />
             {Array.from({ length: 9 }).map((_, i) => (
-              <Skeleton key={i + 9} className="h-9 w-full rounded-lg bg-emerald-900/20" />
+              <Skeleton key={i + 9} className="h-9 w-full rounded-lg bg-[color:var(--sec-surface)]" />
             ))}
-            <Skeleton className="h-10 w-full rounded-lg bg-emerald-900/30" />
+            <Skeleton className="h-10 w-full rounded-lg bg-[color:var(--sec-surface)]" />
           </div>
         </div>
       </div>
@@ -1720,7 +1720,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
   const subtitle = `${status}${playedOnLabel ? ` · ${playedOnLabel}` : ""}`;
 
   return (
-    <div className="min-h-screen bg-[#042713] text-slate-100 px-1.5 sm:px-2 pt-4 pb-[env(safe-area-inset-bottom)]">
+    <div className="min-h-screen bg-[color:var(--ciaga-ground)] text-slate-100 px-1.5 sm:px-2 pt-4 pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto w-full max-w-none space-y-2">
         <header className="flex items-center gap-2">
           <BackButton
@@ -1749,16 +1749,16 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
             <>
               <div className="flex-1 min-w-0 px-1">
                 <div className="text-center">
-                  <div className="text-[15px] font-semibold tracking-wide text-[#f5e6b0] truncate">{roundName}</div>
-                  <div className="text-[10px] uppercase tracking-[0.14em] text-emerald-200/70 truncate">{subtitle}</div>
+                  <div className="text-[15px] font-semibold tracking-wide text-[color:var(--sec-accent)] truncate">{roundName}</div>
+                  <div className="text-[10px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] truncate">{subtitle}</div>
                 </div>
                 <div className="mt-1 flex justify-center">
-                  <div className="rounded-xl border border-emerald-900/70 bg-[#0b3b21]/50 p-1 flex items-center overflow-hidden max-w-full">
+                  <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_50%,transparent)] p-1 flex items-center overflow-hidden max-w-full">
                     {!isSingleBall && (
                       <>
                         <button
                           className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 ${
-                            scoreView === "gross" ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
+                            scoreView === "gross" ? "bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)]" : "text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]"
                           }`}
                           onClick={() => setScoreView("gross")}
                         >
@@ -1767,7 +1767,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
                         {(!eventId || isFinished) && (
                           <button
                             className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 ${
-                              scoreView === "net" ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
+                              scoreView === "net" ? "bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)]" : "text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]"
                             }`}
                             onClick={() => setScoreView("net")}
                           >
@@ -1778,13 +1778,13 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
                     )}
                     {formatDisplays.length > 0 && (
                       <>
-                        {!isSingleBall && <div className="w-px h-5 bg-emerald-900/50 mx-0.5 shrink-0" />}
+                        {!isSingleBall && <div className="w-px h-5 bg-[color:var(--sec-surface)] mx-0.5 shrink-0" />}
                         <div className="flex overflow-x-auto min-w-0" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
                           {formatDisplays.map((fd, i) => (
                             <button
                               key={i}
                               className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 whitespace-nowrap ${
-                                scoreView === `format:${i}` ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
+                                scoreView === `format:${i}` ? "bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)]" : "text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]"
                               }`}
                               onClick={() => setScoreView(`format:${i}` as FormatScoreView)}
                             >
@@ -1801,7 +1801,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="px-2 text-emerald-100 hover:bg-emerald-900/30"
+                  className="px-2 text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
                   onClick={() => setMenuOpen(true)}
                 >
                   <Menu className="h-5 w-5" />
@@ -1811,24 +1811,24 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
           ) : (
             <>
               <div className="text-center flex-1 px-1 min-w-0">
-                <div className="text-[15px] font-semibold tracking-wide text-[#f5e6b0] truncate">{roundName}</div>
-                <div className="text-[10px] uppercase tracking-[0.14em] text-emerald-200/70 truncate">{subtitle}</div>
+                <div className="text-[15px] font-semibold tracking-wide text-[color:var(--sec-accent)] truncate">{roundName}</div>
+                <div className="text-[10px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] truncate">{subtitle}</div>
               </div>
               <div className="flex flex-col items-end gap-1 min-w-0 overflow-hidden">
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="px-2 text-emerald-100 hover:bg-emerald-900/30"
+                  className="px-2 text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
                   onClick={() => setMenuOpen(true)}
                 >
                   <Menu className="h-5 w-5" />
                 </Button>
-                <div className="rounded-xl border border-emerald-900/70 bg-[#0b3b21]/50 p-1 flex items-center overflow-hidden max-w-full">
+                <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_50%,transparent)] p-1 flex items-center overflow-hidden max-w-full">
                   {!isSingleBall && (
                     <>
                       <button
                         className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 ${
-                          scoreView === "gross" ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
+                          scoreView === "gross" ? "bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)]" : "text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]"
                         }`}
                         onClick={() => setScoreView("gross")}
                       >
@@ -1837,7 +1837,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
                       {(!eventId || isFinished) && (
                         <button
                           className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 ${
-                            scoreView === "net" ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
+                            scoreView === "net" ? "bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)]" : "text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]"
                           }`}
                           onClick={() => setScoreView("net")}
                         >
@@ -1848,13 +1848,13 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
                   )}
                   {formatDisplays.length > 0 && (
                     <>
-                      {!isSingleBall && <div className="w-px h-5 bg-emerald-900/50 mx-0.5 shrink-0" />}
+                      {!isSingleBall && <div className="w-px h-5 bg-[color:var(--sec-surface)] mx-0.5 shrink-0" />}
                       <div className="flex overflow-x-auto min-w-0" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
                         {formatDisplays.map((fd, i) => (
                           <button
                             key={i}
                             className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 whitespace-nowrap ${
-                              scoreView === `format:${i}` ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
+                              scoreView === `format:${i}` ? "bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)]" : "text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]"
                             }`}
                             onClick={() => setScoreView(`format:${i}` as FormatScoreView)}
                           >
@@ -1876,21 +1876,21 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
         ) : null}
 
         {needsSetup ? (
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 space-y-3">
-            <div className="text-sm font-semibold text-emerald-50">Round not started</div>
-            <div className="text-[11px] text-emerald-100/70">
+          <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4 space-y-3">
+            <div className="text-sm font-semibold text-[color:var(--sec-text)]">Round not started</div>
+            <div className="text-[11px] text-[color:var(--sec-muted)]">
               Choose a tee in setup to preview the scorecard. The round starts when the first
               score is entered.
             </div>
             {canScore ? (
               <Button
-                className="w-full rounded-2xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c]"
+                className="w-full rounded-2xl bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] hover:bg-[color:var(--sec-accent)]"
                 onClick={() => router.replace(`/round/${roundId}/setup`)}
               >
                 Go to setup
               </Button>
             ) : (
-              <div className="text-[11px] text-emerald-100/70">
+              <div className="text-[11px] text-[color:var(--sec-muted)]">
                 You can view this round, but only participants can set it up.
               </div>
             )}
@@ -1924,7 +1924,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
 
         {!needsSetup && multiTee ? (
           <div className="flex items-center gap-1.5 flex-wrap px-0.5">
-            <span className="text-[9px] uppercase tracking-[0.14em] text-emerald-200/50">Tee</span>
+            <span className="text-[9px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)]">Tee</span>
             {teeToggleOptions.map((t) => {
               // A deduped option stands for several snapshot ids.
               const active = t.ids.includes(displayTeeSetId ?? "");
@@ -1935,8 +1935,8 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
                   onClick={() => setDisplayTeeSetId(t.id)}
                   className={`px-2 py-0.5 text-[10px] font-medium rounded-md transition-colors ${
                     active
-                      ? "bg-emerald-900/50 text-[#f5e6b0]"
-                      : "text-emerald-100/50 hover:text-emerald-100/80"
+                      ? "bg-[color:var(--sec-surface)] text-[color:var(--sec-accent)]"
+                      : "text-[color:var(--sec-muted)] hover:text-[color:var(--sec-muted)]"
                   }`}
                 >
                   {t.name ?? "Tee"}
@@ -1946,7 +1946,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
             <button
               type="button"
               onClick={() => setMenuOpen(true)}
-              className="text-[9px] text-emerald-100/45 underline underline-offset-2 hover:text-emerald-100/70"
+              className="text-[9px] text-[color:var(--sec-muted)] underline underline-offset-2 hover:text-[color:var(--sec-muted)]"
             >
               Compare
             </button>

@@ -102,15 +102,15 @@ function deriveAccess(g: GroupData): string {
 }
 
 function PositionBadge({ position }: { position: number | null }) {
-  if (position == null) return <span className="w-7 text-center text-xs text-emerald-200/40">—</span>;
+  if (position == null) return <span className="w-7 text-center text-xs text-[color:var(--sec-muted)]">—</span>;
   const colours =
     position === 1
-      ? "bg-[#7CF0BE]/20 text-[#7CF0BE] border-[#7CF0BE]/40"
+      ? "bg-[color:color-mix(in_srgb,var(--sec-accent)_20%,transparent)] text-[color:var(--sec-accent)] border-[color:color-mix(in_srgb,var(--sec-accent)_40%,transparent)]"
       : position === 2
       ? "bg-[#c0c0c0]/15 text-[#c0c0c0] border-[#c0c0c0]/30"
       : position === 3
       ? "bg-[#cd7f32]/20 text-[#cd7f32] border-[#cd7f32]/40"
-      : "bg-emerald-900/40 text-emerald-200/70 border-emerald-900/60";
+      : "bg-[color:var(--sec-surface)] text-[color:var(--sec-muted)] border-[color:var(--sec-hair)]";
   return (
     <span className={`w-7 h-7 flex items-center justify-center rounded-full border text-[11px] font-extrabold shrink-0 ${colours}`}>
       {position}
@@ -150,10 +150,10 @@ function MemberDetailDrawer({
 
   const roleCls =
     member.role === "owner"
-      ? "text-[#7CF0BE] border-[#7CF0BE]/30 bg-[#7CF0BE]/10"
+      ? "text-[color:var(--sec-accent)] border-[color:color-mix(in_srgb,var(--sec-accent)_30%,transparent)] bg-[color:color-mix(in_srgb,var(--sec-accent)_10%,transparent)]"
       : member.role === "admin"
-      ? "text-emerald-300 border-emerald-700/50 bg-emerald-900/30"
-      : "text-emerald-200/50 border-emerald-900/50 bg-transparent";
+      ? "text-[color:var(--sec-good)] border-[color:var(--sec-line)] bg-[color:var(--sec-surface)]"
+      : "text-[color:var(--sec-muted)] border-[color:var(--sec-hair)] bg-transparent";
 
   const handleTeeSave = async () => {
     setTeeSaving(true);
@@ -190,48 +190,48 @@ function MemberDetailDrawer({
     <div className="fixed inset-0 z-50 flex items-end" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60" />
       <div
-        className="relative w-full max-w-sm mx-auto bg-[#071f13] rounded-t-2xl border-t border-emerald-900/70 px-4 pt-5 pb-[env(safe-area-inset-bottom)] space-y-4 max-h-[80dvh] overflow-y-auto"
+        className="relative w-full max-w-sm mx-auto bg-[color:var(--ciaga-ground)] rounded-t-2xl border-t border-[color:var(--sec-hair)] px-4 pt-5 pb-[env(safe-area-inset-bottom)] space-y-4 max-h-[80dvh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="w-10 h-1 rounded-full bg-emerald-800/60 mx-auto mb-1" />
+        <div className="w-10 h-1 rounded-full bg-[color:var(--sec-surface-2)] mx-auto mb-1" />
 
         {/* Header */}
         <div className="flex items-center gap-3">
           {member.profile?.avatar_url ? (
             <img src={member.profile.avatar_url} alt="" className="h-12 w-12 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
           ) : (
-            <div className="h-12 w-12 rounded-full bg-emerald-900/60 grid place-items-center text-sm font-bold text-emerald-200 shrink-0">
+            <div className="h-12 w-12 rounded-full bg-[color:var(--sec-surface)] grid place-items-center text-sm font-bold text-[color:var(--sec-text-2)] shrink-0">
               {member.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-bold text-emerald-50 truncate">{member.profile?.name ?? member.profile_id}</div>
+            <div className="text-sm font-bold text-[color:var(--sec-text)] truncate">{member.profile?.name ?? member.profile_id}</div>
             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
               <span className={`text-[9px] font-semibold px-2 py-0.5 rounded-full border capitalize ${roleCls}`}>
                 {member.role}
               </span>
               {member.has_participated ? (
-                memberSince && <span className="text-[10px] text-emerald-200/50">Since {memberSince}</span>
+                memberSince && <span className="text-[10px] text-[color:var(--sec-muted)]">Since {memberSince}</span>
               ) : (
-                <span className="text-[10px] text-emerald-200/40 italic">New member</span>
+                <span className="text-[10px] text-[color:var(--sec-muted)] italic">New member</span>
               )}
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="h-7 w-7 grid place-items-center rounded-full border border-emerald-900/60 text-emerald-200/60 hover:text-emerald-100 shrink-0"
+            className="h-7 w-7 grid place-items-center rounded-full border border-[color:var(--sec-hair)] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)] shrink-0"
           >
             ✕
           </button>
         </div>
 
         {/* Handicap card */}
-        <div className="w-full rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4 text-center">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">
+        <div className="w-full rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_80%,transparent)] p-4 text-center">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--sec-muted)]">
             {displayedHI ? displayedHI.label : "Handicap Index"}
           </div>
-          <div className="mt-1 text-2xl font-semibold text-emerald-50">
+          <div className="mt-1 text-2xl font-semibold text-[color:var(--sec-text)]">
             {displayedHI ? displayedHI.value : "—"}
           </div>
           {displayedHI?.isTournament && (
@@ -241,8 +241,8 @@ function MemberDetailDrawer({
 
         {/* Tournament index override (admin/owner only) */}
         {isAdminOrOwner && (
-          <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-3 space-y-2">
-            <div className="text-[10px] uppercase tracking-wider text-emerald-200/50">Tournament Index Override</div>
+          <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-3 space-y-2">
+            <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Tournament Index Override</div>
             <div className="flex items-center gap-2">
               <input
                 type="number"
@@ -252,14 +252,14 @@ function MemberDetailDrawer({
                 placeholder="e.g. 14.2 (blank to clear)"
                 value={tiValue}
                 onChange={(e) => setTiValue(e.target.value)}
-                className="flex-1 rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
+                className="flex-1 rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none focus:border-[color:var(--sec-line)] [color-scheme:dark]"
                 disabled={tiSaving}
               />
               <button
                 type="button"
                 onClick={handleTiSave}
                 disabled={tiSaving}
-                className="px-3 py-2 rounded-xl bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50 shrink-0"
+                className="px-3 py-2 rounded-xl bg-[color:var(--sec-primary)] text-sm font-semibold text-white hover:bg-[color:var(--sec-primary-hover)] disabled:opacity-50 shrink-0"
               >
                 {tiSaving ? "…" : "Set"}
               </button>
@@ -268,14 +268,14 @@ function MemberDetailDrawer({
         )}
 
         {/* Tee preference */}
-        <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-3 space-y-2">
-          <div className="text-[10px] uppercase tracking-wider text-emerald-200/50">Preferred Tee</div>
+        <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-3 space-y-2">
+          <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Preferred Tee</div>
           {isAdminOrOwner ? (
             <div className="flex items-center gap-2">
               <select
                 value={teeValue}
                 onChange={(e) => setTeeValue(e.target.value)}
-                className="flex-1 rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-2 py-1.5 text-[11px] text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
+                className="flex-1 rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-2 py-1.5 text-[11px] text-[color:var(--sec-text)] focus:outline-none focus:border-[color:var(--sec-line)] [color-scheme:dark]"
                 disabled={teeSaving}
               >
                 <option value="">— not set —</option>
@@ -288,14 +288,14 @@ function MemberDetailDrawer({
                 type="button"
                 onClick={handleTeeSave}
                 disabled={teeSaving}
-                className="px-3 py-2 rounded-xl bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50 shrink-0"
+                className="px-3 py-2 rounded-xl bg-[color:var(--sec-primary)] text-sm font-semibold text-white hover:bg-[color:var(--sec-primary-hover)] disabled:opacity-50 shrink-0"
               >
                 {teeSaving ? "…" : "Save"}
               </button>
             </div>
           ) : (
-            <div className="text-sm text-emerald-100/80">
-              {member.preferred_tee_name ?? <span className="text-emerald-100/40">Not set</span>}
+            <div className="text-sm text-[color:var(--sec-muted)]">
+              {member.preferred_tee_name ?? <span className="text-[color:var(--sec-muted)]">Not set</span>}
             </div>
           )}
         </div>
@@ -305,7 +305,7 @@ function MemberDetailDrawer({
           <button
             type="button"
             onClick={() => { onRoleToggle(); onClose(); }}
-            className="w-full py-2 rounded-full border border-emerald-800/60 text-[11px] text-emerald-300/70 hover:text-emerald-200 hover:border-emerald-700/60"
+            className="w-full py-2 rounded-full border border-[color:var(--sec-hair)] text-[11px] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text-2)] hover:border-[color:var(--sec-line)]"
           >
             {member.role === "admin" ? "Remove Admin" : "Make Admin"}
           </button>
@@ -315,7 +315,7 @@ function MemberDetailDrawer({
         <button
           type="button"
           onClick={onNavigate}
-          className="w-full py-2.5 rounded-full border border-emerald-700/50 text-sm text-emerald-200 hover:bg-emerald-900/30"
+          className="w-full py-2.5 rounded-full border border-[color:var(--sec-line)] text-sm text-[color:var(--sec-text-2)] hover:bg-[color:var(--sec-surface-2)]"
         >
           View Profile →
         </button>
@@ -347,10 +347,10 @@ function MemberRow({
 
   const roleCls =
     member.role === "owner"
-      ? "text-[#7CF0BE] border-[#7CF0BE]/30 bg-[#7CF0BE]/10"
+      ? "text-[color:var(--sec-accent)] border-[color:color-mix(in_srgb,var(--sec-accent)_30%,transparent)] bg-[color:color-mix(in_srgb,var(--sec-accent)_10%,transparent)]"
       : member.role === "admin"
-      ? "text-emerald-300 border-emerald-700/50 bg-emerald-900/30"
-      : "text-emerald-200/50 border-emerald-900/50 bg-transparent";
+      ? "text-[color:var(--sec-good)] border-[color:var(--sec-line)] bg-[color:var(--sec-surface)]"
+      : "text-[color:var(--sec-muted)] border-[color:var(--sec-hair)] bg-transparent";
 
   const memberSince = member.first_participated_at
     ? new Date(member.first_participated_at).toLocaleDateString([], { month: "short", year: "numeric" })
@@ -360,7 +360,7 @@ function MemberRow({
     member.tournament_index != null
       ? { text: formatHI(member.tournament_index), cls: "text-amber-300/80 border-amber-800/40 bg-amber-900/20", label: "T" }
       : member.handicap_index != null
-      ? { text: formatHI(member.handicap_index), cls: "text-emerald-200/70 border-emerald-900/50 bg-transparent", label: null }
+      ? { text: formatHI(member.handicap_index), cls: "text-[color:var(--sec-muted)] border-[color:var(--sec-hair)] bg-transparent", label: null }
       : null;
 
   return (
@@ -368,25 +368,25 @@ function MemberRow({
       <button
         type="button"
         onClick={() => setShowDrawer(true)}
-        className="w-full rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 text-left hover:brightness-110 transition-all"
+        className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2.5 text-left hover:brightness-110 transition-all"
       >
         <div className="flex items-center gap-3">
           {member.profile?.avatar_url ? (
             <img src={member.profile.avatar_url} alt="" className="h-9 w-9 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
           ) : (
-            <div className="h-9 w-9 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
+            <div className="h-9 w-9 rounded-full bg-[color:var(--sec-surface)] grid place-items-center text-[10px] font-bold text-[color:var(--sec-text-2)] shrink-0">
               {member.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <span className="block text-sm font-semibold text-emerald-50 truncate">
+            <span className="block text-sm font-semibold text-[color:var(--sec-text)] truncate">
               {member.profile?.name ?? member.profile_id}
             </span>
             <div className="flex items-center gap-1.5 mt-0.5">
               {member.has_participated ? (
-                memberSince && <span className="text-[10px] text-emerald-200/40">Since {memberSince}</span>
+                memberSince && <span className="text-[10px] text-[color:var(--sec-muted)]">Since {memberSince}</span>
               ) : (
-                <span className="text-[10px] text-emerald-200/35 italic">New member</span>
+                <span className="text-[10px] text-[color:var(--sec-muted)] italic">New member</span>
               )}
             </div>
           </div>
@@ -519,7 +519,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   };
   const sortHeader = (label: string, field: "net" | "gross") => (
     <button type="button" onClick={() => handleSort(field)}
-      className={`text-[10px] w-12 text-right flex items-center justify-end gap-0.5 ${sortField === field ? "text-emerald-200/70" : "text-emerald-200/30"}`}>
+      className={`text-[10px] w-12 text-right flex items-center justify-end gap-0.5 ${sortField === field ? "text-[color:var(--sec-muted)]" : "text-[color:var(--sec-muted)]"}`}>
       {label}
       {sortField === field && <span className="text-[9px]">{sortDir === "asc" ? "↑" : "↓"}</span>}
     </button>
@@ -963,7 +963,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   if (loading) {
     return (
       <div className="min-h-[100dvh] flex items-center justify-center">
-        <div className="text-sm text-emerald-100/60">Loading…</div>
+        <div className="text-sm text-[color:var(--sec-muted)]">Loading…</div>
       </div>
     );
   }
@@ -971,8 +971,8 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
   if (!group) {
     return (
       <div className="min-h-[100dvh] flex flex-col items-center justify-center gap-4 px-4">
-        <div className="text-sm text-emerald-100/60">Group not found.</div>
-        <button type="button" onClick={() => router.push("/majors")} className="text-sm text-emerald-200 underline">
+        <div className="text-sm text-[color:var(--sec-muted)]">Group not found.</div>
+        <button type="button" onClick={() => router.push("/majors")} className="text-sm text-[color:var(--sec-text-2)] underline">
           Back to Hub
         </button>
       </div>
@@ -983,26 +983,26 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     status === "live"
       ? "border-amber-800/50 bg-amber-900/20"
       : status === "completed"
-      ? "border-emerald-800/40 bg-emerald-900/20"
+      ? "border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)]"
       : status === "cancelled"
       ? "border-red-900/40 bg-red-950/20"
-      : "border-emerald-900/70 bg-[#0b3b21]/80";
+      : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_80%,transparent)]";
 
   const compStatusBadge = (status: string) =>
     status === "live"
       ? "bg-amber-900/50 text-amber-300 border-amber-800/50"
       : status === "completed"
-      ? "bg-emerald-900/60 text-emerald-300 border-emerald-800/50"
+      ? "bg-[color:var(--sec-surface)] text-[color:var(--sec-good)] border-[color:var(--sec-hair)]"
       : status === "cancelled"
-      ? "bg-red-950/50 text-red-400/80 border-red-900/50"
-      : "bg-emerald-900/40 text-emerald-200/70 border-emerald-900/60";
+      ? "bg-red-950/50 text-[color:var(--sec-bad)] border-red-900/50"
+      : "bg-[color:var(--sec-surface)] text-[color:var(--sec-muted)] border-[color:var(--sec-hair)]";
 
   const roleBadge = (role: string) =>
     role === "owner"
-      ? "text-[#7CF0BE] border-[#7CF0BE]/30 bg-[#7CF0BE]/10"
+      ? "text-[color:var(--sec-accent)] border-[color:color-mix(in_srgb,var(--sec-accent)_30%,transparent)] bg-[color:color-mix(in_srgb,var(--sec-accent)_10%,transparent)]"
       : role === "admin"
-      ? "text-emerald-300 border-emerald-700/50 bg-emerald-900/30"
-      : "text-emerald-200/50 border-emerald-900/50 bg-transparent";
+      ? "text-[color:var(--sec-good)] border-[color:var(--sec-line)] bg-[color:var(--sec-surface)]"
+      : "text-[color:var(--sec-muted)] border-[color:var(--sec-hair)] bg-transparent";
 
   const pendingMembers = members.filter((m) => m.status === "pending");
   const invitedMembers = members.filter((m) => m.status === "invited");
@@ -1012,7 +1012,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     overview: (
       <div className="space-y-3">
         {group.description && (
-          <p className="text-[13px] text-emerald-100/75 leading-relaxed">{group.description}</p>
+          <p className="text-[13px] text-[color:var(--sec-muted)] leading-relaxed">{group.description}</p>
         )}
 
         {/* Standings preview — current season top 3 */}
@@ -1020,14 +1020,14 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           <button
             type="button"
             onClick={() => setTab("standings")}
-            className="w-full rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/70 px-3 py-3 text-left hover:bg-emerald-900/30 transition-colors"
+            className="w-full rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] px-3 py-3 text-left hover:bg-[color:var(--sec-surface-2)] transition-colors"
           >
             <div className="flex items-center justify-between mb-1">
-              <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider">Standings</div>
-              <span className="text-[10px] text-emerald-400/80">View all →</span>
+              <div className="text-[10px] text-[color:var(--sec-muted)] uppercase tracking-wider">Standings</div>
+              <span className="text-[10px] text-[color:var(--sec-good)]">View all →</span>
             </div>
             {liveStandingsData?.current_season && (
-              <div className="text-[10px] text-emerald-300/60 mb-2">
+              <div className="text-[10px] text-[color:var(--sec-muted)] mb-2">
                 {liveStandingsData.current_season.season_label}
               </div>
             )}
@@ -1036,9 +1036,9 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                 const pos = s.live_position ?? s.confirmed_position;
                 return (
                   <div key={s.profile_id} className="flex items-center gap-2">
-                    <span className={`w-5 text-center text-[11px] font-bold ${i === 0 ? "text-[#7CF0BE]" : i === 1 ? "text-[#c0c0c0]" : "text-[#cd7f32]"}`}>{pos}</span>
-                    <span className="flex-1 text-[12px] font-semibold text-emerald-100 truncate">{s.profile?.name ?? "—"}</span>
-                    <span className="text-[11px] text-emerald-200/60">{s.confirmed_points} pts</span>
+                    <span className={`w-5 text-center text-[11px] font-bold ${i === 0 ? "text-[color:var(--sec-accent)]" : i === 1 ? "text-[#c0c0c0]" : "text-[#cd7f32]"}`}>{pos}</span>
+                    <span className="flex-1 text-[12px] font-semibold text-[color:var(--sec-text)] truncate">{s.profile?.name ?? "—"}</span>
+                    <span className="text-[11px] text-[color:var(--sec-muted)]">{s.confirmed_points} pts</span>
                   </div>
                 );
               })}
@@ -1051,50 +1051,50 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           <button
             type="button"
             onClick={() => router.push(`/majors/fantasy/seasons/${seasonNarrative.seasonId}`)}
-            className="w-full text-left rounded-2xl border border-emerald-900/60 bg-gradient-to-br from-[#0b3b21]/90 to-[#07301a]/90 px-4 py-3 hover:from-[#0b3b21] hover:to-[#07301a] transition-colors"
+            className="w-full text-left rounded-2xl border border-[color:var(--sec-hair)] bg-gradient-to-br from-[color:color-mix(in_srgb,var(--sec-surface)_90%,transparent)] to-[color:color-mix(in_srgb,var(--sec-surface)_90%,transparent)] px-4 py-3 hover:from-[color:var(--sec-surface)] hover:to-[color:var(--sec-surface)] transition-colors"
           >
             <div className="flex items-center justify-between mb-1">
-              <div className="text-[9px] uppercase tracking-[0.2em] text-[#7CF0BE]/60">Season story</div>
-              <span className="text-[10px] text-emerald-400/80">Markets →</span>
+              <div className="text-[9px] uppercase tracking-[0.2em] text-[color:color-mix(in_srgb,var(--sec-accent)_60%,transparent)]">Season story</div>
+              <span className="text-[10px] text-[color:var(--sec-good)]">Markets →</span>
             </div>
-            <p className="text-[12px] leading-relaxed text-emerald-100/85">{seasonNarrative.text}</p>
+            <p className="text-[12px] leading-relaxed text-[color:var(--sec-muted)]">{seasonNarrative.text}</p>
           </button>
         )}
 
         {/* Shortcut cards grid */}
         <div className="grid grid-cols-2 gap-2">
           {/* Type — static */}
-          <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5">
-            <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider mb-0.5">Type</div>
-            <div className="text-sm font-semibold text-emerald-50 capitalize">{group.type.replace(/_/g, " ")}</div>
+          <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2.5">
+            <div className="text-[10px] text-[color:var(--sec-muted)] uppercase tracking-wider mb-0.5">Type</div>
+            <div className="text-sm font-semibold text-[color:var(--sec-text)] capitalize">{group.type.replace(/_/g, " ")}</div>
           </div>
           {/* Privacy — static */}
-          <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5">
-            <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider mb-0.5">Privacy</div>
-            <div className="text-sm font-semibold text-emerald-50 capitalize">{group.privacy.replace(/_/g, " ")}</div>
+          <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2.5">
+            <div className="text-[10px] text-[color:var(--sec-muted)] uppercase tracking-wider mb-0.5">Privacy</div>
+            <div className="text-sm font-semibold text-[color:var(--sec-text)] capitalize">{group.privacy.replace(/_/g, " ")}</div>
           </div>
           {/* Members — navigates to members tab */}
           <button
             type="button"
             onClick={() => setTab("members")}
-            className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 text-left hover:bg-emerald-900/30 transition-colors"
+            className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2.5 text-left hover:bg-[color:var(--sec-surface-2)] transition-colors"
           >
-            <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider mb-0.5">Members</div>
+            <div className="text-[10px] text-[color:var(--sec-muted)] uppercase tracking-wider mb-0.5">Members</div>
             <div className="flex items-baseline justify-between">
-              <div className="text-sm font-semibold text-emerald-50">{group.member_count}</div>
-              <span className="text-[10px] text-emerald-400/70">→</span>
+              <div className="text-sm font-semibold text-[color:var(--sec-text)]">{group.member_count}</div>
+              <span className="text-[10px] text-[color:var(--sec-good)]">→</span>
             </div>
           </button>
           {/* Events — navigates to events tab */}
           <button
             type="button"
             onClick={() => setTab("events")}
-            className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 text-left hover:bg-emerald-900/30 transition-colors"
+            className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2.5 text-left hover:bg-[color:var(--sec-surface-2)] transition-colors"
           >
-            <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider mb-0.5">Events</div>
+            <div className="text-[10px] text-[color:var(--sec-muted)] uppercase tracking-wider mb-0.5">Events</div>
             <div className="flex items-baseline justify-between">
-              <div className="text-sm font-semibold text-emerald-50">{events.length}</div>
-              <span className="text-[10px] text-emerald-400/70">→</span>
+              <div className="text-sm font-semibold text-[color:var(--sec-text)]">{events.length}</div>
+              <span className="text-[10px] text-[color:var(--sec-good)]">→</span>
             </div>
           </button>
           {/* Competitions — navigates to competitions tab (members only) */}
@@ -1102,12 +1102,12 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             <button
               type="button"
               onClick={() => setTab("competitions")}
-              className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 text-left hover:bg-emerald-900/30 transition-colors"
+              className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2.5 text-left hover:bg-[color:var(--sec-surface-2)] transition-colors"
             >
-              <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider mb-0.5">Competitions</div>
+              <div className="text-[10px] text-[color:var(--sec-muted)] uppercase tracking-wider mb-0.5">Competitions</div>
               <div className="flex items-baseline justify-between">
-                <div className="text-sm font-semibold text-emerald-50">{competitions.length}</div>
-                <span className="text-[10px] text-emerald-400/70">→</span>
+                <div className="text-sm font-semibold text-[color:var(--sec-text)]">{competitions.length}</div>
+                <span className="text-[10px] text-[color:var(--sec-good)]">→</span>
               </div>
             </button>
           )}
@@ -1115,9 +1115,9 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
         {/* Season timeline */}
         {(group.season_start || group.season_end) && (
-          <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5">
-            <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider mb-1">Season</div>
-            <div className="text-[12px] text-emerald-100/75">
+          <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2.5">
+            <div className="text-[10px] text-[color:var(--sec-muted)] uppercase tracking-wider mb-1">Season</div>
+            <div className="text-[12px] text-[color:var(--sec-muted)]">
               {group.season_start
                 ? new Date(group.season_start).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })
                 : "—"}
@@ -1131,15 +1131,15 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
         {/* Join code for admins */}
         {isAdminOrOwner && group.join_code && (
-          <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 flex items-center justify-between">
+          <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2.5 flex items-center justify-between">
             <div>
-              <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider mb-0.5">Join Code</div>
-              <div className="text-base font-mono font-bold text-[#7CF0BE] tracking-widest">{group.join_code}</div>
+              <div className="text-[10px] text-[color:var(--sec-muted)] uppercase tracking-wider mb-0.5">Join Code</div>
+              <div className="text-base font-mono font-bold text-[color:var(--sec-accent)] tracking-widest">{group.join_code}</div>
             </div>
             <button
               type="button"
               onClick={() => navigator.clipboard?.writeText(group.join_code ?? "")}
-              className="text-[10px] text-emerald-400 border border-emerald-700/40 rounded-full px-2.5 py-1 hover:bg-emerald-900/30"
+              className="text-[10px] text-[color:var(--sec-good)] border border-[color:var(--sec-line)] rounded-full px-2.5 py-1 hover:bg-[color:var(--sec-surface-2)]"
             >
               Copy
             </button>
@@ -1152,7 +1152,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             type="button"
             onClick={handleJoin}
             disabled={joining}
-            className="w-full py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
+            className="w-full py-3 rounded-full bg-[color:var(--sec-primary)] text-sm font-semibold text-white hover:bg-[color:var(--sec-primary-hover)] disabled:opacity-50"
           >
             {joining ? "Joining…" : group.join_method === "request" ? "Request to Join" : "Join Group"}
           </button>
@@ -1162,7 +1162,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             type="button"
             onClick={handleJoin}
             disabled={joining}
-            className="w-full py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
+            className="w-full py-3 rounded-full bg-[color:var(--sec-primary)] text-sm font-semibold text-white hover:bg-[color:var(--sec-primary-hover)] disabled:opacity-50"
           >
             {joining ? "Joining…" : "Accept Invite"}
           </button>
@@ -1181,7 +1181,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           <button
             type="button"
             onClick={() => router.push(`/majors/events/create?group_id=${groupId}`)}
-            className="w-full py-2.5 rounded-full border border-emerald-700/60 text-sm font-semibold text-emerald-200 hover:bg-emerald-900/30"
+            className="w-full py-2.5 rounded-full border border-[color:var(--sec-line)] text-sm font-semibold text-[color:var(--sec-text-2)] hover:bg-[color:var(--sec-surface-2)]"
           >
             + New Competition
           </button>
@@ -1198,12 +1198,12 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                 onClick={() => setCompSubTab(st)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
                   compSubTab === st
-                    ? "bg-emerald-700 text-white"
-                    : "border border-emerald-900/60 text-emerald-200/70 hover:text-emerald-50"
+                    ? "bg-[color:var(--sec-primary)] text-white"
+                    : "border border-[color:var(--sec-hair)] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
                 }`}
               >
                 <span className="capitalize">{st === "active" ? "Active" : "Completed"}</span>
-                <span className={`text-[10px] ${compSubTab === st ? "text-emerald-200" : "text-emerald-200/50"}`}>
+                <span className={`text-[10px] ${compSubTab === st ? "text-[color:var(--sec-text-2)]" : "text-[color:var(--sec-muted)]"}`}>
                   {count}
                 </span>
               </button>
@@ -1218,8 +1218,8 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             onClick={() => setShowCancelled((v) => !v)}
             className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
               showCancelled
-                ? "bg-red-950/40 text-red-400/80 border-red-900/50"
-                : "border-emerald-900/60 text-emerald-200/50 hover:text-emerald-50"
+                ? "bg-red-950/40 text-[color:var(--sec-bad)] border-red-900/50"
+                : "border-[color:var(--sec-hair)] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
             }`}
           >
             {showCancelled ? "Hide" : "Show"} cancelled
@@ -1229,10 +1229,10 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
         {/* Competition list */}
         {compSubTab === "active" && upcomingComps.length === 0 && (
-          <div className="text-sm text-emerald-100/60 text-center py-8">No upcoming or live competitions.</div>
+          <div className="text-sm text-[color:var(--sec-muted)] text-center py-8">No upcoming or live competitions.</div>
         )}
         {compSubTab === "completed" && visibleCompletedComps.length === 0 && (
-          <div className="text-sm text-emerald-100/60 text-center py-8">
+          <div className="text-sm text-[color:var(--sec-muted)] text-center py-8">
             {completedComps.length > 0 ? "No non-cancelled competitions." : "No completed competitions yet."}
           </div>
         )}
@@ -1244,12 +1244,12 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             className={`w-full text-left rounded-2xl border p-4 space-y-1 hover:brightness-110 transition-all ${compStatusColour(c.majors_status)}`}
           >
             <div className="flex items-center justify-between gap-2">
-              <span className="text-sm font-semibold text-emerald-50 truncate">{c.name}</span>
+              <span className="text-sm font-semibold text-[color:var(--sec-text)] truncate">{c.name}</span>
               <span className={`shrink-0 text-[9px] font-semibold px-2 py-0.5 rounded-full border capitalize ${compStatusBadge(c.majors_status)}`}>
                 {eventStatusLabel(c)}
               </span>
             </div>
-            <div className="text-[11px] text-emerald-100/60 flex items-center gap-2">
+            <div className="text-[11px] text-[color:var(--sec-muted)] flex items-center gap-2">
               {c.event_date && <span>{new Date(c.event_date).toLocaleDateString([], { month: "short", day: "numeric" })}</span>}
               {(() => {
                 const label =
@@ -1258,7 +1258,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                     : (locationLabel(c) ?? c.course?.name ?? null);
                 return label ? (
                   <>
-                    <span className="text-emerald-800">·</span>
+                    <span className="text-[color:var(--ciaga-ground)]">·</span>
                     <span className="truncate">{label}</span>
                   </>
                 ) : null;
@@ -1348,7 +1348,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         profile?.avatar_url ? (
           <img src={profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
         ) : (
-          <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
+          <div className="h-7 w-7 rounded-full bg-[color:var(--sec-surface)] grid place-items-center text-[10px] font-bold text-[color:var(--sec-text-2)] shrink-0">
             {profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
           </div>
         );
@@ -1360,15 +1360,15 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       };
 
       const podiumClass = (pos: number | null) =>
-        pos === 1 ? "border-[#7CF0BE]/25 bg-[#7CF0BE]/5"
+        pos === 1 ? "border-[color:color-mix(in_srgb,var(--sec-accent)_25%,transparent)] bg-[color:color-mix(in_srgb,var(--sec-accent)_5%,transparent)]"
         : pos === 2 ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5"
         : pos === 3 ? "border-[#cd7f32]/20 bg-[#cd7f32]/5"
-        : "border-emerald-900/50 bg-[#0b3b21]/60";
+        : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)]";
 
       // ── Points sub-tab ───────────────────────────────────────────────────
       const renderPoints = () => {
         if (nRows.length === 0) {
-          return <div className="text-sm text-emerald-100/60 text-center py-8">No standings for this period.</div>;
+          return <div className="text-sm text-[color:var(--sec-muted)] text-center py-8">No standings for this period.</div>;
         }
         return (
           <div className="space-y-2">
@@ -1389,22 +1389,22 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                   onClick={() => setSelectedPlayerForDrawer({ profileId: s.profile_id, name: s.profile?.name ?? "Unknown", avatarUrl: s.profile?.avatar_url ?? null, currentSeasonId: drawerSeasonId, seasonLabel: drawerSeasonLabel })}
                   className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${podiumClass(s.official_position)}`}>
                   <div className="w-3 shrink-0 flex justify-center">
-                    {improved && <span className="text-[10px] leading-none text-emerald-400">▲</span>}
-                    {worsened && <span className="text-[10px] leading-none text-red-400">▼</span>}
+                    {improved && <span className="text-[10px] leading-none text-[color:var(--sec-good)]">▲</span>}
+                    {worsened && <span className="text-[10px] leading-none text-[color:var(--sec-bad)]">▼</span>}
                   </div>
                   <PositionBadge position={s.official_position} />
                   {avatarEl(s.profile)}
-                  <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
+                  <span className="flex-1 text-sm font-semibold text-[color:var(--sec-text)] truncate">{s.profile?.name ?? "Unknown"}</span>
                   <div className="text-right shrink-0 space-y-0.5">
                     <div className="flex items-baseline justify-end gap-1">
-                      <span className="text-xs font-extrabold text-[#7CF0BE]">{fmtPts(s.display_points)} pts</span>
+                      <span className="text-xs font-extrabold text-[color:var(--sec-accent)]">{fmtPts(s.display_points)} pts</span>
                       {s.live_points_pending > 0 && (
                         <span className="text-[10px] font-semibold text-amber-400/90">+{Math.round(s.live_points_pending)}</span>
                       )}
                     </div>
                     <div className="flex gap-1 justify-end">
-                      <span className="text-[9px] text-emerald-100/50 bg-emerald-900/40 rounded px-1">{s.events_played} evts</span>
-                      {s.wins > 0 && <span className="text-[9px] text-[#7CF0BE]/70 bg-[#7CF0BE]/10 rounded px-1">{s.wins}W</span>}
+                      <span className="text-[9px] text-[color:var(--sec-muted)] bg-[color:var(--sec-surface)] rounded px-1">{s.events_played} evts</span>
+                      {s.wins > 0 && <span className="text-[9px] text-[color:color-mix(in_srgb,var(--sec-accent)_70%,transparent)] bg-[color:color-mix(in_srgb,var(--sec-accent)_10%,transparent)] rounded px-1">{s.wins}W</span>}
                     </div>
                   </div>
                 </button>
@@ -1422,7 +1422,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           .filter((r) => r.total_net_to_par != null || r.total_gross_to_par != null)
           .sort((a, b) => dir * (((a as any)[primaryField] as number ?? 9999) - ((b as any)[primaryField] as number ?? 9999)));
         if (sorted.length === 0) {
-          return <div className="text-sm text-emerald-100/60 text-center py-8">No stroke data for this period.</div>;
+          return <div className="text-sm text-[color:var(--sec-muted)] text-center py-8">No stroke data for this period.</div>;
         }
         return (
           <div className="space-y-2">
@@ -1439,10 +1439,10 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
               >
                 <PositionBadge position={s.official_position} />
                 {avatarEl(s.profile)}
-                <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
+                <span className="flex-1 text-sm font-semibold text-[color:var(--sec-text)] truncate">{s.profile?.name ?? "Unknown"}</span>
                 <div className="flex gap-4 shrink-0">
-                  <span className={`text-xs font-bold w-12 text-right ${(s as any).total_gross_to_par != null && (s as any).total_gross_to_par < 0 ? "text-emerald-400" : (s as any).total_gross_to_par != null && (s as any).total_gross_to_par > 0 ? "text-red-400" : "text-emerald-100/80"}`}>{formatToPar((s as any).total_gross_to_par ?? null)}</span>
-                  <span className={`text-xs font-bold w-12 text-right ${(s as any).total_net_to_par != null && (s as any).total_net_to_par < 0 ? "text-emerald-400" : (s as any).total_net_to_par != null && (s as any).total_net_to_par > 0 ? "text-red-400" : "text-[#7CF0BE]/80"}`}>{formatToPar((s as any).total_net_to_par ?? null)}</span>
+                  <span className={`text-xs font-bold w-12 text-right ${(s as any).total_gross_to_par != null && (s as any).total_gross_to_par < 0 ? "text-[color:var(--sec-good)]" : (s as any).total_gross_to_par != null && (s as any).total_gross_to_par > 0 ? "text-[color:var(--sec-bad)]" : "text-[color:var(--sec-muted)]"}`}>{formatToPar((s as any).total_gross_to_par ?? null)}</span>
+                  <span className={`text-xs font-bold w-12 text-right ${(s as any).total_net_to_par != null && (s as any).total_net_to_par < 0 ? "text-[color:var(--sec-good)]" : (s as any).total_net_to_par != null && (s as any).total_net_to_par > 0 ? "text-[color:var(--sec-bad)]" : "text-[color:color-mix(in_srgb,var(--sec-accent)_80%,transparent)]"}`}>{formatToPar((s as any).total_net_to_par ?? null)}</span>
                 </div>
               </button>
             ))}
@@ -1458,7 +1458,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           .filter((r) => r.avg_net_to_par != null || r.avg_gross_to_par != null)
           .sort((a, b) => dir * ((a[primaryField] as number ?? 999) - (b[primaryField] as number ?? 999)));
         if (sorted.length === 0) {
-          return <div className="text-sm text-emerald-100/60 text-center py-8">No score data for this period.</div>;
+          return <div className="text-sm text-[color:var(--sec-muted)] text-center py-8">No score data for this period.</div>;
         }
         return (
           <div className="space-y-2">
@@ -1475,10 +1475,10 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
               >
                 <PositionBadge position={s.official_position} />
                 {avatarEl(s.profile)}
-                <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
+                <span className="flex-1 text-sm font-semibold text-[color:var(--sec-text)] truncate">{s.profile?.name ?? "Unknown"}</span>
                 <div className="flex gap-4 shrink-0">
-                  <span className={`text-xs font-bold w-12 text-right ${s.avg_gross_to_par != null && s.avg_gross_to_par < 0 ? "text-emerald-400" : s.avg_gross_to_par != null && s.avg_gross_to_par > 0 ? "text-red-400" : "text-emerald-100/80"}`}>{formatToPar(s.avg_gross_to_par ?? null)}</span>
-                  <span className={`text-xs font-bold w-12 text-right ${s.avg_net_to_par != null && s.avg_net_to_par < 0 ? "text-emerald-400" : s.avg_net_to_par != null && s.avg_net_to_par > 0 ? "text-red-400" : "text-emerald-100/80"}`}>{formatToPar(s.avg_net_to_par ?? null)}</span>
+                  <span className={`text-xs font-bold w-12 text-right ${s.avg_gross_to_par != null && s.avg_gross_to_par < 0 ? "text-[color:var(--sec-good)]" : s.avg_gross_to_par != null && s.avg_gross_to_par > 0 ? "text-[color:var(--sec-bad)]" : "text-[color:var(--sec-muted)]"}`}>{formatToPar(s.avg_gross_to_par ?? null)}</span>
+                  <span className={`text-xs font-bold w-12 text-right ${s.avg_net_to_par != null && s.avg_net_to_par < 0 ? "text-[color:var(--sec-good)]" : s.avg_net_to_par != null && s.avg_net_to_par > 0 ? "text-[color:var(--sec-bad)]" : "text-[color:var(--sec-muted)]"}`}>{formatToPar(s.avg_net_to_par ?? null)}</span>
                 </div>
               </button>
             ))}
@@ -1492,7 +1492,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           <select
             value={standingsSeasonId}
             onChange={(e) => handleStandingsSeasonChange(e.target.value)}
-            className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-2 py-1.5 text-[11px] text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
+            className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-2 py-1.5 text-[11px] text-[color:var(--sec-text)] focus:outline-none focus:border-[color:var(--sec-line)] [color-scheme:dark]"
           >
             {standingsSeasonOptions.map((o) => (
               <option key={o.value} value={o.value}>{o.label}</option>
@@ -1514,8 +1514,8 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                 onClick={() => setStandingsMetric(m)}
                 className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors capitalize ${
                   standingsMetric === m
-                    ? "bg-emerald-700 text-white"
-                    : "border border-emerald-900/60 text-emerald-200/70 hover:text-emerald-50"
+                    ? "bg-[color:var(--sec-primary)] text-white"
+                    : "border border-[color:var(--sec-hair)] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
                 }`}
               >
                 {m === "avg" ? "Average" : m === "points" ? "Points" : "Strokes"}
@@ -1525,7 +1525,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
           {/* Content */}
           {standingsHistoricalLoading ? (
-            <div className="text-sm text-emerald-100/60 text-center py-8">Loading…</div>
+            <div className="text-sm text-[color:var(--sec-muted)] text-center py-8">Loading…</div>
           ) : (
             <>
               {standingsMetric === "points" && renderPoints()}
@@ -1537,21 +1537,21 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           {/* Earnings leaderboard — visible to all members */}
           {winningsLoaded && winningSummaries.some((w: any) => w.all_time_won > 0) && (
             <div className="space-y-2 mt-2">
-              <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/55">Earnings</div>
+              <div className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--sec-muted)]">Earnings</div>
               {[...winningSummaries]
                 .filter((w: any) => w.all_time_won > 0)
                 .sort((a: any, b: any) => b.all_time_won - a.all_time_won)
                 .map((w: any) => (
-                  <div key={w.profile_id} className="flex items-center gap-3 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/50 px-3 py-2">
+                  <div key={w.profile_id} className="flex items-center gap-3 rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_50%,transparent)] px-3 py-2">
                     {w.profile?.avatar_url ? (
                       <img src={w.profile.avatar_url} alt="" className="h-6 w-6 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
                     ) : (
-                      <div className="h-6 w-6 rounded-full bg-emerald-800 flex items-center justify-center text-[9px] font-bold text-emerald-200 shrink-0">
+                      <div className="h-6 w-6 rounded-full bg-[color:var(--sec-surface-2)] flex items-center justify-center text-[9px] font-bold text-[color:var(--sec-text-2)] shrink-0">
                         {(w.profile?.name ?? "?").slice(0, 2).toUpperCase()}
                       </div>
                     )}
-                    <span className="flex-1 text-sm text-emerald-100 truncate">{w.profile?.name ?? "Unknown"}</span>
-                    <span className="text-sm font-bold text-[#7CF0BE]">£{w.all_time_won.toFixed(2)}</span>
+                    <span className="flex-1 text-sm text-[color:var(--sec-text)] truncate">{w.profile?.name ?? "Unknown"}</span>
+                    <span className="text-sm font-bold text-[color:var(--sec-accent)]">£{w.all_time_won.toFixed(2)}</span>
                   </div>
                 ))}
             </div>
@@ -1564,7 +1564,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     schedule: (
       <div className="space-y-3">
         {upcomingComps.length === 0 && (
-          <div className="text-sm text-emerald-100/60 text-center py-8">No upcoming competitions.</div>
+          <div className="text-sm text-[color:var(--sec-muted)] text-center py-8">No upcoming competitions.</div>
         )}
         {upcomingComps.map((c) => (
           <button
@@ -1573,8 +1573,8 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             onClick={() => router.push(`/majors/events/${c.id}`)}
             className={`w-full text-left rounded-2xl border p-4 space-y-1 hover:brightness-110 transition-all ${compStatusColour(c.majors_status)}`}
           >
-            <div className="text-sm font-semibold text-emerald-50">{c.name}</div>
-            <div className="text-[11px] text-emerald-100/60 flex gap-2">
+            <div className="text-sm font-semibold text-[color:var(--sec-text)]">{c.name}</div>
+            <div className="text-[11px] text-[color:var(--sec-muted)] flex gap-2">
               {c.event_date && <span>{new Date(c.event_date).toLocaleDateString([], { month: "short", day: "numeric" })}</span>}
               {c.course && <span>· {c.course.name}</span>}
             </div>
@@ -1586,17 +1586,17 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     history: (
       <div className="space-y-3">
         {completedComps.length === 0 && (
-          <div className="text-sm text-emerald-100/60 text-center py-8">No completed competitions.</div>
+          <div className="text-sm text-[color:var(--sec-muted)] text-center py-8">No completed competitions.</div>
         )}
         {completedComps.map((c) => (
           <button
             key={c.id}
             type="button"
             onClick={() => router.push(`/majors/events/${c.id}`)}
-            className="w-full text-left rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4 space-y-1 hover:border-emerald-700/70"
+            className="w-full text-left rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_80%,transparent)] p-4 space-y-1 hover:border-[color:var(--sec-line)]"
           >
-            <div className="text-sm font-semibold text-emerald-50">{c.name}</div>
-            <div className="text-[11px] text-emerald-100/60">
+            <div className="text-sm font-semibold text-[color:var(--sec-text)]">{c.name}</div>
+            <div className="text-[11px] text-[color:var(--sec-muted)]">
               {c.event_date && new Date(c.event_date).toLocaleDateString()}
             </div>
           </button>
@@ -1626,20 +1626,20 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                       {m.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
                     </div>
                   )}
-                  <span className="flex-1 text-sm text-emerald-50 truncate text-left">{m.profile?.name ?? m.profile_id}</span>
+                  <span className="flex-1 text-sm text-[color:var(--sec-text)] truncate text-left">{m.profile?.name ?? m.profile_id}</span>
                 </button>
                 <div className="flex gap-1.5 shrink-0">
                   <button
                     type="button"
                     onClick={() => handleMemberAction(m.id, { status: "active" })}
-                    className="text-[10px] font-semibold text-emerald-400 border border-emerald-700/50 rounded-full px-2.5 py-1 hover:bg-emerald-900/40"
+                    className="text-[10px] font-semibold text-[color:var(--sec-good)] border border-[color:var(--sec-line)] rounded-full px-2.5 py-1 hover:bg-[color:var(--sec-surface-2)]"
                   >
                     Approve
                   </button>
                   <button
                     type="button"
                     onClick={() => handleDeclineMember(m.profile_id)}
-                    className="text-[10px] text-red-400/80 border border-red-900/40 rounded-full px-2.5 py-1 hover:bg-red-900/20"
+                    className="text-[10px] text-[color:var(--sec-bad)] border border-red-900/40 rounded-full px-2.5 py-1 hover:bg-red-900/20"
                   >
                     Decline
                   </button>
@@ -1651,16 +1651,16 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
         {/* Invited members — collapsible, visible to admins/owners */}
         {invitedMembers.length > 0 && isAdminOrOwner && (
-          <div className="rounded-2xl border border-emerald-800/30 bg-emerald-950/30 overflow-hidden">
+          <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] overflow-hidden">
             <button
               type="button"
-              className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-emerald-900/20 transition-colors"
+              className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-[color:var(--sec-surface-2)] transition-colors"
               onClick={() => setInvitedCollapsed((c) => !c)}
             >
-              <span className="text-[10px] uppercase tracking-wider text-emerald-200/50 font-semibold">
+              <span className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)] font-semibold">
                 {invitedMembers.length} Invited
               </span>
-              <span className={`text-emerald-200/40 text-xs transition-transform ${invitedCollapsed ? "rotate-0" : "rotate-90"}`}>›</span>
+              <span className={`text-[color:var(--sec-muted)] text-xs transition-transform ${invitedCollapsed ? "rotate-0" : "rotate-90"}`}>›</span>
             </button>
             {!invitedCollapsed && (
               <div className="px-3 pb-3 space-y-2">
@@ -1668,25 +1668,25 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                   const hi = m.tournament_index != null
                     ? { text: formatHI(m.tournament_index), cls: "text-amber-300/80 border-amber-800/40 bg-amber-900/20" }
                     : m.handicap_index != null
-                    ? { text: formatHI(m.handicap_index), cls: "text-emerald-200/70 border-emerald-900/50 bg-transparent" }
+                    ? { text: formatHI(m.handicap_index), cls: "text-[color:var(--sec-muted)] border-[color:var(--sec-hair)] bg-transparent" }
                     : null;
                   return (
                     <div key={m.id} className="flex items-center gap-3 py-1">
                       {m.profile?.avatar_url ? (
                         <img src={m.profile.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
                       ) : (
-                        <div className="h-8 w-8 rounded-full bg-emerald-900/60 flex items-center justify-center text-[10px] font-bold text-emerald-200 shrink-0">
+                        <div className="h-8 w-8 rounded-full bg-[color:var(--sec-surface)] flex items-center justify-center text-[10px] font-bold text-[color:var(--sec-text-2)] shrink-0">
                           {m.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
                         </div>
                       )}
-                      <span className="flex-1 text-[13px] text-emerald-200/70 truncate">{m.profile?.name ?? m.profile_id}</span>
+                      <span className="flex-1 text-[13px] text-[color:var(--sec-muted)] truncate">{m.profile?.name ?? m.profile_id}</span>
                       <div className="flex items-center gap-1.5 shrink-0">
                         {hi && (
                           <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${hi.cls}`}>
                             {hi.text}
                           </span>
                         )}
-                        <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full border border-emerald-800/40 text-emerald-300/50 bg-transparent">
+                        <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full border border-[color:var(--sec-hair)] text-[color:var(--sec-muted)] bg-transparent">
                           Invited
                         </span>
                       </div>
@@ -1702,7 +1702,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         {isAdminOrOwner && (
           <button
             type="button"
-            className="w-full py-2 rounded-full border border-emerald-700/50 text-sm text-emerald-200/70 hover:text-emerald-200 hover:bg-emerald-900/20"
+            className="w-full py-2 rounded-full border border-[color:var(--sec-line)] text-sm text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text-2)] hover:bg-[color:var(--sec-surface-2)]"
             onClick={() => setShowInvite(true)}
           >
             + Invite Member
@@ -1772,22 +1772,22 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         profile?.avatar_url ? (
           <img src={profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
         ) : (
-          <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
+          <div className="h-7 w-7 rounded-full bg-[color:var(--sec-surface)] grid place-items-center text-[10px] font-bold text-[color:var(--sec-text-2)] shrink-0">
             {profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
           </div>
         );
 
       const podiumClass = (pos: number | null) =>
-        pos === 1 ? "border-[#7CF0BE]/25 bg-[#7CF0BE]/5"
+        pos === 1 ? "border-[color:color-mix(in_srgb,var(--sec-accent)_25%,transparent)] bg-[color:color-mix(in_srgb,var(--sec-accent)_5%,transparent)]"
         : pos === 2 ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5"
         : pos === 3 ? "border-[#cd7f32]/20 bg-[#cd7f32]/5"
-        : "border-emerald-900/50 bg-[#0b3b21]/60";
+        : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)]";
 
       // ── All-Time views ──────────────────────────────────────────────────────
       const renderAllTime = () => {
-        if (!competitionResults) return <div className="text-sm text-emerald-100/60 text-center py-8">Loading…</div>;
+        if (!competitionResults) return <div className="text-sm text-[color:var(--sec-muted)] text-center py-8">Loading…</div>;
         const records = competitionResults.player_records;
-        if (records.length === 0) return <div className="text-sm text-emerald-100/60 text-center py-8">No event data yet.</div>;
+        if (records.length === 0) return <div className="text-sm text-[color:var(--sec-muted)] text-center py-8">No event data yet.</div>;
 
         const openDrawer = (pr: any) => setSelectedPlayerForDrawer({
           profileId: pr.profile_id,
@@ -1806,15 +1806,15 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                   <div className="flex items-center gap-2">
                     <PositionBadge position={i + 1} />
                     {avatarEl(pr.profile)}
-                    <span className="flex-1 text-sm font-semibold text-emerald-100 truncate">{pr.profile.name ?? "Unknown"}</span>
-                    <span className="text-[11px] font-bold text-[#7CF0BE]">{pr.total_wins} {pr.total_wins === 1 ? "win" : "wins"}</span>
+                    <span className="flex-1 text-sm font-semibold text-[color:var(--sec-text)] truncate">{pr.profile.name ?? "Unknown"}</span>
+                    <span className="text-[11px] font-bold text-[color:var(--sec-accent)]">{pr.total_wins} {pr.total_wins === 1 ? "win" : "wins"}</span>
                   </div>
                   {pr.competition_records.length > 0 && (
                     <div className="space-y-1 pl-9">
                       {pr.competition_records.map((sr: any) => (
                         <div key={sr.competition_id ?? "standalone"} className="flex items-center justify-between gap-2">
-                          <span className="text-[11px] text-emerald-200/70 truncate">{sr.competition_name ?? "Competition"}</span>
-                          <span className="text-[10px] text-emerald-200/55 shrink-0">
+                          <span className="text-[11px] text-[color:var(--sec-muted)] truncate">{sr.competition_name ?? "Competition"}</span>
+                          <span className="text-[10px] text-[color:var(--sec-muted)] shrink-0">
                             {sr.wins > 0 ? `${sr.wins}× win${sr.wins !== 1 ? "s" : ""}` : sr.best_finish != null ? `Best: ${ordinal(sr.best_finish)}` : "—"}
                           </span>
                         </div>
@@ -1825,14 +1825,14 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                     <div className="space-y-1 pl-9">
                       {pr.standalone_wins.map((w: any) => (
                         <div key={w.event_id} className="flex items-center justify-between gap-2">
-                          <span className="text-[11px] text-emerald-200/70 truncate">{w.name ?? "Event"}</span>
-                          <span className="text-[10px] text-[#7CF0BE]/70 shrink-0">{w.year ?? ""}</span>
+                          <span className="text-[11px] text-[color:var(--sec-muted)] truncate">{w.name ?? "Event"}</span>
+                          <span className="text-[10px] text-[color:color-mix(in_srgb,var(--sec-accent)_70%,transparent)] shrink-0">{w.year ?? ""}</span>
                         </div>
                       ))}
                     </div>
                   )}
                   {pr.competition_records.length === 0 && pr.standalone_wins.length === 0 && (
-                    <div className="pl-9 text-[11px] text-emerald-200/40">No entries yet</div>
+                    <div className="pl-9 text-[11px] text-[color:var(--sec-muted)]">No entries yet</div>
                   )}
                 </button>
               ))}
@@ -1848,10 +1848,10 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                 <button key={pr.profile_id} type="button" onClick={() => openDrawer(pr)} className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${podiumClass(i < 3 ? i + 1 : null)}`}>
                   <PositionBadge position={i + 1} />
                   {avatarEl(pr.profile)}
-                  <span className="flex-1 text-sm font-semibold text-emerald-100 truncate">{pr.profile.name ?? "Unknown"}</span>
+                  <span className="flex-1 text-sm font-semibold text-[color:var(--sec-text)] truncate">{pr.profile.name ?? "Unknown"}</span>
                   <div className="text-right shrink-0">
-                    <div className="text-xs font-extrabold text-[#7CF0BE]">{(pr as any).career_points} pts</div>
-                    <div className="text-[9px] text-emerald-100/40">{(pr as any).career_events_played} evts</div>
+                    <div className="text-xs font-extrabold text-[color:var(--sec-accent)]">{(pr as any).career_points} pts</div>
+                    <div className="text-[9px] text-[color:var(--sec-muted)]">{(pr as any).career_events_played} evts</div>
                   </div>
                 </button>
               ))}
@@ -1873,10 +1873,10 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                 <button key={pr.profile_id} type="button" onClick={() => openDrawer(pr)} className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${podiumClass(i < 3 ? i + 1 : null)}`}>
                   <PositionBadge position={i + 1} />
                   {avatarEl(pr.profile)}
-                  <span className="flex-1 text-sm font-semibold text-emerald-100 truncate">{pr.profile.name ?? "Unknown"}</span>
+                  <span className="flex-1 text-sm font-semibold text-[color:var(--sec-text)] truncate">{pr.profile.name ?? "Unknown"}</span>
                   <div className="flex gap-4 shrink-0">
-                    <span className="text-xs font-bold text-emerald-100/80 w-12 text-right">{fmtTopar((pr as any).career_total_gross_to_par)}</span>
-                    <span className="text-xs font-bold text-[#7CF0BE]/80 w-12 text-right">{fmtTopar((pr as any).career_total_net_to_par)}</span>
+                    <span className="text-xs font-bold text-[color:var(--sec-muted)] w-12 text-right">{fmtTopar((pr as any).career_total_gross_to_par)}</span>
+                    <span className="text-xs font-bold text-[color:color-mix(in_srgb,var(--sec-accent)_80%,transparent)] w-12 text-right">{fmtTopar((pr as any).career_total_net_to_par)}</span>
                   </div>
                 </button>
               ))}
@@ -1899,10 +1899,10 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                 <button key={pr.profile_id} type="button" onClick={() => openDrawer(pr)} className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${podiumClass(i < 3 ? i + 1 : null)}`}>
                   <PositionBadge position={i + 1} />
                   {avatarEl(pr.profile)}
-                  <span className="flex-1 text-sm font-semibold text-emerald-100 truncate">{pr.profile.name ?? "Unknown"}</span>
+                  <span className="flex-1 text-sm font-semibold text-[color:var(--sec-text)] truncate">{pr.profile.name ?? "Unknown"}</span>
                   <div className="flex gap-4 shrink-0">
-                    <span className="text-xs font-bold text-emerald-100/80 w-12 text-right">{fmtTopar((pr as any).career_avg_gross_to_par)}</span>
-                    <span className="text-xs font-bold text-[#7CF0BE]/80 w-12 text-right">{fmtTopar((pr as any).career_avg_net_to_par)}</span>
+                    <span className="text-xs font-bold text-[color:var(--sec-muted)] w-12 text-right">{fmtTopar((pr as any).career_avg_gross_to_par)}</span>
+                    <span className="text-xs font-bold text-[color:color-mix(in_srgb,var(--sec-accent)_80%,transparent)] w-12 text-right">{fmtTopar((pr as any).career_avg_net_to_par)}</span>
                   </div>
                 </button>
               ))}
@@ -1913,8 +1913,8 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
       // ── Individual season views ─────────────────────────────────────────────
       const renderSeasonView = () => {
-        if (seasonStandingsLoading) return <div className="text-sm text-emerald-100/60 text-center py-8">Loading…</div>;
-        if (seasonStandings.length === 0) return <div className="text-sm text-emerald-100/60 text-center py-8">No standings for this season.</div>;
+        if (seasonStandingsLoading) return <div className="text-sm text-[color:var(--sec-muted)] text-center py-8">Loading…</div>;
+        if (seasonStandings.length === 0) return <div className="text-sm text-[color:var(--sec-muted)] text-center py-8">No standings for this season.</div>;
 
         const selectedSeasonObj = groupSeasons.find((s: any) => s.id === selectedSeasonId);
         const seasonLabel = selectedSeasonObj?.season_label ?? undefined;
@@ -1928,7 +1928,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         });
 
         const viewFull = selectedSeasonObj && (
-          <button type="button" onClick={() => router.push(`/majors/group-seasons/${selectedSeasonId}`)} className="w-full text-right text-[11px] text-emerald-400/70 hover:text-emerald-300 pb-1">
+          <button type="button" onClick={() => router.push(`/majors/group-seasons/${selectedSeasonId}`)} className="w-full text-right text-[11px] text-[color:var(--sec-good)] hover:text-[color:var(--sec-good)] pb-1">
             View full season →
           </button>
         );
@@ -1942,10 +1942,10 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                 <button key={s.profile_id} type="button" onClick={() => openDrawer(s)} className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${podiumClass(s.position)}`}>
                   <PositionBadge position={s.position} />
                   {avatarEl(s.profile)}
-                  <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
+                  <span className="flex-1 text-sm font-semibold text-[color:var(--sec-text)] truncate">{s.profile?.name ?? "Unknown"}</span>
                   <div className="text-right shrink-0">
-                    <div className="text-xs font-extrabold text-[#7CF0BE]">{s.wins}W</div>
-                    <div className="text-[9px] text-emerald-100/50">{s.events_played} evts</div>
+                    <div className="text-xs font-extrabold text-[color:var(--sec-accent)]">{s.wins}W</div>
+                    <div className="text-[9px] text-[color:var(--sec-muted)]">{s.events_played} evts</div>
                   </div>
                 </button>
               ))}
@@ -1962,12 +1962,12 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                 <button key={s.profile_id} type="button" onClick={() => openDrawer(s)} className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${podiumClass(s.position)}`}>
                   <PositionBadge position={s.position} />
                   {avatarEl(s.profile)}
-                  <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
+                  <span className="flex-1 text-sm font-semibold text-[color:var(--sec-text)] truncate">{s.profile?.name ?? "Unknown"}</span>
                   <div className="text-right shrink-0">
-                    <div className="text-xs font-extrabold text-[#7CF0BE]">{fmtPts(s.season_points)} pts</div>
+                    <div className="text-xs font-extrabold text-[color:var(--sec-accent)]">{fmtPts(s.season_points)} pts</div>
                     <div className="flex gap-1 justify-end">
-                      <span className="text-[9px] text-emerald-100/50 bg-emerald-900/40 rounded px-1">{s.events_played} evts</span>
-                      {s.wins > 0 && <span className="text-[9px] text-[#7CF0BE]/70 bg-[#7CF0BE]/10 rounded px-1">{s.wins}W</span>}
+                      <span className="text-[9px] text-[color:var(--sec-muted)] bg-[color:var(--sec-surface)] rounded px-1">{s.events_played} evts</span>
+                      {s.wins > 0 && <span className="text-[9px] text-[color:color-mix(in_srgb,var(--sec-accent)_70%,transparent)] bg-[color:color-mix(in_srgb,var(--sec-accent)_10%,transparent)] rounded px-1">{s.wins}W</span>}
                     </div>
                   </div>
                 </button>
@@ -1982,7 +1982,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           const sorted = [...seasonStandings]
             .filter((s) => (s as any).total_net_to_par != null || (s as any).total_gross_to_par != null)
             .sort((a, b) => seaDir * (((a as any)[seaStrokesField] as number ?? 9999) - ((b as any)[seaStrokesField] as number ?? 9999)));
-          if (sorted.length === 0) return <div className="text-sm text-emerald-100/60 text-center py-8">No stroke data for this season.</div>;
+          if (sorted.length === 0) return <div className="text-sm text-[color:var(--sec-muted)] text-center py-8">No stroke data for this season.</div>;
           return (
             <div className="space-y-2">
               {viewFull}
@@ -1994,10 +1994,10 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                 <button key={s.profile_id} type="button" onClick={() => openDrawer(s)} className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${podiumClass(s.position)}`}>
                   <PositionBadge position={s.position} />
                   {avatarEl(s.profile)}
-                  <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
+                  <span className="flex-1 text-sm font-semibold text-[color:var(--sec-text)] truncate">{s.profile?.name ?? "Unknown"}</span>
                   <div className="flex gap-4 shrink-0">
-                    <span className={`text-xs font-bold w-12 text-right ${(s as any).total_gross_to_par != null && (s as any).total_gross_to_par < 0 ? "text-emerald-400" : (s as any).total_gross_to_par != null && (s as any).total_gross_to_par > 0 ? "text-red-400" : "text-emerald-100/80"}`}>{fmtTopar((s as any).total_gross_to_par ?? null)}</span>
-                    <span className={`text-xs font-bold w-12 text-right ${(s as any).total_net_to_par != null && (s as any).total_net_to_par < 0 ? "text-emerald-400" : (s as any).total_net_to_par != null && (s as any).total_net_to_par > 0 ? "text-red-400" : "text-[#7CF0BE]/80"}`}>{fmtTopar((s as any).total_net_to_par ?? null)}</span>
+                    <span className={`text-xs font-bold w-12 text-right ${(s as any).total_gross_to_par != null && (s as any).total_gross_to_par < 0 ? "text-[color:var(--sec-good)]" : (s as any).total_gross_to_par != null && (s as any).total_gross_to_par > 0 ? "text-[color:var(--sec-bad)]" : "text-[color:var(--sec-muted)]"}`}>{fmtTopar((s as any).total_gross_to_par ?? null)}</span>
+                    <span className={`text-xs font-bold w-12 text-right ${(s as any).total_net_to_par != null && (s as any).total_net_to_par < 0 ? "text-[color:var(--sec-good)]" : (s as any).total_net_to_par != null && (s as any).total_net_to_par > 0 ? "text-[color:var(--sec-bad)]" : "text-[color:color-mix(in_srgb,var(--sec-accent)_80%,transparent)]"}`}>{fmtTopar((s as any).total_net_to_par ?? null)}</span>
                   </div>
                 </button>
               ))}
@@ -2012,7 +2012,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           const sorted = [...seasonStandings]
             .filter((s) => s.avg_net_to_par != null || s.avg_gross_to_par != null)
             .sort((a, b) => seaDir * ((a[seaAvgField] as number ?? 999) - (b[seaAvgField] as number ?? 999)));
-          if (sorted.length === 0) return <div className="text-sm text-emerald-100/60 text-center py-8">No score data for this season.</div>;
+          if (sorted.length === 0) return <div className="text-sm text-[color:var(--sec-muted)] text-center py-8">No score data for this season.</div>;
           return (
             <div className="space-y-2">
               {viewFull}
@@ -2024,10 +2024,10 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                 <button key={s.profile_id} type="button" onClick={() => openDrawer(s)} className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left hover:brightness-110 transition-all ${podiumClass(s.position)}`}>
                   <PositionBadge position={s.position} />
                   {avatarEl(s.profile)}
-                  <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{s.profile?.name ?? "Unknown"}</span>
+                  <span className="flex-1 text-sm font-semibold text-[color:var(--sec-text)] truncate">{s.profile?.name ?? "Unknown"}</span>
                   <div className="flex gap-4 shrink-0">
-                    <span className="text-xs font-bold text-emerald-100/80 w-12 text-right">{fmtTopar(s.avg_gross_to_par)}</span>
-                    <span className="text-xs font-bold text-[#7CF0BE]/80 w-12 text-right">{fmtTopar(s.avg_net_to_par)}</span>
+                    <span className="text-xs font-bold text-[color:var(--sec-muted)] w-12 text-right">{fmtTopar(s.avg_gross_to_par)}</span>
+                    <span className="text-xs font-bold text-[color:color-mix(in_srgb,var(--sec-accent)_80%,transparent)] w-12 text-right">{fmtTopar(s.avg_net_to_par)}</span>
                   </div>
                 </button>
               ))}
@@ -2054,7 +2054,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         } finally { setCreatingSeason(false); }
       };
 
-      const inputCls = "w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]";
+      const inputCls = "w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2 text-sm text-[color:var(--sec-text)] focus:outline-none focus:border-[color:var(--sec-line)] [color-scheme:dark]";
 
       return (
         <div className="space-y-4">
@@ -2063,14 +2063,14 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             <button
               type="button"
               onClick={() => setShowCreateSeason(true)}
-              className="w-full py-2.5 rounded-full border border-emerald-700/60 text-sm font-semibold text-emerald-200 hover:bg-emerald-900/30"
+              className="w-full py-2.5 rounded-full border border-[color:var(--sec-line)] text-sm font-semibold text-[color:var(--sec-text-2)] hover:bg-[color:var(--sec-surface-2)]"
             >
               + Create Season
             </button>
           )}
           {showCreateSeason && (
-            <div className="rounded-xl border border-emerald-700/40 bg-[#0b3b21]/50 px-3 py-3 space-y-2">
-              <div className="text-[11px] font-semibold text-emerald-200">New Season</div>
+            <div className="rounded-xl border border-[color:var(--sec-line)] bg-[color:color-mix(in_srgb,var(--sec-surface)_50%,transparent)] px-3 py-3 space-y-2">
+              <div className="text-[11px] font-semibold text-[color:var(--sec-text-2)]">New Season</div>
               <select
                 value={createSeasonForm.season_type}
                 onChange={(e) => setCreateSeasonForm((f) => ({ ...f, season_type: e.target.value as "calendar_year" | "custom" }))}
@@ -2105,13 +2105,13 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                 <option value="season_points">Season Points</option>
               </select>
               {createSeasonError && (
-                <div className="text-[11px] text-red-400">{createSeasonError}</div>
+                <div className="text-[11px] text-[color:var(--sec-bad)]">{createSeasonError}</div>
               )}
               <div className="flex gap-2">
                 <button type="button" onClick={() => { setShowCreateSeason(false); setCreateSeasonError(null); }}
-                  className="flex-1 py-1.5 rounded-full border border-emerald-900/60 text-[11px] text-emerald-200/60">Cancel</button>
+                  className="flex-1 py-1.5 rounded-full border border-[color:var(--sec-hair)] text-[11px] text-[color:var(--sec-muted)]">Cancel</button>
                 <button type="button" onClick={handleCreateSeason} disabled={creatingSeason}
-                  className="flex-1 py-1.5 rounded-full bg-emerald-700 text-[11px] font-semibold text-white disabled:opacity-50">
+                  className="flex-1 py-1.5 rounded-full bg-[color:var(--sec-primary)] text-[11px] font-semibold text-white disabled:opacity-50">
                   {creatingSeason ? "Creating…" : "Create"}
                 </button>
               </div>
@@ -2121,9 +2121,9 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           {/* Season prize pot & charge management — admin only */}
           {isAdminOrOwner && groupSeasons.length > 0 && (
             <div className="space-y-1.5">
-              <div className="text-[10px] uppercase tracking-wider text-emerald-200/50 font-semibold">Season Pots &amp; Charges</div>
+              <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)] font-semibold">Season Pots &amp; Charges</div>
               {potError && (
-                <div className="text-[11px] text-red-400 bg-red-950/30 border border-red-900/50 rounded-xl px-3 py-2">
+                <div className="text-[11px] text-[color:var(--sec-bad)] bg-red-950/30 border border-red-900/50 rounded-xl px-3 py-2">
                   {potError}
                   <button type="button" onClick={() => setPotError(null)} className="ml-2 underline">Dismiss</button>
                 </div>
@@ -2203,29 +2203,29 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                     } finally { setSavingPot(false); }
                   };
                   return (
-                    <div key={s.id} className="rounded-2xl border border-emerald-800/30 bg-emerald-950/20 overflow-hidden">
+                    <div key={s.id} className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] overflow-hidden">
                       <button
                         type="button"
-                        className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-emerald-900/20"
+                        className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-[color:var(--sec-surface-2)]"
                         onClick={toggleOpen}
                       >
-                        <span className="text-[13px] font-medium text-emerald-100">{s.season_label ?? s.name}</span>
-                        <span className={`text-emerald-200/40 text-xs transition-transform ${isOpen ? "rotate-90" : "rotate-0"}`}>›</span>
+                        <span className="text-[13px] font-medium text-[color:var(--sec-text)]">{s.season_label ?? s.name}</span>
+                        <span className={`text-[color:var(--sec-muted)] text-xs transition-transform ${isOpen ? "rotate-90" : "rotate-0"}`}>›</span>
                       </button>
                       {isOpen && (
                         <div className="px-3 pb-3 space-y-2">
                           {pots.length === 0 && !showAddPotForm && (
-                            <div className="text-[11px] text-emerald-200/40 text-center py-2">No pots or charges yet</div>
+                            <div className="text-[11px] text-[color:var(--sec-muted)] text-center py-2">No pots or charges yet</div>
                           )}
                           {pots.map((pot) => (
-                            <div key={pot.id} className="flex items-center gap-2 rounded-xl border border-emerald-900/40 bg-[#0b3b21]/50 px-3 py-2">
+                            <div key={pot.id} className="flex items-center gap-2 rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_50%,transparent)] px-3 py-2">
                               <div className="flex-1 min-w-0">
-                                <div className="text-[13px] font-medium text-emerald-50 truncate">{pot.name}</div>
+                                <div className="text-[13px] font-medium text-[color:var(--sec-text)] truncate">{pot.name}</div>
                                 <div className="flex items-center gap-2 mt-0.5">
                                   {pot.entry_fee_amount != null && (
-                                    <span className="text-[10px] text-emerald-200/60">£{Number(pot.entry_fee_amount).toFixed(2)}</span>
+                                    <span className="text-[10px] text-[color:var(--sec-muted)]">£{Number(pot.entry_fee_amount).toFixed(2)}</span>
                                   )}
-                                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${pot.is_mandatory ? "border-amber-800/40 text-amber-300/70 bg-amber-900/20" : "border-emerald-800/40 text-emerald-300/50"}`}>
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${pot.is_mandatory ? "border-amber-800/40 text-amber-300/70 bg-amber-900/20" : "border-[color:var(--sec-hair)] text-[color:var(--sec-muted)]"}`}>
                                     {pot.is_mandatory ? "Required" : "Optional"}
                                   </span>
                                 </div>
@@ -2233,33 +2233,33 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                               <button
                                 type="button"
                                 onClick={() => handleDeletePot(pot)}
-                                className="text-[10px] text-red-400/70 border border-red-900/30 rounded-full px-2 py-0.5 hover:bg-red-900/20 shrink-0"
+                                className="text-[10px] text-[color:var(--sec-bad)] border border-red-900/30 rounded-full px-2 py-0.5 hover:bg-red-900/20 shrink-0"
                               >
                                 Remove
                               </button>
                             </div>
                           ))}
                           {showAddPotForm ? (
-                            <div className="space-y-2 rounded-xl border border-emerald-700/40 bg-[#0b3b21]/40 p-2.5">
+                            <div className="space-y-2 rounded-xl border border-[color:var(--sec-line)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] p-2.5">
                               <input
                                 type="text"
                                 placeholder="Name (e.g. Season Entry Fee)"
                                 value={addPotForm.name}
                                 onChange={(e) => setAddPotForm((f) => ({ ...f, name: e.target.value }))}
-                                className="w-full rounded-lg border border-emerald-900/60 bg-[#0b3b21]/60 px-2.5 py-1.5 text-[12px] text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
+                                className="w-full rounded-lg border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-2.5 py-1.5 text-[12px] text-[color:var(--sec-text)] focus:outline-none focus:border-[color:var(--sec-line)] [color-scheme:dark]"
                               />
                               <input
                                 type="number"
                                 placeholder="Entry fee £ (optional)"
                                 value={addPotForm.entry_fee_amount}
                                 onChange={(e) => setAddPotForm((f) => ({ ...f, entry_fee_amount: e.target.value }))}
-                                className="w-full rounded-lg border border-emerald-900/60 bg-[#0b3b21]/60 px-2.5 py-1.5 text-[12px] text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
+                                className="w-full rounded-lg border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-2.5 py-1.5 text-[12px] text-[color:var(--sec-text)] focus:outline-none focus:border-[color:var(--sec-line)] [color-scheme:dark]"
                                 min="0" step="0.01"
                               />
                               <select
                                 value={addPotForm.distribution_type}
                                 onChange={(e) => setAddPotForm((f) => ({ ...f, distribution_type: e.target.value }))}
-                                className="w-full rounded-lg border border-emerald-900/60 bg-[#0b3b21]/60 px-2.5 py-1.5 text-[12px] text-emerald-50 focus:outline-none [color-scheme:dark]"
+                                className="w-full rounded-lg border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-2.5 py-1.5 text-[12px] text-[color:var(--sec-text)] focus:outline-none [color-scheme:dark]"
                               >
                                 <option value="entry_only">Entry fee only (no prize)</option>
                                 <option value="position_based">Position-based prize</option>
@@ -2272,15 +2272,15 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                                   type="checkbox"
                                   checked={addPotForm.is_mandatory}
                                   onChange={(e) => setAddPotForm((f) => ({ ...f, is_mandatory: e.target.checked }))}
-                                  className="rounded border-emerald-700/60 bg-[#0b3b21]/60 text-emerald-500"
+                                  className="rounded border-[color:var(--sec-line)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] text-emerald-500"
                                 />
-                                <span className="text-[12px] text-emerald-200/70">Mandatory (players must pay to enter)</span>
+                                <span className="text-[12px] text-[color:var(--sec-muted)]">Mandatory (players must pay to enter)</span>
                               </label>
                               <div className="flex gap-2">
                                 <button type="button" onClick={() => setShowAddPotForm(false)}
-                                  className="flex-1 py-1 rounded-full border border-emerald-900/60 text-[11px] text-emerald-200/60">Cancel</button>
+                                  className="flex-1 py-1 rounded-full border border-[color:var(--sec-hair)] text-[11px] text-[color:var(--sec-muted)]">Cancel</button>
                                 <button type="button" onClick={handleAddPot} disabled={savingPot || !addPotForm.name.trim()}
-                                  className="flex-1 py-1 rounded-full bg-emerald-700 text-[11px] font-semibold text-white disabled:opacity-50">
+                                  className="flex-1 py-1 rounded-full bg-[color:var(--sec-primary)] text-[11px] font-semibold text-white disabled:opacity-50">
                                   {savingPot ? "Saving…" : "Add"}
                                 </button>
                               </div>
@@ -2289,7 +2289,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                             <button
                               type="button"
                               onClick={() => setShowAddPotForm(true)}
-                              className="w-full py-1.5 rounded-full border border-emerald-700/40 text-[11px] text-emerald-200/60 hover:text-emerald-200 hover:bg-emerald-900/20"
+                              className="w-full py-1.5 rounded-full border border-[color:var(--sec-line)] text-[11px] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text-2)] hover:bg-[color:var(--sec-surface-2)]"
                             >
                               + Add Pot / Charge
                             </button>
@@ -2307,7 +2307,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             <select
               value={selectedSeasonId}
               onChange={(e) => handleSeasonChange(e.target.value)}
-              className="flex-1 rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-2 py-1.5 text-[11px] text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
+              className="flex-1 rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-2 py-1.5 text-[11px] text-[color:var(--sec-text)] focus:outline-none focus:border-[color:var(--sec-line)] [color-scheme:dark]"
             >
               {seasonWheelOptions.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
@@ -2316,7 +2316,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             <select
               value={seasonMetric}
               onChange={(e) => setSeasonMetric(e.target.value as typeof seasonMetric)}
-              className="flex-1 rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-2 py-1.5 text-[11px] text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
+              className="flex-1 rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-2 py-1.5 text-[11px] text-[color:var(--sec-text)] focus:outline-none focus:border-[color:var(--sec-line)] [color-scheme:dark]"
             >
               {metricWheelOptions.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
@@ -2334,13 +2334,13 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
           <button
             type="button"
             onClick={() => router.push(`/majors/competitions/create?group_id=${groupId}`)}
-            className="w-full py-2.5 rounded-full border border-emerald-700/60 text-sm font-semibold text-emerald-200 hover:bg-emerald-900/30"
+            className="w-full py-2.5 rounded-full border border-[color:var(--sec-line)] text-sm font-semibold text-[color:var(--sec-text-2)] hover:bg-[color:var(--sec-surface-2)]"
           >
             + Create Competition Template
           </button>
         )}
         {competitions.length === 0 ? (
-          <div className="text-sm text-emerald-100/60 text-center py-8">
+          <div className="text-sm text-[color:var(--sec-muted)] text-center py-8">
             {isAdminOrOwner
               ? "No competitions yet. Create a competition template to generate events each year."
               : "No competition templates for this group."}
@@ -2351,12 +2351,12 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             const handicapPct = settings.handicap_allowance_pct as number | undefined;
             const maxHandicap = settings.max_handicap as number | null | undefined;
             return (
-              <div key={s.id} className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4 space-y-3">
+              <div key={s.id} className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_80%,transparent)] p-4 space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <div className="text-sm font-semibold text-emerald-50">{s.name}</div>
+                    <div className="text-sm font-semibold text-[color:var(--sec-text)]">{s.name}</div>
                     {s.description && (
-                      <div className="text-[11px] text-emerald-100/55 mt-0.5">{s.description}</div>
+                      <div className="text-[11px] text-[color:var(--sec-muted)] mt-0.5">{s.description}</div>
                     )}
                     {/* Current holder */}
                     <div className="flex items-center gap-1.5 mt-1.5">
@@ -2365,56 +2365,56 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                           {s.current_holder.avatar_url ? (
                             <img src={s.current_holder.avatar_url} alt="" className="h-4 w-4 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
                           ) : (
-                            <div className="h-4 w-4 rounded-full bg-emerald-900/60 grid place-items-center text-[8px] font-bold text-emerald-200 shrink-0">
+                            <div className="h-4 w-4 rounded-full bg-[color:var(--sec-surface)] grid place-items-center text-[8px] font-bold text-[color:var(--sec-text-2)] shrink-0">
                               {s.current_holder.name?.slice(0, 1).toUpperCase() ?? "?"}
                             </div>
                           )}
-                          <span className="text-[10px] text-emerald-200/70">Holder: <span className="text-[#7CF0BE]/80 font-semibold">{s.current_holder.name}</span></span>
+                          <span className="text-[10px] text-[color:var(--sec-muted)]">Holder: <span className="text-[color:color-mix(in_srgb,var(--sec-accent)_80%,transparent)] font-semibold">{s.current_holder.name}</span></span>
                         </>
                       ) : (
-                        <span className="text-[10px] text-emerald-200/35">No current holder</span>
+                        <span className="text-[10px] text-[color:var(--sec-muted)]">No current holder</span>
                       )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {s.recur_annually && (
-                      <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full border border-emerald-700/50 bg-emerald-900/30 text-emerald-300">
+                      <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full border border-[color:var(--sec-line)] bg-[color:var(--sec-surface)] text-[color:var(--sec-good)]">
                         Annual
                       </span>
                     )}
                     <button
                       type="button"
                       onClick={() => router.push(`/majors/competitions/${s.id}`)}
-                      className="text-[11px] text-emerald-300/70 hover:text-emerald-200"
+                      className="text-[11px] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text-2)]"
                     >
                       {isAdminOrOwner ? "Manage →" : "View →"}
                     </button>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <span className="text-[10px] text-emerald-200/55 border border-emerald-900/50 rounded-full px-2 py-0.5 capitalize">
+                  <span className="text-[10px] text-[color:var(--sec-muted)] border border-[color:var(--sec-hair)] rounded-full px-2 py-0.5 capitalize">
                     {s.template_event_type}
                   </span>
-                  <span className="text-[10px] text-emerald-200/55 border border-emerald-900/50 rounded-full px-2 py-0.5 capitalize">
+                  <span className="text-[10px] text-[color:var(--sec-muted)] border border-[color:var(--sec-hair)] rounded-full px-2 py-0.5 capitalize">
                     {s.template_scoring_model}
                   </span>
                   {s.latest_season && (
-                    <span className="text-[10px] text-emerald-200/55 border border-emerald-900/50 rounded-full px-2 py-0.5">
+                    <span className="text-[10px] text-[color:var(--sec-muted)] border border-[color:var(--sec-hair)] rounded-full px-2 py-0.5">
                       {s.latest_season.season_label}
                     </span>
                   )}
                   {handicapPct != null && handicapPct !== 100 && (
-                    <span className="text-[10px] text-emerald-200/55 border border-emerald-900/50 rounded-full px-2 py-0.5">
+                    <span className="text-[10px] text-[color:var(--sec-muted)] border border-[color:var(--sec-hair)] rounded-full px-2 py-0.5">
                       {handicapPct}% HCP
                     </span>
                   )}
                   {maxHandicap != null && (
-                    <span className="text-[10px] text-emerald-200/55 border border-emerald-900/50 rounded-full px-2 py-0.5">
+                    <span className="text-[10px] text-[color:var(--sec-muted)] border border-[color:var(--sec-hair)] rounded-full px-2 py-0.5">
                       Max HCP {maxHandicap}
                     </span>
                   )}
                   {(s.event_templates?.length ?? 0) > 0 && (
-                    <span className="text-[10px] text-emerald-200/55 border border-emerald-900/50 rounded-full px-2 py-0.5">
+                    <span className="text-[10px] text-[color:var(--sec-muted)] border border-[color:var(--sec-hair)] rounded-full px-2 py-0.5">
                       {s.event_templates.length} event{s.event_templates.length !== 1 ? "s" : ""}
                     </span>
                   )}
@@ -2423,7 +2423,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                   <button
                     type="button"
                     onClick={() => router.push(`/majors/events/create?group_id=${groupId}&competition_id=${s.id}`)}
-                    className="w-full py-2 rounded-full bg-emerald-700/80 text-[11px] font-semibold text-white hover:bg-emerald-600"
+                    className="w-full py-2 rounded-full bg-[color:var(--sec-primary)] text-[11px] font-semibold text-white hover:bg-[color:var(--sec-primary-hover)]"
                   >
                     + Add Event
                   </button>
@@ -2464,34 +2464,34 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             {/* Export CSV */}
             <a
               href={`/api/majors/groups/${groupId}/balances/export`}
-              className="block w-full py-2.5 rounded-full border border-emerald-700/60 text-sm font-semibold text-emerald-200 text-center hover:bg-emerald-900/30"
+              className="block w-full py-2.5 rounded-full border border-[color:var(--sec-line)] text-sm font-semibold text-[color:var(--sec-text-2)] text-center hover:bg-[color:var(--sec-surface-2)]"
             >
               Export CSV
             </a>
 
             {/* Group financial summary */}
             {balanceMembers.length > 0 && (
-              <div className="rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/60 px-4 py-3">
-                <div className="text-[10px] uppercase tracking-wider text-emerald-200/50 font-semibold mb-2">Group Summary</div>
+              <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-4 py-3">
+                <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)] font-semibold mb-2">Group Summary</div>
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="rounded-xl bg-[#0b3b21]/60 border border-emerald-900/40 px-2 py-2 text-center">
-                    <div className="text-[9px] text-emerald-200/40 uppercase">Total Charged</div>
-                    <div className="text-sm font-bold text-emerald-100">{currencySymbol}{totalCharged.toFixed(2)}</div>
+                  <div className="rounded-xl bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] border border-[color:var(--sec-hair)] px-2 py-2 text-center">
+                    <div className="text-[9px] text-[color:var(--sec-muted)] uppercase">Total Charged</div>
+                    <div className="text-sm font-bold text-[color:var(--sec-text)]">{currencySymbol}{totalCharged.toFixed(2)}</div>
                   </div>
-                  <div className="rounded-xl bg-[#0b3b21]/60 border border-emerald-900/40 px-2 py-2 text-center">
-                    <div className="text-[9px] text-emerald-200/40 uppercase">Total Collected</div>
-                    <div className="text-sm font-bold text-emerald-400">{currencySymbol}{totalPaid.toFixed(2)}</div>
+                  <div className="rounded-xl bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] border border-[color:var(--sec-hair)] px-2 py-2 text-center">
+                    <div className="text-[9px] text-[color:var(--sec-muted)] uppercase">Total Collected</div>
+                    <div className="text-sm font-bold text-[color:var(--sec-good)]">{currencySymbol}{totalPaid.toFixed(2)}</div>
                   </div>
                   {totalOutstanding > 0 && (
                     <div className="rounded-xl bg-red-950/30 border border-red-900/30 px-2 py-2 text-center">
-                      <div className="text-[9px] text-red-300/50 uppercase">Outstanding</div>
-                      <div className="text-sm font-bold text-red-400">{currencySymbol}{totalOutstanding.toFixed(2)}</div>
+                      <div className="text-[9px] text-[color:var(--sec-bad)] uppercase">Outstanding</div>
+                      <div className="text-sm font-bold text-[color:var(--sec-bad)]">{currencySymbol}{totalOutstanding.toFixed(2)}</div>
                     </div>
                   )}
                   {totalCredit > 0 && (
-                    <div className="rounded-xl bg-emerald-900/20 border border-emerald-800/30 px-2 py-2 text-center">
-                      <div className="text-[9px] text-emerald-300/50 uppercase">In Credit</div>
-                      <div className="text-sm font-bold text-emerald-400">{currencySymbol}{totalCredit.toFixed(2)}</div>
+                    <div className="rounded-xl bg-[color:var(--sec-surface)] border border-[color:var(--sec-hair)] px-2 py-2 text-center">
+                      <div className="text-[9px] text-[color:var(--sec-muted)] uppercase">In Credit</div>
+                      <div className="text-sm font-bold text-[color:var(--sec-good)]">{currencySymbol}{totalCredit.toFixed(2)}</div>
                     </div>
                   )}
                 </div>
@@ -2500,15 +2500,15 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
             {/* All member balances */}
             {balanceMembers.length === 0 ? (
-              <div className="text-sm text-emerald-100/60 text-center py-8">No financial activity yet.</div>
+              <div className="text-sm text-[color:var(--sec-muted)] text-center py-8">No financial activity yet.</div>
             ) : (
               <div className="space-y-2">
                 {balanceMembers.map((m) => {
                   const isExpanded = expandedMember === m.profile_id;
-                  const balanceColor = m.balance > 0 ? "text-red-400" : m.balance < 0 ? "text-emerald-400" : "text-emerald-200/60";
+                  const balanceColor = m.balance > 0 ? "text-[color:var(--sec-bad)]" : m.balance < 0 ? "text-[color:var(--sec-good)]" : "text-[color:var(--sec-muted)]";
 
                   return (
-                    <div key={m.profile_id} className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/70 overflow-hidden">
+                    <div key={m.profile_id} className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] overflow-hidden">
                       <button
                         type="button"
                         onClick={() => setExpandedMember(isExpanded ? null : m.profile_id)}
@@ -2517,38 +2517,38 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                         {m.profile?.avatar_url ? (
                           <img src={m.profile.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
                         ) : (
-                          <div className="h-8 w-8 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
+                          <div className="h-8 w-8 rounded-full bg-[color:var(--sec-surface)] grid place-items-center text-[10px] font-bold text-[color:var(--sec-text-2)] shrink-0">
                             {m.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
                           </div>
                         )}
-                        <span className="flex-1 text-sm font-semibold text-emerald-50 truncate">{m.profile?.name ?? "Unknown"}</span>
+                        <span className="flex-1 text-sm font-semibold text-[color:var(--sec-text)] truncate">{m.profile?.name ?? "Unknown"}</span>
                         <div className="text-right shrink-0">
                           <div className={`text-sm font-bold ${balanceColor}`}>
                             {m.balance > 0 ? `Owes ${currencySymbol}${m.balance.toFixed(2)}` :
                              m.balance < 0 ? `Credit ${currencySymbol}${Math.abs(m.balance).toFixed(2)}` : "Settled"}
                           </div>
-                          <div className="text-[10px] text-emerald-200/40">
+                          <div className="text-[10px] text-[color:var(--sec-muted)]">
                             {currencySymbol}{m.total_charged.toFixed(2)} charged · {currencySymbol}{m.total_paid.toFixed(2)} paid
                           </div>
                         </div>
                       </button>
 
                       {isExpanded && (
-                        <div className="border-t border-emerald-900/50 px-3 py-3 space-y-2">
+                        <div className="border-t border-[color:var(--sec-hair)] px-3 py-3 space-y-2">
                           {m.transactions.length === 0 ? (
-                            <div className="text-[11px] text-emerald-200/40">No transactions.</div>
+                            <div className="text-[11px] text-[color:var(--sec-muted)]">No transactions.</div>
                           ) : (
                             m.transactions.map((tx: any) => (
                               <div key={tx.id} className="flex items-start justify-between gap-2 text-[11px]">
                                 <div>
-                                  <div className="text-emerald-100/80">{txTypeLabel(tx.type)}</div>
+                                  <div className="text-[color:var(--sec-muted)]">{txTypeLabel(tx.type)}</div>
                                   {(tx.event?.name ?? tx.competition?.name) && (
-                                    <div className="text-emerald-200/40">{tx.event?.name ?? tx.competition?.name}</div>
+                                    <div className="text-[color:var(--sec-muted)]">{tx.event?.name ?? tx.competition?.name}</div>
                                   )}
-                                  {tx.note && <div className="text-emerald-200/40 italic">{tx.note}</div>}
-                                  <div className="text-emerald-200/30">{new Date(tx.created_at).toLocaleDateString()}</div>
+                                  {tx.note && <div className="text-[color:var(--sec-muted)] italic">{tx.note}</div>}
+                                  <div className="text-[color:var(--sec-muted)]">{new Date(tx.created_at).toLocaleDateString()}</div>
                                 </div>
-                                <span className={`font-semibold shrink-0 ${tx.amount > 0 ? "text-red-400" : "text-emerald-400"}`}>
+                                <span className={`font-semibold shrink-0 ${tx.amount > 0 ? "text-[color:var(--sec-bad)]" : "text-[color:var(--sec-good)]"}`}>
                                   {tx.amount > 0 ? "+" : ""}{currencySymbol}{Math.abs(tx.amount).toFixed(2)}
                                 </span>
                               </div>
@@ -2563,7 +2563,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                                 setPaymentNote("");
                                 setPaymentModal({ profileId: m.profile_id, name: m.profile?.name ?? "Player" });
                               }}
-                              className="flex-1 py-1.5 rounded-full border border-emerald-700/50 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-900/30"
+                              className="flex-1 py-1.5 rounded-full border border-[color:var(--sec-line)] text-[11px] font-semibold text-[color:var(--sec-text-2)] hover:bg-[color:var(--sec-surface-2)]"
                             >
                               + Record Payment
                             </button>
@@ -2595,8 +2595,8 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
             {/* Prize Pot P&L — Winnings Summary */}
             {winningsLoaded && winningSummaries.length > 0 && (
-              <div className="rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-3 space-y-2">
-                <div className="text-[10px] uppercase tracking-wider text-emerald-200/50 font-semibold">Prize Pot P&L</div>
+              <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-3 space-y-2">
+                <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)] font-semibold">Prize Pot P&L</div>
                 <div className="space-y-1">
                   {winningSummaries
                     .filter((w: any) => w.all_time_spent > 0 || w.all_time_won > 0)
@@ -2605,13 +2605,13 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                         key={w.profile_id}
                         type="button"
                         onClick={() => setWinningsPlayer(w)}
-                        className="w-full flex items-center justify-between py-2 px-2 rounded-xl hover:bg-emerald-900/20 text-left"
+                        className="w-full flex items-center justify-between py-2 px-2 rounded-xl hover:bg-[color:var(--sec-surface-2)] text-left"
                       >
-                        <span className="text-sm text-emerald-100">{w.profile?.name ?? "Unknown"}</span>
+                        <span className="text-sm text-[color:var(--sec-text)]">{w.profile?.name ?? "Unknown"}</span>
                         <div className="flex gap-4 text-[11px]">
-                          <span className="text-emerald-200/50">In: {currencySymbol}{w.all_time_spent.toFixed(2)}</span>
-                          <span className="text-emerald-400">Won: {currencySymbol}{w.all_time_won.toFixed(2)}</span>
-                          <span className={w.all_time_net >= 0 ? "text-emerald-300 font-semibold" : "text-red-400 font-semibold"}>
+                          <span className="text-[color:var(--sec-muted)]">In: {currencySymbol}{w.all_time_spent.toFixed(2)}</span>
+                          <span className="text-[color:var(--sec-good)]">Won: {currencySymbol}{w.all_time_won.toFixed(2)}</span>
+                          <span className={w.all_time_net >= 0 ? "text-[color:var(--sec-good)] font-semibold" : "text-[color:var(--sec-bad)] font-semibold"}>
                             Net: {w.all_time_net >= 0 ? "+" : ""}{currencySymbol}{w.all_time_net.toFixed(2)}
                           </span>
                         </div>
@@ -2624,17 +2624,17 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             {/* Payment record modal */}
             {paymentModal && (
               <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60" onClick={() => setPaymentModal(null)}>
-                <div className="w-full max-w-sm rounded-t-2xl bg-[#0b3b21] border border-emerald-800/60 px-4 py-5 space-y-3" onClick={(e) => e.stopPropagation()}>
-                  <div className="text-sm font-semibold text-emerald-100">Record Payment — {paymentModal.name}</div>
+                <div className="w-full max-w-sm rounded-t-2xl bg-[color:var(--sec-surface)] border border-[color:var(--sec-hair)] px-4 py-5 space-y-3" onClick={(e) => e.stopPropagation()}>
+                  <div className="text-sm font-semibold text-[color:var(--sec-text)]">Record Payment — {paymentModal.name}</div>
                   <div>
-                    <label className="text-[10px] uppercase text-emerald-200/50">Amount ({currencySymbol})</label>
+                    <label className="text-[10px] uppercase text-[color:var(--sec-muted)]">Amount ({currencySymbol})</label>
                     <input
                       type="number"
                       min="0"
                       step="0.01"
                       value={paymentAmount}
                       onChange={(e) => setPaymentAmount(e.target.value)}
-                      className="mt-1 w-full rounded-lg bg-emerald-950/60 border border-emerald-800/50 text-emerald-100 px-3 py-2 text-sm focus:outline-none"
+                      className="mt-1 w-full rounded-lg bg-[color:var(--sec-surface)] border border-[color:var(--sec-hair)] text-[color:var(--sec-text)] px-3 py-2 text-sm focus:outline-none"
                       placeholder="0.00"
                       autoFocus
                     />
@@ -2644,26 +2644,26 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                       if (!isNaN(amt) && amt > 0 && member) {
                         const newBal = member.balance - amt;
                         return (
-                          <div className="mt-1 text-[11px] text-emerald-200/60">
-                            Balance: {currencySymbol}{member.balance.toFixed(2)} → <span className={newBal < 0 ? "text-emerald-400" : "text-emerald-200"}>{currencySymbol}{newBal.toFixed(2)}</span>
-                            {newBal < 0 && <span className="text-emerald-400 ml-1">(credit)</span>}
+                          <div className="mt-1 text-[11px] text-[color:var(--sec-muted)]">
+                            Balance: {currencySymbol}{member.balance.toFixed(2)} → <span className={newBal < 0 ? "text-[color:var(--sec-good)]" : "text-[color:var(--sec-text-2)]"}>{currencySymbol}{newBal.toFixed(2)}</span>
+                            {newBal < 0 && <span className="text-[color:var(--sec-good)] ml-1">(credit)</span>}
                           </div>
                         );
                       }
                     })()}
                   </div>
                   <div>
-                    <label className="text-[10px] uppercase text-emerald-200/50">Note (optional)</label>
+                    <label className="text-[10px] uppercase text-[color:var(--sec-muted)]">Note (optional)</label>
                     <input
                       type="text"
                       value={paymentNote}
                       onChange={(e) => setPaymentNote(e.target.value)}
-                      className="mt-1 w-full rounded-lg bg-emerald-950/60 border border-emerald-800/50 text-emerald-100 px-3 py-2 text-sm focus:outline-none"
+                      className="mt-1 w-full rounded-lg bg-[color:var(--sec-surface)] border border-[color:var(--sec-hair)] text-[color:var(--sec-text)] px-3 py-2 text-sm focus:outline-none"
                       placeholder="e.g. Cash received at club"
                     />
                   </div>
                   <div className="flex gap-2 pt-1">
-                    <button type="button" onClick={() => setPaymentModal(null)} className="flex-1 py-2 rounded-full border border-emerald-800/50 text-sm text-emerald-200">Cancel</button>
+                    <button type="button" onClick={() => setPaymentModal(null)} className="flex-1 py-2 rounded-full border border-[color:var(--sec-hair)] text-sm text-[color:var(--sec-text-2)]">Cancel</button>
                     <button
                       type="button"
                       disabled={paymentSubmitting || !paymentAmount || parseFloat(paymentAmount) <= 0}
@@ -2687,7 +2687,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                         setPaymentSubmitting(false);
                         setPaymentModal(null);
                       }}
-                      className="flex-1 py-2 rounded-full bg-emerald-700 text-sm font-semibold text-white disabled:opacity-50"
+                      className="flex-1 py-2 rounded-full bg-[color:var(--sec-primary)] text-sm font-semibold text-white disabled:opacity-50"
                     >
                       {paymentSubmitting ? "Saving…" : "Record"}
                     </button>
@@ -2699,11 +2699,11 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             {/* Withdrawal modal */}
             {withdrawalModal && (
               <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60" onClick={() => setWithdrawalModal(null)}>
-                <div className="w-full max-w-sm rounded-t-2xl bg-[#0b3b21] border border-emerald-800/60 px-4 py-5 space-y-3" onClick={(e) => e.stopPropagation()}>
-                  <div className="text-sm font-semibold text-emerald-100">Mark Winnings as Withdrawn — {withdrawalModal.name}</div>
-                  <p className="text-[11px] text-emerald-200/60">Records that winnings have been physically handed to the player. Reduces their balance but does not affect their winnings stats.</p>
+                <div className="w-full max-w-sm rounded-t-2xl bg-[color:var(--sec-surface)] border border-[color:var(--sec-hair)] px-4 py-5 space-y-3" onClick={(e) => e.stopPropagation()}>
+                  <div className="text-sm font-semibold text-[color:var(--sec-text)]">Mark Winnings as Withdrawn — {withdrawalModal.name}</div>
+                  <p className="text-[11px] text-[color:var(--sec-muted)]">Records that winnings have been physically handed to the player. Reduces their balance but does not affect their winnings stats.</p>
                   <div>
-                    <label className="text-[10px] uppercase text-emerald-200/50">Amount ({currencySymbol}) — Max: {currencySymbol}{withdrawalModal.maxAmount.toFixed(2)}</label>
+                    <label className="text-[10px] uppercase text-[color:var(--sec-muted)]">Amount ({currencySymbol}) — Max: {currencySymbol}{withdrawalModal.maxAmount.toFixed(2)}</label>
                     <input
                       type="number"
                       min="0.01"
@@ -2711,12 +2711,12 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                       step="0.01"
                       value={withdrawalAmount}
                       onChange={(e) => setWithdrawalAmount(e.target.value)}
-                      className="mt-1 w-full rounded-lg bg-emerald-950/60 border border-emerald-800/50 text-emerald-100 px-3 py-2 text-sm focus:outline-none"
+                      className="mt-1 w-full rounded-lg bg-[color:var(--sec-surface)] border border-[color:var(--sec-hair)] text-[color:var(--sec-text)] px-3 py-2 text-sm focus:outline-none"
                       autoFocus
                     />
                   </div>
                   <div className="flex gap-2 pt-1">
-                    <button type="button" onClick={() => setWithdrawalModal(null)} className="flex-1 py-2 rounded-full border border-emerald-800/50 text-sm text-emerald-200">Cancel</button>
+                    <button type="button" onClick={() => setWithdrawalModal(null)} className="flex-1 py-2 rounded-full border border-[color:var(--sec-hair)] text-sm text-[color:var(--sec-text-2)]">Cancel</button>
                     <button
                       type="button"
                       disabled={withdrawalSubmitting || !withdrawalAmount || parseFloat(withdrawalAmount) <= 0}
@@ -2752,7 +2752,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             {/* Invite member sheet */}
             {showInvite && group && (
               <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60" onClick={() => setShowInvite(false)}>
-                <div className="w-full max-w-sm rounded-t-2xl bg-[#0b3b21] border border-emerald-800/60 px-4 py-5 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                <div className="w-full max-w-sm rounded-t-2xl bg-[color:var(--sec-surface)] border border-[color:var(--sec-hair)] px-4 py-5 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                   <InvitePlayerSheet
                     groupId={group.id}
                     excludedProfileIds={new Set(members.map((m) => m.profile_id))}
@@ -2766,51 +2766,51 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             {/* Winnings detail drawer */}
             {winningsPlayer && (
               <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60" onClick={() => setWinningsPlayer(null)}>
-                <div className="w-full max-w-sm rounded-t-2xl bg-[#0b3b21] border border-emerald-800/60 px-4 py-5 space-y-3 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                <div className="w-full max-w-sm rounded-t-2xl bg-[color:var(--sec-surface)] border border-[color:var(--sec-hair)] px-4 py-5 space-y-3 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center justify-between">
-                    <div className="text-sm font-semibold text-emerald-100">{winningsPlayer.profile?.name} — Prize Pot History</div>
-                    <button type="button" onClick={() => setWinningsPlayer(null)} className="text-emerald-200/40 text-xl">✕</button>
+                    <div className="text-sm font-semibold text-[color:var(--sec-text)]">{winningsPlayer.profile?.name} — Prize Pot History</div>
+                    <button type="button" onClick={() => setWinningsPlayer(null)} className="text-[color:var(--sec-muted)] text-xl">✕</button>
                   </div>
                   <div className="grid grid-cols-3 gap-2 text-center">
-                    <div className="rounded-xl bg-emerald-950/40 border border-emerald-900/40 py-2">
-                      <div className="text-[9px] text-emerald-200/40 uppercase">Spent</div>
-                      <div className="text-sm font-bold text-emerald-200">{currencySymbol}{winningsPlayer.all_time_spent.toFixed(2)}</div>
+                    <div className="rounded-xl bg-[color:var(--sec-surface)] border border-[color:var(--sec-hair)] py-2">
+                      <div className="text-[9px] text-[color:var(--sec-muted)] uppercase">Spent</div>
+                      <div className="text-sm font-bold text-[color:var(--sec-text-2)]">{currencySymbol}{winningsPlayer.all_time_spent.toFixed(2)}</div>
                     </div>
-                    <div className="rounded-xl bg-emerald-950/40 border border-emerald-900/40 py-2">
-                      <div className="text-[9px] text-emerald-200/40 uppercase">Won</div>
-                      <div className="text-sm font-bold text-emerald-400">{currencySymbol}{winningsPlayer.all_time_won.toFixed(2)}</div>
+                    <div className="rounded-xl bg-[color:var(--sec-surface)] border border-[color:var(--sec-hair)] py-2">
+                      <div className="text-[9px] text-[color:var(--sec-muted)] uppercase">Won</div>
+                      <div className="text-sm font-bold text-[color:var(--sec-good)]">{currencySymbol}{winningsPlayer.all_time_won.toFixed(2)}</div>
                     </div>
-                    <div className={`rounded-xl border py-2 ${winningsPlayer.all_time_net >= 0 ? "bg-emerald-900/20 border-emerald-700/30" : "bg-red-950/30 border-red-900/30"}`}>
-                      <div className="text-[9px] text-emerald-200/40 uppercase">Net</div>
-                      <div className={`text-sm font-bold ${winningsPlayer.all_time_net >= 0 ? "text-emerald-300" : "text-red-400"}`}>
+                    <div className={`rounded-xl border py-2 ${winningsPlayer.all_time_net >= 0 ? "bg-[color:var(--sec-surface)] border-[color:var(--sec-line)]" : "bg-red-950/30 border-red-900/30"}`}>
+                      <div className="text-[9px] text-[color:var(--sec-muted)] uppercase">Net</div>
+                      <div className={`text-sm font-bold ${winningsPlayer.all_time_net >= 0 ? "text-[color:var(--sec-good)]" : "text-[color:var(--sec-bad)]"}`}>
                         {winningsPlayer.all_time_net >= 0 ? "+" : ""}{currencySymbol}{winningsPlayer.all_time_net.toFixed(2)}
                       </div>
                     </div>
                   </div>
                   {winningsPlayer.by_season?.length > 0 && (
                     <div>
-                      <div className="text-[10px] uppercase text-emerald-200/40 mb-1">By Season</div>
+                      <div className="text-[10px] uppercase text-[color:var(--sec-muted)] mb-1">By Season</div>
                       {winningsPlayer.by_season.map((s: any, i: number) => (
-                        <div key={i} className="flex justify-between text-[11px] py-1 border-b border-emerald-900/30">
-                          <span className="text-emerald-200/70">{s.season_name}</span>
-                          <span className="text-emerald-200/50">In: {currencySymbol}{s.spent.toFixed(2)} · Won: <span className="text-emerald-400">{currencySymbol}{s.won.toFixed(2)}</span></span>
+                        <div key={i} className="flex justify-between text-[11px] py-1 border-b border-[color:var(--sec-hair)]">
+                          <span className="text-[color:var(--sec-muted)]">{s.season_name}</span>
+                          <span className="text-[color:var(--sec-muted)]">In: {currencySymbol}{s.spent.toFixed(2)} · Won: <span className="text-[color:var(--sec-good)]">{currencySymbol}{s.won.toFixed(2)}</span></span>
                         </div>
                       ))}
                     </div>
                   )}
                   <div>
-                    <div className="text-[10px] uppercase text-emerald-200/40 mb-1">Pot History</div>
+                    <div className="text-[10px] uppercase text-[color:var(--sec-muted)] mb-1">Pot History</div>
                     {winningsPlayer.pot_history?.length === 0 ? (
-                      <div className="text-[11px] text-emerald-200/30 py-2">No prize pot transactions yet</div>
+                      <div className="text-[11px] text-[color:var(--sec-muted)] py-2">No prize pot transactions yet</div>
                     ) : winningsPlayer.pot_history?.map((ph: any, i: number) => (
-                      <div key={i} className="py-2 border-b border-emerald-900/20 space-y-0.5">
+                      <div key={i} className="py-2 border-b border-[color:var(--sec-hair)] space-y-0.5">
                         <div className="flex justify-between">
-                          <span className="text-sm text-emerald-100">{ph.pot_name}</span>
+                          <span className="text-sm text-[color:var(--sec-text)]">{ph.pot_name}</span>
                           {ph.payout_amount != null && (
-                            <span className="text-sm font-semibold text-emerald-400">+{currencySymbol}{ph.payout_amount.toFixed(2)}</span>
+                            <span className="text-sm font-semibold text-[color:var(--sec-good)]">+{currencySymbol}{ph.payout_amount.toFixed(2)}</span>
                           )}
                         </div>
-                        <div className="text-[10px] text-emerald-200/40">
+                        <div className="text-[10px] text-[color:var(--sec-muted)]">
                           {ph.event_name ?? ph.season_name ?? "Group"} · Entry: {currencySymbol}{ph.entry_fee.toFixed(2)}
                           {ph.payout_position && ` · ${ph.payout_position === 1 ? "1st" : ph.payout_position === 2 ? "2nd" : ph.payout_position === 3 ? "3rd" : `${ph.payout_position}th`}`}
                           {" · "}{new Date(ph.date).toLocaleDateString()}
@@ -2823,12 +2823,12 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             )}
 
             {/* Financial settings */}
-            <div className="rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-3 space-y-3">
-              <div className="text-[10px] uppercase tracking-wider text-emerald-200/50 font-semibold">Financial Settings</div>
+            <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-3 space-y-3">
+              <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)] font-semibold">Financial Settings</div>
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-sm text-emerald-50">Allow Credit Balances</div>
-                  <div className="text-[10px] text-emerald-200/50">Players can owe money before settling</div>
+                  <div className="text-sm text-[color:var(--sec-text)]">Allow Credit Balances</div>
+                  <div className="text-[10px] text-[color:var(--sec-muted)]">Players can owe money before settling</div>
                 </div>
                 <button
                   type="button"
@@ -2845,7 +2845,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                     setGroup((prev) => prev ? { ...prev, allow_credit: newVal } as any : prev);
                   }}
                   className={`relative inline-flex items-center w-10 h-6 rounded-full transition-colors ${
-                    ((group as any)?.allow_credit ?? true) ? "bg-emerald-600" : "bg-emerald-900/50 border border-emerald-900/70"
+                    ((group as any)?.allow_credit ?? true) ? "bg-[color:var(--sec-primary)]" : "bg-[color:var(--sec-surface)] border border-[color:var(--sec-hair)]"
                   }`}
                 >
                   <span className={`absolute left-0 top-1 h-4 w-4 rounded-full bg-white shadow transition-transform ${
@@ -2862,35 +2862,35 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       return (
         <div className="space-y-4">
           {myBalance == null ? (
-            <div className="text-sm text-emerald-100/60 text-center py-8">Loading…</div>
+            <div className="text-sm text-[color:var(--sec-muted)] text-center py-8">Loading…</div>
           ) : (
             <>
-              <div className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/70 px-4 py-4 text-center space-y-1">
-                <div className="text-[10px] uppercase tracking-wider text-emerald-200/50">Your Balance</div>
-                <div className={`text-2xl font-extrabold ${myBalance.balance > 0 ? "text-red-400" : myBalance.balance < 0 ? "text-emerald-400" : "text-emerald-200/60"}`}>
+              <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] px-4 py-4 text-center space-y-1">
+                <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Your Balance</div>
+                <div className={`text-2xl font-extrabold ${myBalance.balance > 0 ? "text-[color:var(--sec-bad)]" : myBalance.balance < 0 ? "text-[color:var(--sec-good)]" : "text-[color:var(--sec-muted)]"}`}>
                   {myBalance.balance > 0 ? `Owes ${currencySymbol}${myBalance.balance.toFixed(2)}` :
                    myBalance.balance < 0 ? `Credit ${currencySymbol}${Math.abs(myBalance.balance).toFixed(2)}` : "Settled"}
                 </div>
-                <div className="text-[11px] text-emerald-200/40">
+                <div className="text-[11px] text-[color:var(--sec-muted)]">
                   {currencySymbol}{myBalance.total_charged.toFixed(2)} charged · {currencySymbol}{myBalance.total_paid.toFixed(2)} paid
                 </div>
               </div>
 
               <div className="space-y-2">
                 {myBalance.transactions.length === 0 ? (
-                  <div className="text-sm text-emerald-100/60 text-center py-4">No transactions yet.</div>
+                  <div className="text-sm text-[color:var(--sec-muted)] text-center py-4">No transactions yet.</div>
                 ) : (
                   myBalance.transactions.map((tx: any) => (
-                    <div key={tx.id} className="flex items-start justify-between gap-2 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5">
+                    <div key={tx.id} className="flex items-start justify-between gap-2 rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2.5">
                       <div>
-                        <div className="text-sm text-emerald-100/80">{txTypeLabel(tx.type)}</div>
+                        <div className="text-sm text-[color:var(--sec-muted)]">{txTypeLabel(tx.type)}</div>
                         {(tx.event?.name ?? tx.competition?.name) && (
-                          <div className="text-[11px] text-emerald-200/50">{tx.event?.name ?? tx.competition?.name}</div>
+                          <div className="text-[11px] text-[color:var(--sec-muted)]">{tx.event?.name ?? tx.competition?.name}</div>
                         )}
-                        {tx.note && <div className="text-[10px] text-emerald-200/40 italic">{tx.note}</div>}
-                        <div className="text-[10px] text-emerald-200/30">{new Date(tx.created_at).toLocaleDateString()}</div>
+                        {tx.note && <div className="text-[10px] text-[color:var(--sec-muted)] italic">{tx.note}</div>}
+                        <div className="text-[10px] text-[color:var(--sec-muted)]">{new Date(tx.created_at).toLocaleDateString()}</div>
                       </div>
-                      <span className={`text-sm font-bold shrink-0 ${tx.amount > 0 ? "text-red-400" : "text-emerald-400"}`}>
+                      <span className={`text-sm font-bold shrink-0 ${tx.amount > 0 ? "text-[color:var(--sec-bad)]" : "text-[color:var(--sec-good)]"}`}>
                         {tx.amount > 0 ? "+" : ""}{currencySymbol}{Math.abs(tx.amount).toFixed(2)}
                       </span>
                     </div>
@@ -2907,18 +2907,18 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       const config = group.fantasy_config;
       if (!config) {
         return (
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 px-4 py-6 text-center space-y-2">
-            <div className="text-sm text-emerald-100/70">Fantasy picks aren&apos;t enabled for this group.</div>
+          <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_80%,transparent)] px-4 py-6 text-center space-y-2">
+            <div className="text-sm text-[color:var(--sec-muted)]">Fantasy picks aren&apos;t enabled for this group.</div>
             {isAdminOrOwner ? (
               <button
                 type="button"
                 onClick={() => setTab("settings")}
-                className="text-[11px] font-semibold text-emerald-400 hover:text-emerald-300"
+                className="text-[11px] font-semibold text-[color:var(--sec-good)] hover:text-[color:var(--sec-good)]"
               >
                 Enable in Settings →
               </button>
             ) : (
-              <div className="text-[11px] text-emerald-200/50">Ask a group admin to enable it.</div>
+              <div className="text-[11px] text-[color:var(--sec-muted)]">Ask a group admin to enable it.</div>
             )}
           </div>
         );
@@ -2926,79 +2926,79 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       return (
         <div className="space-y-3">
           {/* My wallet */}
-          <div className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/70 px-3 py-3">
+          <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] px-3 py-3">
             <div className="flex items-center justify-between mb-1">
-              <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider">My Wallet</div>
-              <span className="text-[10px] text-emerald-200/50">
+              <div className="text-[10px] text-[color:var(--sec-muted)] uppercase tracking-wider">My Wallet</div>
+              <span className="text-[10px] text-[color:var(--sec-muted)]">
                 {config.mode === "topup" ? "Top-up budget" : "Fixed budget"} · {config.budgetScope === "event" ? "per event" : "per season"}
               </span>
             </div>
             {config.budgetScope === "event" ? (
-              <div className="text-[11px] text-emerald-200/55 py-1">
+              <div className="text-[11px] text-[color:var(--sec-muted)] py-1">
                 Budgets are per event — your balance appears on each event&apos;s market page.
               </div>
             ) : fantasyWalletLoading ? (
-              <div className="text-[11px] text-emerald-200/50 py-1">Loading…</div>
+              <div className="text-[11px] text-[color:var(--sec-muted)] py-1">Loading…</div>
             ) : fantasyWallet ? (
               <div className="flex items-end justify-between">
                 <div>
-                  <div className="text-xl font-bold text-[#7CF0BE]">{fmtPts(fantasyWallet.balance)} pts</div>
-                  <div className="text-[10px] text-emerald-200/50">available balance</div>
+                  <div className="text-xl font-bold text-[color:var(--sec-accent)]">{fmtPts(fantasyWallet.balance)} pts</div>
+                  <div className="text-[10px] text-[color:var(--sec-muted)]">available balance</div>
                 </div>
-                <div className={`text-sm font-semibold ${fantasyWallet.pnl > 0 ? "text-emerald-300" : fantasyWallet.pnl < 0 ? "text-red-300" : "text-emerald-100/60"}`}>
+                <div className={`text-sm font-semibold ${fantasyWallet.pnl > 0 ? "text-[color:var(--sec-good)]" : fantasyWallet.pnl < 0 ? "text-[color:var(--sec-bad)]" : "text-[color:var(--sec-muted)]"}`}>
                   {fantasyWallet.pnl > 0 ? "+" : ""}{fmtPts(fantasyWallet.pnl)} PnL
                 </div>
               </div>
             ) : (
-              <div className="text-[11px] text-emerald-200/50 py-1">Wallet unavailable</div>
+              <div className="text-[11px] text-[color:var(--sec-muted)] py-1">Wallet unavailable</div>
             )}
           </div>
 
           <button
             type="button"
             onClick={() => router.push("/majors/fantasy")}
-            className="w-full rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/70 px-3 py-3 text-left hover:bg-emerald-900/30 transition-colors"
+            className="w-full rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] px-3 py-3 text-left hover:bg-[color:var(--sec-surface-2)] transition-colors"
           >
             <div className="flex items-center justify-between">
-              <div className="text-sm font-semibold text-emerald-50">Fantasy Hub</div>
-              <span className="text-[10px] text-emerald-400/80">Open →</span>
+              <div className="text-sm font-semibold text-[color:var(--sec-text)]">Fantasy Hub</div>
+              <span className="text-[10px] text-[color:var(--sec-good)]">Open →</span>
             </div>
-            <div className="text-[10px] text-emerald-200/50 mt-0.5">
+            <div className="text-[10px] text-[color:var(--sec-muted)] mt-0.5">
               Picks, cash-outs, top-ups and the fantasy leaderboard live in the hub.
             </div>
           </button>
 
-          <div className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/70 px-3 py-3">
+          <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] px-3 py-3">
             <div className="flex items-center justify-between mb-1.5">
-              <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider">Season Leaderboard</div>
+              <div className="text-[10px] text-[color:var(--sec-muted)] uppercase tracking-wider">Season Leaderboard</div>
               <button
                 type="button"
                 onClick={() => router.push("/majors/fantasy/leaderboard")}
-                className="text-[10px] text-emerald-400/80 hover:text-emerald-300"
+                className="text-[10px] text-[color:var(--sec-good)] hover:text-[color:var(--sec-good)]"
               >
                 Full board →
               </button>
             </div>
             {fantasyLeaderboardLoading ? (
-              <div className="text-[11px] text-emerald-200/50 py-2 text-center">Loading…</div>
+              <div className="text-[11px] text-[color:var(--sec-muted)] py-2 text-center">Loading…</div>
             ) : fantasyLeaderboard.length === 0 ? (
-              <div className="text-[11px] text-emerald-200/50 py-2 text-center">
+              <div className="text-[11px] text-[color:var(--sec-muted)] py-2 text-center">
                 No picks placed yet — the leaderboard starts with the first pick.
               </div>
             ) : (
               <div className="space-y-1">
                 {fantasyLeaderboard.slice(0, 5).map((e) => (
                   <div key={e.profile_id} className="flex items-center gap-2.5 py-1">
-                    <span className="w-5 text-center text-[11px] font-bold text-emerald-200/50">{e.position}</span>
+                    <span className="w-5 text-center text-[11px] font-bold text-[color:var(--sec-muted)]">{e.position}</span>
                     {e.avatar_url ? (
                       <img src={e.avatar_url} alt="" className="h-6 w-6 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
                     ) : (
-                      <div className="h-6 w-6 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
+                      <div className="h-6 w-6 rounded-full bg-[color:var(--sec-surface)] grid place-items-center text-[10px] font-bold text-[color:var(--sec-text-2)] shrink-0">
                         {e.name.slice(0, 2).toUpperCase()}
                       </div>
                     )}
-                    <span className="flex-1 min-w-0 text-[12px] text-emerald-50 truncate">{e.name}</span>
-                    <span className={`text-[12px] font-bold ${e.pnl > 0 ? "text-emerald-300" : e.pnl < 0 ? "text-red-300" : "text-emerald-100/60"}`}>
+                    <span className="flex-1 min-w-0 text-[12px] text-[color:var(--sec-text)] truncate">{e.name}</span>
+                    <span className={`text-[12px] font-bold ${e.pnl > 0 ? "text-[color:var(--sec-good)]" : e.pnl < 0 ? "text-[color:var(--sec-bad)]" : "text-[color:var(--sec-muted)]"}`}>
                       {e.pnl > 0 ? "+" : ""}{e.pnl}
                     </span>
                   </div>
@@ -3026,29 +3026,29 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
           return (
             <div className="space-y-3">
-              <div className="text-[10px] uppercase tracking-wider text-emerald-200/50">Group Details</div>
-              <div className="space-y-3 rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/60 p-4">
+              <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Group Details</div>
+              <div className="space-y-3 rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] p-4">
                 <div className="space-y-1.5">
-                  <div className="text-[10px] text-emerald-200/50">Name</div>
+                  <div className="text-[10px] text-[color:var(--sec-muted)]">Name</div>
                   <input
                     type="text"
                     value={details.name}
                     onChange={(e) => setDetails({ name: e.target.value })}
-                    className="w-full rounded-xl bg-[#01100A] border border-emerald-900/60 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none focus:border-emerald-600"
+                    className="w-full rounded-xl bg-[color:var(--ciaga-ground)] border border-[color:var(--sec-hair)] px-3 py-2 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none focus:border-[color:var(--sec-line)]"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <div className="text-[10px] text-emerald-200/50">Description</div>
+                  <div className="text-[10px] text-[color:var(--sec-muted)]">Description</div>
                   <textarea
                     rows={3}
                     value={details.description}
                     onChange={(e) => setDetails({ description: e.target.value })}
                     placeholder="What is this group about?"
-                    className="w-full rounded-xl bg-[#01100A] border border-emerald-900/60 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none focus:border-emerald-600 resize-none"
+                    className="w-full rounded-xl bg-[color:var(--ciaga-ground)] border border-[color:var(--sec-hair)] px-3 py-2 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none focus:border-[color:var(--sec-line)] resize-none"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <div className="text-[10px] text-emerald-200/50">Access</div>
+                  <div className="text-[10px] text-[color:var(--sec-muted)]">Access</div>
                   <div className="space-y-1.5">
                     {ACCESS_OPTIONS.map((a) => (
                       <button
@@ -3057,25 +3057,25 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                         onClick={() => setDetails({ access: a.value })}
                         className={`w-full rounded-xl border px-3 py-2.5 text-left transition-colors ${
                           activeAccess.value === a.value
-                            ? "border-emerald-500 bg-emerald-900/50"
-                            : "border-emerald-900/50 bg-[#0b3b21]/40 hover:border-emerald-700/50"
+                            ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)]"
+                            : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] hover:border-[color:var(--sec-line)]"
                         }`}
                       >
-                        <div className="text-sm font-semibold text-emerald-50">{a.label}</div>
-                        <div className="text-[11px] text-emerald-200/55">{a.desc}</div>
+                        <div className="text-sm font-semibold text-[color:var(--sec-text)]">{a.label}</div>
+                        <div className="text-[11px] text-[color:var(--sec-muted)]">{a.desc}</div>
                       </button>
                     ))}
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <div className="text-[10px] text-emerald-200/50">Max Members (optional)</div>
+                  <div className="text-[10px] text-[color:var(--sec-muted)]">Max Members (optional)</div>
                   <input
                     type="number"
                     min={2}
                     value={details.max_members}
                     onChange={(e) => setDetails({ max_members: e.target.value })}
                     placeholder="Unlimited"
-                    className="w-full rounded-xl bg-[#01100A] border border-emerald-900/60 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none focus:border-emerald-600"
+                    className="w-full rounded-xl bg-[color:var(--ciaga-ground)] border border-[color:var(--sec-hair)] px-3 py-2 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none focus:border-[color:var(--sec-line)]"
                   />
                 </div>
                 <button
@@ -3108,7 +3108,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                       setSavingGroupDetails(false);
                     }
                   }}
-                  className="w-full py-2.5 rounded-full bg-emerald-700 text-sm font-semibold text-white disabled:opacity-40"
+                  className="w-full py-2.5 rounded-full bg-[color:var(--sec-primary)] text-sm font-semibold text-white disabled:opacity-40"
                 >
                   {savingGroupDetails ? "Saving…" : "Save Group Details"}
                 </button>
@@ -3119,17 +3119,17 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
         {/* Group Image */}
         <div className="space-y-2">
-          <div className="text-[10px] uppercase tracking-wider text-emerald-200/50">Group Image</div>
+          <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Group Image</div>
           <div className="flex items-center gap-3">
             {group.image_url ? (
-              <img src={group.image_url} alt={group.name} className="h-16 w-16 rounded-2xl object-cover border border-emerald-700/40 shrink-0" loading="lazy" decoding="async" />
+              <img src={group.image_url} alt={group.name} className="h-16 w-16 rounded-2xl object-cover border border-[color:var(--sec-line)] shrink-0" loading="lazy" decoding="async" />
             ) : (
-              <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-emerald-800 to-emerald-950 flex items-center justify-center text-xl font-bold text-emerald-200 shrink-0">
+              <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-[color:var(--sec-surface-2)] to-[color:var(--sec-surface)] flex items-center justify-center text-xl font-bold text-[color:var(--sec-text-2)] shrink-0">
                 {group.name.slice(0, 2).toUpperCase()}
               </div>
             )}
             <label className="cursor-pointer flex-1">
-              <div className={`w-full py-2.5 rounded-full border border-emerald-700/60 text-sm font-semibold text-emerald-200 text-center hover:bg-emerald-900/30 transition-colors ${uploadingImage ? "opacity-50" : ""}`}>
+              <div className={`w-full py-2.5 rounded-full border border-[color:var(--sec-line)] text-sm font-semibold text-[color:var(--sec-text-2)] text-center hover:bg-[color:var(--sec-surface-2)] transition-colors ${uploadingImage ? "opacity-50" : ""}`}>
                 {uploadingImage ? "Uploading…" : group.image_url ? "Change Image" : "Add Image"}
               </div>
               <input
@@ -3147,7 +3147,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         </div>
         {/* League Settings */}
         <div className="space-y-3">
-          <div className="text-[10px] uppercase tracking-wider text-emerald-200/50">League Settings</div>
+          <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">League Settings</div>
           {(() => {
             const prefs = leagueSettingsForm ?? group.default_scoring_prefs ?? {};
             const competitionType = (prefs as any).competition_type ?? null;
@@ -3165,15 +3165,15 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             };
 
             return (
-              <div className="space-y-4 rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/60 p-4">
+              <div className="space-y-4 rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] p-4">
                 {/* Default Format */}
                 <div className="space-y-1.5">
-                  <div className="text-[10px] text-emerald-200/50">Default Format</div>
+                  <div className="text-[10px] text-[color:var(--sec-muted)]">Default Format</div>
                   <div className="flex flex-wrap gap-1.5">
                     <button
                       type="button"
                       onClick={() => setPrefs({ competition_type: null, scoring_model: null })}
-                      className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors ${competitionType === null ? "bg-emerald-700 text-white border-emerald-600" : "border-emerald-900/60 text-emerald-200/60 hover:text-emerald-100"}`}
+                      className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors ${competitionType === null ? "bg-[color:var(--sec-primary)] text-white border-[color:var(--sec-line)]" : "border-[color:var(--sec-hair)] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"}`}
                     >
                       None
                     </button>
@@ -3195,7 +3195,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                             },
                           });
                         }}
-                        className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors ${competitionType === t.value ? "bg-emerald-700 text-white border-emerald-600" : "border-emerald-900/60 text-emerald-200/60 hover:text-emerald-100"}`}
+                        className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition-colors ${competitionType === t.value ? "bg-[color:var(--sec-primary)] text-white border-[color:var(--sec-line)]" : "border-[color:var(--sec-hair)] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"}`}
                       >
                         {t.label}
                       </button>
@@ -3205,9 +3205,9 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
                 {/* Scoring model */}
                 <div className="space-y-1.5">
-                  <div className="text-[10px] text-emerald-200/50">Default Scoring</div>
+                  <div className="text-[10px] text-[color:var(--sec-muted)]">Default Scoring</div>
                   {scoringLocked ? (
-                    <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 px-3 py-1.5 text-[11px] text-emerald-200/55">
+                    <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-3 py-1.5 text-[11px] text-[color:var(--sec-muted)]">
                       {scoringModel === "stableford_points" ? "Stableford Points" : "Match Result"} — determined by format
                     </div>
                   ) : (
@@ -3217,7 +3217,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                           key={m}
                           type="button"
                           onClick={() => setPrefs({ scoring_model: m })}
-                          className={`flex-1 py-1.5 rounded-full text-[11px] font-semibold transition-colors ${scoringModel === m ? "bg-emerald-700 text-white" : "border border-emerald-900/60 text-emerald-200/60 hover:text-emerald-100"}`}
+                          className={`flex-1 py-1.5 rounded-full text-[11px] font-semibold transition-colors ${scoringModel === m ? "bg-[color:var(--sec-primary)] text-white" : "border border-[color:var(--sec-hair)] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"}`}
                         >
                           {m === "net" ? "Net" : m === "gross" ? "Gross" : "Stableford"}
                         </button>
@@ -3228,7 +3228,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
                 {/* Points model */}
                 <div className="space-y-1.5">
-                  <div className="text-[10px] text-emerald-200/50">Points System</div>
+                  <div className="text-[10px] text-[color:var(--sec-muted)]">Points System</div>
                   <div className="flex gap-2 flex-wrap">
                     {([
                       { v: null, label: "None" },
@@ -3240,7 +3240,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                         key={label}
                         type="button"
                         onClick={() => setPrefs({ points_model: v })}
-                        className={`px-3 py-1.5 rounded-full text-[11px] font-semibold transition-colors ${(pointsModel ?? null) === v ? "bg-emerald-700 text-white" : "border border-emerald-900/60 text-emerald-200/60 hover:text-emerald-100"}`}
+                        className={`px-3 py-1.5 rounded-full text-[11px] font-semibold transition-colors ${(pointsModel ?? null) === v ? "bg-[color:var(--sec-primary)] text-white" : "border border-[color:var(--sec-hair)] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"}`}
                       >
                         {label}
                       </button>
@@ -3250,14 +3250,14 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
                 {/* Handicap rules */}
                 <div className="space-y-2">
-                  <div className="text-[10px] text-emerald-200/50">Handicap Mode</div>
+                  <div className="text-[10px] text-[color:var(--sec-muted)]">Handicap Mode</div>
                   <select
                     value={handicapMode}
                     onChange={(e) => {
                       const hr = { ...((prefs as any).handicap_rules ?? {}), mode: e.target.value };
                       setPrefs({ handicap_rules: hr });
                     }}
-                    className="w-full bg-[#01100A] border border-emerald-900/60 rounded-lg px-2 py-1.5 text-[12px] text-emerald-100 focus:outline-none [color-scheme:dark]"
+                    className="w-full bg-[color:var(--ciaga-ground)] border border-[color:var(--sec-hair)] rounded-lg px-2 py-1.5 text-[12px] text-[color:var(--sec-text)] focus:outline-none [color-scheme:dark]"
                   >
                     <option value="allowance_pct">Percentage Allowance</option>
                     <option value="compare_against_lowest">Off the Lowest</option>
@@ -3267,7 +3267,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                   {(handicapMode === "allowance_pct" || handicapMode === "compare_against_lowest") && (
                     <div className="flex items-center gap-3">
                       <div className="flex-1 space-y-1.5">
-                        <div className="text-[10px] text-emerald-200/50">Allowance %</div>
+                        <div className="text-[10px] text-[color:var(--sec-muted)]">Allowance %</div>
                         <div className="flex items-center gap-1.5">
                           <input
                             type="number"
@@ -3280,14 +3280,14 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                               setPrefs({ handicap_rules: hr });
                             }}
                             placeholder="100"
-                            className="w-16 bg-[#01100A] border border-emerald-900/60 rounded-lg px-2 py-1 text-[12px] text-emerald-100 text-center"
+                            className="w-16 bg-[color:var(--ciaga-ground)] border border-[color:var(--sec-hair)] rounded-lg px-2 py-1 text-[12px] text-[color:var(--sec-text)] text-center"
                           />
-                          <span className="text-[11px] text-emerald-200/50">%</span>
+                          <span className="text-[11px] text-[color:var(--sec-muted)]">%</span>
                         </div>
                       </div>
                       {handicapMode !== "none" && (
                         <div className="flex-1 space-y-1.5">
-                          <div className="text-[10px] text-emerald-200/50">Max Handicap</div>
+                          <div className="text-[10px] text-[color:var(--sec-muted)]">Max Handicap</div>
                           <input
                             type="number"
                             min={0}
@@ -3298,7 +3298,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                               setPrefs({ handicap_rules: hr });
                             }}
                             placeholder="No limit"
-                            className="w-full bg-[#01100A] border border-emerald-900/60 rounded-lg px-2 py-1 text-[12px] text-emerald-100 text-center"
+                            className="w-full bg-[color:var(--ciaga-ground)] border border-[color:var(--sec-hair)] rounded-lg px-2 py-1 text-[12px] text-[color:var(--sec-text)] text-center"
                           />
                         </div>
                       )}
@@ -3306,7 +3306,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                   )}
                   {handicapMode !== "none" && handicapMode !== "allowance_pct" && handicapMode !== "compare_against_lowest" && (
                     <div className="space-y-1.5">
-                      <div className="text-[10px] text-emerald-200/50">Max Handicap</div>
+                      <div className="text-[10px] text-[color:var(--sec-muted)]">Max Handicap</div>
                       <input
                         type="number"
                         min={0}
@@ -3317,13 +3317,13 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                           setPrefs({ handicap_rules: hr });
                         }}
                         placeholder="No limit"
-                        className="w-full bg-[#01100A] border border-emerald-900/60 rounded-lg px-2 py-1 text-[12px] text-emerald-100 text-center"
+                        className="w-full bg-[color:var(--ciaga-ground)] border border-[color:var(--sec-hair)] rounded-lg px-2 py-1 text-[12px] text-[color:var(--sec-text)] text-center"
                       />
                     </div>
                   )}
                 </div>
 
-                <div className="text-[9px] text-emerald-200/30 text-center">Applies to new events only — past seasons unaffected.</div>
+                <div className="text-[9px] text-[color:var(--sec-muted)] text-center">Applies to new events only — past seasons unaffected.</div>
 
                 <button
                   type="button"
@@ -3348,7 +3348,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                       setSavingLeagueSettings(false);
                     }
                   }}
-                  className="w-full py-2.5 rounded-full bg-emerald-700 text-sm font-semibold text-white disabled:opacity-40"
+                  className="w-full py-2.5 rounded-full bg-[color:var(--sec-primary)] text-sm font-semibold text-white disabled:opacity-40"
                 >
                   {savingLeagueSettings ? "Saving…" : "Save League Settings"}
                 </button>
@@ -3359,7 +3359,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
         {/* Fantasy Picks */}
         <div className="space-y-3">
-          <div className="text-[10px] uppercase tracking-wider text-emerald-200/50">Fantasy Picks</div>
+          <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Fantasy Picks</div>
           {(() => {
             const saved = group.fantasy_config;
             const form = fantasyConfigForm ?? {
@@ -3375,17 +3375,17 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
             };
 
             return (
-              <div className="space-y-4 rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/60 p-4">
+              <div className="space-y-4 rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] p-4">
                 <button
                   type="button"
                   onClick={() => setForm({ enabled: !form.enabled })}
                   className="flex items-center justify-between w-full"
                 >
                   <div className="text-left">
-                    <div className="text-[11px] font-semibold text-emerald-100">Enable Fantasy Picks</div>
-                    <div className="text-[10px] text-emerald-200/40">Points-based picks on group events — no money involved</div>
+                    <div className="text-[11px] font-semibold text-[color:var(--sec-text)]">Enable Fantasy Picks</div>
+                    <div className="text-[10px] text-[color:var(--sec-muted)]">Points-based picks on group events — no money involved</div>
                   </div>
-                  <div className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${form.enabled ? "bg-emerald-600" : "bg-emerald-900/50"}`}>
+                  <div className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${form.enabled ? "bg-[color:var(--sec-primary)]" : "bg-[color:var(--sec-surface)]"}`}>
                     <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.enabled ? "translate-x-5" : ""}`} />
                   </div>
                 </button>
@@ -3394,7 +3394,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                   <>
                     {/* Budget mode */}
                     <div className="space-y-1.5">
-                      <div className="text-[10px] text-emerald-200/50">Budget Mode</div>
+                      <div className="text-[10px] text-[color:var(--sec-muted)]">Budget Mode</div>
                       <div className="flex gap-2">
                         {([
                           { v: "fixed" as const, label: "Fixed" },
@@ -3404,13 +3404,13 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                             key={v}
                             type="button"
                             onClick={() => setForm({ mode: v })}
-                            className={`flex-1 py-1.5 rounded-full text-[11px] font-semibold transition-colors ${form.mode === v ? "bg-emerald-700 text-white" : "border border-emerald-900/60 text-emerald-200/60 hover:text-emerald-100"}`}
+                            className={`flex-1 py-1.5 rounded-full text-[11px] font-semibold transition-colors ${form.mode === v ? "bg-[color:var(--sec-primary)] text-white" : "border border-[color:var(--sec-hair)] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"}`}
                           >
                             {label}
                           </button>
                         ))}
                       </div>
-                      <div className="text-[9px] text-emerald-200/35">
+                      <div className="text-[9px] text-[color:var(--sec-muted)]">
                         {form.mode === "fixed"
                           ? "Players get one budget — when it's gone, it's gone."
                           : "Players can top up anytime. The leaderboard ranks net profit, so top-ups can't game it."}
@@ -3419,7 +3419,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
                     {/* Budget scope */}
                     <div className="space-y-1.5">
-                      <div className="text-[10px] text-emerald-200/50">Budget Scope</div>
+                      <div className="text-[10px] text-[color:var(--sec-muted)]">Budget Scope</div>
                       <div className="flex gap-2">
                         {([
                           { v: "season" as const, label: "Per Season" },
@@ -3429,7 +3429,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                             key={v}
                             type="button"
                             onClick={() => setForm({ budgetScope: v })}
-                            className={`flex-1 py-1.5 rounded-full text-[11px] font-semibold transition-colors ${form.budgetScope === v ? "bg-emerald-700 text-white" : "border border-emerald-900/60 text-emerald-200/60 hover:text-emerald-100"}`}
+                            className={`flex-1 py-1.5 rounded-full text-[11px] font-semibold transition-colors ${form.budgetScope === v ? "bg-[color:var(--sec-primary)] text-white" : "border border-[color:var(--sec-hair)] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"}`}
                           >
                             {label}
                           </button>
@@ -3440,24 +3440,24 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                     {/* Amounts */}
                     <div className="flex items-center gap-3">
                       <div className="flex-1 space-y-1.5">
-                        <div className="text-[10px] text-emerald-200/50">Starting Budget (pts)</div>
+                        <div className="text-[10px] text-[color:var(--sec-muted)]">Starting Budget (pts)</div>
                         <input
                           type="number"
                           min={1}
                           value={form.budgetAmount}
                           onChange={(e) => setForm({ budgetAmount: e.target.value })}
-                          className="w-full bg-[#01100A] border border-emerald-900/60 rounded-lg px-2 py-1 text-[12px] text-emerald-100 text-center"
+                          className="w-full bg-[color:var(--ciaga-ground)] border border-[color:var(--sec-hair)] rounded-lg px-2 py-1 text-[12px] text-[color:var(--sec-text)] text-center"
                         />
                       </div>
                       {form.mode === "topup" && (
                         <div className="flex-1 space-y-1.5">
-                          <div className="text-[10px] text-emerald-200/50">Top-up Increment (pts)</div>
+                          <div className="text-[10px] text-[color:var(--sec-muted)]">Top-up Increment (pts)</div>
                           <input
                             type="number"
                             min={1}
                             value={form.topupIncrement}
                             onChange={(e) => setForm({ topupIncrement: e.target.value })}
-                            className="w-full bg-[#01100A] border border-emerald-900/60 rounded-lg px-2 py-1 text-[12px] text-emerald-100 text-center"
+                            className="w-full bg-[color:var(--ciaga-ground)] border border-[color:var(--sec-hair)] rounded-lg px-2 py-1 text-[12px] text-[color:var(--sec-text)] text-center"
                           />
                         </div>
                       )}
@@ -3466,7 +3466,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                 )}
 
                 {fantasyConfigError && (
-                  <div className="text-[11px] text-red-300 text-center">{fantasyConfigError}</div>
+                  <div className="text-[11px] text-[color:var(--sec-bad)] text-center">{fantasyConfigError}</div>
                 )}
 
                 <button
@@ -3506,7 +3506,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                       setSavingFantasyConfig(false);
                     }
                   }}
-                  className="w-full py-2.5 rounded-full bg-emerald-700 text-sm font-semibold text-white disabled:opacity-40"
+                  className="w-full py-2.5 rounded-full bg-[color:var(--sec-primary)] text-sm font-semibold text-white disabled:opacity-40"
                 >
                   {savingFantasyConfig ? "Saving…" : "Save Fantasy Settings"}
                 </button>
@@ -3517,23 +3517,23 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
 
         {/* Group Charges */}
         <div className="space-y-2">
-          <div className="text-[10px] uppercase tracking-wider text-emerald-200/50">Group Charges</div>
-          <p className="text-[10px] text-emerald-200/40">Charges that appear in the event join drawer. Mandatory charges are auto-applied; optional charges can be selected by the player.</p>
-          <div className="rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-3 space-y-2">
+          <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Group Charges</div>
+          <p className="text-[10px] text-[color:var(--sec-muted)]">Charges that appear in the event join drawer. Mandatory charges are auto-applied; optional charges can be selected by the player.</p>
+          <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-3 space-y-2">
             {groupCharges.length === 0 && !addGroupChargeForm ? (
-              <div className="text-[11px] text-emerald-200/40 text-center py-2">No group charges defined</div>
+              <div className="text-[11px] text-[color:var(--sec-muted)] text-center py-2">No group charges defined</div>
             ) : (
               groupCharges.map((gc: any) => (
-                <div key={gc.id} className="flex items-center justify-between py-1.5 border-b border-emerald-900/20">
+                <div key={gc.id} className="flex items-center justify-between py-1.5 border-b border-[color:var(--sec-hair)]">
                   <div>
-                    <div className="text-sm text-emerald-100">{gc.name}</div>
-                    <div className="text-[10px] text-emerald-200/40">
+                    <div className="text-sm text-[color:var(--sec-text)]">{gc.name}</div>
+                    <div className="text-[10px] text-[color:var(--sec-muted)]">
                       {gc.is_mandatory ? "Mandatory" : "Optional"} · {gc.is_active ? "Active" : "Inactive"}
                       {gc.description && ` · ${gc.description}`}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-emerald-200">£{Number(gc.amount).toFixed(2)}</span>
+                    <span className="text-sm font-semibold text-[color:var(--sec-text-2)]">£{Number(gc.amount).toFixed(2)}</span>
                     <button
                       type="button"
                       onClick={async () => {
@@ -3546,7 +3546,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                         });
                         setGroupCharges((prev) => prev.map((c) => c.id === gc.id ? { ...c, is_active: !c.is_active } : c));
                       }}
-                      className={`text-[10px] px-2 py-0.5 rounded-full border ${gc.is_active ? "border-emerald-700/50 text-emerald-300" : "border-emerald-900/40 text-emerald-200/30"}`}
+                      className={`text-[10px] px-2 py-0.5 rounded-full border ${gc.is_active ? "border-[color:var(--sec-line)] text-[color:var(--sec-good)]" : "border-[color:var(--sec-hair)] text-[color:var(--sec-muted)]"}`}
                     >
                       {gc.is_active ? "Active" : "Inactive"}
                     </button>
@@ -3561,7 +3561,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                         });
                         setGroupCharges((prev) => prev.filter((c) => c.id !== gc.id));
                       }}
-                      className="text-red-400/50 hover:text-red-400 text-sm"
+                      className="text-[color:var(--sec-bad)] hover:text-[color:var(--sec-bad)] text-sm"
                     >✕</button>
                   </div>
                 </div>
@@ -3575,7 +3575,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                   placeholder="Charge name"
                   value={addGroupChargeForm.name}
                   onChange={(e) => setAddGroupChargeForm((f) => f && { ...f, name: e.target.value })}
-                  className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2 text-sm text-emerald-50 focus:outline-none"
+                  className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2 text-sm text-[color:var(--sec-text)] focus:outline-none"
                 />
                 <div className="grid grid-cols-2 gap-2">
                   <input
@@ -3585,12 +3585,12 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                     step="0.01"
                     value={addGroupChargeForm.amount}
                     onChange={(e) => setAddGroupChargeForm((f) => f && { ...f, amount: e.target.value })}
-                    className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2 text-sm text-emerald-50 focus:outline-none"
+                    className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2 text-sm text-[color:var(--sec-text)] focus:outline-none"
                   />
                   <select
                     value={addGroupChargeForm.category}
                     onChange={(e) => setAddGroupChargeForm((f) => f && { ...f, category: e.target.value })}
-                    className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2 text-sm text-emerald-50 focus:outline-none"
+                    className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2 text-sm text-[color:var(--sec-text)] focus:outline-none"
                   >
                     <option value="other">Other</option>
                     <option value="green_fee">Green Fee</option>
@@ -3603,24 +3603,24 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                   placeholder="Description (optional)"
                   value={addGroupChargeForm.description}
                   onChange={(e) => setAddGroupChargeForm((f) => f && { ...f, description: e.target.value })}
-                  className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2 text-sm text-emerald-50 focus:outline-none"
+                  className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2 text-sm text-[color:var(--sec-text)] focus:outline-none"
                 />
                 <button
                   type="button"
                   onClick={() => setAddGroupChargeForm((f) => f && { ...f, is_mandatory: !f.is_mandatory })}
-                  className="flex items-center justify-between w-full py-2 px-2 rounded-lg border border-emerald-900/40 hover:bg-emerald-900/20"
+                  className="flex items-center justify-between w-full py-2 px-2 rounded-lg border border-[color:var(--sec-hair)] hover:bg-[color:var(--sec-surface-2)]"
                 >
                   <div className="text-left">
-                    <div className="text-[11px] font-semibold text-emerald-100">Mandatory</div>
-                    <div className="text-[10px] text-emerald-200/40">Auto-charged to all players when joining an event</div>
+                    <div className="text-[11px] font-semibold text-[color:var(--sec-text)]">Mandatory</div>
+                    <div className="text-[10px] text-[color:var(--sec-muted)]">Auto-charged to all players when joining an event</div>
                   </div>
-                  <div className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${addGroupChargeForm.is_mandatory ? "bg-emerald-600" : "bg-emerald-900/50"}`}>
+                  <div className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${addGroupChargeForm.is_mandatory ? "bg-[color:var(--sec-primary)]" : "bg-[color:var(--sec-surface)]"}`}>
                     <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${addGroupChargeForm.is_mandatory ? "translate-x-5" : ""}`} />
                   </div>
                 </button>
                 <div className="flex gap-2">
                   <button type="button" onClick={() => setAddGroupChargeForm(null)}
-                    className="flex-1 py-1.5 rounded-full border border-emerald-900/60 text-[11px] text-emerald-200/60">
+                    className="flex-1 py-1.5 rounded-full border border-[color:var(--sec-hair)] text-[11px] text-[color:var(--sec-muted)]">
                     Cancel
                   </button>
                   <button
@@ -3650,7 +3650,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                       }
                       setSavingGroupCharge(false);
                     }}
-                    className="flex-1 py-1.5 rounded-full bg-emerald-700 text-[11px] font-semibold text-white disabled:opacity-50"
+                    className="flex-1 py-1.5 rounded-full bg-[color:var(--sec-primary)] text-[11px] font-semibold text-white disabled:opacity-50"
                   >
                     {savingGroupCharge ? "Saving…" : "Add Charge"}
                   </button>
@@ -3660,7 +3660,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
               <button
                 type="button"
                 onClick={() => setAddGroupChargeForm({ name: "", amount: "", category: "other", description: "", is_mandatory: false })}
-                className="w-full py-1.5 rounded-full border border-emerald-700/50 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-900/30"
+                className="w-full py-1.5 rounded-full border border-[color:var(--sec-line)] text-[11px] font-semibold text-[color:var(--sec-text-2)] hover:bg-[color:var(--sec-surface-2)]"
               >
                 + Add Group Charge
               </button>
@@ -3671,7 +3671,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         {/* Danger zone — owner only */}
         {myRole === "owner" && (
           <div className="rounded-2xl border border-red-900/40 bg-red-900/10 p-4 space-y-2">
-            <div className="text-[10px] uppercase tracking-wider text-red-400/70 font-semibold">Danger Zone</div>
+            <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-bad)] font-semibold">Danger Zone</div>
             <button
               type="button"
               onClick={async () => {
@@ -3684,7 +3684,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
                 });
                 router.push("/majors");
               }}
-              className="w-full py-2 rounded-full border border-red-800/60 text-sm text-red-400 hover:bg-red-900/30"
+              className="w-full py-2 rounded-full border border-red-800/60 text-sm text-[color:var(--sec-bad)] hover:bg-red-900/30"
             >
               Delete Group
             </button>
@@ -3692,7 +3692,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
         )}
       </div>
     ) : (
-      <div className="text-sm text-emerald-100/60 text-center py-8">
+      <div className="text-sm text-[color:var(--sec-muted)] text-center py-8">
         Only owners and admins can access settings.
       </div>
     ),
@@ -3708,7 +3708,7 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     <div className="min-h-[100dvh] pb-[env(safe-area-inset-bottom)] max-w-sm mx-auto">
       {/* Header */}
       <div className="px-4 pt-8 flex items-center justify-between mb-3">
-        <button type="button" onClick={() => router.push("/majors")} className="text-[11px] text-emerald-100/70 hover:text-emerald-50">
+        <button type="button" onClick={() => router.push("/majors")} className="text-[11px] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]">
           ← Hub
         </button>
         <div className="w-14" />
@@ -3717,16 +3717,16 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
       {/* Group hero */}
       <div className="px-4 mb-4 flex items-start gap-3">
         {group.image_url ? (
-          <img src={group.image_url} alt={group.name} className="h-14 w-14 rounded-2xl object-cover border border-emerald-700/40 shrink-0" loading="lazy" decoding="async" />
+          <img src={group.image_url} alt={group.name} className="h-14 w-14 rounded-2xl object-cover border border-[color:var(--sec-line)] shrink-0" loading="lazy" decoding="async" />
         ) : (
-          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-emerald-800 to-emerald-950 flex items-center justify-center text-lg font-bold text-emerald-200 shrink-0">
+          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-[color:var(--sec-surface-2)] to-[color:var(--sec-surface)] flex items-center justify-center text-lg font-bold text-[color:var(--sec-text-2)] shrink-0">
             {group.name.slice(0, 2).toUpperCase()}
           </div>
         )}
         <div className="min-w-0 pt-0.5">
-          <h1 className="text-xl font-bold text-[#7CF0BE] leading-tight truncate">{group.name}</h1>
+          <h1 className="text-xl font-bold text-[color:var(--sec-accent)] leading-tight truncate">{group.name}</h1>
           <div className="flex items-center gap-2 flex-wrap mt-1">
-            <span className="text-[10px] text-emerald-200/55 border border-emerald-900/50 rounded-full px-2 py-0.5 capitalize">
+            <span className="text-[10px] text-[color:var(--sec-muted)] border border-[color:var(--sec-hair)] rounded-full px-2 py-0.5 capitalize">
               {group.type.replace(/_/g, " ")}
             </span>
             {group.ciaga_tag !== "none" && (
@@ -3748,8 +3748,8 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
               onClick={() => setTab(t.id)}
               className={`shrink-0 px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
                 tab === t.id
-                  ? "bg-emerald-700 text-white"
-                  : "border border-emerald-900/60 text-emerald-200/70 hover:text-emerald-50"
+                  ? "bg-[color:var(--sec-primary)] text-white"
+                  : "border border-[color:var(--sec-hair)] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
               }`}
             >
               {t.label}
@@ -3775,58 +3775,58 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
               {selectedPlayerForDrawer.avatarUrl ? (
                 <img src={selectedPlayerForDrawer.avatarUrl} alt="" className="h-10 w-10 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
               ) : (
-                <div className="h-10 w-10 rounded-full bg-emerald-900/60 grid place-items-center text-sm font-bold text-emerald-200 shrink-0">
+                <div className="h-10 w-10 rounded-full bg-[color:var(--sec-surface)] grid place-items-center text-sm font-bold text-[color:var(--sec-text-2)] shrink-0">
                   {selectedPlayerForDrawer.name.slice(0, 2).toUpperCase()}
                 </div>
               )}
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-bold text-emerald-50 truncate">{selectedPlayerForDrawer.name}</div>
-                <div className="text-[10px] text-emerald-200/50">
+                <div className="text-sm font-bold text-[color:var(--sec-text)] truncate">{selectedPlayerForDrawer.name}</div>
+                <div className="text-[10px] text-[color:var(--sec-muted)]">
                   {selectedPlayerForDrawer.seasonLabel ?? liveStandingsData?.current_season?.season_label ?? "Current Season"}
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedPlayerForDrawer(null)}
-                className="h-7 w-7 grid place-items-center rounded-full border border-emerald-900/60 text-emerald-200/60 hover:text-emerald-100 shrink-0"
+                className="h-7 w-7 grid place-items-center rounded-full border border-[color:var(--sec-hair)] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)] shrink-0"
               >
                 ✕
               </button>
             </div>
             {playerBreakdownLoading ? (
-              <div className="text-sm text-emerald-100/60 text-center py-4">Loading…</div>
+              <div className="text-sm text-[color:var(--sec-muted)] text-center py-4">Loading…</div>
             ) : playerBreakdownEntries.length === 0 ? (
-              <div className="text-sm text-emerald-100/60 text-center py-4">No events played this season.</div>
+              <div className="text-sm text-[color:var(--sec-muted)] text-center py-4">No events played this season.</div>
             ) : (
               <div className="space-y-2">
-                <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider">Event Breakdown</div>
+                <div className="text-[10px] text-[color:var(--sec-muted)] uppercase tracking-wider">Event Breakdown</div>
                 {playerBreakdownEntries.map((e) => (
-                  <div key={e.event_id} className="flex items-center gap-2 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2">
+                  <div key={e.event_id} className="flex items-center gap-2 rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2">
                     <PositionBadge position={e.position} />
                     <div className="flex-1 min-w-0">
-                      <div className="text-[12px] font-semibold text-emerald-100 truncate">{e.event_name}</div>
+                      <div className="text-[12px] font-semibold text-[color:var(--sec-text)] truncate">{e.event_name}</div>
                       {e.event_date && (
-                        <div className="text-[10px] text-emerald-200/50">
+                        <div className="text-[10px] text-[color:var(--sec-muted)]">
                           {new Date(e.event_date).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })}
                         </div>
                       )}
                     </div>
                     <div className="text-right shrink-0 space-y-0.5">
                       {e.points_earned != null && (
-                        <div className="text-[11px] font-bold text-[#7CF0BE]">{fmtPts(e.points_earned)} pts</div>
+                        <div className="text-[11px] font-bold text-[color:var(--sec-accent)]">{fmtPts(e.points_earned)} pts</div>
                       )}
                       {e.gross_score != null && (
-                        <div className="text-[10px] text-emerald-200/55">{e.gross_score} gross</div>
+                        <div className="text-[10px] text-[color:var(--sec-muted)]">{e.gross_score} gross</div>
                       )}
                       {e.net_score != null && (
-                        <div className="text-[10px] text-emerald-200/40">{e.net_score} net</div>
+                        <div className="text-[10px] text-[color:var(--sec-muted)]">{e.net_score} net</div>
                       )}
                     </div>
                   </div>
                 ))}
-                <div className="flex items-center justify-between pt-1 border-t border-emerald-900/40">
-                  <span className="text-[11px] text-emerald-200/50">{playerBreakdownEntries.length} event{playerBreakdownEntries.length !== 1 ? "s" : ""}</span>
-                  <span className="text-[11px] font-bold text-[#7CF0BE]">
+                <div className="flex items-center justify-between pt-1 border-t border-[color:var(--sec-hair)]">
+                  <span className="text-[11px] text-[color:var(--sec-muted)]">{playerBreakdownEntries.length} event{playerBreakdownEntries.length !== 1 ? "s" : ""}</span>
+                  <span className="text-[11px] font-bold text-[color:var(--sec-accent)]">
                     {fmtPts(playerBreakdownEntries.reduce((sum, e) => sum + (e.points_earned ?? 0), 0))} pts total
                   </span>
                 </div>

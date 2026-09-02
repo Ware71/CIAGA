@@ -115,7 +115,7 @@ export function ProjectionFan({
 
   if (!model) {
     return (
-      <div className="h-[200px] flex items-center justify-center rounded-2xl border border-emerald-900/70 bg-[#042713]/55 text-sm font-semibold text-emerald-100/70">
+      <div className="h-[200px] flex items-center justify-center rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_55%,transparent)] text-sm font-semibold text-[color:var(--sec-muted)]">
         Not enough history yet
       </div>
     );
@@ -188,7 +188,7 @@ export function ProjectionFan({
   return (
     <div className="space-y-2">
       {/* Legend — identity is never colour alone, so every series is named. */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-bold text-emerald-100/60">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-bold text-[color:var(--sec-muted)]">
         <span className="inline-flex items-center gap-1.5">
           <i className="inline-block h-[3px] w-4 rounded-sm" style={{ background: RECORDED }} />
           Recorded
@@ -318,15 +318,15 @@ export function ProjectionFan({
         <div className="mt-1 flex min-h-[18px] items-center gap-3 text-[10px] font-bold tabular-nums">
           {readout ? (
             <>
-              <span className="text-emerald-100/50">{readout.date}</span>
+              <span className="text-[color:var(--sec-muted)]">{readout.date}</span>
               {readout.rows.map(([k, v]) => (
-                <span key={k} className="text-emerald-100/70">
-                  {k} <b className="text-emerald-50">{v}</b>
+                <span key={k} className="text-[color:var(--sec-muted)]">
+                  {k} <b className="text-[color:var(--sec-text)]">{v}</b>
                 </span>
               ))}
             </>
           ) : (
-            <span className="text-emerald-100/35">Drag across the chart to read any date</span>
+            <span className="text-[color:var(--sec-muted)]">Drag across the chart to read any date</span>
           )}
         </div>
       </div>

@@ -65,8 +65,8 @@ function CompetitionCard({ comp }: { comp: EventWithGroup }) {
               isLive
                 ? "bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] border-transparent"
                 : isCompleted
-                ? "bg-emerald-900/60 text-emerald-300 border-emerald-800/50"
-                : "bg-emerald-900/40 text-[color:var(--sec-muted)] border-emerald-900/60"
+                ? "bg-[color:var(--sec-surface)] text-[color:var(--sec-good)] border-[color:var(--sec-hair)]"
+                : "bg-[color:var(--sec-surface)] text-[color:var(--sec-muted)] border-[color:var(--sec-hair)]"
             }`}
           >
             {eventStatusLabel(comp)}
@@ -78,7 +78,7 @@ function CompetitionCard({ comp }: { comp: EventWithGroup }) {
           )}
           {comp.course && (
             <>
-              <span className="text-emerald-800">·</span>
+              <span className="text-[color:var(--ciaga-ground)]">·</span>
               <span className="truncate">{comp.course.name}</span>
             </>
           )}
@@ -129,27 +129,27 @@ function BalanceDrawer({ balance, onClose }: { balance: BalanceData; onClose: ()
   const totalDisplay = balance.total_balance === 0
     ? <span className="text-lg font-bold text-[color:var(--sec-accent)]">Settled</span>
     : balance.has_debt
-    ? <span className="text-lg font-bold text-red-400">owe {fmtSigned(balance.total_balance)}</span>
+    ? <span className="text-lg font-bold text-[color:var(--sec-bad)]">owe {fmtSigned(balance.total_balance)}</span>
     : <span className="text-lg font-bold text-[color:var(--sec-accent)]">{fmtSigned(balance.total_balance)}</span>;
 
   const content = (
     <div className="fixed inset-0 z-[200]" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60" />
       <div
-        className="absolute left-0 right-0 bottom-0 rounded-t-3xl border-t border-emerald-900/70 bg-[#061f12] max-h-[85dvh] overflow-y-auto overscroll-contain"
+        className="absolute left-0 right-0 bottom-0 rounded-t-3xl border-t border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] max-h-[85dvh] overflow-y-auto overscroll-contain"
         style={{ paddingBottom: "env(safe-area-inset-bottom, 16px)" }}
         onClick={(e) => e.stopPropagation()}
         onTouchMove={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
       >
-        <div className="w-10 h-1 rounded-full bg-emerald-800/60 mx-auto mt-3 mb-1" />
+        <div className="w-10 h-1 rounded-full bg-[color:var(--sec-surface-2)] mx-auto mt-3 mb-1" />
         <div className="flex items-center justify-between px-4 py-3">
           <div className="text-sm font-semibold text-[color:var(--sec-text)]">Your Balance</div>
-          <button type="button" onClick={onClose} className="text-[color:var(--sec-muted)] hover:text-emerald-100 text-lg leading-none">✕</button>
+          <button type="button" onClick={onClose} className="text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)] text-lg leading-none">✕</button>
         </div>
 
         {/* Total summary */}
-        <div className="mx-4 mb-3 rounded-2xl border bg-[#0b3b21]/80 p-4 flex items-center justify-between"
+        <div className="mx-4 mb-3 rounded-2xl border bg-[color:color-mix(in_srgb,var(--sec-surface)_80%,transparent)] p-4 flex items-center justify-between"
           style={{ borderColor: balance.has_debt ? "rgba(239,68,68,0.3)" : "rgba(16,185,129,0.3)" }}>
           <div className="text-[11px] uppercase tracking-widest text-[color:var(--sec-muted)]">Total</div>
           {totalDisplay}
@@ -159,18 +159,18 @@ function BalanceDrawer({ balance, onClose }: { balance: BalanceData; onClose: ()
           {/* Debts first */}
           {debtGroups.length > 0 && (
             <div className="space-y-2">
-              <div className="text-[10px] uppercase tracking-widest text-red-400/70 font-semibold">You Owe</div>
+              <div className="text-[10px] uppercase tracking-widest text-[color:var(--sec-bad)] font-semibold">You Owe</div>
               {debtGroups.map((g) => (
                 <div key={g.group_id} className="rounded-2xl border border-red-900/30 bg-red-950/20 p-3 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-semibold text-[color:var(--sec-text)] truncate">{g.group_name}</span>
-                    <span className="text-sm font-bold text-red-400 shrink-0 ml-2">owe {fmtSigned(g.balance)}</span>
+                    <span className="text-sm font-bold text-[color:var(--sec-bad)] shrink-0 ml-2">owe {fmtSigned(g.balance)}</span>
                   </div>
                   {g.by_event.filter((e) => e.net !== 0).map((e, i) => (
                     <div key={e.event_id ?? i} className="pl-1 space-y-1">
                       <div className="flex items-center justify-between text-[11px]">
                         <span className="text-[color:var(--sec-muted)] truncate font-medium">{e.event_name ?? "General"}</span>
-                        <span className={`shrink-0 ml-2 font-semibold ${e.net > 0 ? "text-red-400/80" : "text-emerald-400/80"}`}>
+                        <span className={`shrink-0 ml-2 font-semibold ${e.net > 0 ? "text-[color:var(--sec-bad)]" : "text-[color:var(--sec-good)]"}`}>
                           {fmtSigned(e.net)}
                         </span>
                       </div>
@@ -179,10 +179,10 @@ function BalanceDrawer({ balance, onClose }: { balance: BalanceData; onClose: ()
                           <span className="text-[color:var(--sec-muted)] truncate flex items-center gap-1.5">
                             {tx.note || humaniseType(tx.type)}
                             {isPrize(tx.type) && tx.amount < 0 && (
-                              <span className="text-[9px] font-semibold text-emerald-300 border border-emerald-700/50 rounded-full px-1.5 py-0.5 leading-none">won</span>
+                              <span className="text-[9px] font-semibold text-[color:var(--sec-good)] border border-[color:var(--sec-line)] rounded-full px-1.5 py-0.5 leading-none">won</span>
                             )}
                           </span>
-                          <span className={`shrink-0 ml-2 ${tx.amount > 0 ? "text-red-400/70" : "text-emerald-400/70"}`}>
+                          <span className={`shrink-0 ml-2 ${tx.amount > 0 ? "text-[color:var(--sec-bad)]" : "text-[color:var(--sec-good)]"}`}>
                             {fmtSigned(tx.amount)}
                           </span>
                         </div>
@@ -197,18 +197,18 @@ function BalanceDrawer({ balance, onClose }: { balance: BalanceData; onClose: ()
           {/* Credits */}
           {creditGroups.length > 0 && (
             <div className="space-y-2">
-              <div className="text-[10px] uppercase tracking-widest text-emerald-400/70 font-semibold">In Credit</div>
+              <div className="text-[10px] uppercase tracking-widest text-[color:var(--sec-good)] font-semibold">In Credit</div>
               {creditGroups.map((g) => (
-                <div key={g.group_id} className="rounded-2xl border border-emerald-800/30 bg-emerald-950/20 p-3 space-y-2">
+                <div key={g.group_id} className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] p-3 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-semibold text-[color:var(--sec-text)] truncate">{g.group_name}</span>
-                    <span className="text-sm font-bold text-emerald-400 shrink-0 ml-2">{fmtSigned(g.balance)}</span>
+                    <span className="text-sm font-bold text-[color:var(--sec-good)] shrink-0 ml-2">{fmtSigned(g.balance)}</span>
                   </div>
                   {g.by_event.filter((e) => e.net !== 0).map((e, i) => (
                     <div key={e.event_id ?? i} className="pl-1 space-y-1">
                       <div className="flex items-center justify-between text-[11px]">
                         <span className="text-[color:var(--sec-muted)] truncate font-medium">{e.event_name ?? "General"}</span>
-                        <span className={`shrink-0 ml-2 font-semibold ${e.net > 0 ? "text-red-400/80" : "text-emerald-400/80"}`}>
+                        <span className={`shrink-0 ml-2 font-semibold ${e.net > 0 ? "text-[color:var(--sec-bad)]" : "text-[color:var(--sec-good)]"}`}>
                           {fmtSigned(e.net)}
                         </span>
                       </div>
@@ -217,10 +217,10 @@ function BalanceDrawer({ balance, onClose }: { balance: BalanceData; onClose: ()
                           <span className="text-[color:var(--sec-muted)] truncate flex items-center gap-1.5">
                             {tx.note || humaniseType(tx.type)}
                             {isPrize(tx.type) && tx.amount < 0 && (
-                              <span className="text-[9px] font-semibold text-emerald-300 border border-emerald-700/50 rounded-full px-1.5 py-0.5 leading-none">won</span>
+                              <span className="text-[9px] font-semibold text-[color:var(--sec-good)] border border-[color:var(--sec-line)] rounded-full px-1.5 py-0.5 leading-none">won</span>
                             )}
                           </span>
-                          <span className={`shrink-0 ml-2 ${tx.amount > 0 ? "text-red-400/70" : "text-emerald-400/70"}`}>
+                          <span className={`shrink-0 ml-2 ${tx.amount > 0 ? "text-[color:var(--sec-bad)]" : "text-[color:var(--sec-good)]"}`}>
                             {fmtSigned(tx.amount)}
                           </span>
                         </div>
@@ -233,7 +233,7 @@ function BalanceDrawer({ balance, onClose }: { balance: BalanceData; onClose: ()
           )}
 
           {balance.groups.length === 0 && (
-            <div className="text-xs text-emerald-200/40 text-center py-6">No balance activity yet</div>
+            <div className="text-xs text-[color:var(--sec-muted)] text-center py-6">No balance activity yet</div>
           )}
         </div>
       </div>
@@ -350,19 +350,19 @@ function AllTimeVsSeasonSection({ hub }: { hub: MajorHubSummary }) {
     { label: "Earnings", season: hub.season_earnings,       alltime: hub.alltime_earnings,       isCurrency: true  },
   ];
   return (
-    <div className="mx-4 rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/60 overflow-hidden">
+    <div className="mx-4 rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] overflow-hidden">
       <div className="grid grid-cols-3 text-[10px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] px-3 pt-3 pb-1">
         <div />
-        <div className="text-center text-emerald-300/80 font-semibold">Season</div>
+        <div className="text-center text-[color:var(--sec-muted)] font-semibold">Season</div>
         <div className="text-center">All Time</div>
       </div>
       {rows.map((row) => (
-        <div key={row.label} className="grid grid-cols-3 px-3 py-2 border-t border-emerald-900/40">
+        <div key={row.label} className="grid grid-cols-3 px-3 py-2 border-t border-[color:var(--sec-hair)]">
           <div className="text-[11px] text-[color:var(--sec-muted)] self-center">{row.label}</div>
           <div className="text-center text-sm font-bold text-[color:var(--sec-accent)]">
             {row.isCurrency ? fmt(row.season) : (row.season || "—")}
           </div>
-          <div className="text-center text-sm font-semibold text-emerald-100/80">
+          <div className="text-center text-sm font-semibold text-[color:var(--sec-muted)]">
             {row.isCurrency ? fmt(row.alltime) : (row.alltime || "—")}
           </div>
         </div>
@@ -381,20 +381,20 @@ function GroupStatRow({ stat }: { stat: MajorGroupSeasonStats }) {
     { label: "Points",   value: stat.season_points ? fmtPts(stat.season_points) : "—" },
   ];
   return (
-    <div className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/60 p-3 space-y-2.5">
+    <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] p-3 space-y-2.5">
       <div className="flex items-center gap-2">
         {stat.group_image_url ? (
           <img             src={stat.group_image_url}
             alt={stat.group_name}
-            className="h-6 w-6 rounded-full object-cover border border-emerald-700/40 shrink-0" loading="lazy" decoding="async" />
+            className="h-6 w-6 rounded-full object-cover border border-[color:var(--sec-line)] shrink-0" loading="lazy" decoding="async" />
         ) : (
-          <div className="h-6 w-6 rounded-full bg-gradient-to-br from-emerald-800 to-emerald-950 flex items-center justify-center text-[9px] font-bold text-emerald-200 shrink-0">
+          <div className="h-6 w-6 rounded-full bg-gradient-to-br from-[color:var(--sec-surface-2)] to-[color:var(--sec-surface)] flex items-center justify-center text-[9px] font-bold text-[color:var(--sec-text-2)] shrink-0">
             {stat.group_name.slice(0, 2).toUpperCase()}
           </div>
         )}
         <span className="text-xs font-semibold text-[color:var(--sec-text)] truncate">{stat.group_name}</span>
         {stat.season_rank != null && (
-          <span className="ml-auto shrink-0 text-[9px] text-emerald-300/60 border border-emerald-800/50 rounded-full px-1.5 py-0.5">
+          <span className="ml-auto shrink-0 text-[9px] text-[color:var(--sec-muted)] border border-[color:var(--sec-hair)] rounded-full px-1.5 py-0.5">
             #{stat.season_rank}
           </span>
         )}
@@ -416,19 +416,19 @@ function SeasonStatsDrawer({ hub, onClose }: { hub: MajorHubSummary; onClose: ()
     <div className="fixed inset-0 z-[200]" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60" />
       <div
-        className="absolute left-0 right-0 bottom-0 rounded-t-3xl border-t border-emerald-900/70 bg-[#061f12] max-h-[85dvh] overflow-y-auto overscroll-contain"
+        className="absolute left-0 right-0 bottom-0 rounded-t-3xl border-t border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] max-h-[85dvh] overflow-y-auto overscroll-contain"
         style={{ paddingBottom: "env(safe-area-inset-bottom, 16px)" }}
         onClick={(e) => e.stopPropagation()}
         onTouchMove={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
       >
-        <div className="w-10 h-1 rounded-full bg-emerald-800/60 mx-auto mt-3 mb-1" />
+        <div className="w-10 h-1 rounded-full bg-[color:var(--sec-surface-2)] mx-auto mt-3 mb-1" />
         <div className="flex items-center justify-between px-4 py-3">
           <div className="text-sm font-semibold text-[color:var(--sec-text)]">Your Stats</div>
           <button
             type="button"
             onClick={onClose}
-            className="text-[color:var(--sec-muted)] hover:text-emerald-100 text-lg leading-none"
+            className="text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)] text-lg leading-none"
           >
             ✕
           </button>
@@ -436,14 +436,14 @@ function SeasonStatsDrawer({ hub, onClose }: { hub: MajorHubSummary; onClose: ()
 
         <AllTimeVsSeasonSection hub={hub} />
 
-        <div className="mx-4 border-t border-emerald-900/50 my-3" />
+        <div className="mx-4 border-t border-[color:var(--sec-hair)] my-3" />
 
         <div className="px-4 pb-4 space-y-2">
           <div className="text-[10px] uppercase tracking-[0.18em] text-[color:color-mix(in_srgb,var(--sec-accent)_75%,transparent)] mb-2">
             By Group · Season
           </div>
           {hub.group_stats.length === 0 ? (
-            <div className="text-xs text-emerald-200/40 text-center py-4">Join a group to see per-group stats</div>
+            <div className="text-xs text-[color:var(--sec-muted)] text-center py-4">Join a group to see per-group stats</div>
           ) : (
             hub.group_stats.map((g) => <GroupStatRow key={g.group_id} stat={g} />)
           )}
@@ -495,13 +495,13 @@ export function MajorsBalance() {
         <div className="relative">
           <PurseIcon size={24} className="text-[color:var(--sec-accent)]" />
           {balanceData?.has_debt && (
-            <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-red-500 border border-[#042713]" />
+            <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-red-500 border border-[color:var(--ciaga-ground)]" />
           )}
         </div>
         {balanceData != null && (
           <span
             className={`text-[11px] font-semibold ${
-              balanceData.has_debt ? "text-red-400" : "text-emerald-300/70"
+              balanceData.has_debt ? "text-[color:var(--sec-bad)]" : "text-[color:var(--sec-muted)]"
             }`}
           >
             {balanceData.total_balance === 0 ? "£0" : fmtSigned(balanceData.total_balance)}

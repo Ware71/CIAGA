@@ -39,7 +39,7 @@ async function resolveFollowingProfiles(ids: string[]): Promise<ProfileLite[]> {
 function Avatar({ name }: { name: string | null }) {
   const initials = name?.slice(0, 2).toUpperCase() ?? "??";
   return (
-    <div className="h-8 w-8 rounded-full bg-emerald-900/60 flex items-center justify-center text-[11px] font-bold text-emerald-200 shrink-0">
+    <div className="h-8 w-8 rounded-full bg-[color:var(--sec-surface)] flex items-center justify-center text-[11px] font-bold text-[color:var(--sec-text-2)] shrink-0">
       {initials}
     </div>
   );
@@ -58,16 +58,16 @@ function ProfileRow({
     <div className="flex items-center gap-3 px-3 py-2.5">
       <Avatar name={profile.name} />
       <div className="flex-1 min-w-0">
-        <div className="text-sm text-emerald-50 truncate">{profile.name ?? "Unknown"}</div>
+        <div className="text-sm text-[color:var(--sec-text)] truncate">{profile.name ?? "Unknown"}</div>
         {profile.email && (
-          <div className="text-[11px] text-emerald-200/45 truncate">{profile.email}</div>
+          <div className="text-[11px] text-[color:var(--sec-muted)] truncate">{profile.email}</div>
         )}
       </div>
       <button
         type="button"
         onClick={onInvite}
         disabled={inviting}
-        className="shrink-0 text-[11px] font-semibold text-emerald-300 border border-emerald-700/50 rounded-full px-3 py-1 hover:bg-emerald-900/40 disabled:opacity-50"
+        className="shrink-0 text-[11px] font-semibold text-[color:var(--sec-good)] border border-[color:var(--sec-line)] rounded-full px-3 py-1 hover:bg-[color:var(--sec-surface-2)] disabled:opacity-50"
       >
         {inviting ? "…" : "Invite"}
       </button>
@@ -195,11 +195,11 @@ export function InvitePlayerSheet({ groupId, onInvite, title, excludedProfileIds
     <div className="space-y-3">
       {onClose && (
         <div className="flex items-center justify-between">
-          <div className="text-sm font-semibold text-emerald-50">{title ?? "Invite Members"}</div>
+          <div className="text-sm font-semibold text-[color:var(--sec-text)]">{title ?? "Invite Members"}</div>
           <button
             type="button"
             onClick={onClose}
-            className="text-[11px] text-emerald-200/55 hover:text-emerald-200"
+            className="text-[11px] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text-2)]"
           >
             Done
           </button>
@@ -212,21 +212,21 @@ export function InvitePlayerSheet({ groupId, onInvite, title, excludedProfileIds
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         autoFocus
-        className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
+        className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-4 py-2.5 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none focus:border-[color:var(--sec-line)]"
       />
 
       {/* Following list (shown when no search, or filtered) */}
       {!showSearch && (
         <>
           {loadingFollowing && (
-            <div className="text-[11px] text-emerald-200/40 text-center py-2">Loading…</div>
+            <div className="text-[11px] text-[color:var(--sec-muted)] text-center py-2">Loading…</div>
           )}
           {!loadingFollowing && showFollowing && (
             <div>
-              <div className="text-[10px] uppercase tracking-wider text-emerald-200/40 font-semibold mb-1.5">
+              <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)] font-semibold mb-1.5">
                 Following
               </div>
-              <div className="rounded-xl border border-emerald-900/50 bg-[#01100A] overflow-hidden divide-y divide-emerald-900/40">
+              <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] overflow-hidden divide-y divide-[color:var(--sec-hair)]">
                 {filteredFollowing.map((p) => (
                   <ProfileRow
                     key={p.id}
@@ -239,7 +239,7 @@ export function InvitePlayerSheet({ groupId, onInvite, title, excludedProfileIds
             </div>
           )}
           {!loadingFollowing && !showFollowing && (
-            <div className="text-[11px] text-emerald-200/40 text-center py-2">
+            <div className="text-[11px] text-[color:var(--sec-muted)] text-center py-2">
               Search for players to invite
             </div>
           )}
@@ -250,10 +250,10 @@ export function InvitePlayerSheet({ groupId, onInvite, title, excludedProfileIds
       {showSearch && (
         <>
           {searching && (
-            <div className="text-[11px] text-emerald-200/40 text-center py-2">Searching…</div>
+            <div className="text-[11px] text-[color:var(--sec-muted)] text-center py-2">Searching…</div>
           )}
           {!searching && filteredSearch.length > 0 && (
-            <div className="rounded-xl border border-emerald-900/50 bg-[#01100A] overflow-hidden divide-y divide-emerald-900/40">
+            <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] overflow-hidden divide-y divide-[color:var(--sec-hair)]">
               {filteredSearch.map((p) => (
                 <ProfileRow
                   key={p.id}
@@ -265,7 +265,7 @@ export function InvitePlayerSheet({ groupId, onInvite, title, excludedProfileIds
             </div>
           )}
           {noResults && (
-            <div className="text-[11px] text-emerald-200/40 text-center py-2">No players found</div>
+            <div className="text-[11px] text-[color:var(--sec-muted)] text-center py-2">No players found</div>
           )}
         </>
       )}
@@ -273,20 +273,20 @@ export function InvitePlayerSheet({ groupId, onInvite, title, excludedProfileIds
       {/* Invited confirmation */}
       {invited.size > 0 && (
         <div className="space-y-1.5">
-          <div className="text-[10px] uppercase tracking-wider text-emerald-200/45">Invited</div>
+          <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Invited</div>
           {[...following, ...searchResults]
             .filter((p, i, arr) => arr.findIndex((x) => x.id === p.id) === i)
             .filter((p) => invited.has(p.id))
             .map((p) => (
               <div
                 key={p.id}
-                className="flex items-center gap-3 rounded-xl border border-emerald-700/30 bg-emerald-900/20 px-3 py-2"
+                className="flex items-center gap-3 rounded-xl border border-[color:var(--sec-line)] bg-[color:var(--sec-surface)] px-3 py-2"
               >
                 <Avatar name={p.name} />
-                <span className="flex-1 text-sm text-emerald-200/80 truncate">
+                <span className="flex-1 text-sm text-[color:var(--sec-muted)] truncate">
                   {p.name ?? "Unknown"}
                 </span>
-                <span className="text-[10px] text-emerald-400/70">Invited ✓</span>
+                <span className="text-[10px] text-[color:var(--sec-good)]">Invited ✓</span>
               </div>
             ))}
         </div>

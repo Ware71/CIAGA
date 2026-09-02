@@ -201,33 +201,33 @@ export default function CommentSection({
         {error ? <div className="text-xs font-semibold text-red-200">{error}</div> : null}
 
         {isLoading && comments.length === 0 ? (
-          <div className="text-sm font-semibold text-emerald-100/70">Loading comments…</div>
+          <div className="text-sm font-semibold text-[color:var(--sec-muted)]">Loading comments…</div>
         ) : comments.length === 0 ? (
-          <div className="text-sm font-semibold text-emerald-100/70">No comments yet.</div>
+          <div className="text-sm font-semibold text-[color:var(--sec-muted)]">No comments yet.</div>
         ) : (
           comments.map((c) => (
-            <div key={c.id} className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/60 p-3">
+            <div key={c.id} className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] p-3">
               <div className="flex items-center gap-2">
                 {c.author?.avatar_url ? (
                   <img
                     src={c.author.avatar_url}
                     alt=""
-                    className="h-7 w-7 rounded-full object-cover border border-emerald-900/60"
+                    className="h-7 w-7 rounded-full object-cover border border-[color:var(--sec-hair)]"
                     loading="lazy"
                   />
                 ) : (
-                  <div className="h-7 w-7 rounded-full border border-emerald-900/60 bg-emerald-950/20" />
+                  <div className="h-7 w-7 rounded-full border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)]" />
                 )}
                 <div className="min-w-0">
-                  <div className="text-xs font-extrabold text-emerald-50 truncate">{displayAuthorName(c)}</div>
-                  <div className="text-[10px] font-semibold text-emerald-100/55">{formatWhen(c.created_at)}</div>
+                  <div className="text-xs font-extrabold text-[color:var(--sec-text)] truncate">{displayAuthorName(c)}</div>
+                  <div className="text-[10px] font-semibold text-[color:var(--sec-muted)]">{formatWhen(c.created_at)}</div>
                 </div>
 
                 <div className="ml-auto flex items-center gap-2">
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="text-emerald-100 hover:bg-emerald-900/30"
+                    className="text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
                     onClick={(e) => {
                       e.stopPropagation();
                       void likeComment(c.id);
@@ -240,7 +240,7 @@ export default function CommentSection({
                 </div>
               </div>
 
-              <div className="mt-2 text-sm font-semibold text-emerald-100/90 whitespace-pre-wrap">
+              <div className="mt-2 text-sm font-semibold text-[color:var(--sec-muted)] whitespace-pre-wrap">
                 {renderWithMentions(c.body, c.mentions)}
               </div>
             </div>
@@ -248,8 +248,8 @@ export default function CommentSection({
         )}
       </div>
 
-      <div className="border-t border-emerald-900/70 p-4 space-y-2">
-        <div className="text-[11px] font-semibold text-emerald-100/55">{commentCountLabel}</div>
+      <div className="border-t border-[color:var(--sec-hair)] p-4 space-y-2">
+        <div className="text-[11px] font-semibold text-[color:var(--sec-muted)]">{commentCountLabel}</div>
         <MentionInput
           value={body}
           onChange={setBody}
@@ -257,7 +257,7 @@ export default function CommentSection({
           onMentionsChange={setMentions}
           dropdownDirection={mentionDirection}
           placeholder="Write a comment… use @ to mention"
-          className="w-full min-h-[72px] rounded-md border border-emerald-900/60 bg-emerald-950/10 px-3 py-2 text-base text-emerald-50 outline-none focus:ring-2 focus:ring-emerald-600/40"
+          className="w-full min-h-[72px] rounded-md border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-3 py-2 text-base text-[color:var(--sec-text)] outline-none focus:ring-2 focus:ring-[color:var(--sec-accent)]"
         />
         <div className="flex justify-end">
           <Button
@@ -267,7 +267,7 @@ export default function CommentSection({
               void send();
             }}
             disabled={isSending || !body.trim()}
-            className="bg-emerald-900/40 text-emerald-50 hover:bg-emerald-900/55"
+            className="bg-[color:var(--sec-surface)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
           >
             {isSending ? "Sending…" : "Comment"}
           </Button>

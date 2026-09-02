@@ -113,8 +113,8 @@ function NotificationCard({
     <div
       className={`rounded-2xl border px-3 py-3 transition-colors ${
         n.read
-          ? "border-emerald-900/50 bg-emerald-950/30"
-          : "border-emerald-500/40 bg-emerald-900/30"
+          ? "border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)]"
+          : "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)]"
       }`}
     >
       <div className="flex items-start gap-3">
@@ -123,7 +123,7 @@ function NotificationCard({
         )}
         <div
           className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ${
-            n.read ? "bg-emerald-900/50 text-emerald-200/70" : "bg-emerald-400/20 text-emerald-200"
+            n.read ? "bg-[color:var(--sec-surface)] text-[color:var(--sec-muted)]" : "bg-emerald-400/20 text-[color:var(--sec-text-2)]"
           }`}
         >
           <Icon size={18} />
@@ -135,19 +135,19 @@ function NotificationCard({
           className="min-w-0 flex-1 text-left"
         >
           <div className="flex items-center justify-between gap-2">
-            <div className="truncate text-sm font-extrabold text-emerald-50">{rendered.title}</div>
-            <div className="shrink-0 text-[10px] font-semibold text-emerald-200/50">
+            <div className="truncate text-sm font-extrabold text-[color:var(--sec-text)]">{rendered.title}</div>
+            <div className="shrink-0 text-[10px] font-semibold text-[color:var(--sec-muted)]">
               {relativeTime(n.updated_at ?? n.created_at)}
             </div>
           </div>
-          <div className="mt-0.5 text-xs font-medium text-emerald-100/80">{rendered.body}</div>
+          <div className="mt-0.5 text-xs font-medium text-[color:var(--sec-muted)]">{rendered.body}</div>
         </button>
 
         {groupable && (
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
-            className="shrink-0 rounded-full p-1 text-emerald-200/60 hover:bg-emerald-900/40 hover:text-emerald-100"
+            className="shrink-0 rounded-full p-1 text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)] hover:text-[color:var(--sec-text)]"
             aria-label={expanded ? "Collapse" : "Expand"}
           >
             <ChevronDown
@@ -159,10 +159,10 @@ function NotificationCard({
       </div>
 
       {groupable && expanded && (
-        <div className="mt-2 space-y-1 border-t border-emerald-900/50 pl-12 pt-2">
+        <div className="mt-2 space-y-1 border-t border-[color:var(--sec-hair)] pl-12 pt-2">
           {actors.map((a) => (
-            <div key={a.profile_id} className="flex items-center gap-2 text-xs text-emerald-100/80">
-              <Users size={12} className="text-emerald-300/60" />
+            <div key={a.profile_id} className="flex items-center gap-2 text-xs text-[color:var(--sec-muted)]">
+              <Users size={12} className="text-[color:var(--sec-muted)]" />
               <span className="font-semibold">{a.name}</span>
               {a.course_record && (
                 <span className="text-amber-300">
@@ -174,7 +174,7 @@ function NotificationCard({
           {/* Payloads cap stored actors, so a busy group holds more people than
               it lists. Say so rather than silently showing a partial list. */}
           {hiddenActorCount > 0 && (
-            <div className="pl-5 text-xs italic text-emerald-100/50">
+            <div className="pl-5 text-xs italic text-[color:var(--sec-muted)]">
               and {hiddenActorCount} more
             </div>
           )}
@@ -236,14 +236,14 @@ export default function NotificationCenter({
         >
           <div className="absolute inset-0 bg-black/60" />
           <motion.div
-            className="relative flex max-h-[82vh] w-full flex-col rounded-t-3xl border-t border-emerald-900/60 bg-[#071c10] px-4 pb-8 pt-4"
+            className="relative flex max-h-[82vh] w-full flex-col rounded-t-3xl border-t border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] px-4 pb-8 pt-4"
             initial={{ y: "100%" }}
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
             transition={{ type: "spring", damping: 30, stiffness: 320 }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-emerald-800/60" />
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-[color:var(--sec-surface-2)]" />
 
             <div className="mb-3 flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2">
@@ -251,13 +251,13 @@ export default function NotificationCenter({
                   <button
                     type="button"
                     onClick={() => setPane("list")}
-                    className="-ml-1 shrink-0 rounded-full p-1 text-emerald-200/70 hover:bg-emerald-900/40 hover:text-emerald-100"
+                    className="-ml-1 shrink-0 rounded-full p-1 text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)] hover:text-[color:var(--sec-text)]"
                     aria-label="Back to notifications"
                   >
                     <ChevronLeft size={18} />
                   </button>
                 )}
-                <div className="truncate text-base font-extrabold text-[#f5e6b0]">
+                <div className="truncate text-base font-extrabold text-[color:var(--sec-accent)]">
                   {pane === "settings" ? "Notification settings" : "Notifications"}
                 </div>
               </div>
@@ -267,7 +267,7 @@ export default function NotificationCenter({
                   <button
                     type="button"
                     onClick={() => void markAllRead()}
-                    className="text-[11px] font-semibold text-emerald-300/80 hover:text-emerald-200"
+                    className="text-[11px] font-semibold text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text-2)]"
                   >
                     Mark all read
                   </button>
@@ -276,7 +276,7 @@ export default function NotificationCenter({
                   <button
                     type="button"
                     onClick={() => setPane("settings")}
-                    className="rounded-full p-1.5 text-emerald-200/70 hover:bg-emerald-900/40 hover:text-emerald-100"
+                    className="rounded-full p-1.5 text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)] hover:text-[color:var(--sec-text)]"
                     aria-label="Notification settings"
                     title="Notification settings"
                   >
@@ -291,12 +291,12 @@ export default function NotificationCenter({
             ) : (
               <>
                 {/* All / Unread toggle */}
-                <div className="mb-3 inline-flex gap-1 rounded-full bg-emerald-950/50 p-1 text-xs font-semibold">
+                <div className="mb-3 inline-flex gap-1 rounded-full bg-[color:var(--sec-surface)] p-1 text-xs font-semibold">
                   <button
                     type="button"
                     onClick={() => setTab("all")}
                     className={`rounded-full px-3 py-1 ${
-                      tab === "all" ? "bg-emerald-400 text-emerald-950" : "text-emerald-200/70"
+                      tab === "all" ? "bg-emerald-400 text-[color:var(--ciaga-ground)]" : "text-[color:var(--sec-muted)]"
                     }`}
                   >
                     All
@@ -305,7 +305,7 @@ export default function NotificationCenter({
                     type="button"
                     onClick={() => setTab("unread")}
                     className={`rounded-full px-3 py-1 ${
-                      tab === "unread" ? "bg-emerald-400 text-emerald-950" : "text-emerald-200/70"
+                      tab === "unread" ? "bg-emerald-400 text-[color:var(--ciaga-ground)]" : "text-[color:var(--sec-muted)]"
                     }`}
                   >
                     Unread{unreadCount > 0 ? ` (${unreadCount})` : ""}
@@ -335,11 +335,11 @@ export default function NotificationCenter({
                   )}
 
                   {loading && visible.length === 0 ? (
-                    <div className="py-10 text-center text-sm font-semibold text-emerald-100/60">
+                    <div className="py-10 text-center text-sm font-semibold text-[color:var(--sec-muted)]">
                       Loading…
                     </div>
                   ) : visible.length === 0 ? (
-                    <div className="py-10 text-center text-sm font-semibold text-emerald-100/60">
+                    <div className="py-10 text-center text-sm font-semibold text-[color:var(--sec-muted)]">
                       {tab === "unread" ? "No unread notifications" : "No notifications yet"}
                     </div>
                   ) : (

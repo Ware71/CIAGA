@@ -64,7 +64,7 @@ function AvatarCircle({
     return <img src={profile.avatar_url} alt="" className={`${cls} rounded-full object-cover shrink-0`} loading="lazy" decoding="async" />;
   }
   return (
-    <div className={`${cls} rounded-full bg-emerald-900/60 grid place-items-center font-bold text-emerald-200 shrink-0`}>
+    <div className={`${cls} rounded-full bg-[color:var(--sec-surface)] grid place-items-center font-bold text-[color:var(--sec-text-2)] shrink-0`}>
       {profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
     </div>
   );
@@ -82,18 +82,18 @@ function RevealRow({ row, springProps, scoringModel }: { row: Row; springProps: 
       transition={springProps}
       className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${
         isWinner
-          ? "border-[#7CF0BE]/60 bg-[#7CF0BE]/10 shadow-lg shadow-[#7CF0BE]/10"
-          : "border-emerald-900/50 bg-[#0b3b21]/70"
+          ? "border-[color:color-mix(in_srgb,var(--sec-accent)_60%,transparent)] bg-[color:color-mix(in_srgb,var(--sec-accent)_10%,transparent)] shadow-lg shadow-[color:color-mix(in_srgb,var(--sec-accent)_10%,transparent)]"
+          : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)]"
       }`}
     >
-      <span className={`w-7 text-center font-extrabold ${isWinner ? "text-[#7CF0BE] text-base" : "text-xs text-[#7CF0BE]/70"}`}>
+      <span className={`w-7 text-center font-extrabold ${isWinner ? "text-[color:var(--sec-accent)] text-base" : "text-xs text-[color:color-mix(in_srgb,var(--sec-accent)_70%,transparent)]"}`}>
         {isWinner ? "🏆" : pos}
       </span>
       <AvatarCircle profile={profile} size="md" />
-      <span className={`flex-1 font-semibold truncate ${isWinner ? "text-[#7CF0BE] text-base" : "text-sm text-emerald-50"}`}>
+      <span className={`flex-1 font-semibold truncate ${isWinner ? "text-[color:var(--sec-accent)] text-base" : "text-sm text-[color:var(--sec-text)]"}`}>
         {profile?.name ?? "Unknown"}
       </span>
-      <span className={`font-extrabold shrink-0 ${isWinner ? "text-[#7CF0BE] text-base" : "text-xs text-[#7CF0BE]"}`}>
+      <span className={`font-extrabold shrink-0 ${isWinner ? "text-[color:var(--sec-accent)] text-base" : "text-xs text-[color:var(--sec-accent)]"}`}>
         {score}
       </span>
     </motion.div>
@@ -119,25 +119,25 @@ function SuspenseCard({ row, delay, scoringModel }: { row: Row; delay: number; s
       transition={{ type: "spring", stiffness: 260, damping: 22 }}
       className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${
         isWinner && revealed
-          ? "border-[#7CF0BE]/60 bg-[#7CF0BE]/10 shadow-lg shadow-[#7CF0BE]/10"
-          : "border-emerald-900/50 bg-[#0b3b21]/70"
+          ? "border-[color:color-mix(in_srgb,var(--sec-accent)_60%,transparent)] bg-[color:color-mix(in_srgb,var(--sec-accent)_10%,transparent)] shadow-lg shadow-[color:color-mix(in_srgb,var(--sec-accent)_10%,transparent)]"
+          : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)]"
       }`}
     >
-      <span className={`w-7 text-center font-extrabold ${isWinner && revealed ? "text-[#7CF0BE] text-base" : "text-xs text-[#7CF0BE]/70"}`}>
+      <span className={`w-7 text-center font-extrabold ${isWinner && revealed ? "text-[color:var(--sec-accent)] text-base" : "text-xs text-[color:color-mix(in_srgb,var(--sec-accent)_70%,transparent)]"}`}>
         {isWinner && revealed ? "🏆" : pos}
       </span>
       <AnimatePresence mode="wait">
         {!revealed ? (
           <motion.div key="hidden" initial={{ rotateY: 0 }} exit={{ rotateY: 90 }} transition={{ duration: 0.25 }} className="flex flex-1 items-center gap-3">
-            <div className="h-8 w-8 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200/40 shrink-0">?</div>
-            <span className="flex-1 font-semibold text-sm text-emerald-200/40 tracking-widest">— — —</span>
-            <span className="font-extrabold text-xs text-[#7CF0BE]/30 shrink-0">??</span>
+            <div className="h-8 w-8 rounded-full bg-[color:var(--sec-surface)] grid place-items-center text-[10px] font-bold text-[color:var(--sec-muted)] shrink-0">?</div>
+            <span className="flex-1 font-semibold text-sm text-[color:var(--sec-muted)] tracking-widest">— — —</span>
+            <span className="font-extrabold text-xs text-[color:color-mix(in_srgb,var(--sec-accent)_30%,transparent)] shrink-0">??</span>
           </motion.div>
         ) : (
           <motion.div key="revealed" initial={{ rotateY: -90 }} animate={{ rotateY: 0 }} transition={{ duration: 0.35, type: "spring", stiffness: 300, damping: 24 }} className="flex flex-1 items-center gap-3">
             <AvatarCircle profile={profile} size="md" />
-            <span className={`flex-1 font-semibold truncate ${isWinner ? "text-[#7CF0BE] text-base" : "text-sm text-emerald-50"}`}>{profile?.name ?? "Unknown"}</span>
-            <span className={`font-extrabold shrink-0 ${isWinner ? "text-[#7CF0BE] text-base" : "text-xs text-[#7CF0BE]"}`}>{score}</span>
+            <span className={`flex-1 font-semibold truncate ${isWinner ? "text-[color:var(--sec-accent)] text-base" : "text-sm text-[color:var(--sec-text)]"}`}>{profile?.name ?? "Unknown"}</span>
+            <span className={`font-extrabold shrink-0 ${isWinner ? "text-[color:var(--sec-accent)] text-base" : "text-xs text-[color:var(--sec-accent)]"}`}>{score}</span>
           </motion.div>
         )}
       </AnimatePresence>
@@ -152,16 +152,16 @@ function ScrollRow({ row, scoringModel }: { row: Row; scoringModel?: string }) {
   const isWinner = pos === 1;
   return (
     <div className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${
-      isWinner ? "border-[#7CF0BE]/60 bg-[#7CF0BE]/10" : "border-emerald-900/50 bg-[#0b3b21]/70"
+      isWinner ? "border-[color:color-mix(in_srgb,var(--sec-accent)_60%,transparent)] bg-[color:color-mix(in_srgb,var(--sec-accent)_10%,transparent)]" : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)]"
     }`}>
-      <span className={`w-7 text-center font-extrabold ${isWinner ? "text-[#7CF0BE] text-base" : "text-xs text-[#7CF0BE]/70"}`}>
+      <span className={`w-7 text-center font-extrabold ${isWinner ? "text-[color:var(--sec-accent)] text-base" : "text-xs text-[color:color-mix(in_srgb,var(--sec-accent)_70%,transparent)]"}`}>
         {isWinner ? "🏆" : pos}
       </span>
       <AvatarCircle profile={profile} size="md" />
-      <span className={`flex-1 font-semibold truncate ${isWinner ? "text-[#7CF0BE] text-base" : "text-sm text-emerald-50"}`}>
+      <span className={`flex-1 font-semibold truncate ${isWinner ? "text-[color:var(--sec-accent)] text-base" : "text-sm text-[color:var(--sec-text)]"}`}>
         {profile?.name ?? "Unknown"}
       </span>
-      <span className={`font-extrabold shrink-0 ${isWinner ? "text-[#7CF0BE] text-base" : "text-xs text-[#7CF0BE]"}`}>
+      <span className={`font-extrabold shrink-0 ${isWinner ? "text-[color:var(--sec-accent)] text-base" : "text-xs text-[color:var(--sec-accent)]"}`}>
         {score}
       </span>
     </div>
@@ -230,7 +230,7 @@ function FakeTicker({ scoringModel }: { scoringModel?: string }) {
     const t = setInterval(() => setVal(rand()), 300);
     return () => clearInterval(t);
   }, [scoringModel]);
-  return <span className="text-[11px] font-bold text-[#7CF0BE]">{val}</span>;
+  return <span className="text-[11px] font-bold text-[color:var(--sec-accent)]">{val}</span>;
 }
 
 // ─── Dramatic Podium ─────────────────────────────────────────────────────────
@@ -239,13 +239,13 @@ type PodiumPhase = "bubbles" | "tension" | "popping" | "celebrate";
 
 const PODIUM_COLORS = {
   1: {
-    border: "border-[#7CF0BE]/70",
-    bg: "bg-[#7CF0BE]/15",
-    text: "text-[#7CF0BE]",
+    border: "border-[color:color-mix(in_srgb,var(--sec-accent)_70%,transparent)]",
+    bg: "bg-[color:color-mix(in_srgb,var(--sec-accent)_15%,transparent)]",
+    text: "text-[color:var(--sec-accent)]",
     height: "180px",
     label: "1",
     gradient: "linear-gradient(180deg, #c9a227 0%, #9a7b1a 40%, #6b5112 100%)",
-    ring: "ring-[#7CF0BE]",
+    ring: "ring-[color:var(--sec-accent)]",
   },
   2: {
     border: "border-slate-400/50",
@@ -364,12 +364,12 @@ const FloatingBubble = memo(function FloatingBubble({
         style={{ originX: "50%", originY: "50%" }}
         animate={bubbleAnimate}
         transition={bubbleTransition}
-        className="w-full h-full rounded-full border-2 border-emerald-700/50 bg-emerald-900/60 grid place-items-center overflow-hidden shadow-lg"
+        className="w-full h-full rounded-full border-2 border-[color:var(--sec-line)] bg-[color:var(--sec-surface)] grid place-items-center overflow-hidden shadow-lg"
       >
         {profile?.avatar_url ? (
           <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
         ) : (
-          <span className="text-[11px] font-bold text-emerald-200">
+          <span className="text-[11px] font-bold text-[color:var(--sec-text-2)]">
             {profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
           </span>
         )}
@@ -389,7 +389,7 @@ const FloatingBubble = memo(function FloatingBubble({
               delay: ringIdx * 0.45,
               ease: "easeOut",
             }}
-            className="absolute inset-0 rounded-full border-2 border-[#7CF0BE]"
+            className="absolute inset-0 rounded-full border-2 border-[color:var(--sec-accent)]"
           />
         ))}
     </motion.div>
@@ -682,9 +682,9 @@ function PodiumRevealInner({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 8 }}
               transition={{ duration: 0.35 }}
-              className="flex items-center gap-2 rounded-full border border-emerald-900/50 bg-[#0b3b21]/60 px-4 py-1.5 backdrop-blur-sm"
+              className="flex items-center gap-2 rounded-full border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-4 py-1.5 backdrop-blur-sm"
             >
-              <span className="text-[11px] text-emerald-200/80">{getProfile(tickerRow)?.name ?? "—"}</span>
+              <span className="text-[11px] text-[color:var(--sec-muted)]">{getProfile(tickerRow)?.name ?? "—"}</span>
               <FakeTicker scoringModel={scoringModel} />
             </motion.div>
           )}
@@ -693,7 +693,7 @@ function PodiumRevealInner({
               key="tension-label"
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="text-[#7CF0BE] text-lg font-bold tracking-widest uppercase"
+              className="text-[color:var(--sec-accent)] text-lg font-bold tracking-widest uppercase"
             >
               {podiumPhase === "tension" ? "The results are in…" : "And the podium is…"}
             </motion.p>
@@ -745,7 +745,7 @@ function PodiumRevealInner({
             initial={{ opacity: 0 }}
             animate={{ opacity: [0, 0.3, 0] }}
             transition={{ duration: 1.2, delay: 0.3 }}
-            className="absolute inset-0 bg-[#7CF0BE] pointer-events-none"
+            className="absolute inset-0 bg-[color:var(--sec-accent)] pointer-events-none"
           />
         )}
       </AnimatePresence>
@@ -872,18 +872,18 @@ export function LeaderboardReveal({ rows, revealStyle, revealTopX, scoringModel,
       {phase === "scroll" && (
         <motion.div key={`scroll-${replayKey}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col h-full">
           <div className="relative z-10 flex items-center justify-between px-4 pt-5 pb-3 shrink-0">
-            <button type="button" onClick={handleReplay} className="text-xs text-emerald-200/40 hover:text-emerald-100 transition-colors">
+            <button type="button" onClick={handleReplay} className="text-xs text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)] transition-colors">
               ↺ Replay
             </button>
-            <p className="text-[#7CF0BE] text-sm font-semibold tracking-widest uppercase">
+            <p className="text-[color:var(--sec-accent)] text-sm font-semibold tracking-widest uppercase">
               {revealTopX != null ? `Top ${revealTopX}` : "Final Results"}
             </p>
-            <button type="button" onClick={onDone} className="text-emerald-200/40 hover:text-emerald-100 transition-colors text-xl leading-none px-1">
+            <button type="button" onClick={onDone} className="text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)] transition-colors text-xl leading-none px-1">
               ×
             </button>
           </div>
 
-          <div className="border-t border-emerald-900/40 mx-4 shrink-0" />
+          <div className="border-t border-[color:var(--sec-hair)] mx-4 shrink-0" />
 
           <div className="flex-1 overflow-hidden relative mt-3 px-4">
             <motion.div
@@ -916,19 +916,19 @@ export function LeaderboardReveal({ rows, revealStyle, revealTopX, scoringModel,
                 {revealStyle === "suspense" ? (
                   <>
                     <AnimatePresence mode="wait">
-                      <motion.p key={suspenseLabel} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="text-[#7CF0BE] text-2xl font-bold tracking-widest uppercase">
+                      <motion.p key={suspenseLabel} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="text-[color:var(--sec-accent)] text-2xl font-bold tracking-widest uppercase">
                         {SUSPENSE_COUNTDOWN_LABELS[suspenseLabel]}
                       </motion.p>
                     </AnimatePresence>
                     <div className="flex justify-center gap-2">
                       {[0, 1, 2, 3].map((i) => (
-                        <motion.div key={i} className="w-2 h-2 rounded-full bg-[#7CF0BE]" animate={{ opacity: [0.15, 1, 0.15], scale: [0.8, 1.2, 0.8] }} transition={{ duration: 1.8, repeat: Infinity, delay: i * 0.45 }} />
+                        <motion.div key={i} className="w-2 h-2 rounded-full bg-[color:var(--sec-accent)]" animate={{ opacity: [0.15, 1, 0.15], scale: [0.8, 1.2, 0.8] }} transition={{ duration: 1.8, repeat: Infinity, delay: i * 0.45 }} />
                       ))}
                     </div>
                   </>
                 ) : (
                   <>
-                    <p className="text-[#7CF0BE] text-2xl font-bold tracking-widest uppercase">
+                    <p className="text-[color:var(--sec-accent)] text-2xl font-bold tracking-widest uppercase">
                       {revealStyle === "rapid" ? "Stand by…" : "Results incoming"}
                     </p>
                     <div className="flex justify-center gap-1">
@@ -943,7 +943,7 @@ export function LeaderboardReveal({ rows, revealStyle, revealTopX, scoringModel,
 
             {phase === "reveal" && (
               <motion.div key={`reveal-${replayKey}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full max-w-sm px-4 space-y-3">
-                <p className="text-center text-[#7CF0BE] text-sm font-semibold tracking-widest uppercase mb-4">
+                <p className="text-center text-[color:var(--sec-accent)] text-sm font-semibold tracking-widest uppercase mb-4">
                   {revealTopX != null ? `Top ${revealTopX} Results` : "Final Results"}
                 </p>
                 <div className="space-y-2">

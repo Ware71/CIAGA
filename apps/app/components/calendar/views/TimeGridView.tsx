@@ -204,25 +204,25 @@ function VerticalGrid(props: GridProps) {
   }, [days, gridOccs, profileIds, hourPx]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-emerald-900/60 bg-[#052a17]/40">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-[color:var(--sec-hair)] bg-[#052a17]/40">
       {/* Day header + all-day chips (natural height) */}
-      <div className="flex shrink-0 border-b border-emerald-900/60 bg-[#04240f]/95">
+      <div className="flex shrink-0 border-b border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_95%,transparent)]">
         <div className="shrink-0" style={{ width: GUTTER }} />
         {perDay.map(({ day, allDay }) => {
           const { weekday, day: dnum } = formatColumnHeader(day);
           return (
             <div
               key={dayKey(day)}
-              className="min-w-0 flex-1 border-l border-emerald-900/40 px-1 py-1.5"
+              className="min-w-0 flex-1 border-l border-[color:var(--sec-hair)] px-1 py-1.5"
             >
               <div className="flex flex-col items-center">
-                <span className="text-[10px] uppercase tracking-wide text-emerald-200/50">
+                <span className="text-[10px] uppercase tracking-wide text-[color:var(--sec-muted)]">
                   {weekday}
                 </span>
                 <span
                   className={cn(
                     "mt-0.5 flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold",
-                    isToday(day) ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-50"
+                    isToday(day) ? "bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)]" : "text-[color:var(--sec-text)]"
                   )}
                 >
                   {dnum}
@@ -253,7 +253,7 @@ function VerticalGrid(props: GridProps) {
             <div
               key={h}
               style={{ height: hourPx }}
-              className="relative -top-1.5 pr-1 text-right text-[10px] text-emerald-200/45"
+              className="relative -top-1.5 pr-1 text-right text-[10px] text-[color:var(--sec-muted)]"
             >
               {formatHourLabel(h)}
             </div>
@@ -263,7 +263,7 @@ function VerticalGrid(props: GridProps) {
         {perDay.map(({ day, positioned, intervals }) => (
           <div
             key={dayKey(day)}
-            className="relative min-w-0 flex-1 border-l border-emerald-900/40"
+            className="relative min-w-0 flex-1 border-l border-[color:var(--sec-hair)]"
             style={{ height: VISIBLE_HOURS * hourPx }}
           >
             {/* hour rows / tap targets */}
@@ -271,7 +271,7 @@ function VerticalGrid(props: GridProps) {
               <button
                 key={h}
                 onClick={() => onSlotClick(day, h)}
-                className="block w-full border-t border-emerald-900/20 hover:bg-emerald-500/5"
+                className="block w-full border-t border-[color:var(--sec-hair)] hover:bg-emerald-500/5"
                 style={{ height: hourPx }}
                 aria-label={`Add at ${formatHourLabel(h)}`}
               />
@@ -481,7 +481,7 @@ function HorizontalGrid(props: GridProps) {
   }
 
   return (
-    <div className="rounded-2xl border border-emerald-900/60 bg-[#052a17]/40 p-2">
+    <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[#052a17]/40 p-2">
       {/* Ruler */}
       <div className="mb-1 flex items-center">
         <div style={{ width: H_LABEL_W }} className="shrink-0" />
@@ -489,7 +489,7 @@ function HorizontalGrid(props: GridProps) {
           {RULER.map((h) => (
             <span
               key={h}
-              className="absolute -translate-x-1/2 text-[9px] text-emerald-200/45"
+              className="absolute -translate-x-1/2 text-[9px] text-[color:var(--sec-muted)]"
               style={{ left: `${pctH(h * 60)}%` }}
             >
               {formatHourLabel(h)}
@@ -505,13 +505,13 @@ function HorizontalGrid(props: GridProps) {
               style={{ width: H_LABEL_W }}
               className="flex shrink-0 flex-col items-center justify-center"
             >
-              <span className="text-[9px] uppercase tracking-wide text-emerald-200/50">
+              <span className="text-[9px] uppercase tracking-wide text-[color:var(--sec-muted)]">
                 {day.toLocaleDateString(undefined, { weekday: "short" })}
               </span>
               <span
                 className={cn(
                   "flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold",
-                  isToday(day) ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-50"
+                  isToday(day) ? "bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)]" : "text-[color:var(--sec-text)]"
                 )}
               >
                 {day.getDate()}
@@ -522,8 +522,8 @@ function HorizontalGrid(props: GridProps) {
               type="button"
               onClick={(e) => trackClick(e, day)}
               className={cn(
-                "relative flex-1 overflow-hidden rounded-lg border border-emerald-900/40",
-                isToday(day) ? "bg-emerald-900/20" : "bg-[#0b3b21]/25"
+                "relative flex-1 overflow-hidden rounded-lg border border-[color:var(--sec-hair)]",
+                isToday(day) ? "bg-[color:var(--sec-surface)]" : "bg-[color:color-mix(in_srgb,var(--sec-surface)_25%,transparent)]"
               )}
               style={{ height: lanes * LANE_H + 4 }}
               aria-label={`Add on ${day.toDateString()}`}
@@ -531,7 +531,7 @@ function HorizontalGrid(props: GridProps) {
               {RULER.map((h) => (
                 <div
                   key={h}
-                  className="pointer-events-none absolute inset-y-0 w-px bg-emerald-900/25"
+                  className="pointer-events-none absolute inset-y-0 w-px bg-[color:var(--sec-surface)]"
                   style={{ left: `${pctH(h * 60)}%` }}
                 />
               ))}

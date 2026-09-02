@@ -54,16 +54,16 @@ function ConfirmSheet(props: {
     <div className="fixed inset-0 z-50">
       <button className="absolute inset-0 bg-black/60" onClick={onClose} aria-label="Close" />
       <div className="absolute left-0 right-0 bottom-0 px-3 pb-[env(safe-area-inset-bottom)]">
-        <div className="mx-auto w-full max-w-[520px] rounded-t-3xl border border-emerald-900/70 bg-[#061f12] shadow-2xl overflow-hidden">
-          <div className="p-4 border-b border-emerald-900/60">
-            <div className="text-sm font-semibold text-emerald-50">{title}</div>
-            {subtitle ? <div className="text-[11px] text-emerald-100/70 mt-1">{subtitle}</div> : null}
+        <div className="mx-auto w-full max-w-[520px] rounded-t-3xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] shadow-2xl overflow-hidden">
+          <div className="p-4 border-b border-[color:var(--sec-hair)]">
+            <div className="text-sm font-semibold text-[color:var(--sec-text)]">{title}</div>
+            {subtitle ? <div className="text-[11px] text-[color:var(--sec-muted)] mt-1">{subtitle}</div> : null}
           </div>
 
           <div className="p-4 flex gap-2">
             <Button
               variant="ghost"
-              className="flex-1 rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/40 text-emerald-50 hover:bg-emerald-900/20"
+              className="flex-1 rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
               onClick={onClose}
               disabled={!!confirmDisabled}
             >
@@ -423,7 +423,7 @@ export default function RoundHomePage() {
             <Link
               href="/calendar"
               aria-label="Open calendar"
-              className="flex h-9 items-center text-[color:var(--sec-muted)] hover:text-emerald-50"
+              className="flex h-9 items-center text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
             >
               <Calendar size={20} />
             </Link>
@@ -433,7 +433,7 @@ export default function RoundHomePage() {
         <div className="space-y-6">
 
         <Button
-          className="w-full rounded-2xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c]"
+          className="w-full rounded-2xl bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] hover:bg-[color:var(--sec-accent)]"
           onClick={handleCreateNewRound}
           disabled={creatingRound}
         >
@@ -443,15 +443,15 @@ export default function RoundHomePage() {
         {loading ? (
           <div className="space-y-3">
             {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-20 w-full rounded-2xl bg-emerald-900/20" />
+              <Skeleton key={i} className="h-20 w-full rounded-2xl bg-[color:var(--sec-surface)]" />
             ))}
           </div>
         ) : err ? (
           <div className="rounded-2xl border border-red-900/50 bg-red-950/30 p-4 text-sm text-red-100">{err}</div>
         ) : rounds.length === 0 ? (
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-6 text-center space-y-2">
-            <div className="text-sm font-semibold text-emerald-50">No rounds yet</div>
-            <p className="text-[11px] text-emerald-100/70 leading-relaxed">Create a round to start a live scorecard.</p>
+          <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-6 text-center space-y-2">
+            <div className="text-sm font-semibold text-[color:var(--sec-text)]">No rounds yet</div>
+            <p className="text-[11px] text-[color:var(--sec-muted)] leading-relaxed">Create a round to start a live scorecard.</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -481,19 +481,19 @@ export default function RoundHomePage() {
                 <Link
                   key={r.id}
                   href={(isDraft || isScheduled) ? `/round/${r.id}/setup` : `/round/${r.id}`}
-                  className="block rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 hover:bg-[#0b3b21]/90"
+                  className="block rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4 hover:bg-[color:color-mix(in_srgb,var(--sec-surface)_90%,transparent)]"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <div className="text-sm font-semibold text-emerald-50">
+                      <div className="text-sm font-semibold text-[color:var(--sec-text)]">
                         {r.linked_event?.name ?? r.name ?? r.courses?.name ?? "Round"}
                       </div>
-                      <div className="text-[11px] text-emerald-100/70">
+                      <div className="text-[11px] text-[color:var(--sec-muted)]">
                         {(r.courses?.name && (r.linked_event?.name ?? r.name) ? r.courses?.name : null) ||
                           statusLabel}
                       </div>
                       {r.scheduled_at ? (
-                        <div className="text-[10px] text-emerald-100/50 mt-0.5">
+                        <div className="text-[10px] text-[color:var(--sec-muted)] mt-0.5">
                           {new Date(r.scheduled_at).toLocaleString(undefined, {
                             weekday: "short",
                             month: "short",
@@ -504,7 +504,7 @@ export default function RoundHomePage() {
                         </div>
                       ) : null}
                       {canSwipe ? (
-                        <div className="mt-1 text-[10px] text-emerald-100/50">
+                        <div className="mt-1 text-[10px] text-[color:var(--sec-muted)]">
                           Swipe left to {isOwner ? "delete" : "withdraw from"}{" "}
                           {isScheduled ? "scheduled round" : "draft"}
                         </div>
@@ -518,7 +518,7 @@ export default function RoundHomePage() {
                         </Link>
                       ) : null}
                     </div>
-                    <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/70">
+                    <div className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--sec-muted)]">
                       {isMajorsRound ? "Majors" : r.status}
                     </div>
                   </div>

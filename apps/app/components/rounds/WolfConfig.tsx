@@ -52,7 +52,7 @@ export function WolfConfig({ value, onChange, disabled }: WolfConfigProps) {
     hint: string,
   ) => (
     <div>
-      <label className="text-xs text-emerald-100/80 block mb-1">{label}</label>
+      <label className="text-xs text-[color:var(--sec-muted)] block mb-1">{label}</label>
       <NumberField
         min={1}
         nullable={false}
@@ -60,21 +60,21 @@ export function WolfConfig({ value, onChange, disabled }: WolfConfigProps) {
         value={cfg[key]}
         onValueChange={(v) => emit({ [key]: v ?? 1 } as Partial<WolfConfigValue>)}
         disabled={disabled}
-        className="w-24 px-2 py-1 rounded border border-emerald-900/70 bg-[#0b3b21]/70 text-xs text-emerald-50 focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-50"
+        className="w-24 px-2 py-1 rounded border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] text-xs text-[color:var(--sec-text)] focus:outline-none focus:ring-1 focus:ring-[color:var(--sec-accent)] disabled:opacity-50"
       />
-      <p className="text-[11px] text-emerald-100/60 mt-1">{hint}</p>
+      <p className="text-[11px] text-[color:var(--sec-muted)] mt-1">{hint}</p>
     </div>
   );
 
   return (
     <div className="space-y-3">
       <div>
-        <label className="text-xs text-emerald-100/80 block mb-1">Scoring</label>
+        <label className="text-xs text-[color:var(--sec-muted)] block mb-1">Scoring</label>
         <select
           value={cfg.scoring}
           onChange={(e) => emit({ scoring: e.target.value as WolfScoring })}
           disabled={disabled}
-          className="w-full rounded-lg border border-emerald-900/70 bg-[#0b3b21]/70 px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50"
+          className="w-full rounded-lg border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] px-3 py-2 text-sm text-[color:var(--sec-text)] focus:outline-none focus:ring-2 focus:ring-[color:var(--sec-accent)] disabled:opacity-50"
         >
           <option value="net">Net (handicap adjusted)</option>
           <option value="gross">Gross (no handicap)</option>
@@ -82,12 +82,12 @@ export function WolfConfig({ value, onChange, disabled }: WolfConfigProps) {
       </div>
 
       <div>
-        <label className="text-xs text-emerald-100/80 block mb-1">Tied holes</label>
+        <label className="text-xs text-[color:var(--sec-muted)] block mb-1">Tied holes</label>
         <select
           value={cfg.tie_mode}
           onChange={(e) => emit({ tie_mode: e.target.value as WolfTieMode })}
           disabled={disabled}
-          className="w-full rounded-lg border border-emerald-900/70 bg-[#0b3b21]/70 px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50"
+          className="w-full rounded-lg border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] px-3 py-2 text-sm text-[color:var(--sec-text)] focus:outline-none focus:ring-2 focus:ring-[color:var(--sec-accent)] disabled:opacity-50"
         >
           <option value="carryover">Carry over (next hole pays double, then triple…)</option>
           <option value="push">Push (no points awarded)</option>
@@ -95,7 +95,7 @@ export function WolfConfig({ value, onChange, disabled }: WolfConfigProps) {
       </div>
 
       <div className="space-y-2">
-        <p className="text-xs font-medium text-emerald-100/90">Partner</p>
+        <p className="text-xs font-medium text-[color:var(--sec-muted)]">Partner</p>
         <div className="grid grid-cols-2 gap-3">
           {numberField("Wolf side wins", "partner_wolf_points", "Points to the wolf and partner each when their side wins.")}
           {numberField("Opponents win", "partner_others_points", "Points to each opponent when they beat the wolf and partner.")}
@@ -103,7 +103,7 @@ export function WolfConfig({ value, onChange, disabled }: WolfConfigProps) {
       </div>
 
       <div className="space-y-2">
-        <p className="text-xs font-medium text-emerald-100/90">Lone Wolf</p>
+        <p className="text-xs font-medium text-[color:var(--sec-muted)]">Lone Wolf</p>
         <div className="grid grid-cols-2 gap-3">
           {numberField("Wolf wins", "lone_wolf_points", "Points to the lone wolf when playing alone and winning.")}
           {numberField("Opponents win", "lone_others_points", "Points to each opponent when they beat the lone wolf.")}
@@ -111,7 +111,7 @@ export function WolfConfig({ value, onChange, disabled }: WolfConfigProps) {
       </div>
 
       <div className="space-y-2">
-        <p className="text-xs font-medium text-emerald-100/90">Blind Wolf</p>
+        <p className="text-xs font-medium text-[color:var(--sec-muted)]">Blind Wolf</p>
         <div className="grid grid-cols-2 gap-3">
           {numberField("Wolf wins", "blind_wolf_points", "Points to the blind wolf (declared alone before tee shots) when winning.")}
           {numberField("Opponents win", "blind_others_points", "Points to each opponent when they beat the blind wolf.")}

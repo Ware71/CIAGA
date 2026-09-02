@@ -25,7 +25,7 @@ export function PairsStablefordConfig({
   return (
     <div className="space-y-3">
       <div>
-        <label className="text-xs text-emerald-100/80 block mb-1">Scoring Mode</label>
+        <label className="text-xs text-[color:var(--sec-muted)] block mb-1">Scoring Mode</label>
         <select
           value={scoringMode}
           onChange={(e) => {
@@ -36,7 +36,7 @@ export function PairsStablefordConfig({
             });
           }}
           disabled={disabled}
-          className="w-full rounded-lg border border-emerald-900/70 bg-[#0b3b21]/70 px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50"
+          className="w-full rounded-lg border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] px-3 py-2 text-sm text-[color:var(--sec-text)] focus:outline-none focus:ring-2 focus:ring-[color:var(--sec-accent)] disabled:opacity-50"
         >
           <option value="best">Best score(s) count</option>
           <option value="worst">Worst score(s) count</option>
@@ -44,7 +44,7 @@ export function PairsStablefordConfig({
         </select>
       </div>
 
-      <p className="text-[11px] text-emerald-100/60">
+      <p className="text-[11px] text-[color:var(--sec-muted)]">
         {scoringMode === "best" && "Each hole: the highest stableford points from the team count."}
         {scoringMode === "worst" && "Each hole: the lowest stableford points from the team count."}
         {scoringMode === "combined" && "Each hole: all team members' stableford points are added together."}
@@ -52,7 +52,7 @@ export function PairsStablefordConfig({
 
       {needsCount && (
         <div>
-          <label className="text-xs text-emerald-100/80 block mb-1">
+          <label className="text-xs text-[color:var(--sec-muted)] block mb-1">
             How many scores count per hole? (out of {teamSize})
           </label>
           <NumberField
@@ -68,7 +68,7 @@ export function PairsStablefordConfig({
               })
             }
             disabled={disabled}
-            className="w-20 px-2 py-1 rounded border border-emerald-900/70 bg-[#0b3b21]/70 text-xs text-emerald-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            className="w-20 px-2 py-1 rounded border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] text-xs text-[color:var(--sec-text)] focus:outline-none focus:ring-1 focus:ring-[color:var(--sec-accent)]"
           />
         </div>
       )}

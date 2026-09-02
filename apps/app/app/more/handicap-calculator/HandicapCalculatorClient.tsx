@@ -44,7 +44,7 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-200/65">
+      <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--sec-muted)]">
         {label}
       </span>
       <input
@@ -54,7 +54,7 @@ function Field({
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-xl border border-emerald-900/70 bg-[#042713]/55 px-3 py-2.5 text-sm font-semibold text-emerald-50 outline-none placeholder:text-emerald-100/25 focus:border-[#f5e6b0]/50"
+        className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_55%,transparent)] px-3 py-2.5 text-sm font-semibold text-[color:var(--sec-text)] outline-none placeholder:text-[color:var(--sec-muted)] focus:border-[color:color-mix(in_srgb,var(--sec-accent)_50%,transparent)]"
       />
     </label>
   );
@@ -122,39 +122,39 @@ export default function HandicapCalculatorClient() {
   const activeHint = ALLOWANCES.find((a) => a.pct === allowance)?.hint;
 
   return (
-    <div className="min-h-screen bg-[#042713] px-4 pt-8 text-slate-100">
+    <div className="min-h-screen bg-[color:var(--ciaga-ground)] px-4 pt-8 text-slate-100">
       <div className="mx-auto w-full max-w-sm space-y-6">
         <header className="relative flex items-center justify-center">
           <BackButton className="absolute left-0 font-semibold" onClick={() => router.back()} />
           <div className="text-center">
-            <div className="text-lg font-extrabold tracking-wide text-[#f5e6b0]">Handicap</div>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200/70">
+            <div className="text-lg font-extrabold tracking-wide text-[color:var(--sec-accent)]">Handicap</div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--sec-muted)]">
               Calculator
             </div>
           </div>
         </header>
 
         {/* Result first — it is the reason you opened this screen. */}
-        <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-5">
+        <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-5">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-200/65">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--sec-muted)]">
                 Course HCP
               </div>
-              <div className="mt-1 text-3xl font-extrabold tabular-nums text-[#f5e6b0]">
+              <div className="mt-1 text-3xl font-extrabold tabular-nums text-[color:var(--sec-accent)]">
                 {result ? result.courseHandicap : "—"}
               </div>
             </div>
             <div>
-              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-200/65">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--sec-muted)]">
                 Playing HCP
               </div>
-              <div className="mt-1 text-3xl font-extrabold tabular-nums text-[#f5e6b0]">
+              <div className="mt-1 text-3xl font-extrabold tabular-nums text-[color:var(--sec-accent)]">
                 {result ? result.playingHandicap : "—"}
               </div>
             </div>
           </div>
-          <div className="mt-3 border-t border-emerald-900/70 pt-3 text-[11px] font-semibold text-emerald-100/50">
+          <div className="mt-3 border-t border-[color:var(--sec-hair)] pt-3 text-[11px] font-semibold text-[color:var(--sec-muted)]">
             {result
               ? `${allowance}% of course handicap`
               : "Enter your index and the tee's slope, rating and par"}
@@ -183,7 +183,7 @@ export default function HandicapCalculatorClient() {
         </div>
 
         <div>
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-200/65">
+          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--sec-muted)]">
             Allowance
           </div>
           <div className="flex flex-wrap gap-2">
@@ -195,23 +195,23 @@ export default function HandicapCalculatorClient() {
                 aria-pressed={allowance === a.pct}
                 className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                   allowance === a.pct
-                    ? "border-[#f5e6b0]/50 bg-[#f5e6b0]/10 text-[#f5e6b0]"
-                    : "border-emerald-900/70 bg-[#0b3b21]/50 text-emerald-100/60 hover:text-emerald-50"
+                    ? "border-[color:color-mix(in_srgb,var(--sec-accent)_50%,transparent)] bg-[color:color-mix(in_srgb,var(--sec-accent)_10%,transparent)] text-[color:var(--sec-accent)]"
+                    : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_50%,transparent)] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
                 }`}
               >
                 {a.label}
               </button>
             ))}
           </div>
-          <div className="mt-2 text-[11px] font-semibold text-emerald-100/45">{activeHint}</div>
+          <div className="mt-2 text-[11px] font-semibold text-[color:var(--sec-muted)]">{activeHint}</div>
         </div>
 
-        <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/40 px-4 py-3 text-[11px] font-semibold leading-relaxed text-emerald-100/50">
+        <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-4 py-3 text-[11px] font-semibold leading-relaxed text-[color:var(--sec-muted)]">
           Course Handicap = Index × (Slope ÷ 113) + (Rating − Par), rounded to the nearest
           whole stroke. Playing Handicap applies the competition allowance.
         </div>
 
-        <div className="pt-1 text-center text-[10px] font-semibold text-emerald-100/50">
+        <div className="pt-1 text-center text-[10px] font-semibold text-[color:var(--sec-muted)]">
           CIAGA · Handicap Calculator
         </div>
       </div>

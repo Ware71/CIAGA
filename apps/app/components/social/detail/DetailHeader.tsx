@@ -22,13 +22,13 @@ function Avatar({ name, url, size = 32 }: { name: string; url: string | null; si
       src={url}
       alt=""
       style={{ width: s, height: s }}
-      className="rounded-full object-cover border border-emerald-900/60"
+      className="rounded-full object-cover border border-[color:var(--sec-hair)]"
       loading="lazy"
     />
   ) : (
     <div
       style={{ width: s, height: s }}
-      className="rounded-full border border-emerald-900/60 bg-emerald-950/30 grid place-items-center text-[11px] font-extrabold text-emerald-50"
+      className="rounded-full border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] grid place-items-center text-[11px] font-extrabold text-[color:var(--sec-text)]"
     >
       {initials(name)}
     </div>
@@ -121,7 +121,7 @@ export default function DetailHeader({ item }: { item: FeedItemVM }) {
   const firstPid = people[0]?.profile_id ?? null;
 
   return (
-    <div className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/60 p-3">
+    <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] p-3">
       <div className="flex items-start gap-3">
         {/* Avatars */}
         <button
@@ -138,8 +138,8 @@ export default function DetailHeader({ item }: { item: FeedItemVM }) {
         {/* Name + pill + meta */}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <div className="min-w-0 truncate text-sm font-extrabold text-emerald-50">{namesLabel}</div>
-            <span className="shrink-0 rounded-full border border-emerald-800/50 bg-emerald-950/40 px-2 py-0.5 text-[9px] font-extrabold tracking-wide text-[#f5e6b0]">
+            <div className="min-w-0 truncate text-sm font-extrabold text-[color:var(--sec-text)]">{namesLabel}</div>
+            <span className="shrink-0 rounded-full border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-2 py-0.5 text-[9px] font-extrabold tracking-wide text-[color:var(--sec-accent)]">
               {pill}
             </span>
             {friendBest ? (
@@ -148,22 +148,22 @@ export default function DetailHeader({ item }: { item: FeedItemVM }) {
               </span>
             ) : null}
           </div>
-          {subLine ? <div className="mt-0.5 truncate text-[11px] font-semibold text-emerald-100/55">{subLine}</div> : null}
-          {matchLine ? <div className="mt-0.5 truncate text-[11px] font-extrabold text-[#f5e6b0]">{matchLine}</div> : null}
+          {subLine ? <div className="mt-0.5 truncate text-[11px] font-semibold text-[color:var(--sec-muted)]">{subLine}</div> : null}
+          {matchLine ? <div className="mt-0.5 truncate text-[11px] font-extrabold text-[color:var(--sec-accent)]">{matchLine}</div> : null}
         </div>
 
         {/* Key figure */}
         {keyFig ? (
           <div className="shrink-0 text-right">
-            <div className="text-[9px] font-extrabold tracking-wide text-emerald-100/45">{keyFig.label}</div>
-            <div className="text-xl font-extrabold leading-none text-[#f5e6b0]">{keyFig.value}</div>
+            <div className="text-[9px] font-extrabold tracking-wide text-[color:var(--sec-muted)]">{keyFig.label}</div>
+            <div className="text-xl font-extrabold leading-none text-[color:var(--sec-accent)]">{keyFig.value}</div>
           </div>
         ) : null}
       </div>
 
       {/* Post text (compact) */}
       {item.type === "user_post" && typeof p.text === "string" && p.text.trim() ? (
-        <div className="mt-2 line-clamp-3 whitespace-pre-wrap text-sm font-semibold text-emerald-50/90">{p.text}</div>
+        <div className="mt-2 line-clamp-3 whitespace-pre-wrap text-sm font-semibold text-[color:var(--sec-text)]">{p.text}</div>
       ) : null}
 
       {/* Reactions */}
@@ -189,14 +189,14 @@ function ReactionSummary({ counts }: { counts: Record<string, number> }) {
   entries.sort((a, b) => b[1] - a[1]);
   const total = entries.reduce((acc, [, n]) => acc + n, 0);
   return (
-    <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-100/55">
+    <div className="flex items-center gap-1 text-[11px] font-semibold text-[color:var(--sec-muted)]">
       {entries.slice(0, 4).map(([emoji, n]) => (
         <span key={emoji}>
           {emoji}
           {n}
         </span>
       ))}
-      <span className="text-emerald-100/35">·</span>
+      <span className="text-[color:var(--sec-muted)]">·</span>
       <span>{total}</span>
     </div>
   );

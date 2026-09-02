@@ -255,11 +255,11 @@ export function SandboxPanel() {
         <button
           onClick={() => setIsOpen(!isOpen)}
           title="Sandbox Dev Tools"
-          className="self-center flex items-center justify-center cursor-pointer rounded-l-lg border border-r-0 border-[#f5e6b0]/40 bg-[#042713] py-5"
+          className="self-center flex items-center justify-center cursor-pointer rounded-l-lg border border-r-0 border-[color:color-mix(in_srgb,var(--sec-accent)_40%,transparent)] bg-[color:var(--ciaga-ground)] py-5"
           style={{ width: TAB_WIDTH, flexShrink: 0 }}
         >
           <span
-            className="text-[#f5e6b0] text-[10px] font-bold tracking-[0.25em]"
+            className="text-[color:var(--sec-accent)] text-[10px] font-bold tracking-[0.25em]"
             style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
           >
             DEV
@@ -268,13 +268,13 @@ export function SandboxPanel() {
 
         {/* Panel */}
         <div
-          className="h-full flex flex-col overflow-hidden border-l border-[#f5e6b0]/20 bg-[#042713]"
+          className="h-full flex flex-col overflow-hidden border-l border-[color:color-mix(in_srgb,var(--sec-accent)_20%,transparent)] bg-[color:var(--ciaga-ground)]"
           style={{ width: PANEL_WIDTH }}
         >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-[#f5e6b0]/10 px-4 py-3">
-            <span className="text-sm font-bold tracking-wide text-[#f5e6b0]">Sandbox Tools</span>
-            <span className="rounded bg-[#f5e6b0]/10 px-1.5 py-0.5 text-[10px] text-[#f5e6b0]/50">
+          <div className="flex items-center justify-between border-b border-[color:color-mix(in_srgb,var(--sec-accent)_10%,transparent)] px-4 py-3">
+            <span className="text-sm font-bold tracking-wide text-[color:var(--sec-accent)]">Sandbox Tools</span>
+            <span className="rounded bg-[color:color-mix(in_srgb,var(--sec-accent)_10%,transparent)] px-1.5 py-0.5 text-[10px] text-[color:color-mix(in_srgb,var(--sec-accent)_50%,transparent)]">
               STAGING
             </span>
           </div>
@@ -282,7 +282,7 @@ export function SandboxPanel() {
           <div className="flex-1 overflow-y-auto">
             {/* ── Switch Profile ── */}
             <div className="px-4 pt-4">
-              <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[#f5e6b0]/50">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[color:color-mix(in_srgb,var(--sec-accent)_50%,transparent)]">
                 Switch Profile
               </p>
               <input
@@ -290,7 +290,7 @@ export function SandboxPanel() {
                 placeholder="Search by name or email…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="mb-2 w-full rounded-md border border-[#f5e6b0]/20 bg-black/30 px-2.5 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 outline-none focus:border-[#f5e6b0]/40"
+                className="mb-2 w-full rounded-md border border-[color:color-mix(in_srgb,var(--sec-accent)_20%,transparent)] bg-black/30 px-2.5 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 outline-none focus:border-[color:color-mix(in_srgb,var(--sec-accent)_40%,transparent)]"
               />
 
               {loadingProfiles && (
@@ -308,7 +308,7 @@ export function SandboxPanel() {
                       disabled={impersonating !== null}
                       className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-white/5 disabled:opacity-50"
                     >
-                      <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-emerald-900">
+                      <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-[color:var(--sec-surface)]">
                         {profile.avatar_url ? (
                           <img
                             src={profile.avatar_url}
@@ -316,7 +316,7 @@ export function SandboxPanel() {
                             className="h-full w-full object-cover"
                           />
                         ) : (
-                          <span className="text-[10px] font-bold text-[#f5e6b0]">{initials}</span>
+                          <span className="text-[10px] font-bold text-[color:var(--sec-accent)]">{initials}</span>
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
@@ -328,7 +328,7 @@ export function SandboxPanel() {
                         )}
                       </div>
                       {isSpinning && (
-                        <span className="text-[9px] text-[#f5e6b0]/40">signing in…</span>
+                        <span className="text-[9px] text-[color:color-mix(in_srgb,var(--sec-accent)_40%,transparent)]">signing in…</span>
                       )}
                     </button>
                   );
@@ -337,11 +337,11 @@ export function SandboxPanel() {
             </div>
 
             {/* Divider */}
-            <div className="mx-4 my-4 border-t border-[#f5e6b0]/10" />
+            <div className="mx-4 my-4 border-t border-[color:color-mix(in_srgb,var(--sec-accent)_10%,transparent)]" />
 
             {/* ── Reset Database ── */}
             <div className="px-4 pb-8">
-              <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[#f5e6b0]/50">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[color:color-mix(in_srgb,var(--sec-accent)_50%,transparent)]">
                 Reset Database
               </p>
               <p className="mb-3 text-[10px] leading-relaxed text-slate-400">
@@ -350,19 +350,19 @@ export function SandboxPanel() {
               </p>
 
               {resetDone && (
-                <p className="mb-2 text-xs text-emerald-400">✓ Database reset complete</p>
+                <p className="mb-2 text-xs text-[color:var(--sec-good)]">✓ Database reset complete</p>
               )}
 
               {!confirmReset ? (
                 <button
                   onClick={() => setConfirmReset(true)}
-                  className="w-full rounded-md border border-red-700/50 bg-red-900/30 py-2 text-xs font-medium text-red-300 transition-colors hover:bg-red-900/50"
+                  className="w-full rounded-md border border-red-700/50 bg-red-900/30 py-2 text-xs font-medium text-[color:var(--sec-bad)] transition-colors hover:bg-red-900/50"
                 >
                   Reset Database
                 </button>
               ) : (
                 <div className="space-y-2">
-                  <p className="text-[10px] font-semibold text-red-400">
+                  <p className="text-[10px] font-semibold text-[color:var(--sec-bad)]">
                     This cannot be undone. Confirm?
                   </p>
                   <div className="flex gap-2">
@@ -383,15 +383,15 @@ export function SandboxPanel() {
                 </div>
               )}
 
-              {error && <p className="mt-2 text-[10px] text-red-400">{error}</p>}
+              {error && <p className="mt-2 text-[10px] text-[color:var(--sec-bad)]">{error}</p>}
             </div>
 
             {/* Divider */}
-            <div className="mx-4 my-4 border-t border-[#f5e6b0]/10" />
+            <div className="mx-4 my-4 border-t border-[color:color-mix(in_srgb,var(--sec-accent)_10%,transparent)]" />
 
             {/* ── Clear Groups ── */}
             <div className="px-4 pb-8">
-              <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[#f5e6b0]/50">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[color:color-mix(in_srgb,var(--sec-accent)_50%,transparent)]">
                 Clear Groups
               </p>
               <p className="mb-3 text-[10px] leading-relaxed text-slate-400">
@@ -400,7 +400,7 @@ export function SandboxPanel() {
               </p>
 
               {clearGroupsDone && (
-                <p className="mb-2 text-xs text-emerald-400">✓ Groups cleared</p>
+                <p className="mb-2 text-xs text-[color:var(--sec-good)]">✓ Groups cleared</p>
               )}
 
               {!confirmClearGroups ? (
@@ -435,11 +435,11 @@ export function SandboxPanel() {
             </div>
 
             {/* Divider */}
-            <div className="mx-4 my-4 border-t border-[#f5e6b0]/10" />
+            <div className="mx-4 my-4 border-t border-[color:color-mix(in_srgb,var(--sec-accent)_10%,transparent)]" />
 
             {/* ── Pull from Production ── */}
             <div className="px-4 pb-8">
-              <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[#f5e6b0]/50">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[color:color-mix(in_srgb,var(--sec-accent)_50%,transparent)]">
                 Pull from Production
               </p>
               <p className="mb-3 text-[10px] leading-relaxed text-slate-400">
@@ -454,14 +454,14 @@ export function SandboxPanel() {
                 <div className="mb-3 max-h-64 overflow-y-auto rounded-md bg-black/40 p-2 font-mono text-[9px]">
                   {planEvent && (
                     <div className="mb-1.5 border-b border-white/5 pb-1.5">
-                      <p className="text-[#f5e6b0]/40">
+                      <p className="text-[color:color-mix(in_srgb,var(--sec-accent)_40%,transparent)]">
                         {planEvent.discovered} tables discovered ·{" "}
                         <span className="text-slate-400">{planEvent.copying} copying</span> ·{" "}
                         <span className="text-slate-500">{planEvent.denied.length} denied</span>
                         {planEvent.blocked.length > 0 && (
                           <>
                             {" "}·{" "}
-                            <span className="text-red-400">
+                            <span className="text-[color:var(--sec-bad)]">
                               {planEvent.blocked.length} blocked
                             </span>
                           </>
@@ -469,7 +469,7 @@ export function SandboxPanel() {
                         {" "}·{" "}
                         <span
                           className={
-                            planEvent.uncovered.length > 0 ? "text-red-400" : "text-emerald-600"
+                            planEvent.uncovered.length > 0 ? "text-[color:var(--sec-bad)]" : "text-emerald-600"
                           }
                         >
                           {planEvent.uncovered.length} uncovered
@@ -482,11 +482,11 @@ export function SandboxPanel() {
                       ))}
                       {planEvent.blocked.map((b) => (
                         <div key={b.table} className="pl-2 text-red-500/80">
-                          <span className="text-red-400">{b.table}</span> — {b.reason}
+                          <span className="text-[color:var(--sec-bad)]">{b.table}</span> — {b.reason}
                         </div>
                       ))}
                       {planEvent.uncovered.map((t) => (
-                        <div key={t} className="pl-2 text-red-400">
+                        <div key={t} className="pl-2 text-[color:var(--sec-bad)]">
                           {t} — not covered by the planner
                         </div>
                       ))}
@@ -494,7 +494,7 @@ export function SandboxPanel() {
                   )}
 
                   {hasReadEvents && (
-                    <p className="mb-0.5 text-[#f5e6b0]/40">Reading from production</p>
+                    <p className="mb-0.5 text-[color:color-mix(in_srgb,var(--sec-accent)_40%,transparent)]">Reading from production</p>
                   )}
                   {pullLog
                     .filter((e) => e.type === "read" || e.type === "skip")
@@ -519,11 +519,11 @@ export function SandboxPanel() {
                     })}
 
                   {hasWipeEvent && (
-                    <p className="mb-0.5 mt-1 text-[#f5e6b0]/40">Wiping staging…</p>
+                    <p className="mb-0.5 mt-1 text-[color:color-mix(in_srgb,var(--sec-accent)_40%,transparent)]">Wiping staging…</p>
                   )}
 
                   {hasWriteEvents && (
-                    <p className="mb-0.5 mt-1 text-[#f5e6b0]/40">Writing to staging</p>
+                    <p className="mb-0.5 mt-1 text-[color:color-mix(in_srgb,var(--sec-accent)_40%,transparent)]">Writing to staging</p>
                   )}
                   {pullLog
                     .filter((e) => e.type === "write" || e.type === "write_error")
@@ -569,13 +569,13 @@ export function SandboxPanel() {
 
                   {orphanEvents.length > 0 && (
                     <div className="mt-1.5 rounded border border-red-800/50 bg-red-950/40 p-1.5">
-                      <p className="mb-1 font-semibold text-red-400">
+                      <p className="mb-1 font-semibold text-[color:var(--sec-bad)]">
                         {orphanEvents.reduce((n, e) => n + e.rows, 0).toLocaleString()} orphaned
                         rows dropped
                       </p>
                       {orphanEvents.map((ev) => (
                         <div key={ev.table} className="mb-1">
-                          <span className="text-red-300">{ev.table}</span>
+                          <span className="text-[color:var(--sec-bad)]">{ev.table}</span>
                           <span className="ml-1 text-red-500/70">({ev.rows})</span>
                           {ev.constraints.map((c) => (
                             <div key={c.constraint} className="pl-2 text-red-600/80">
@@ -597,7 +597,7 @@ export function SandboxPanel() {
                     .map((e, i) => {
                       const ev = e as Extract<PullEvent, { type: "error" }>;
                       return (
-                        <p key={i} className="mt-1 text-red-400">
+                        <p key={i} className="mt-1 text-[color:var(--sec-bad)]">
                           ✗ {ev.message}
                         </p>
                       );
@@ -606,7 +606,7 @@ export function SandboxPanel() {
                   {doneEvent && (
                     <p
                       className={`mt-1 ${
-                        doneEvent.orphans > 0 ? "text-amber-400" : "text-emerald-400"
+                        doneEvent.orphans > 0 ? "text-amber-400" : "text-[color:var(--sec-good)]"
                       }`}
                     >
                       Done — {doneEvent.tablesCopied} tables,{" "}
@@ -655,7 +655,7 @@ export function SandboxPanel() {
                 </div>
               )}
 
-              {error && <p className="mt-2 text-[10px] text-red-400">{error}</p>}
+              {error && <p className="mt-2 text-[10px] text-[color:var(--sec-bad)]">{error}</p>}
             </div>
           </div>
         </div>

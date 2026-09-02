@@ -97,11 +97,11 @@ export function SeasonMarketsPanel({
   };
 
   if (loading) {
-    return <div className="text-sm text-emerald-100/60 text-center py-20">Loading…</div>;
+    return <div className="text-sm text-[color:var(--sec-muted)] text-center py-20">Loading…</div>;
   }
   if (!board?.generated || !board.markets) {
     return (
-      <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 px-4 py-6 text-center text-sm text-emerald-100/70">
+      <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_80%,transparent)] px-4 py-6 text-center text-sm text-[color:var(--sec-muted)]">
         {board?.error ?? "Season markets aren't available for this group yet."}
       </div>
     );
@@ -110,31 +110,31 @@ export function SeasonMarketsPanel({
   return (
     <div className="space-y-3">
       {board.state?.narrative && (
-        <div className="rounded-2xl border border-emerald-900/60 bg-gradient-to-br from-[#0b3b21]/90 to-[#07301a]/90 px-4 py-3">
-          <p className="text-[12px] leading-relaxed text-emerald-100/85">{board.state.narrative}</p>
+        <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-gradient-to-br from-[color:color-mix(in_srgb,var(--sec-surface)_90%,transparent)] to-[color:color-mix(in_srgb,var(--sec-surface)_90%,transparent)] px-4 py-3">
+          <p className="text-[12px] leading-relaxed text-[color:var(--sec-muted)]">{board.state.narrative}</p>
         </div>
       )}
-      {msg && <div className="text-center text-[11px] font-semibold text-emerald-300">{msg}</div>}
+      {msg && <div className="text-center text-[11px] font-semibold text-[color:var(--sec-good)]">{msg}</div>}
       {board.markets.map((market) => (
-        <section key={market.id} className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/40 overflow-hidden">
-          <div className="px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#f5e6b0]/80">
+        <section key={market.id} className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] overflow-hidden">
+          <div className="px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:color-mix(in_srgb,var(--sec-accent)_80%,transparent)]">
             {market.label}
           </div>
           <div className="px-2.5 pb-2.5 space-y-1">
             {market.selections.length === 0 ? (
-              <div className="px-1 py-2 text-[11px] text-emerald-200/50">No prices yet.</div>
+              <div className="px-1 py-2 text-[11px] text-[color:var(--sec-muted)]">No prices yet.</div>
             ) : (
               market.selections.map((sel) => (
                 <div
                   key={sel.key}
-                  className="flex items-center justify-between py-1 border-b border-emerald-900/20 last:border-b-0"
+                  className="flex items-center justify-between py-1 border-b border-[color:var(--sec-hair)] last:border-b-0"
                 >
-                  <span className="text-[12px] text-emerald-100/85 truncate pr-2">{sel.label}</span>
+                  <span className="text-[12px] text-[color:var(--sec-muted)] truncate pr-2">{sel.label}</span>
                   <button
                     type="button"
                     disabled={board.state?.is_final}
                     onClick={() => setPicking({ marketId: market.id, selection: sel, marketLabel: market.label })}
-                    className="shrink-0 min-w-[58px] rounded-lg border border-emerald-700/50 bg-emerald-950/40 px-2 py-1 text-center text-[11px] font-bold text-[#f5e6b0] hover:bg-emerald-800/40 active:scale-95 disabled:opacity-40"
+                    className="shrink-0 min-w-[58px] rounded-lg border border-[color:var(--sec-line)] bg-[color:var(--sec-surface)] px-2 py-1 text-center text-[11px] font-bold text-[color:var(--sec-accent)] hover:bg-[color:var(--sec-surface-2)] active:scale-95 disabled:opacity-40"
                   >
                     <OddsValue odds={sel.decimal_odds} />
                   </button>
@@ -149,28 +149,28 @@ export function SeasonMarketsPanel({
         createPortal(
           <div className="fixed inset-0 z-50 flex items-end">
             <button type="button" aria-label="Close" onClick={() => setPicking(null)} className="absolute inset-0 bg-black/60" />
-            <div className="relative w-full max-w-sm mx-auto rounded-t-3xl border border-emerald-900/70 bg-[#07301a] px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+20px)]">
-              <div className="text-sm font-bold text-[#f5e6b0] mb-0.5">{picking.selection.label}</div>
-              <div className="text-[11px] text-emerald-200/60 mb-4">
+            <div className="relative w-full max-w-sm mx-auto rounded-t-3xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+20px)]">
+              <div className="text-sm font-bold text-[color:var(--sec-accent)] mb-0.5">{picking.selection.label}</div>
+              <div className="text-[11px] text-[color:var(--sec-muted)] mb-4">
                 {picking.marketLabel} @ <OddsValue odds={picking.selection.decimal_odds} />
               </div>
               <div className="flex items-center justify-center gap-4 mb-3">
-                <button type="button" onClick={() => setStake((s) => Math.max(1, s - 5))} className="h-10 w-10 rounded-full border border-emerald-900/60 text-lg text-emerald-200">−</button>
+                <button type="button" onClick={() => setStake((s) => Math.max(1, s - 5))} className="h-10 w-10 rounded-full border border-[color:var(--sec-hair)] text-lg text-[color:var(--sec-text-2)]">−</button>
                 <div className="min-w-[90px] text-center">
-                  <div className="text-2xl font-bold text-emerald-50">{stake}</div>
-                  <div className="text-[10px] text-emerald-200/50">points stake</div>
+                  <div className="text-2xl font-bold text-[color:var(--sec-text)]">{stake}</div>
+                  <div className="text-[10px] text-[color:var(--sec-muted)]">points stake</div>
                 </div>
-                <button type="button" onClick={() => setStake((s) => s + 5)} className="h-10 w-10 rounded-full border border-emerald-900/60 text-lg text-emerald-200">+</button>
+                <button type="button" onClick={() => setStake((s) => s + 5)} className="h-10 w-10 rounded-full border border-[color:var(--sec-hair)] text-lg text-[color:var(--sec-text-2)]">+</button>
               </div>
-              <div className="mb-3 text-center text-[11px] text-emerald-200/60">
+              <div className="mb-3 text-center text-[11px] text-[color:var(--sec-muted)]">
                 Returns{" "}
-                <span className="font-bold text-[#f5e6b0]">{(stake * picking.selection.decimal_odds).toFixed(2)} pts</span>
+                <span className="font-bold text-[color:var(--sec-accent)]">{(stake * picking.selection.decimal_odds).toFixed(2)} pts</span>
               </div>
               <button
                 type="button"
                 onClick={placePick}
                 disabled={placing}
-                className="w-full py-2.5 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
+                className="w-full py-2.5 rounded-full bg-[color:var(--sec-primary)] text-sm font-semibold text-white hover:bg-[color:var(--sec-primary-hover)] disabled:opacity-50"
               >
                 {placing ? "Placing…" : `Place season pick — ${stake} pts`}
               </button>

@@ -176,12 +176,12 @@ function FormulaConfigEditor({
   const previewPositions = Array.from({ length: previewRows }, (_, i) => i + 1);
 
   return (
-    <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 p-4 space-y-4">
-      <div className="text-[10px] uppercase tracking-wider text-emerald-200/55 font-semibold">Formula Settings</div>
+    <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] p-4 space-y-4">
+      <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)] font-semibold">Formula Settings</div>
 
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1">
-          <label className="text-[10px] text-emerald-200/60">Field size override</label>
+          <label className="text-[10px] text-[color:var(--sec-muted)]">Field size override</label>
           <input
             type="number"
             min={2}
@@ -189,15 +189,15 @@ function FormulaConfigEditor({
             placeholder="Auto (actual finishers)"
             value={form.formula_num_participants}
             onChange={(e) => update("formula_num_participants", e.target.value)}
-            className="w-full rounded-lg border border-emerald-900/60 bg-[#01100A] px-2 py-1.5 text-[12px] text-emerald-50 placeholder:text-emerald-100/30 focus:outline-none focus:border-emerald-600"
+            className="w-full rounded-lg border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] px-2 py-1.5 text-[12px] text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none focus:border-[color:var(--sec-line)]"
           />
-          <div className="text-[9px] text-emerald-200/40">Leave blank to use actual finisher count</div>
+          <div className="text-[9px] text-[color:var(--sec-muted)]">Leave blank to use actual finisher count</div>
         </div>
       </div>
 
       {pointsModel === "custom_formula" && (
         <div className="space-y-3">
-          <div className="text-[10px] text-emerald-200/50 font-semibold uppercase tracking-wider">Custom coefficients</div>
+          <div className="text-[10px] text-[color:var(--sec-muted)] font-semibold uppercase tracking-wider">Custom coefficients</div>
           <div className="grid grid-cols-2 gap-3">
             {([
               { key: "formula_base",              label: "Floor pts",        placeholder: String(FORMULA_DEFAULTS.base) },
@@ -208,14 +208,14 @@ function FormulaConfigEditor({
               { key: "formula_round_coefficient", label: "Round step",       placeholder: String(FORMULA_DEFAULTS.round_coefficient) },
             ] as { key: keyof FormState; label: string; placeholder: string }[]).map(({ key, label, placeholder }) => (
               <div key={key} className="space-y-1">
-                <label className="text-[10px] text-emerald-200/60">{label}</label>
+                <label className="text-[10px] text-[color:var(--sec-muted)]">{label}</label>
                 <input
                   type="number"
                   step="0.01"
                   placeholder={placeholder}
                   value={form[key] as string}
                   onChange={(e) => update(key, e.target.value)}
-                  className="w-full rounded-lg border border-emerald-900/60 bg-[#01100A] px-2 py-1.5 text-[12px] text-emerald-50 placeholder:text-emerald-100/30 focus:outline-none focus:border-emerald-600"
+                  className="w-full rounded-lg border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] px-2 py-1.5 text-[12px] text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none focus:border-[color:var(--sec-line)]"
                 />
               </div>
             ))}
@@ -225,16 +225,16 @@ function FormulaConfigEditor({
 
       {/* Live preview */}
       <div className="space-y-2">
-        <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider">Preview (F={F}, R={numRounds})</div>
+        <div className="text-[10px] text-[color:var(--sec-muted)] uppercase tracking-wider">Preview (F={F}, R={numRounds})</div>
         <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
           {previewPositions.map((pos) => {
             const pts = computeFormulaPoints(pos, F, numRounds, config);
             return (
               <div key={pos} className="flex items-center justify-between py-0.5">
-                <span className="text-[11px] text-emerald-200/60">
+                <span className="text-[11px] text-[color:var(--sec-muted)]">
                   {pos}{pos === 1 ? "st" : pos === 2 ? "nd" : pos === 3 ? "rd" : "th"}
                 </span>
-                <span className="text-[11px] font-semibold text-[#7CF0BE]">{pts}</span>
+                <span className="text-[11px] font-semibold text-[color:var(--sec-accent)]">{pts}</span>
               </div>
             );
           })}
@@ -258,15 +258,15 @@ function PointsTableEditor({
 
   if (pointsModel === "fedex_style") {
     return (
-      <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 p-4 space-y-2">
-        <div className="text-[10px] uppercase tracking-wider text-emerald-200/55 font-semibold">FedEx-Style Points (read-only)</div>
+      <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] p-4 space-y-2">
+        <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)] font-semibold">FedEx-Style Points (read-only)</div>
         <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
           {FEDEX_POINTS.map((pts, i) => (
             <div key={i} className="flex items-center justify-between py-0.5">
-              <span className="text-[11px] text-emerald-200/60">
+              <span className="text-[11px] text-[color:var(--sec-muted)]">
                 {i + 1}{i === 0 ? "st" : i === 1 ? "nd" : i === 2 ? "rd" : "th"}
               </span>
-              <span className="text-[11px] font-semibold text-[#7CF0BE]">{pts}</span>
+              <span className="text-[11px] font-semibold text-[color:var(--sec-accent)]">{pts}</span>
             </div>
           ))}
         </div>
@@ -285,12 +285,12 @@ function PointsTableEditor({
   }
 
   return (
-    <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 p-4 space-y-2">
-      <div className="text-[10px] uppercase tracking-wider text-emerald-200/55 font-semibold">Points by Position</div>
+    <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] p-4 space-y-2">
+      <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)] font-semibold">Points by Position</div>
       <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
         {rows.map((pos) => (
           <div key={pos} className="flex items-center justify-between py-0.5">
-            <span className="text-[11px] text-emerald-200/60 w-8 shrink-0">
+            <span className="text-[11px] text-[color:var(--sec-muted)] w-8 shrink-0">
               {pos}{pos === 1 ? "st" : pos === 2 ? "nd" : pos === 3 ? "rd" : "th"}
             </span>
             <NumberField
@@ -298,7 +298,7 @@ function PointsTableEditor({
               value={pointsTable[String(pos)]}
               onValueChange={(v) => handleChange(pos, v)}
               placeholder="0"
-              className="w-16 rounded-lg border border-emerald-900/60 bg-[#01100A] px-2 py-1 text-[11px] text-emerald-50 placeholder:text-emerald-100/30 focus:outline-none focus:border-emerald-600 text-right"
+              className="w-16 rounded-lg border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] px-2 py-1 text-[11px] text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none focus:border-[color:var(--sec-line)] text-right"
             />
           </div>
         ))}
@@ -334,23 +334,23 @@ function SuspensePreviewCard({ row, flipped }: { row: typeof PREVIEW_ROWS[0]; fl
   const isWinner = row.pos === 1;
   return (
     <div className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${
-      isWinner && flipped ? "border-[#7CF0BE]/50 bg-[#7CF0BE]/10" : "border-emerald-900/50 bg-[#0b3b21]/70"
+      isWinner && flipped ? "border-[color:color-mix(in_srgb,var(--sec-accent)_50%,transparent)] bg-[color:color-mix(in_srgb,var(--sec-accent)_10%,transparent)]" : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)]"
     }`}>
-      <span className="w-5 text-center text-[10px] font-extrabold text-[#7CF0BE]/70">
+      <span className="w-5 text-center text-[10px] font-extrabold text-[color:color-mix(in_srgb,var(--sec-accent)_70%,transparent)]">
         {isWinner && flipped ? "🏆" : row.pos}
       </span>
       <AnimatePresence mode="wait">
         {!flipped ? (
           <motion.div key="hidden" exit={{ rotateY: 90 }} transition={{ duration: 0.2 }} className="flex flex-1 items-center gap-2">
-            <div className="h-6 w-6 rounded-full bg-emerald-900/60 grid place-items-center text-[9px] text-emerald-200/40 shrink-0">?</div>
-            <span className="flex-1 text-[11px] text-emerald-200/30 tracking-widest">— — —</span>
-            <span className="text-[10px] text-[#7CF0BE]/25">??</span>
+            <div className="h-6 w-6 rounded-full bg-[color:var(--sec-surface)] grid place-items-center text-[9px] text-[color:var(--sec-muted)] shrink-0">?</div>
+            <span className="flex-1 text-[11px] text-[color:var(--sec-muted)] tracking-widest">— — —</span>
+            <span className="text-[10px] text-[color:color-mix(in_srgb,var(--sec-accent)_25%,transparent)]">??</span>
           </motion.div>
         ) : (
           <motion.div key="shown" initial={{ rotateY: -90 }} animate={{ rotateY: 0 }} transition={{ duration: 0.3, type: "spring", stiffness: 280, damping: 24 }} className="flex flex-1 items-center gap-2">
-            <div className="h-6 w-6 rounded-full bg-emerald-900/60 grid place-items-center text-[9px] font-bold text-emerald-200 shrink-0">{row.initials}</div>
-            <span className={`flex-1 text-[11px] font-semibold truncate ${isWinner ? "text-[#7CF0BE]" : "text-emerald-50"}`}>{row.name}</span>
-            <span className={`text-[10px] font-extrabold shrink-0 ${isWinner ? "text-[#7CF0BE]" : "text-[#7CF0BE]/80"}`}>{row.score}</span>
+            <div className="h-6 w-6 rounded-full bg-[color:var(--sec-surface)] grid place-items-center text-[9px] font-bold text-[color:var(--sec-text-2)] shrink-0">{row.initials}</div>
+            <span className={`flex-1 text-[11px] font-semibold truncate ${isWinner ? "text-[color:var(--sec-accent)]" : "text-[color:var(--sec-text)]"}`}>{row.name}</span>
+            <span className={`text-[10px] font-extrabold shrink-0 ${isWinner ? "text-[color:var(--sec-accent)]" : "text-[color:color-mix(in_srgb,var(--sec-accent)_80%,transparent)]"}`}>{row.score}</span>
           </motion.div>
         )}
       </AnimatePresence>
@@ -368,7 +368,7 @@ const PODIUM_PREVIEW_POSITIONS = [
   {
     pos: 1 as const, initials: "JS", name: "J. Smith", score: "-2",
     gradient: "linear-gradient(180deg, #c9a227 0%, #9a7b1a 40%, #6b5112 100%)",
-    ring: "ring-[#7CF0BE]", text: "text-[#7CF0BE]", h: 70, label: "1",
+    ring: "ring-[color:var(--sec-accent)]", text: "text-[color:var(--sec-accent)]", h: 70, label: "1",
     bLeft: "44%", bTop: "4%",  bSize: "w-11 h-11", pulsePeak: 1.35, pulseDur: 2.7,
   },
   {
@@ -394,10 +394,10 @@ function MiniPreviewTicker() {
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 3 }}
         transition={{ duration: 0.2 }}
-        className="flex items-center gap-1.5 rounded-full border border-emerald-900/50 bg-[#0b3b21]/60 px-2.5 py-0.5 text-[9px]"
+        className="flex items-center gap-1.5 rounded-full border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-2.5 py-0.5 text-[9px]"
       >
-        <span className="text-emerald-200/70">{row.name}</span>
-        <span className="font-bold text-[#7CF0BE]">- -</span>
+        <span className="text-[color:var(--sec-muted)]">{row.name}</span>
+        <span className="font-bold text-[color:var(--sec-accent)]">- -</span>
       </motion.div>
     </AnimatePresence>
   );
@@ -454,7 +454,7 @@ function PodiumPreview() {
             transition={{ duration: 0.3 }}
             className="absolute inset-0 flex items-center justify-center z-20"
           >
-            <p className="text-[#7CF0BE] text-[11px] font-bold tracking-widest uppercase">
+            <p className="text-[color:var(--sec-accent)] text-[11px] font-bold tracking-widest uppercase">
               The results are in…
             </p>
           </motion.div>
@@ -487,7 +487,7 @@ function PodiumPreview() {
                   ? { duration: 0.85, times: [0, 0.6, 1], ease: "easeIn" }
                   : { duration: pulseDur, repeat: Infinity, ease: "easeInOut" }
               }
-              className={`${bSize} rounded-full border border-emerald-700/50 bg-emerald-900/60 grid place-items-center text-[9px] font-bold text-emerald-200`}
+              className={`${bSize} rounded-full border border-[color:var(--sec-line)] bg-[color:var(--sec-surface)] grid place-items-center text-[9px] font-bold text-[color:var(--sec-text-2)]`}
             >
               {initials}
             </motion.div>
@@ -497,7 +497,7 @@ function PodiumPreview() {
                 initial={{ scale: 1, opacity: 0.8 }}
                 animate={{ scale: 5, opacity: 0 }}
                 transition={{ duration: 0.6, ease: "easeOut" }}
-                className={`${bSize} rounded-full border border-emerald-400/60`}
+                className={`${bSize} rounded-full border border-[color:var(--sec-accent)]`}
               />
             )}
           </div>
@@ -520,7 +520,7 @@ function PodiumPreview() {
                       transition={{ type: "spring", stiffness: 320, damping: 22 }}
                       className={`ring-1 ${ring} rounded-full shadow-lg`}
                     >
-                      <div className="w-7 h-7 rounded-full bg-emerald-900/60 grid place-items-center text-[8px] font-bold text-emerald-200">
+                      <div className="w-7 h-7 rounded-full bg-[color:var(--sec-surface)] grid place-items-center text-[8px] font-bold text-[color:var(--sec-text-2)]">
                         {initials}
                       </div>
                     </motion.div>
@@ -634,8 +634,8 @@ function RevealModePreview({ mode }: { mode: "animated" | "suspense" | "rapid" |
     : { type: "spring" as const, stiffness: 260, damping: 22 };
 
   return (
-    <div className="rounded-xl border border-emerald-900/40 bg-[#051a0d]/80 overflow-hidden" style={{ height: 210 }}>
-      <div className="text-[9px] uppercase tracking-wider text-emerald-200/30 px-3 pt-2 pb-1">Preview</div>
+    <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[#051a0d]/80 overflow-hidden" style={{ height: 210 }}>
+      <div className="text-[9px] uppercase tracking-wider text-[color:var(--sec-muted)] px-3 pt-2 pb-1">Preview</div>
       <div className="flex flex-col items-center justify-center px-3" style={{ height: 178 }}>
 
         {/* Podium preview */}
@@ -649,13 +649,13 @@ function RevealModePreview({ mode }: { mode: "animated" | "suspense" | "rapid" |
                 {mode === "suspense" ? (
                   <>
                     <AnimatePresence mode="wait">
-                      <motion.p key={labelIdx} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} className="text-[#7CF0BE] text-xs font-bold tracking-widest uppercase">
+                      <motion.p key={labelIdx} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} className="text-[color:var(--sec-accent)] text-xs font-bold tracking-widest uppercase">
                         {SUSPENSE_LABELS[labelIdx]}
                       </motion.p>
                     </AnimatePresence>
                     <div className="flex justify-center gap-1.5">
                       {[0, 1, 2, 3].map((i) => (
-                        <motion.div key={i} className="w-1.5 h-1.5 rounded-full bg-[#7CF0BE]"
+                        <motion.div key={i} className="w-1.5 h-1.5 rounded-full bg-[color:var(--sec-accent)]"
                           animate={{ opacity: [0.15, 1, 0.15], scale: [0.8, 1.2, 0.8] }}
                           transition={{ duration: 1.6, repeat: Infinity, delay: i * 0.4 }} />
                       ))}
@@ -663,7 +663,7 @@ function RevealModePreview({ mode }: { mode: "animated" | "suspense" | "rapid" |
                   </>
                 ) : (
                   <>
-                    <p className="text-[#7CF0BE] text-xs font-bold tracking-widest uppercase">
+                    <p className="text-[color:var(--sec-accent)] text-xs font-bold tracking-widest uppercase">
                       {mode === "rapid" ? "Stand by…" : "Results incoming"}
                     </p>
                     <div className="flex justify-center gap-1">
@@ -693,19 +693,19 @@ function RevealModePreview({ mode }: { mode: "animated" | "suspense" | "rapid" |
                             animate={{ opacity: 1, y: 0, scale: 1 }}
                             transition={springProps}
                             className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${
-                              isWinner ? "border-[#7CF0BE]/50 bg-[#7CF0BE]/10" : "border-emerald-900/50 bg-[#0b3b21]/70"
+                              isWinner ? "border-[color:color-mix(in_srgb,var(--sec-accent)_50%,transparent)] bg-[color:color-mix(in_srgb,var(--sec-accent)_10%,transparent)]" : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)]"
                             }`}
                           >
-                            <span className="w-5 text-center text-[10px] font-extrabold text-[#7CF0BE]/70">
+                            <span className="w-5 text-center text-[10px] font-extrabold text-[color:color-mix(in_srgb,var(--sec-accent)_70%,transparent)]">
                               {isWinner ? "🏆" : row.pos}
                             </span>
-                            <div className="h-6 w-6 rounded-full bg-emerald-900/60 grid place-items-center text-[9px] font-bold text-emerald-200 shrink-0">
+                            <div className="h-6 w-6 rounded-full bg-[color:var(--sec-surface)] grid place-items-center text-[9px] font-bold text-[color:var(--sec-text-2)] shrink-0">
                               {row.initials}
                             </div>
-                            <span className={`flex-1 text-[11px] font-semibold truncate ${isWinner ? "text-[#7CF0BE]" : "text-emerald-50"}`}>
+                            <span className={`flex-1 text-[11px] font-semibold truncate ${isWinner ? "text-[color:var(--sec-accent)]" : "text-[color:var(--sec-text)]"}`}>
                               {row.name}
                             </span>
-                            <span className={`text-[10px] font-extrabold shrink-0 ${isWinner ? "text-[#7CF0BE]" : "text-[#7CF0BE]/80"}`}>
+                            <span className={`text-[10px] font-extrabold shrink-0 ${isWinner ? "text-[color:var(--sec-accent)]" : "text-[color:color-mix(in_srgb,var(--sec-accent)_80%,transparent)]"}`}>
                               {row.score}
                             </span>
                           </motion.div>
@@ -731,14 +731,14 @@ function LeaderboardFreezeSection({
   const [open, setOpen] = useState(false);
   const hasConfig = form.freeze_enabled;
   return (
-    <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 overflow-hidden">
+    <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] overflow-hidden">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center justify-between px-4 py-3 text-left"
       >
-        <span className="text-[11px] uppercase tracking-wider text-emerald-200/65">Ceremony Freeze</span>
-        <span className="text-[10px] text-emerald-100/50">{hasConfig ? "Configured" : "Optional"} {open ? "▲" : "▼"}</span>
+        <span className="text-[11px] uppercase tracking-wider text-[color:var(--sec-muted)]">Ceremony Freeze</span>
+        <span className="text-[10px] text-[color:var(--sec-muted)]">{hasConfig ? "Configured" : "Optional"} {open ? "▲" : "▼"}</span>
       </button>
       {open && (
         <div className="px-4 pb-4 space-y-4">
@@ -748,19 +748,19 @@ function LeaderboardFreezeSection({
             onClick={() => update("freeze_enabled", !form.freeze_enabled)}
             className={`w-full text-left rounded-xl border px-4 py-3 text-sm transition-colors ${
               form.freeze_enabled
-                ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                : "border-emerald-900/50 bg-[#01100A] text-emerald-200/60"
+                ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]"
+                : "border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] text-[color:var(--sec-muted)]"
             }`}
           >
             <div className="font-semibold">Hide results for ceremony</div>
-            <div className="text-[10px] text-emerald-200/50 mt-0.5">Freeze leaderboard before players finish</div>
+            <div className="text-[10px] text-[color:var(--sec-muted)] mt-0.5">Freeze leaderboard before players finish</div>
           </button>
 
           {form.freeze_enabled && (
             <>
               {/* How many holes to hide */}
               <div className="space-y-1.5">
-                <label className="text-[10px] text-emerald-200/55">Hide last ___ holes</label>
+                <label className="text-[10px] text-[color:var(--sec-muted)]">Hide last ___ holes</label>
                 <input
                   type="number"
                   min={1}
@@ -768,16 +768,16 @@ function LeaderboardFreezeSection({
                   value={form.freeze_last_holes}
                   onChange={(e) => update("freeze_last_holes", e.target.value)}
                   placeholder="e.g. 5"
-                  className="w-full rounded-xl border border-emerald-900/60 bg-[#01100A] px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
+                  className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] px-3 py-2 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none focus:border-[color:var(--sec-line)]"
                 />
-                <p className="text-[10px] text-emerald-100/40">
+                <p className="text-[10px] text-[color:var(--sec-muted)]">
                   Scores through the earlier holes remain visible. Final holes are hidden until the reveal.
                 </p>
               </div>
 
               {/* Scope */}
               <div className="space-y-1.5">
-                <label className="text-[10px] text-emerald-200/55">Who is hidden?</label>
+                <label className="text-[10px] text-[color:var(--sec-muted)]">Who is hidden?</label>
                 <div className="flex gap-1.5">
                   {(["all", "top_x"] as const).map((v) => (
                     <button
@@ -786,8 +786,8 @@ function LeaderboardFreezeSection({
                       onClick={() => update("freeze_scope", v)}
                       className={`flex-1 rounded-xl border px-3 py-2 text-xs transition-colors ${
                         form.freeze_scope === v
-                          ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                          : "border-emerald-900/50 bg-[#01100A] text-emerald-200/60"
+                          ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]"
+                          : "border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] text-[color:var(--sec-muted)]"
                       }`}
                     >
                       {v === "all" ? "Entire field" : "Top X only"}
@@ -801,7 +801,7 @@ function LeaderboardFreezeSection({
                     value={form.freeze_top_x}
                     onChange={(e) => update("freeze_top_x", e.target.value)}
                     placeholder="How many top positions to hide"
-                    className="w-full rounded-xl border border-emerald-900/60 bg-[#01100A] px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
+                    className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] px-3 py-2 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none focus:border-[color:var(--sec-line)]"
                   />
                 )}
               </div>
@@ -812,17 +812,17 @@ function LeaderboardFreezeSection({
                 onClick={() => update("freeze_auto_reveal", !form.freeze_auto_reveal)}
                 className={`w-full text-left rounded-xl border px-4 py-2 text-sm transition-colors ${
                   form.freeze_auto_reveal
-                    ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                    : "border-emerald-900/50 bg-[#01100A] text-emerald-200/60"
+                    ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]"
+                    : "border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] text-[color:var(--sec-muted)]"
                 }`}
               >
                 <div className="font-semibold">Auto-reveal when all finish</div>
-                <div className="text-[10px] text-emerald-200/50 mt-0.5">Automatically unfreeze once every player submits</div>
+                <div className="text-[10px] text-[color:var(--sec-muted)] mt-0.5">Automatically unfreeze once every player submits</div>
               </button>
 
               {/* Reveal style — 2×2 grid */}
               <div className="space-y-2">
-                <label className="text-[10px] text-emerald-200/55">Reveal style</label>
+                <label className="text-[10px] text-[color:var(--sec-muted)]">Reveal style</label>
                 <div className="grid grid-cols-2 gap-1.5">
                   {REVEAL_MODES.map((m) => (
                     <button
@@ -831,12 +831,12 @@ function LeaderboardFreezeSection({
                       onClick={() => update("reveal_style", m.value)}
                       className={`rounded-xl border px-3 py-2.5 text-left transition-colors ${
                         form.reveal_style === m.value
-                          ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                          : "border-emerald-900/50 bg-[#01100A] text-emerald-200/60"
+                          ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]"
+                          : "border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] text-[color:var(--sec-muted)]"
                       }`}
                     >
                       <div className="text-xs font-semibold">{m.label}</div>
-                      <div className="text-[10px] text-emerald-200/45 mt-0.5 leading-tight">{m.desc}</div>
+                      <div className="text-[10px] text-[color:var(--sec-muted)] mt-0.5 leading-tight">{m.desc}</div>
                     </button>
                   ))}
                 </div>
@@ -850,14 +850,14 @@ function LeaderboardFreezeSection({
               {/* Reveal top X */}
               {form.reveal_style !== "none" && (
                 <div className="space-y-1.5">
-                  <label className="text-[10px] text-emerald-200/55">Animate top ___ positions (leave blank for full field)</label>
+                  <label className="text-[10px] text-[color:var(--sec-muted)]">Animate top ___ positions (leave blank for full field)</label>
                   <input
                     type="number"
                     min={1}
                     value={form.reveal_top_x}
                     onChange={(e) => update("reveal_top_x", e.target.value)}
                     placeholder="e.g. 10 — blank = entire field"
-                    className="w-full rounded-xl border border-emerald-900/60 bg-[#01100A] px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
+                    className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] px-3 py-2 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none focus:border-[color:var(--sec-line)]"
                   />
                 </div>
               )}
@@ -875,33 +875,33 @@ function EntryWindowSection({
   const [open, setOpen] = useState(false);
   const hasValue = !!(start || end);
   return (
-    <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 overflow-hidden">
+    <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] overflow-hidden">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center justify-between px-4 py-3 text-left"
       >
-        <span className="text-[11px] uppercase tracking-wider text-emerald-200/65">Entry Window</span>
-        <span className="text-[10px] text-emerald-100/50">{hasValue ? "Set" : "Optional"} {open ? "▲" : "▼"}</span>
+        <span className="text-[11px] uppercase tracking-wider text-[color:var(--sec-muted)]">Entry Window</span>
+        <span className="text-[10px] text-[color:var(--sec-muted)]">{hasValue ? "Set" : "Optional"} {open ? "▲" : "▼"}</span>
       </button>
       {open && (
         <div className="px-4 pb-4 space-y-3">
           <div className="space-y-1">
-            <label className="text-[10px] text-emerald-200/55">Opens</label>
+            <label className="text-[10px] text-[color:var(--sec-muted)]">Opens</label>
             <input
               type="datetime-local"
               value={start}
               onChange={(e) => onChangeStart(e.target.value)}
-              className="w-full rounded-xl border border-emerald-900/60 bg-[#01100A] px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
+              className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] px-3 py-2 text-sm text-[color:var(--sec-text)] focus:outline-none focus:border-[color:var(--sec-line)] [color-scheme:dark]"
             />
           </div>
           <div className="space-y-1">
-            <label className="text-[10px] text-emerald-200/55">Closes</label>
+            <label className="text-[10px] text-[color:var(--sec-muted)]">Closes</label>
             <input
               type="datetime-local"
               value={end}
               onChange={(e) => onChangeEnd(e.target.value)}
-              className="w-full rounded-xl border border-emerald-900/60 bg-[#01100A] px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
+              className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] px-3 py-2 text-sm text-[color:var(--sec-text)] focus:outline-none focus:border-[color:var(--sec-line)] [color-scheme:dark]"
             />
           </div>
         </div>
@@ -913,14 +913,14 @@ function EntryWindowSection({
 function RulesTextSection({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 overflow-hidden">
+    <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] overflow-hidden">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center justify-between px-4 py-3 text-left"
       >
-        <span className="text-[11px] uppercase tracking-wider text-emerald-200/65">Rules Text</span>
-        <span className="text-[10px] text-emerald-100/50">{value ? "Set" : "Optional"} {open ? "▲" : "▼"}</span>
+        <span className="text-[11px] uppercase tracking-wider text-[color:var(--sec-muted)]">Rules Text</span>
+        <span className="text-[10px] text-[color:var(--sec-muted)]">{value ? "Set" : "Optional"} {open ? "▲" : "▼"}</span>
       </button>
       {open && (
         <div className="px-4 pb-4">
@@ -929,7 +929,7 @@ function RulesTextSection({ value, onChange }: { value: string; onChange: (v: st
             onChange={(e) => onChange(e.target.value)}
             rows={4}
             placeholder="Any specific rules or conditions for this event…"
-            className="w-full rounded-xl border border-emerald-900/60 bg-[#01100A] px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600 resize-none"
+            className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] px-3 py-2 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none focus:border-[color:var(--sec-line)] resize-none"
           />
         </div>
       )}
@@ -1429,14 +1429,14 @@ export default function CreateEventClient() {
       {/* Group — locked if launched from a group page, otherwise picker */}
       {preselectedGroupId ? (
         <div className="space-y-1.5">
-          <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Group</label>
-          <div className="rounded-xl border border-emerald-600/60 bg-emerald-900/30 px-4 py-2.5 text-sm text-emerald-50">
+          <label className="text-[11px] uppercase tracking-wider text-[color:var(--sec-muted)]">Group</label>
+          <div className="rounded-xl border border-[color:var(--sec-line)] bg-[color:var(--sec-surface)] px-4 py-2.5 text-sm text-[color:var(--sec-text)]">
             {myGroups.find((g) => g.id === form.group_id)?.name ?? "Loading…"}
           </div>
         </div>
       ) : (
         <div className="space-y-2">
-          <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Group (optional)</label>
+          <label className="text-[11px] uppercase tracking-wider text-[color:var(--sec-muted)]">Group (optional)</label>
           {myGroups.length > 0 ? (
             <div className="space-y-1.5">
               <button
@@ -1444,8 +1444,8 @@ export default function CreateEventClient() {
                 onClick={() => { update("group_id", ""); update("competition_id", ""); update("season_id", ""); setGroupDefaultsApplied(false); setCompetitionEventTemplates([]); setTemplateCompetition(null); }}
                 className={`w-full text-left rounded-xl border px-4 py-2 text-sm transition-colors ${
                   form.group_id === ""
-                    ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                    : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
+                    ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]"
+                    : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-muted)]"
                 }`}
               >
                 Standalone (no group)
@@ -1460,8 +1460,8 @@ export default function CreateEventClient() {
                   }}
                   className={`w-full text-left rounded-xl border px-4 py-2 text-sm transition-colors ${
                     form.group_id === g.id
-                      ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                      : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
+                      ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]"
+                      : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-muted)]"
                   }`}
                 >
                   {g.name}
@@ -1469,9 +1469,9 @@ export default function CreateEventClient() {
               ))}
             </div>
           ) : (
-            <div className="text-sm text-emerald-100/50">
+            <div className="text-sm text-[color:var(--sec-muted)]">
               No groups yet.{" "}
-              <button type="button" onClick={() => router.push("/majors/groups/create")} className="underline text-emerald-300">
+              <button type="button" onClick={() => router.push("/majors/groups/create")} className="underline text-[color:var(--sec-good)]">
                 Create one?
               </button>
             </div>
@@ -1482,7 +1482,7 @@ export default function CreateEventClient() {
       {/* Season — select before competition so year is known for name auto-populate */}
       {form.group_id && (
         <div className="space-y-2">
-          <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Season</label>
+          <label className="text-[11px] uppercase tracking-wider text-[color:var(--sec-muted)]">Season</label>
           {groupSeasons.length > 0 ? (
             <div className="space-y-1.5">
               {groupSeasons.map((s) => (
@@ -1504,12 +1504,12 @@ export default function CreateEventClient() {
                   }}
                   className={`w-full text-left rounded-xl border px-4 py-2 text-sm transition-colors ${
                     form.season_id === s.id
-                      ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                      : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
+                      ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]"
+                      : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-muted)]"
                   }`}
                 >
                   <div>{s.name}</div>
-                  <div className="text-[10px] text-emerald-200/45 mt-0.5">
+                  <div className="text-[10px] text-[color:var(--sec-muted)] mt-0.5">
                     {new Date(s.start_date + "T00:00:00").toLocaleDateString("en-GB", { month: "short", year: "numeric" })}
                     {" – "}
                     {new Date(s.end_date + "T00:00:00").toLocaleDateString("en-GB", { month: "short", year: "numeric" })}
@@ -1518,12 +1518,12 @@ export default function CreateEventClient() {
               ))}
             </div>
           ) : (
-            <div className="text-sm text-emerald-100/50">
+            <div className="text-sm text-[color:var(--sec-muted)]">
               No seasons yet.{" "}
               <button
                 type="button"
                 onClick={() => router.push(`/majors/groups/${form.group_id}?tab=settings`)}
-                className="underline text-emerald-300"
+                className="underline text-[color:var(--sec-good)]"
               >
                 Add a season →
               </button>
@@ -1533,7 +1533,7 @@ export default function CreateEventClient() {
             <button
               type="button"
               onClick={() => router.push(`/majors/groups/${form.group_id}?tab=settings`)}
-              className="text-[11px] text-emerald-400 underline"
+              className="text-[11px] text-[color:var(--sec-good)] underline"
             >
               + Create new season
             </button>
@@ -1544,7 +1544,7 @@ export default function CreateEventClient() {
       {/* Competition / Template — primary entry point for group events */}
       {form.group_id && (
         <div className="space-y-2">
-          <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Which competition is this event part of?</label>
+          <label className="text-[11px] uppercase tracking-wider text-[color:var(--sec-muted)]">Which competition is this event part of?</label>
           <button
             type="button"
             onClick={() => {
@@ -1560,8 +1560,8 @@ export default function CreateEventClient() {
             }}
             className={`w-full text-left rounded-xl border px-4 py-2 text-sm transition-colors ${
               form.competition_id === ""
-                ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
+                ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]"
+                : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-muted)]"
             }`}
           >
             Not part of a competition
@@ -1573,22 +1573,22 @@ export default function CreateEventClient() {
                 onClick={() => handleCompetitionSelect(comp.id)}
                 className={`w-full text-left rounded-xl border px-4 py-2 text-sm transition-colors ${
                   form.competition_id === comp.id
-                    ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                    : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
+                    ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]"
+                    : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-muted)]"
                 }`}
               >
                 {comp.name}
               </button>
               {/* Templates nested under selected competition */}
               {form.competition_id === comp.id && competitionEventTemplates.length > 0 && (
-                <div className="ml-3 mt-1 space-y-1 border-l border-emerald-800/60 pl-3">
+                <div className="ml-3 mt-1 space-y-1 border-l border-[color:var(--sec-hair)] pl-3">
                   <button
                     type="button"
                     onClick={() => handleEventTemplateSelect("")}
                     className={`w-full text-left rounded-xl border px-3 py-1.5 text-[11px] transition-colors ${
                       form.competition_event_template_id === ""
-                        ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                        : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
+                        ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]"
+                        : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-muted)]"
                     }`}
                   >
                     No specific event
@@ -1600,13 +1600,13 @@ export default function CreateEventClient() {
                       onClick={() => handleEventTemplateSelect(et.id)}
                       className={`w-full text-left rounded-xl border px-3 py-1.5 text-[11px] transition-colors ${
                         form.competition_event_template_id === et.id
-                          ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                          : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
+                          ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]"
+                          : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-muted)]"
                       }`}
                     >
                       <div>{et.name}</div>
                       {et.typical_month != null && (
-                        <div className="text-[10px] text-emerald-200/45 mt-0.5">
+                        <div className="text-[10px] text-[color:var(--sec-muted)] mt-0.5">
                           Usually {["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][et.typical_month - 1]}
                         </div>
                       )}
@@ -1616,7 +1616,7 @@ export default function CreateEventClient() {
               )}
             </div>
           ))}
-          <button type="button" onClick={() => setShowNewCompetitionModal(true)} className="text-[11px] text-emerald-400 underline">
+          <button type="button" onClick={() => setShowNewCompetitionModal(true)} className="text-[11px] text-[color:var(--sec-good)] underline">
             + Create new competition
           </button>
         </div>
@@ -1624,24 +1624,24 @@ export default function CreateEventClient() {
 
       {/* Name — pre-populated from template + year, always editable */}
       <div className="space-y-2">
-        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Event Name *</label>
+        <label className="text-[11px] uppercase tracking-wider text-[color:var(--sec-muted)]">Event Name *</label>
         <input
           type="text"
           value={form.name}
           onChange={(e) => { nameAutoGenerated.current = false; update("name", e.target.value); }}
           placeholder="e.g. Spring Major 2026"
-          className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-3 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
+          className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-4 py-3 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none focus:border-[color:var(--sec-line)]"
         />
       </div>
 
       {/* Date */}
       <div className="space-y-2">
-        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Date</label>
+        <label className="text-[11px] uppercase tracking-wider text-[color:var(--sec-muted)]">Date</label>
         <input
           type="date"
           value={form.event_date}
           onChange={(e) => update("event_date", e.target.value)}
-          className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-3 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
+          className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-4 py-3 text-sm text-[color:var(--sec-text)] focus:outline-none focus:border-[color:var(--sec-line)] [color-scheme:dark]"
         />
         {(() => {
           if (!form.group_id || !form.event_date) return null;
@@ -1679,19 +1679,19 @@ export default function CreateEventClient() {
 
       {/* Format — inherited from template with override option, or editable */}
       <div className="space-y-2">
-        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Format</label>
+        <label className="text-[11px] uppercase tracking-wider text-[color:var(--sec-muted)]">Format</label>
         {showInheritedFormat ? (
-          <div className="flex items-center justify-between rounded-xl border border-emerald-700/40 bg-emerald-900/20 px-4 py-2.5">
+          <div className="flex items-center justify-between rounded-xl border border-[color:var(--sec-line)] bg-[color:var(--sec-surface)] px-4 py-2.5">
             <div>
-              <div className="text-[10px] uppercase tracking-wider text-emerald-400/70 mb-0.5">Inherited from template</div>
-              <div className="text-sm text-emerald-50">
+              <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-good)] mb-0.5">Inherited from template</div>
+              <div className="text-sm text-[color:var(--sec-text)]">
                 {EVENT_TYPE_LABELS[form.event_type] ?? form.event_type}
               </div>
             </div>
             <button
               type="button"
               onClick={() => setFormatOverridden(true)}
-              className="text-[11px] text-emerald-400 underline shrink-0 ml-3"
+              className="text-[11px] text-[color:var(--sec-good)] underline shrink-0 ml-3"
             >
               Change
             </button>
@@ -1705,8 +1705,8 @@ export default function CreateEventClient() {
                 onClick={() => handleTypeChange(t.value)}
                 className={`rounded-xl border px-3 py-2 text-sm transition-colors ${
                   form.event_type === t.value
-                    ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                    : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
+                    ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]"
+                    : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-muted)]"
                 }`}
               >
                 {t.label}
@@ -1718,7 +1718,7 @@ export default function CreateEventClient() {
 
       {/* Scoring */}
       <div className="space-y-2">
-        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Scoring</label>
+        <label className="text-[11px] uppercase tracking-wider text-[color:var(--sec-muted)]">Scoring</label>
         {FORMAT_ALLOWS_SCORING_CHOICE(form.event_type) ? (
           <div className="flex gap-1.5">
             {SCORING_MODELS.filter((s) => s.value === "net" || s.value === "gross").map((s) => (
@@ -1728,8 +1728,8 @@ export default function CreateEventClient() {
                 onClick={() => update("scoring_model", s.value)}
                 className={`flex-1 rounded-xl border px-3 py-2 text-sm transition-colors ${
                   form.scoring_model === s.value
-                    ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                    : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
+                    ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]"
+                    : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-muted)]"
                 }`}
               >
                 {s.shortLabel}
@@ -1737,7 +1737,7 @@ export default function CreateEventClient() {
             ))}
           </div>
         ) : (
-          <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 px-3 py-2 text-sm text-emerald-200/55">
+          <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-3 py-2 text-sm text-[color:var(--sec-muted)]">
             {form.scoring_model === "stableford_points" ? "Stableford Points" : "Match Result"} — determined by format
           </div>
         )}
@@ -1747,15 +1747,15 @@ export default function CreateEventClient() {
     /* ── Step 1: Handicap & Entry ── */
     <div key="step1" className="space-y-5">
       {groupDefaultsApplied && (
-        <div className="rounded-xl border border-emerald-700/50 bg-emerald-900/20 px-4 py-2 text-[11px] text-emerald-200/70">
+        <div className="rounded-xl border border-[color:var(--sec-line)] bg-[color:var(--sec-surface)] px-4 py-2 text-[11px] text-[color:var(--sec-muted)]">
           ✓ Handicap rules pre-filled from group defaults
         </div>
       )}
 
       {/* Handicap rules */}
       {form.scoring_model !== "gross" && (
-        <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 p-4 space-y-3">
-          <div className="text-[10px] uppercase tracking-wider text-emerald-200/55 font-semibold">Handicap Rules</div>
+        <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] p-4 space-y-3">
+          <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)] font-semibold">Handicap Rules</div>
           <HandicapRulesEditor
             value={{ mode: form.handicap_mode as any, allowance_pct: form.handicap_allowance_pct, max_handicap: form.handicap_max }}
             onChange={(v) => setForm((f) => ({ ...f, handicap_mode: v.mode as PlayingHandicapMode, handicap_allowance_pct: v.allowance_pct, handicap_max: v.max_handicap }))}
@@ -1779,14 +1779,14 @@ export default function CreateEventClient() {
     <div key="step2" className="space-y-5">
       {/* Number of rounds */}
       <div className="space-y-2">
-        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Number of Rounds</label>
+        <label className="text-[11px] uppercase tracking-wider text-[color:var(--sec-muted)]">Number of Rounds</label>
         <input
           type="number"
           min={1}
           max={10}
           value={form.num_rounds}
           onChange={(e) => update("num_rounds", e.target.value)}
-          className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-3 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
+          className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-4 py-3 text-sm text-[color:var(--sec-text)] focus:outline-none focus:border-[color:var(--sec-line)]"
         />
       </div>
 
@@ -1794,30 +1794,30 @@ export default function CreateEventClient() {
       {form.rounds.map((r, idx) => {
         const tees = roundTeeBoxes[idx] ?? [];
         return (
-          <div key={idx} className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/30 p-3 space-y-2">
-            <div className="text-[10px] uppercase tracking-wider text-emerald-200/55 font-semibold">
+          <div key={idx} className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_30%,transparent)] p-3 space-y-2">
+            <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)] font-semibold">
               {form.rounds.length > 1 ? `Round ${idx + 1} — Course` : "Course (optional)"}
             </div>
             {form.rounds.length > 1 && (
               <div className="space-y-1">
-                <label className="text-[10px] uppercase tracking-wider text-emerald-200/65">
+                <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">
                   Date {idx === 0 ? "(defaults to the event date)" : "(optional)"}
                 </label>
                 <input
                   type="date"
                   value={r.scheduled_date}
                   onChange={(e) => updateRound(idx, { scheduled_date: e.target.value })}
-                  className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2 text-[12px] text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
+                  className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2 text-[12px] text-[color:var(--sec-text)] focus:outline-none focus:border-[color:var(--sec-line)] [color-scheme:dark]"
                 />
               </div>
             )}
             {r.course_id ? (
-              <div className="flex items-center justify-between rounded-xl border border-emerald-600/60 bg-emerald-900/30 px-3 py-2">
-                <span className="text-sm text-emerald-50 truncate">{r.course_name}</span>
+              <div className="flex items-center justify-between rounded-xl border border-[color:var(--sec-line)] bg-[color:var(--sec-surface)] px-3 py-2">
+                <span className="text-sm text-[color:var(--sec-text)] truncate">{r.course_name}</span>
                 <button
                   type="button"
                   onClick={() => { updateRound(idx, { course_id: "", course_name: "", tee_male_id: "", tee_female_id: "" }); setRoundTeeBoxes((prev) => { const u = { ...prev }; delete u[idx]; return u; }); }}
-                  className="ml-3 text-[11px] text-emerald-300/60 hover:text-emerald-200 shrink-0"
+                  className="ml-3 text-[11px] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text-2)] shrink-0"
                 >
                   ✕
                 </button>
@@ -1826,7 +1826,7 @@ export default function CreateEventClient() {
               <button
                 type="button"
                 onClick={() => setShowCoursePickerForRound(idx)}
-                className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2 text-sm text-emerald-100/40 hover:border-emerald-700/60 text-left"
+                className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2 text-sm text-[color:var(--sec-muted)] hover:border-[color:var(--sec-line)] text-left"
               >
                 Search for a course…
               </button>
@@ -1838,11 +1838,11 @@ export default function CreateEventClient() {
                   { label: "Women's tee", field: "tee_female_id" as const, options: tees.filter((t) => !t.gender || t.gender === "female" || t.gender === "unisex") },
                 ].map(({ label, field, options }) => (
                   <div key={field} className="space-y-1">
-                    <label className="text-[10px] uppercase tracking-wider text-emerald-200/65">{label}</label>
+                    <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">{label}</label>
                     <select
                       value={r[field]}
                       onChange={(e) => updateRound(idx, { [field]: e.target.value })}
-                      className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-2 py-1.5 text-[11px] text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
+                      className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-2 py-1.5 text-[11px] text-[color:var(--sec-text)] focus:outline-none focus:border-[color:var(--sec-line)] [color-scheme:dark]"
                     >
                       <option value="">— optional —</option>
                       {options.map((t) => (
@@ -1859,7 +1859,7 @@ export default function CreateEventClient() {
 
       {/* Points model */}
       <div className="space-y-2">
-        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Points Model</label>
+        <label className="text-[11px] uppercase tracking-wider text-[color:var(--sec-muted)]">Points Model</label>
         <div className="grid grid-cols-2 gap-1.5">
           {POINTS_MODELS.map((p) => (
             <button
@@ -1868,12 +1868,12 @@ export default function CreateEventClient() {
               onClick={() => update("points_model", p.value)}
               className={`rounded-xl border px-3 py-2 text-left transition-colors ${
                 form.points_model === p.value
-                  ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                  : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
+                  ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]"
+                  : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-muted)]"
               }`}
             >
               <div className="text-sm font-semibold">{p.shortLabel}</div>
-              {p.desc && <div className="text-[10px] text-emerald-200/50 mt-0.5">{p.desc}</div>}
+              {p.desc && <div className="text-[10px] text-[color:var(--sec-muted)] mt-0.5">{p.desc}</div>}
             </button>
           ))}
         </div>
@@ -1897,16 +1897,16 @@ export default function CreateEventClient() {
       />
 
       {/* Season standings toggle */}
-      <div className="flex items-center justify-between rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 px-4 py-3">
+      <div className="flex items-center justify-between rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-4 py-3">
         <div>
-          <div className="text-sm text-emerald-50">Counting for season</div>
-          <div className="text-[10px] text-emerald-200/50 mt-0.5">Include this event in season standings</div>
+          <div className="text-sm text-[color:var(--sec-text)]">Counting for season</div>
+          <div className="text-[10px] text-[color:var(--sec-muted)] mt-0.5">Include this event in season standings</div>
         </div>
         <button
           type="button"
           onClick={() => update("standings_contribution", form.standings_contribution === "event_only" ? "both" : "event_only")}
           className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${
-            form.standings_contribution !== "event_only" ? "bg-emerald-600" : "bg-emerald-900/60"
+            form.standings_contribution !== "event_only" ? "bg-[color:var(--sec-primary)]" : "bg-[color:var(--sec-surface)]"
           }`}
         >
           <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${
@@ -1920,54 +1920,54 @@ export default function CreateEventClient() {
 
       {/* Description (optional, at the bottom) */}
       <div className="space-y-2">
-        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Description (optional)</label>
+        <label className="text-[11px] uppercase tracking-wider text-[color:var(--sec-muted)]">Description (optional)</label>
         <textarea
           value={form.description}
           onChange={(e) => update("description", e.target.value)}
           rows={2}
           placeholder="Describe this event…"
-          className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-3 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600 resize-none"
+          className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-4 py-3 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none focus:border-[color:var(--sec-line)] resize-none"
         />
       </div>
     </div>,
 
     /* ── Step 3: Prize Pot ── */
     <div key="step3" className="space-y-5">
-      <div className="text-sm font-semibold text-emerald-50">Prize Pot</div>
+      <div className="text-sm font-semibold text-[color:var(--sec-text)]">Prize Pot</div>
 
       {/* Toggle */}
-      <div className="flex items-center justify-between rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 px-4 py-3">
+      <div className="flex items-center justify-between rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-4 py-3">
         <div>
-          <div className="text-sm text-emerald-50">Add prize pot to this event</div>
-          <div className="text-[10px] text-emerald-200/50 mt-0.5">Set up prize distribution for this event</div>
+          <div className="text-sm text-[color:var(--sec-text)]">Add prize pot to this event</div>
+          <div className="text-[10px] text-[color:var(--sec-muted)] mt-0.5">Set up prize distribution for this event</div>
         </div>
         <button
           type="button"
           onClick={() => setEventPot((p) => ({ ...p, enabled: !p.enabled }))}
-          className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${eventPot.enabled ? "bg-emerald-600" : "bg-emerald-900/60"}`}
+          className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${eventPot.enabled ? "bg-[color:var(--sec-primary)]" : "bg-[color:var(--sec-surface)]"}`}
         >
           <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${eventPot.enabled ? "translate-x-5" : ""}`} />
         </button>
       </div>
 
       {eventPot.enabled && (
-        <div className="space-y-3 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 px-4 py-4">
+        <div className="space-y-3 rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-4 py-4">
           <div className="space-y-1.5">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/55">Pot Name</label>
+            <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Pot Name</label>
             <input
               type="text"
               placeholder={`${form.name || "Event"} Prize`}
               value={eventPot.name}
               onChange={(e) => setEventPot((p) => ({ ...p, name: e.target.value }))}
-              className="w-full rounded-xl border border-emerald-900/60 bg-[#01100A] px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/30 focus:outline-none focus:border-emerald-600"
+              className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] px-3 py-2 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none focus:border-[color:var(--sec-line)]"
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/55">Distribution</label>
+            <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Distribution</label>
             <select
               value={eventPot.distribution_type}
               onChange={(e) => setEventPot((p) => ({ ...p, distribution_type: e.target.value }))}
-              className="w-full rounded-xl border border-emerald-900/60 bg-[#01100A] px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
+              className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] px-3 py-2 text-sm text-[color:var(--sec-text)] focus:outline-none focus:border-[color:var(--sec-line)]"
             >
               <option value="winner_takes_all">Winner takes all</option>
               <option value="position_based">By finishing position (custom splits)</option>
@@ -1977,7 +1977,7 @@ export default function CreateEventClient() {
             </select>
           </div>
           <div className="space-y-1.5">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/55">Entry Fee per Player (£)</label>
+            <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Entry Fee per Player (£)</label>
             <input
               type="number"
               min="0"
@@ -1985,18 +1985,18 @@ export default function CreateEventClient() {
               placeholder="e.g. 10"
               value={eventPot.entry_fee_amount}
               onChange={(e) => setEventPot((p) => ({ ...p, entry_fee_amount: e.target.value }))}
-              className="w-full rounded-xl border border-emerald-900/60 bg-[#01100A] px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/30 focus:outline-none focus:border-emerald-600"
+              className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] px-3 py-2 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none focus:border-[color:var(--sec-line)]"
             />
           </div>
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm text-emerald-50">Mandatory</div>
-              <div className="text-[10px] text-emerald-200/50 mt-0.5">Auto-enroll players on event join</div>
+              <div className="text-sm text-[color:var(--sec-text)]">Mandatory</div>
+              <div className="text-[10px] text-[color:var(--sec-muted)] mt-0.5">Auto-enroll players on event join</div>
             </div>
             <button
               type="button"
               onClick={() => setEventPot((p) => ({ ...p, is_mandatory: !p.is_mandatory }))}
-              className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${eventPot.is_mandatory ? "bg-emerald-600" : "bg-emerald-900/60"}`}
+              className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${eventPot.is_mandatory ? "bg-[color:var(--sec-primary)]" : "bg-[color:var(--sec-surface)]"}`}
             >
               <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${eventPot.is_mandatory ? "translate-x-5" : ""}`} />
             </button>
@@ -2005,14 +2005,14 @@ export default function CreateEventClient() {
       )}
 
       {!eventPot.enabled && (
-        <p className="text-[11px] text-emerald-200/35 text-center">You can add prize pots later from the event page.</p>
+        <p className="text-[11px] text-[color:var(--sec-muted)] text-center">You can add prize pots later from the event page.</p>
       )}
     </div>,
 
     /* ── Step 4: Review ── */
     <div key="step4" className="space-y-4">
-      <div className="text-sm font-semibold text-emerald-50">Review & Create</div>
-      <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4 space-y-2">
+      <div className="text-sm font-semibold text-[color:var(--sec-text)]">Review & Create</div>
+      <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_80%,transparent)] p-4 space-y-2">
         {[
           { label: "Name", value: form.name },
           { label: "Format", value: EVENT_TYPE_LABELS[form.event_type] ?? form.event_type },
@@ -2047,12 +2047,12 @@ export default function CreateEventClient() {
           .filter(Boolean)
           .map((item) => (
             <div key={item!.label} className="flex justify-between text-sm">
-              <span className="text-emerald-200/55">{item!.label}</span>
-              <span className="text-emerald-50 capitalize">{item!.value}</span>
+              <span className="text-[color:var(--sec-muted)]">{item!.label}</span>
+              <span className="text-[color:var(--sec-text)] capitalize">{item!.value}</span>
             </div>
           ))}
       </div>
-      {error && <div className="text-sm text-red-400">{error}</div>}
+      {error && <div className="text-sm text-[color:var(--sec-bad)]">{error}</div>}
     </div>,
   ];
 
@@ -2062,12 +2062,12 @@ export default function CreateEventClient() {
         <button
           type="button"
           onClick={() => (step === 0 ? router.back() : setStep((s) => s - 1))}
-          className="text-[11px] text-emerald-100/70 hover:text-emerald-50"
+          className="text-[11px] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
         >
           ← {step === 0 ? "Back" : "Previous"}
         </button>
-        <h1 className="text-base font-semibold text-[#7CF0BE]">Create Event</h1>
-        <div className="text-[11px] text-emerald-200/55">
+        <h1 className="text-base font-semibold text-[color:var(--sec-accent)]">Create Event</h1>
+        <div className="text-[11px] text-[color:var(--sec-muted)]">
           {step + 1}/{totalSteps}
         </div>
       </div>
@@ -2077,7 +2077,7 @@ export default function CreateEventClient() {
           <div
             key={i}
             className={`h-1 flex-1 rounded-full transition-colors ${
-              i <= step ? "bg-emerald-600" : "bg-emerald-900/50"
+              i <= step ? "bg-[color:var(--sec-primary)]" : "bg-[color:var(--sec-surface)]"
             }`}
           />
         ))}
@@ -2105,7 +2105,7 @@ export default function CreateEventClient() {
             type="button"
             onClick={() => setStep((s) => s + 1)}
             disabled={!canNext()}
-            className="w-full py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-40"
+            className="w-full py-3 rounded-full bg-[color:var(--sec-primary)] text-sm font-semibold text-white hover:bg-[color:var(--sec-primary-hover)] disabled:opacity-40"
           >
             Next
           </button>
@@ -2114,7 +2114,7 @@ export default function CreateEventClient() {
             type="button"
             onClick={handleSubmit}
             disabled={submitting}
-            className="w-full py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
+            className="w-full py-3 rounded-full bg-[color:var(--sec-primary)] text-sm font-semibold text-white hover:bg-[color:var(--sec-primary-hover)] disabled:opacity-50"
           >
             {submitting ? "Creating…" : "Create Event"}
           </button>
@@ -2136,20 +2136,20 @@ export default function CreateEventClient() {
       {showNewCompetitionModal && (
         <div className="fixed inset-0 bg-black/70 flex items-end justify-center z-50 pb-[env(safe-area-inset-bottom)]">
           <div className="w-full max-w-sm bg-[#0c2e18] rounded-t-2xl p-6 space-y-4">
-            <div className="text-sm font-semibold text-emerald-50">New Competition</div>
+            <div className="text-sm font-semibold text-[color:var(--sec-text)]">New Competition</div>
             <input
               type="text"
               value={newCompetitionName}
               onChange={(e) => setNewCompetitionName(e.target.value)}
               placeholder="e.g. The Club Masters"
-              className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-3 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
+              className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-4 py-3 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none focus:border-[color:var(--sec-line)]"
               autoFocus
             />
             <div className="flex gap-3">
               <button
                 type="button"
                 onClick={() => { setShowNewCompetitionModal(false); setNewCompetitionName(""); }}
-                className="flex-1 py-2.5 rounded-full border border-emerald-800 text-sm text-emerald-200"
+                className="flex-1 py-2.5 rounded-full border border-[color:var(--sec-hair)] text-sm text-[color:var(--sec-text-2)]"
               >
                 Cancel
               </button>
@@ -2157,7 +2157,7 @@ export default function CreateEventClient() {
                 type="button"
                 onClick={handleCreateCompetition}
                 disabled={!newCompetitionName.trim() || creatingCompetition}
-                className="flex-1 py-2.5 rounded-full bg-emerald-700 text-sm font-semibold text-white disabled:opacity-40"
+                className="flex-1 py-2.5 rounded-full bg-[color:var(--sec-primary)] text-sm font-semibold text-white disabled:opacity-40"
               >
                 {creatingCompetition ? "Creating…" : "Create"}
               </button>

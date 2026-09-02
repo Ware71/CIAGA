@@ -380,28 +380,28 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
               >
                 <div className="absolute inset-0 bg-black/60" />
                 <div
-                  className="relative w-full rounded-t-3xl bg-[#071c10] border-t border-emerald-900/60 px-4 pt-4 pb-10 space-y-2"
+                  className="relative w-full rounded-t-3xl bg-[color:var(--ciaga-ground)] border-t border-[color:var(--sec-hair)] px-4 pt-4 pb-10 space-y-2"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <div className="w-10 h-1 rounded-full bg-emerald-800/60 mx-auto mb-3" />
+                  <div className="w-10 h-1 rounded-full bg-[color:var(--sec-surface-2)] mx-auto mb-3" />
                   {(majorsPreload?.pending_invites?.length ?? 0) > 0 && (
-                    <div className="text-[11px] uppercase tracking-widest text-emerald-200/50 font-semibold mb-3">Group Invites</div>
+                    <div className="text-[11px] uppercase tracking-widest text-[color:var(--sec-muted)] font-semibold mb-3">Group Invites</div>
                   )}
                   {(majorsPreload?.pending_invites ?? []).map((inv) => {
                     const isActioning = !!actioningInvite[inv.group_id];
                     return (
                       <div
                         key={inv.group_id}
-                        className="w-full flex items-center gap-3 rounded-2xl border border-emerald-900/50 bg-emerald-950/40 px-4 py-3"
+                        className="w-full flex items-center gap-3 rounded-2xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-4 py-3"
                       >
-                        <div className="h-9 w-9 rounded-full bg-emerald-900/60 grid place-items-center text-[11px] font-bold text-emerald-200 shrink-0 overflow-hidden">
+                        <div className="h-9 w-9 rounded-full bg-[color:var(--sec-surface)] grid place-items-center text-[11px] font-bold text-[color:var(--sec-text-2)] shrink-0 overflow-hidden">
                           {inv.group.image_url
                             ? <img src={inv.group.image_url} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" />
                             : inv.group.name.slice(0, 2).toUpperCase()}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-semibold text-emerald-50 truncate">{inv.group.name}</div>
-                          <div className="text-[11px] text-emerald-200/50">You&apos;ve been invited</div>
+                          <div className="text-sm font-semibold text-[color:var(--sec-text)] truncate">{inv.group.name}</div>
+                          <div className="text-[11px] text-[color:var(--sec-muted)]">You&apos;ve been invited</div>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <button
@@ -411,7 +411,7 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
                               setShowInviteSheet(false);
                               router.push(`/majors/groups/${inv.group_id}?autoJoin=1`);
                             }}
-                            className="text-[11px] font-semibold text-emerald-900 bg-emerald-400 hover:bg-emerald-300 disabled:opacity-50 rounded-full px-3 py-1.5 leading-none"
+                            className="text-[11px] font-semibold text-[color:var(--ciaga-ground)] bg-emerald-400 hover:bg-emerald-300 disabled:opacity-50 rounded-full px-3 py-1.5 leading-none"
                           >
                             Accept
                           </button>
@@ -442,7 +442,7 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
                                 });
                               }
                             }}
-                            className="text-[11px] font-semibold text-emerald-200/60 hover:text-emerald-200 disabled:opacity-50 rounded-full border border-emerald-900/60 px-3 py-1.5 leading-none"
+                            className="text-[11px] font-semibold text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text-2)] disabled:opacity-50 rounded-full border border-[color:var(--sec-hair)] px-3 py-1.5 leading-none"
                           >
                             {isActioning ? "…" : "Decline"}
                           </button>
@@ -452,21 +452,21 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
                   })}
 
                   {(majorsPreload?.pending_event_invites?.length ?? 0) > 0 && (
-                    <div className="text-[11px] uppercase tracking-widest text-emerald-200/50 font-semibold mb-3 mt-1">Event Invites</div>
+                    <div className="text-[11px] uppercase tracking-widest text-[color:var(--sec-muted)] font-semibold mb-3 mt-1">Event Invites</div>
                   )}
                   {(majorsPreload?.pending_event_invites ?? []).map((inv) => {
                     const isActioning = !!actioningInvite[inv.event_id];
                     return (
                       <div
                         key={inv.event_id}
-                        className="w-full flex items-center gap-3 rounded-2xl border border-emerald-900/50 bg-emerald-950/40 px-4 py-3"
+                        className="w-full flex items-center gap-3 rounded-2xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-4 py-3"
                       >
-                        <div className="h-9 w-9 rounded-full bg-emerald-900/60 grid place-items-center text-[11px] font-bold text-emerald-200 shrink-0">
+                        <div className="h-9 w-9 rounded-full bg-[color:var(--sec-surface)] grid place-items-center text-[11px] font-bold text-[color:var(--sec-text-2)] shrink-0">
                           {inv.event.name.slice(0, 2).toUpperCase()}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-semibold text-emerald-50 truncate">{inv.event.name}</div>
-                          <div className="text-[11px] text-emerald-200/50 truncate">
+                          <div className="text-sm font-semibold text-[color:var(--sec-text)] truncate">{inv.event.name}</div>
+                          <div className="text-[11px] text-[color:var(--sec-muted)] truncate">
                             {inv.group_name ? `${inv.group_name} · ` : ""}You&apos;ve been invited
                           </div>
                         </div>
@@ -478,7 +478,7 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
                               setShowInviteSheet(false);
                               router.push(`/majors/events/${inv.event_id}?autoEnter=1`);
                             }}
-                            className="text-[11px] font-semibold text-emerald-900 bg-emerald-400 hover:bg-emerald-300 disabled:opacity-50 rounded-full px-3 py-1.5 leading-none"
+                            className="text-[11px] font-semibold text-[color:var(--ciaga-ground)] bg-emerald-400 hover:bg-emerald-300 disabled:opacity-50 rounded-full px-3 py-1.5 leading-none"
                           >
                             Accept
                           </button>
@@ -509,7 +509,7 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
                                 });
                               }
                             }}
-                            className="text-[11px] font-semibold text-emerald-200/60 hover:text-emerald-200 disabled:opacity-50 rounded-full border border-emerald-900/60 px-3 py-1.5 leading-none"
+                            className="text-[11px] font-semibold text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text-2)] disabled:opacity-50 rounded-full border border-[color:var(--sec-hair)] px-3 py-1.5 leading-none"
                           >
                             {isActioning ? "…" : "Decline"}
                           </button>
@@ -610,7 +610,7 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
               action={
                 <button
                   type="button"
-                  className="hover:text-emerald-50"
+                  className="hover:text-[color:var(--sec-text)]"
                   onClick={() => router.push("/social")}
                 >
                   Open ›
@@ -633,7 +633,7 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
                     Loading…
                   </div>
                 ) : miniFeedError ? (
-                  <div className="py-3 text-[length:var(--t-body)] text-red-300">{miniFeedError}</div>
+                  <div className="py-3 text-[length:var(--t-body)] text-[color:var(--sec-bad)]">{miniFeedError}</div>
                 ) : (
                   <div className="py-3 text-[length:var(--t-body)] text-[color:var(--sec-muted)]">
                     Nothing new yet.

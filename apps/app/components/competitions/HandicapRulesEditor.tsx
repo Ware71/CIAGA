@@ -17,11 +17,11 @@ type Props = {
 
 export function HandicapRulesEditor({ value, onChange, disabled, compact }: Props) {
   const labelClass = compact
-    ? "text-[10px] text-emerald-200/60"
-    : "text-[11px] text-emerald-200/65";
+    ? "text-[10px] text-[color:var(--sec-muted)]"
+    : "text-[11px] text-[color:var(--sec-muted)]";
   const inputClass = compact
-    ? "w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
-    : "w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600";
+    ? "w-full rounded-xl bg-[color:var(--sec-surface)] border border-[color:var(--sec-hair)] px-3 py-2 text-sm text-[color:var(--sec-text)] focus:outline-none focus:border-[color:var(--sec-line)]"
+    : "w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-4 py-2.5 text-sm text-[color:var(--sec-text)] focus:outline-none focus:border-[color:var(--sec-line)]";
 
   return (
     <div className="space-y-2">
@@ -46,7 +46,7 @@ export function HandicapRulesEditor({ value, onChange, disabled, compact }: Prop
           <option value="none">No Handicap (Gross Only)</option>
         </select>
         {value.mode === "compare_against_lowest" && (
-          <p className="text-[10px] text-emerald-100/40">
+          <p className="text-[10px] text-[color:var(--sec-muted)]">
             Best player plays off scratch. Others receive strokes equal to the difference from the lowest handicap.
           </p>
         )}
@@ -64,7 +64,7 @@ export function HandicapRulesEditor({ value, onChange, disabled, compact }: Prop
             onChange={(e) => onChange({ ...value, allowance_pct: e.target.value })}
             className={inputClass}
           />
-          <p className="text-[10px] text-emerald-100/40">
+          <p className="text-[10px] text-[color:var(--sec-muted)]">
             e.g. 90 = players use 90% of their course handicap
           </p>
         </div>
@@ -80,9 +80,9 @@ export function HandicapRulesEditor({ value, onChange, disabled, compact }: Prop
             value={value.max_handicap}
             onChange={(e) => onChange({ ...value, max_handicap: e.target.value })}
             placeholder="Leave blank for no limit"
-            className={`${inputClass} placeholder:text-emerald-100/35`}
+            className={`${inputClass} placeholder:text-[color:var(--sec-muted)]`}
           />
-          <p className="text-[10px] text-emerald-100/40">Cap the maximum handicap that can be applied</p>
+          <p className="text-[10px] text-[color:var(--sec-muted)]">Cap the maximum handicap that can be applied</p>
         </div>
       )}
     </div>

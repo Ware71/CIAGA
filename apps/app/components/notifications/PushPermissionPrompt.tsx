@@ -70,20 +70,20 @@ export default function PushPermissionPrompt({
         >
           <div className="absolute inset-0 bg-black/70" onClick={dismiss} />
           <motion.div
-            className="relative w-full max-w-sm rounded-3xl border border-emerald-900/60 bg-[#071c10] p-5 shadow-2xl"
+            className="relative w-full max-w-sm rounded-3xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] p-5 shadow-2xl"
             initial={{ y: 24, opacity: 0, scale: 0.98 }}
             animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: 24, opacity: 0 }}
             transition={{ type: "spring", damping: 28, stiffness: 320 }}
           >
-            <div className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-emerald-400/20 text-emerald-200">
+            <div className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-emerald-400/20 text-[color:var(--sec-text-2)]">
               {variant === "ios_install" ? <Smartphone size={24} /> : <Bell size={24} />}
             </div>
 
             {variant === "default" && (
               <>
-                <div className="text-xl font-extrabold text-[#f5e6b0]">Turn on notifications</div>
-                <div className="mt-2 text-sm font-medium text-emerald-100/85">
+                <div className="text-xl font-extrabold text-[color:var(--sec-accent)]">Turn on notifications</div>
+                <div className="mt-2 text-sm font-medium text-[color:var(--sec-muted)]">
                   Get notified about new events, when entry opens, mentions, and when people you
                   follow tee off.
                 </div>
@@ -92,19 +92,19 @@ export default function PushPermissionPrompt({
                     type="button"
                     onClick={enable}
                     disabled={working}
-                    className="w-full rounded-full bg-[#f5e6b0] px-4 py-2.5 text-sm font-extrabold text-[#042713] disabled:opacity-60"
+                    className="w-full rounded-full bg-[color:var(--sec-accent)] px-4 py-2.5 text-sm font-extrabold text-[color:var(--ciaga-ground)] disabled:opacity-60"
                   >
                     {working ? stepLabel ?? "Enabling…" : "Enable notifications"}
                   </button>
                   {error && (
-                    <div className="text-xs font-medium text-emerald-100/60">
+                    <div className="text-xs font-medium text-[color:var(--sec-muted)]">
                       {error} Tap to try again.
                     </div>
                   )}
                   <button
                     type="button"
                     onClick={dismiss}
-                    className="w-full rounded-full px-4 py-2 text-sm font-semibold text-emerald-200/70 hover:text-emerald-100"
+                    className="w-full rounded-full px-4 py-2 text-sm font-semibold text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
                   >
                     Not now
                   </button>
@@ -114,15 +114,15 @@ export default function PushPermissionPrompt({
 
             {variant === "denied" && (
               <>
-                <div className="text-xl font-extrabold text-[#f5e6b0]">Notifications are off</div>
-                <div className="mt-2 text-sm font-medium text-emerald-100/85">
+                <div className="text-xl font-extrabold text-[color:var(--sec-accent)]">Notifications are off</div>
+                <div className="mt-2 text-sm font-medium text-[color:var(--sec-muted)]">
                   They’re currently blocked for this site. To turn them on, enable notifications for
                   CIAGA in your browser/site settings, then reopen the app.
                 </div>
                 <button
                   type="button"
                   onClick={dismiss}
-                  className="mt-5 w-full rounded-full bg-emerald-400 px-4 py-2.5 text-sm font-extrabold text-emerald-950"
+                  className="mt-5 w-full rounded-full bg-emerald-400 px-4 py-2.5 text-sm font-extrabold text-[color:var(--ciaga-ground)]"
                 >
                   Got it
                 </button>
@@ -131,8 +131,8 @@ export default function PushPermissionPrompt({
 
             {variant === "ios_install" && (
               <>
-                <div className="text-xl font-extrabold text-[#f5e6b0]">Add CIAGA to your Home Screen</div>
-                <div className="mt-2 text-sm font-medium text-emerald-100/85">
+                <div className="text-xl font-extrabold text-[color:var(--sec-accent)]">Add CIAGA to your Home Screen</div>
+                <div className="mt-2 text-sm font-medium text-[color:var(--sec-muted)]">
                   On iPhone, notifications need the app installed. In Safari tap the{" "}
                   <b>Share</b> icon, then <b>Add to Home Screen</b>, and open CIAGA from there to
                   enable notifications.
@@ -140,7 +140,7 @@ export default function PushPermissionPrompt({
                 <button
                   type="button"
                   onClick={dismiss}
-                  className="mt-5 w-full rounded-full bg-emerald-400 px-4 py-2.5 text-sm font-extrabold text-emerald-950"
+                  className="mt-5 w-full rounded-full bg-emerald-400 px-4 py-2.5 text-sm font-extrabold text-[color:var(--ciaga-ground)]"
                 >
                   Got it
                 </button>

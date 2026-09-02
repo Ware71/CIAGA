@@ -44,7 +44,7 @@ function SeenCard({ item, highlight }: { item: FeedItemVM; highlight?: boolean }
   }, [item.id]);
 
   return (
-    <div ref={ref} className={highlight ? "rounded-2xl ring-2 ring-[#f5e6b0]/70" : undefined}>
+    <div ref={ref} className={highlight ? "rounded-2xl ring-2 ring-[color:color-mix(in_srgb,var(--sec-accent)_70%,transparent)]" : undefined}>
       <FeedCard item={item} />
     </div>
   );
@@ -53,11 +53,11 @@ function SeenCard({ item, highlight }: { item: FeedItemVM; highlight?: boolean }
 function CaughtUpDivider() {
   return (
     <div className="flex items-center gap-3 py-1">
-      <div className="h-px flex-1 bg-emerald-900/60" />
-      <div className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-emerald-100/45">
+      <div className="h-px flex-1 bg-[color:var(--sec-surface)]" />
+      <div className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-[color:var(--sec-muted)]">
         You&rsquo;re all caught up
       </div>
-      <div className="h-px flex-1 bg-emerald-900/60" />
+      <div className="h-px flex-1 bg-[color:var(--sec-surface)]" />
     </div>
   );
 }
@@ -228,18 +228,18 @@ export default function FeedList({ refreshKey, focusId, initialData }: Props) {
   const isEmpty = live.length + unseen.length + seen.length === 0 && !focusItem;
 
   if (isLoading) {
-    return <div className="text-sm font-semibold text-emerald-100/70">Loading feed…</div>;
+    return <div className="text-sm font-semibold text-[color:var(--sec-muted)]">Loading feed…</div>;
   }
 
   return (
     <div className="space-y-4">
       {error ? (
-        <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm font-semibold text-red-200">
+        <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4 text-sm font-semibold text-red-200">
           {error}
           <div className="mt-3">
             <Button
               variant="secondary"
-              className="bg-emerald-900/40 text-emerald-50 hover:bg-emerald-900/55"
+              className="bg-[color:var(--sec-surface)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
               onClick={loadInitial}
             >
               Retry
@@ -249,7 +249,7 @@ export default function FeedList({ refreshKey, focusId, initialData }: Props) {
       ) : null}
 
       {isEmpty ? (
-        <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-6 text-sm font-semibold text-emerald-100/70">
+        <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-6 text-sm font-semibold text-[color:var(--sec-muted)]">
           No activity yet. Be the first to post.
         </div>
       ) : null}
@@ -283,14 +283,14 @@ export default function FeedList({ refreshKey, focusId, initialData }: Props) {
         {nextCursor ? (
           <Button
             variant="secondary"
-            className="bg-emerald-900/40 text-emerald-50 hover:bg-emerald-900/55"
+            className="bg-[color:var(--sec-surface)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
             onClick={loadMore}
             disabled={isLoadingMore}
           >
             {isLoadingMore ? "Loading…" : "Load more"}
           </Button>
         ) : (
-          <div className="text-xs font-semibold text-emerald-100/60">That&rsquo;s everything for now.</div>
+          <div className="text-xs font-semibold text-[color:var(--sec-muted)]">That&rsquo;s everything for now.</div>
         )}
       </div>
     </div>

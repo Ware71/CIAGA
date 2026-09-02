@@ -4,12 +4,16 @@ import type { OccurrenceKind, PlayerDayStatus, ResolvedOccurrence } from "@/lib/
 
 /** Per-kind accent colour for the flat accent-bar chips. */
 export function accentColor(occ: ResolvedOccurrence): string {
-  if (occ.kind === "round") return occ.roundStatus === "finished" ? "#b8993f" : "#f5e6b0";
+  // Finished rounds read dulled, live/upcoming read at full accent.
+  if (occ.kind === "round")
+    return occ.roundStatus === "finished"
+      ? "color-mix(in srgb, var(--sec-accent) 55%, transparent)"
+      : "var(--sec-accent)";
   if (occ.kind === "event") {
     // Entered / open events read gold; not-yet-open / closed read muted grey.
     return occ.entryState === "entry_soon" || occ.entryState === "entry_closed"
       ? "#9ca3af"
-      : "#f5e6b0";
+      : "var(--sec-accent)";
   }
   if (occ.kind === "available") return "#34d399";
   return "#ef4444"; // unavailable
@@ -33,9 +37,9 @@ export function entryTag(occ: ResolvedOccurrence): { label: string; tone: EntryT
 
 /** Pill classes for each entry-state tone. */
 export const ENTRY_TAG_CLASSES: Record<EntryTagTone, string> = {
-  entered: "bg-emerald-400/20 text-emerald-100",
-  now: "bg-[#f5e6b0] text-[#042713] font-semibold",
-  soon: "bg-white/10 text-emerald-100/70",
+  entered: "bg-emerald-400/20 text-[color:var(--sec-text)]",
+  now: "bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] font-semibold",
+  soon: "bg-white/10 text-[color:var(--sec-muted)]",
 };
 
 /** Diagonal-hatch fill marking a day the active filter *removed* (vs empty). */
@@ -48,7 +52,7 @@ export const REMOVED_CELL_CLASS = "opacity-60";
 /** Month availability dot colours. */
 export const STATUS_COLORS: Record<PlayerDayStatus, string> = {
   available: "#34d399", // green
-  scheduled: "#b8993f", // dull gold
+  scheduled: "color-mix(in srgb, var(--sec-accent) 60%, transparent)",
   unavailable: "#ef4444", // red
   none: "#6b7280", // grey
 };
@@ -57,11 +61,11 @@ export const STATUS_COLORS: Record<PlayerDayStatus, string> = {
 export function chipClasses(kind: OccurrenceKind): string {
   switch (kind) {
     case "round":
-      return "bg-[#f5e6b0] text-[#042713] border border-[#e9d79c]";
+      return "bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] border border-[color:var(--sec-accent)]";
     case "event":
-      return "bg-[#f5e6b0]/20 text-[#f5e6b0] border border-[#f5e6b0]/40";
+      return "bg-[color:color-mix(in_srgb,var(--sec-accent)_20%,transparent)] text-[color:var(--sec-accent)] border border-[color:color-mix(in_srgb,var(--sec-accent)_40%,transparent)]";
     case "available":
-      return "bg-emerald-500/20 text-emerald-100 border border-emerald-400/40";
+      return "bg-emerald-500/20 text-[color:var(--sec-text)] border border-[color:var(--sec-accent)]";
     case "unavailable":
       return "bg-red-900/30 text-red-200 border border-red-800/50";
   }
@@ -70,13 +74,13 @@ export function chipClasses(kind: OccurrenceKind): string {
 /** Occurrence-aware styling — finished rounds + entry-state events get distinct looks. */
 export function occChipClasses(occ: ResolvedOccurrence): string {
   if (occ.kind === "round" && occ.roundStatus === "finished") {
-    return "bg-[#f5e6b0]/25 text-[#f5e6b0] border border-[#f5e6b0]/40";
+    return "bg-[color:color-mix(in_srgb,var(--sec-accent)_25%,transparent)] text-[color:var(--sec-accent)] border border-[color:color-mix(in_srgb,var(--sec-accent)_40%,transparent)]";
   }
   if (occ.kind === "event") {
     // Not-yet-open / closed events read softer than entered / open ones.
     return occ.entryState === "entry_soon" || occ.entryState === "entry_closed"
-      ? "bg-[#f5e6b0]/5 text-[#f5e6b0]/80 border border-[#f5e6b0]/30"
-      : "bg-[#f5e6b0]/20 text-[#f5e6b0] border border-[#f5e6b0]/50";
+      ? "bg-[color:color-mix(in_srgb,var(--sec-accent)_5%,transparent)] text-[color:color-mix(in_srgb,var(--sec-accent)_80%,transparent)] border border-[color:color-mix(in_srgb,var(--sec-accent)_30%,transparent)]"
+      : "bg-[color:color-mix(in_srgb,var(--sec-accent)_20%,transparent)] text-[color:var(--sec-accent)] border border-[color:color-mix(in_srgb,var(--sec-accent)_50%,transparent)]";
   }
   return chipClasses(occ.kind);
 }
@@ -90,7 +94,7 @@ export const AVAILABLE_SHADE = "bg-emerald-400/15";
 
 /** A subtle owner tint (dot colour) so layered calendars are distinguishable. */
 const OWNER_PALETTE = [
-  "#f5e6b0", // gold
+  "var(--sec-accent)", // gold
   "#7dd3fc", // sky
   "#f9a8d4", // pink
   "#c4b5fd", // violet

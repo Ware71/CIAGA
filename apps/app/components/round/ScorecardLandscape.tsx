@@ -114,15 +114,15 @@ export default function ScorecardLandscape(props: {
   const formatIsBadgeable = isFormatView(scoreView) && formatDisplay != null && !formatDisplay.higherIsBetter && !formatDisplay.summaries.some(s => typeof s.total === "string");
 
   return (
-    <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 overflow-hidden">
+    <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] overflow-hidden">
       <div className="overflow-x-auto">
         <div className="min-w-[860px]">
           <div className="grid" style={{ gridTemplateColumns: landscapeCols }}>
-            <div className="border-b border-emerald-900/60 bg-[#0b3b21]/70">
+            <div className="border-b border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)]">
               {["HOLE", "PAR", "YDS", "SI"].map((lbl) => (
                 <div
                   key={lbl}
-                  className="h-7 px-2.5 flex items-center text-[10px] text-emerald-100/70 border-b border-emerald-900/60 last:border-b-0"
+                  className="h-7 px-2.5 flex items-center text-[10px] text-[color:var(--sec-muted)] border-b border-[color:var(--sec-hair)] last:border-b-0"
                 >
                   {lbl}
                 </div>
@@ -134,8 +134,8 @@ export default function ScorecardLandscape(props: {
 
               const cell = (v: any) => (
                 <div
-                  className={`h-7 flex items-center justify-center text-[10px] border-r border-emerald-900/60 ${
-                    isActive ? "bg-[#042713] text-[#f5e6b0]" : "bg-[#0b3b21]/40 text-emerald-100/80"
+                  className={`h-7 flex items-center justify-center text-[10px] border-r border-[color:var(--sec-hair)] ${
+                    isActive ? "bg-[color:var(--ciaga-ground)] text-[color:var(--sec-accent)]" : "bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-muted)]"
                   }`}
                 >
                   {v ?? ""}
@@ -145,16 +145,16 @@ export default function ScorecardLandscape(props: {
               if (c.kind === "hole") {
                 const isStartingHole = startingHole !== 1 && c.hole.hole_number === startingHole;
                 return (
-                  <div key={`meta-hole-${c.hole.hole_number}`} className="border-b border-emerald-900/60">
+                  <div key={`meta-hole-${c.hole.hole_number}`} className="border-b border-[color:var(--sec-hair)]">
                     <div
-                      className={`relative h-7 flex items-center justify-center text-[10px] border-r border-emerald-900/60 ${
-                        isActive ? "bg-[#042713] text-[#f5e6b0]" : "bg-[#0b3b21]/40 text-emerald-100/80"
+                      className={`relative h-7 flex items-center justify-center text-[10px] border-r border-[color:var(--sec-hair)] ${
+                        isActive ? "bg-[color:var(--ciaga-ground)] text-[color:var(--sec-accent)]" : "bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-muted)]"
                       }`}
                       title={isStartingHole ? `Round started on hole ${startingHole}` : undefined}
                     >
                       {c.hole.hole_number}
                       {isStartingHole && (
-                        <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-[#f5e6b0]" />
+                        <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-[color:var(--sec-accent)]" />
                       )}
                     </div>
                     {cell(c.hole.par)}
@@ -171,7 +171,7 @@ export default function ScorecardLandscape(props: {
               const yds = sumYds(label);
 
               return (
-                <div key={`meta-sum-${c.kind}-${idx}`} className="border-b border-emerald-900/60">
+                <div key={`meta-sum-${c.kind}-${idx}`} className="border-b border-[color:var(--sec-hair)]">
                   {cell(label)}
                   {cell(par ?? "–")}
                   {cell(yds ?? "–")}
@@ -181,7 +181,7 @@ export default function ScorecardLandscape(props: {
             })}
           </div>
 
-          <div className="divide-y divide-emerald-900/60">
+          <div className="divide-y divide-[color:var(--sec-hair)]">
             {participants.map((p) => {
               const name = getParticipantLabel(p);
               const avatarUrl = getParticipantAvatar(p);
@@ -203,16 +203,16 @@ export default function ScorecardLandscape(props: {
 
               return (
                 <div key={p.id} className="grid" style={{ gridTemplateColumns: landscapeCols }}>
-                  <div className="bg-[#0b3b21]/60">
+                  <div className="bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)]">
                     <div className="h-10 px-2.5 flex items-center gap-2 min-w-0">
-                      <Avatar className="h-6 w-6 border border-emerald-200/70 shrink-0">
+                      <Avatar className="h-6 w-6 border border-[color:var(--sec-line)] shrink-0">
                         {avatarUrl ? <AvatarImage src={avatarUrl} /> : null}
                         <AvatarFallback className="text-[9px]">{initialsFrom(name)}</AvatarFallback>
                       </Avatar>
                       <div className="min-w-0">
-                        <div className="text-[12px] font-semibold text-emerald-50 truncate">{name}</div>
+                        <div className="text-[12px] font-semibold text-[color:var(--sec-text)] truncate">{name}</div>
                         {hcpLabel ? (
-                          <div className="text-[10px] text-emerald-100/60 leading-none">
+                          <div className="text-[10px] text-[color:var(--sec-muted)] leading-none">
                             {hcpLabel}
                           </div>
                         ) : null}
@@ -253,9 +253,9 @@ export default function ScorecardLandscape(props: {
                       const fmtColor =
                         fmtHint === "positive" ? "text-green-300" :
                         fmtHint === "won" ? "text-green-300" :
-                        fmtHint === "negative" ? "text-emerald-100/50" :
-                        fmtHint === "lost" ? "text-red-300/80" :
-                        fmtHint === "halved" ? "text-emerald-100/70" :
+                        fmtHint === "negative" ? "text-[color:var(--sec-muted)]" :
+                        fmtHint === "lost" ? "text-[color:var(--sec-bad)]" :
+                        fmtHint === "halved" ? "text-[color:var(--sec-muted)]" :
                         "";
 
                       const badge = savingKey !== key ? scoreBadgeType(s, hp.par, scoreView, formatIsBadgeable) : null;
@@ -265,9 +265,9 @@ export default function ScorecardLandscape(props: {
                       return (
                         <button
                           key={`cell-hole-${idx}-${key}`}
-                          className={`relative h-10 border-r border-emerald-900/60 flex flex-col items-center justify-center font-semibold tabular-nums text-[13px]
-                            ${isActive ? "bg-[#042713] text-[#f5e6b0]" : "bg-[#0b3b21]/20 text-emerald-50"}
-                            ${disabled ? "opacity-80 cursor-default" : "hover:bg-emerald-900/20"}
+                          className={`relative h-10 border-r border-[color:var(--sec-hair)] flex flex-col items-center justify-center font-semibold tabular-nums text-[13px]
+                            ${isActive ? "bg-[color:var(--ciaga-ground)] text-[color:var(--sec-accent)]" : "bg-[color:color-mix(in_srgb,var(--sec-surface)_20%,transparent)] text-[color:var(--sec-text)]"}
+                            ${disabled ? "opacity-80 cursor-default" : "hover:bg-[color:var(--sec-surface-2)]"}
                             ${fmtColor}
                           `}
                           onClick={() => onOpenEntry(p.id, h.hole_number)}
@@ -282,7 +282,7 @@ export default function ScorecardLandscape(props: {
                             <span className="leading-none">{savingKey === key ? "…" : (s ?? "–")}</span>
                           </BadgeWrap>
                           {puLabel ? (
-                            <div className="mt-0.5 text-[9px] font-semibold text-emerald-100/60 leading-none">{puLabel}</div>
+                            <div className="mt-0.5 text-[9px] font-semibold text-[color:var(--sec-muted)] leading-none">{puLabel}</div>
                           ) : recv > 0 ? (
                             <div className="mt-1 leading-none">
                               <StrokeDots count={recv} />
@@ -316,14 +316,14 @@ export default function ScorecardLandscape(props: {
                     return (
                       <div
                         key={`cell-sum-${p.id}-${idx}`}
-                        className={`h-10 border-r border-emerald-900/60 flex flex-col items-center justify-center font-bold tabular-nums text-[12px]
-                          ${isTot ? "bg-[#f5e6b0] text-[#042713]" : "bg-[#0b3b21]/30 text-emerald-50"}
+                        className={`h-10 border-r border-[color:var(--sec-hair)] flex flex-col items-center justify-center font-bold tabular-nums text-[12px]
+                          ${isTot ? "bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)]" : "bg-[color:color-mix(in_srgb,var(--sec-surface)_30%,transparent)] text-[color:var(--sec-text)]"}
                         `}
                       >
                         <div className="leading-none">{value}</div>
                         <div
                           className={`text-[10px] font-semibold leading-none ${
-                            isTot ? "text-[#042713]/70" : "text-emerald-100/70"
+                            isTot ? "text-[color:color-mix(in_srgb,var(--ciaga-ground)_70%,transparent)]" : "text-[color:var(--sec-muted)]"
                           }`}
                         >
                           {toPar != null ? formatToPar(toPar) : ""}

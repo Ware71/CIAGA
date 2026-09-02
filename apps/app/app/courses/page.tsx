@@ -212,16 +212,16 @@ export default function CoursesPage() {
     (mode === "world" && world.step === "courses" && !world.coursesLoading);
 
   return (
-    <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
+    <div className="min-h-screen bg-[color:var(--ciaga-ground)] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto w-full max-w-sm space-y-4">
         <header className="flex items-center justify-between">
           <BackButton onClick={() => router.back()} />
 
           <div className="text-center flex-1">
-            <div className="text-lg font-semibold tracking-wide text-[#f5e6b0]">
+            <div className="text-lg font-semibold tracking-wide text-[color:var(--sec-accent)]">
               Courses
             </div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--sec-muted)]">
               {mode === "nearby" ? "Nearby" : "Worldwide"}
             </div>
           </div>
@@ -230,15 +230,15 @@ export default function CoursesPage() {
         </header>
 
         {/* Mode toggle */}
-        <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-2 flex gap-2">
+        <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-2 flex gap-2">
           <button
             type="button"
             onClick={() => setMode("nearby")}
             className={[
               "flex-1 rounded-xl px-3 py-2 text-xs font-medium",
               mode === "nearby"
-                ? "bg-emerald-900/40 border border-emerald-200/30"
-                : "hover:bg-emerald-900/20",
+                ? "bg-[color:var(--sec-surface)] border border-[color:var(--sec-line)]"
+                : "hover:bg-[color:var(--sec-surface-2)]",
             ].join(" ")}
           >
             Nearby
@@ -249,8 +249,8 @@ export default function CoursesPage() {
             className={[
               "flex-1 rounded-xl px-3 py-2 text-xs font-medium",
               mode === "world"
-                ? "bg-emerald-900/40 border border-emerald-200/30"
-                : "hover:bg-emerald-900/20",
+                ? "bg-[color:var(--sec-surface)] border border-[color:var(--sec-line)]"
+                : "hover:bg-[color:var(--sec-surface-2)]",
             ].join(" ")}
           >
             Worldwide
@@ -258,7 +258,7 @@ export default function CoursesPage() {
         </div>
 
         {/* Search / Filter area */}
-        <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-3">
+        <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-3">
           {mode === "world" ? (
             <>
               {/* ── Worldwide: step-based UI ── */}
@@ -277,14 +277,14 @@ export default function CoursesPage() {
                     <button
                       type="button"
                       onClick={() => setPinOpen(true)}
-                      className="shrink-0 rounded-xl border border-emerald-200/30 bg-[#0a341c]/40 px-2.5 py-2 text-emerald-100 hover:bg-[#0a341c]/70"
+                      className="shrink-0 rounded-xl border border-[color:var(--sec-line)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-2.5 py-2 text-[color:var(--sec-text)] hover:bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)]"
                       aria-label="Pick location on map"
                       title="Pick location on map"
                     >
                       <MapPin size={16} />
                     </button>
                   </div>
-                  <div className="mt-2 text-[10px] text-emerald-100/50">
+                  <div className="mt-2 text-[10px] text-[color:var(--sec-muted)]">
                     Search for a city, address, or course name — then browse
                     nearby golf courses. Or tap the pin to pick on a map.
                   </div>
@@ -297,18 +297,18 @@ export default function CoursesPage() {
                     <button
                       type="button"
                       onClick={world.backToSearch}
-                      className="shrink-0 text-emerald-100/70 hover:text-emerald-100"
+                      className="shrink-0 text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
                       aria-label="Back to search"
                     >
                       <ArrowLeft size={16} />
                     </button>
-                    <div className="text-sm text-emerald-100/80 truncate">
+                    <div className="text-sm text-[color:var(--sec-muted)] truncate">
                       Results for &ldquo;{world.locationQuery}&rdquo;
                     </div>
                   </div>
 
                   {world.locationResults.length === 0 && !world.locationLoading && (
-                    <div className="text-sm text-emerald-100/60">
+                    <div className="text-sm text-[color:var(--sec-muted)]">
                       No locations found. Try a different search.
                     </div>
                   )}
@@ -317,17 +317,17 @@ export default function CoursesPage() {
                     {world.locationResults.map((loc) => (
                       <li
                         key={loc.place_id}
-                        className="rounded-xl border border-emerald-900/50 bg-[#0a341c]/40 p-3 flex items-center justify-between gap-2"
+                        className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] p-3 flex items-center justify-between gap-2"
                       >
                         <div className="min-w-0">
-                          <div className="text-sm text-emerald-50 truncate">
+                          <div className="text-sm text-[color:var(--sec-text)] truncate">
                             {loc.display_name}
                           </div>
                         </div>
                         <Button
                           size="sm"
                           variant="outline"
-                          className="shrink-0 rounded-xl border-emerald-200/40 bg-[#0a341c]/60 text-emerald-100 hover:bg-[#0a341c]/80 text-xs"
+                          className="shrink-0 rounded-xl border-[color:var(--sec-line)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] text-[color:var(--sec-text)] hover:bg-[color:color-mix(in_srgb,var(--sec-surface)_80%,transparent)] text-xs"
                           onClick={() => world.selectLocation(loc)}
                         >
                           Search here
@@ -340,7 +340,7 @@ export default function CoursesPage() {
                     <button
                       type="button"
                       onClick={() => setPinOpen(true)}
-                      className="text-[11px] text-emerald-100/50 hover:text-emerald-100/80 underline underline-offset-2"
+                      className="text-[11px] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-muted)] underline underline-offset-2"
                     >
                       Or pick a location on the map
                     </button>
@@ -353,21 +353,21 @@ export default function CoursesPage() {
                   <button
                     type="button"
                     onClick={world.backToLocations}
-                    className="shrink-0 text-emerald-100/70 hover:text-emerald-100"
+                    className="shrink-0 text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
                     aria-label="Change location"
                   >
                     <ArrowLeft size={16} />
                   </button>
-                  <div className="text-sm text-emerald-100/80 truncate flex-1">
+                  <div className="text-sm text-[color:var(--sec-muted)] truncate flex-1">
                     Courses near{" "}
-                    <span className="text-emerald-50 font-medium">
+                    <span className="text-[color:var(--sec-text)] font-medium">
                       {world.selectedLocation?.display_name}
                     </span>
                   </div>
                   <button
                     type="button"
                     onClick={world.backToSearch}
-                    className="shrink-0 text-[11px] text-emerald-100/50 hover:text-emerald-100/80 underline underline-offset-2"
+                    className="shrink-0 text-[11px] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-muted)] underline underline-offset-2"
                   >
                     New search
                   </button>
@@ -380,7 +380,7 @@ export default function CoursesPage() {
               value={nearbyFilter}
               onChange={(e) => setNearbyFilter(e.target.value)}
               placeholder="Filter nearby courses…"
-              className="w-full bg-transparent outline-none text-sm placeholder:text-emerald-100/40"
+              className="w-full bg-transparent outline-none text-sm placeholder:text-[color:var(--sec-muted)]"
               aria-label="Filter nearby courses"
             />
           )}
@@ -388,7 +388,7 @@ export default function CoursesPage() {
 
         {/* Loading */}
         {loading && (
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">
+          <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4 text-sm text-[color:var(--sec-muted)]">
             {mode === "nearby"
               ? "Finding courses near you…"
               : world.step === "search" || world.step === "locations"
@@ -406,7 +406,7 @@ export default function CoursesPage() {
 
         {/* Empty state */}
         {showCourseList && filteredCourses.length === 0 && (
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">
+          <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4 text-sm text-[color:var(--sec-muted)]">
             {mode === "world"
               ? "No golf courses found near this location. Try a different spot."
               : nearbyFilter.trim()
@@ -425,14 +425,14 @@ export default function CoursesPage() {
               return (
                 <li
                   key={c.id}
-                  className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4"
+                  className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_80%,transparent)] p-4"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="font-medium text-emerald-50 truncate">
+                      <div className="font-medium text-[color:var(--sec-text)] truncate">
                         {displayName}
                       </div>
-                      <div className="mt-1 text-[11px] text-emerald-200/70">
+                      <div className="mt-1 text-[11px] text-[color:var(--sec-muted)]">
                         {formatDistance(c.distance_m)}
                       </div>
                     </div>
@@ -440,7 +440,7 @@ export default function CoursesPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="shrink-0 rounded-xl border-emerald-200/40 bg-[#0a341c]/60 text-emerald-100 hover:bg-[#0a341c]/80"
+                      className="shrink-0 rounded-xl border-[color:var(--sec-line)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] text-[color:var(--sec-text)] hover:bg-[color:color-mix(in_srgb,var(--sec-surface)_80%,transparent)]"
                       onClick={() => onView(c)}
                       disabled={isResolving}
                     >
@@ -453,7 +453,7 @@ export default function CoursesPage() {
           </ul>
         )}
 
-        <footer className="pt-2 text-center text-[10px] text-emerald-100/50">
+        <footer className="pt-2 text-center text-[10px] text-[color:var(--sec-muted)]">
           Powered by OpenStreetMap data.
         </footer>
       </div>

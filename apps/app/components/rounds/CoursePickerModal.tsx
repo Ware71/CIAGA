@@ -270,17 +270,17 @@ export function CoursePickerModal({ open, onClose, onSelect, preloadedNearby, ne
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#042713] text-slate-100 overflow-y-auto">
+    <div className="fixed inset-0 z-50 bg-[color:var(--ciaga-ground)] text-slate-100 overflow-y-auto">
       <div className="mx-auto w-full max-w-sm px-4 pt-6 pb-8 space-y-4">
         {/* Header */}
         <header className="flex items-center justify-between">
-          <div className="text-lg font-semibold tracking-wide text-[#f5e6b0]">
+          <div className="text-lg font-semibold tracking-wide text-[color:var(--sec-accent)]">
             Select Course
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl p-2 text-emerald-100/70 hover:text-emerald-100 hover:bg-emerald-900/30"
+            className="rounded-xl p-2 text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
             aria-label="Close"
           >
             <X size={20} />
@@ -288,15 +288,15 @@ export function CoursePickerModal({ open, onClose, onSelect, preloadedNearby, ne
         </header>
 
         {/* Mode toggle */}
-        <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-2 flex gap-2">
+        <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-2 flex gap-2">
           <button
             type="button"
             onClick={() => setMode("nearby")}
             className={[
               "flex-1 rounded-xl px-3 py-2 text-xs font-medium",
               mode === "nearby"
-                ? "bg-emerald-900/40 border border-emerald-200/30"
-                : "hover:bg-emerald-900/20",
+                ? "bg-[color:var(--sec-surface)] border border-[color:var(--sec-line)]"
+                : "hover:bg-[color:var(--sec-surface-2)]",
             ].join(" ")}
           >
             Nearby
@@ -307,8 +307,8 @@ export function CoursePickerModal({ open, onClose, onSelect, preloadedNearby, ne
             className={[
               "flex-1 rounded-xl px-3 py-2 text-xs font-medium",
               mode === "world"
-                ? "bg-emerald-900/40 border border-emerald-200/30"
-                : "hover:bg-emerald-900/20",
+                ? "bg-[color:var(--sec-surface)] border border-[color:var(--sec-line)]"
+                : "hover:bg-[color:var(--sec-surface-2)]",
             ].join(" ")}
           >
             Worldwide
@@ -316,7 +316,7 @@ export function CoursePickerModal({ open, onClose, onSelect, preloadedNearby, ne
         </div>
 
         {/* Search / Filter */}
-        <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-3">
+        <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-3">
           {mode === "world" ? (
             <>
               {world.step === "search" && (
@@ -334,14 +334,14 @@ export function CoursePickerModal({ open, onClose, onSelect, preloadedNearby, ne
                     <button
                       type="button"
                       onClick={() => setPinOpen(true)}
-                      className="shrink-0 rounded-xl border border-emerald-200/30 bg-[#0a341c]/40 px-2.5 py-2 text-emerald-100 hover:bg-[#0a341c]/70"
+                      className="shrink-0 rounded-xl border border-[color:var(--sec-line)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-2.5 py-2 text-[color:var(--sec-text)] hover:bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)]"
                       aria-label="Pick location on map"
                       title="Pick location on map"
                     >
                       <MapPin size={16} />
                     </button>
                   </div>
-                  <div className="mt-2 text-[10px] text-emerald-100/50">
+                  <div className="mt-2 text-[10px] text-[color:var(--sec-muted)]">
                     Search for a city, address, or course name — then browse
                     nearby golf courses. Or tap the pin to pick on a map.
                   </div>
@@ -354,18 +354,18 @@ export function CoursePickerModal({ open, onClose, onSelect, preloadedNearby, ne
                     <button
                       type="button"
                       onClick={world.backToSearch}
-                      className="shrink-0 text-emerald-100/70 hover:text-emerald-100"
+                      className="shrink-0 text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
                       aria-label="Back to search"
                     >
                       <ArrowLeft size={16} />
                     </button>
-                    <div className="text-sm text-emerald-100/80 truncate">
+                    <div className="text-sm text-[color:var(--sec-muted)] truncate">
                       Results for &ldquo;{world.locationQuery}&rdquo;
                     </div>
                   </div>
 
                   {world.locationResults.length === 0 && !world.locationLoading && (
-                    <div className="text-sm text-emerald-100/60">
+                    <div className="text-sm text-[color:var(--sec-muted)]">
                       No locations found. Try a different search.
                     </div>
                   )}
@@ -374,17 +374,17 @@ export function CoursePickerModal({ open, onClose, onSelect, preloadedNearby, ne
                     {world.locationResults.map((loc) => (
                       <li
                         key={loc.place_id}
-                        className="rounded-xl border border-emerald-900/50 bg-[#0a341c]/40 p-3 flex items-center justify-between gap-2"
+                        className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] p-3 flex items-center justify-between gap-2"
                       >
                         <div className="min-w-0">
-                          <div className="text-sm text-emerald-50 truncate">
+                          <div className="text-sm text-[color:var(--sec-text)] truncate">
                             {loc.display_name}
                           </div>
                         </div>
                         <Button
                           size="sm"
                           variant="outline"
-                          className="shrink-0 rounded-xl border-emerald-200/40 bg-[#0a341c]/60 text-emerald-100 hover:bg-[#0a341c]/80 text-xs"
+                          className="shrink-0 rounded-xl border-[color:var(--sec-line)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] text-[color:var(--sec-text)] hover:bg-[color:color-mix(in_srgb,var(--sec-surface)_80%,transparent)] text-xs"
                           onClick={() => world.selectLocation(loc)}
                         >
                           Search here
@@ -397,7 +397,7 @@ export function CoursePickerModal({ open, onClose, onSelect, preloadedNearby, ne
                     <button
                       type="button"
                       onClick={() => setPinOpen(true)}
-                      className="text-[11px] text-emerald-100/50 hover:text-emerald-100/80 underline underline-offset-2"
+                      className="text-[11px] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-muted)] underline underline-offset-2"
                     >
                       Or pick a location on the map
                     </button>
@@ -410,21 +410,21 @@ export function CoursePickerModal({ open, onClose, onSelect, preloadedNearby, ne
                   <button
                     type="button"
                     onClick={world.backToLocations}
-                    className="shrink-0 text-emerald-100/70 hover:text-emerald-100"
+                    className="shrink-0 text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
                     aria-label="Change location"
                   >
                     <ArrowLeft size={16} />
                   </button>
-                  <div className="text-sm text-emerald-100/80 truncate flex-1">
+                  <div className="text-sm text-[color:var(--sec-muted)] truncate flex-1">
                     Courses near{" "}
-                    <span className="text-emerald-50 font-medium">
+                    <span className="text-[color:var(--sec-text)] font-medium">
                       {world.selectedLocation?.display_name}
                     </span>
                   </div>
                   <button
                     type="button"
                     onClick={world.backToSearch}
-                    className="shrink-0 text-[11px] text-emerald-100/50 hover:text-emerald-100/80 underline underline-offset-2"
+                    className="shrink-0 text-[11px] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-muted)] underline underline-offset-2"
                   >
                     New search
                   </button>
@@ -436,7 +436,7 @@ export function CoursePickerModal({ open, onClose, onSelect, preloadedNearby, ne
               value={nearbyFilter}
               onChange={(e) => setNearbyFilter(e.target.value)}
               placeholder="Filter nearby courses…"
-              className="w-full bg-transparent outline-none text-sm placeholder:text-emerald-100/40"
+              className="w-full bg-transparent outline-none text-sm placeholder:text-[color:var(--sec-muted)]"
               aria-label="Filter nearby courses"
             />
           )}
@@ -444,7 +444,7 @@ export function CoursePickerModal({ open, onClose, onSelect, preloadedNearby, ne
 
         {/* Loading */}
         {loading && (
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">
+          <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4 text-sm text-[color:var(--sec-muted)]">
             {mode === "nearby"
               ? "Finding courses near you…"
               : world.step === "search" || world.step === "locations"
@@ -462,7 +462,7 @@ export function CoursePickerModal({ open, onClose, onSelect, preloadedNearby, ne
 
         {/* Empty state */}
         {showCourseList && filteredCourses.length === 0 && (
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">
+          <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4 text-sm text-[color:var(--sec-muted)]">
             {mode === "world"
               ? "No golf courses found near this location. Try a different spot."
               : nearbyFilter.trim()
@@ -483,14 +483,14 @@ export function CoursePickerModal({ open, onClose, onSelect, preloadedNearby, ne
               return (
                 <li
                   key={c.id}
-                  className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4"
+                  className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_80%,transparent)] p-4"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="font-medium text-emerald-50 truncate">
+                      <div className="font-medium text-[color:var(--sec-text)] truncate">
                         {displayName}
                       </div>
-                      <div className="mt-1 text-[11px] text-emerald-200/70">
+                      <div className="mt-1 text-[11px] text-[color:var(--sec-muted)]">
                         {formatDistance(c.distance_m)}
                       </div>
                     </div>
@@ -498,7 +498,7 @@ export function CoursePickerModal({ open, onClose, onSelect, preloadedNearby, ne
                     <Button
                       size="sm"
                       variant="outline"
-                      className="shrink-0 rounded-xl border-emerald-200/40 bg-[#0a341c]/60 text-emerald-100 hover:bg-[#0a341c]/80"
+                      className="shrink-0 rounded-xl border-[color:var(--sec-line)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] text-[color:var(--sec-text)] hover:bg-[color:color-mix(in_srgb,var(--sec-surface)_80%,transparent)]"
                       onClick={() => onSelectCourse(c)}
                       disabled={isResolving}
                     >
@@ -516,7 +516,7 @@ export function CoursePickerModal({ open, onClose, onSelect, preloadedNearby, ne
           <button
             type="button"
             onClick={() => setNearbyLoadStep(1)}
-            className="w-full rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/40 py-3 text-sm text-emerald-100/70 hover:bg-emerald-900/20 hover:text-emerald-100"
+            className="w-full rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] py-3 text-sm text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)] hover:text-[color:var(--sec-text)]"
           >
             Show all {nearbyAll5km.length} within 5 km
           </button>
@@ -526,13 +526,13 @@ export function CoursePickerModal({ open, onClose, onSelect, preloadedNearby, ne
             type="button"
             onClick={fetchExpanded}
             disabled={nearbyExpandLoading}
-            className="w-full rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/40 py-3 text-sm text-emerald-100/70 hover:bg-emerald-900/20 hover:text-emerald-100 disabled:opacity-50"
+            className="w-full rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] py-3 text-sm text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)] hover:text-[color:var(--sec-text)] disabled:opacity-50"
           >
             {nearbyExpandLoading ? "Searching…" : "Search wider area (20 km)"}
           </button>
         )}
 
-        <footer className="pt-2 text-center text-[10px] text-emerald-100/50">
+        <footer className="pt-2 text-center text-[10px] text-[color:var(--sec-muted)]">
           Powered by OpenStreetMap data.
         </footer>
       </div>

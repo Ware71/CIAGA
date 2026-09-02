@@ -150,13 +150,13 @@ function InviteStartPageContent() {
   }
 
   return (
-    <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8">
+    <div className="min-h-screen bg-[color:var(--ciaga-ground)] text-slate-100 px-4 pt-8">
       <div className="mx-auto w-full max-w-sm space-y-4">
-        <h1 className="text-xl font-semibold text-[#f5e6b0]">Finish your invite</h1>
+        <h1 className="text-xl font-semibold text-[color:var(--sec-accent)]">Finish your invite</h1>
 
-        <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/90 space-y-2">
+        <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4 text-sm text-[color:var(--sec-muted)] space-y-2">
           <p>Click continue to securely verify your invite and finish account setup.</p>
-          <p className="text-emerald-200/60">This extra step helps prevent email scanners from using one-time links.</p>
+          <p className="text-[color:var(--sec-muted)]">This extra step helps prevent email scanners from using one-time links.</p>
         </div>
 
         {msg && (
@@ -165,7 +165,7 @@ function InviteStartPageContent() {
               "rounded-2xl border p-3 text-sm",
               isError
                 ? "border-red-900/40 bg-red-950/20 text-red-200"
-                : "border-emerald-900/70 bg-[#0b3b21]/70 text-emerald-100/90",
+                : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] text-[color:var(--sec-muted)]",
             ].join(" ")}
           >
             {msg}
@@ -176,7 +176,7 @@ function InviteStartPageContent() {
           <button
             onClick={handleContinue}
             disabled={working || resending || !inviteId}
-            className="w-full rounded-xl bg-emerald-700/80 hover:bg-emerald-700 px-4 py-3 text-sm font-medium disabled:opacity-50"
+            className="w-full rounded-xl bg-[color:var(--sec-primary)] hover:bg-[color:var(--sec-primary-hover)] px-4 py-3 text-sm font-medium disabled:opacity-50"
           >
             {working ? "Continuing..." : "Continue"}
           </button>
@@ -185,7 +185,7 @@ function InviteStartPageContent() {
             <button
               onClick={handleResend}
               disabled={working || resending}
-              className="w-full rounded-xl border border-emerald-900/70 bg-[#0b3b21]/70 hover:bg-[#0b3b21] px-4 py-3 text-sm font-medium text-emerald-100/80 disabled:opacity-50"
+              className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] hover:bg-[color:var(--sec-surface)] px-4 py-3 text-sm font-medium text-[color:var(--sec-muted)] disabled:opacity-50"
             >
               {resending ? "Sending..." : "Send me a new invite link"}
             </button>

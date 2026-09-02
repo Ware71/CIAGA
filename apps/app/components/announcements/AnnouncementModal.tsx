@@ -43,7 +43,7 @@ export default function AnnouncementModal({ items, onSeen }: Props) {
           <div className="absolute inset-0 bg-black/70" />
           <motion.div
             key={current.id}
-            className="relative w-full max-w-sm overflow-hidden rounded-3xl border border-emerald-900/60 bg-[#071c10] shadow-2xl"
+            className="relative w-full max-w-sm overflow-hidden rounded-3xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] shadow-2xl"
             initial={{ y: 24, opacity: 0, scale: 0.98 }}
             animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: 24, opacity: 0 }}
@@ -79,14 +79,14 @@ function InfoCard({ ann, onDone }: { ann: Announcement; onDone: () => void }) {
       {ann.image_url ? (
         <img src={ann.image_url} alt="" className="h-40 w-full object-cover" loading="lazy" decoding="async" />
       ) : (
-        <div className="grid h-28 w-full place-items-center bg-emerald-900/30">
-          <Sparkles className="text-emerald-300" size={32} />
+        <div className="grid h-28 w-full place-items-center bg-[color:var(--sec-surface)]">
+          <Sparkles className="text-[color:var(--sec-good)]" size={32} />
         </div>
       )}
       <div className="space-y-3 p-5">
-        <div className="text-lg font-extrabold text-[#f5e6b0]">{ann.title}</div>
+        <div className="text-lg font-extrabold text-[color:var(--sec-accent)]">{ann.title}</div>
         {ann.body ? (
-          <div className="whitespace-pre-wrap text-sm font-medium text-emerald-100/85">
+          <div className="whitespace-pre-wrap text-sm font-medium text-[color:var(--sec-muted)]">
             {ann.body}
           </div>
         ) : null}
@@ -94,7 +94,7 @@ function InfoCard({ ann, onDone }: { ann: Announcement; onDone: () => void }) {
           <button
             type="button"
             onClick={onDone}
-            className="rounded-full px-4 py-2 text-sm font-semibold text-emerald-200/70 hover:text-emerald-100"
+            className="rounded-full px-4 py-2 text-sm font-semibold text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
           >
             Dismiss
           </button>
@@ -107,7 +107,7 @@ function InfoCard({ ann, onDone }: { ann: Announcement; onDone: () => void }) {
                 if (/^https?:\/\//.test(url)) window.open(url, "_blank");
                 else router.push(url);
               }}
-              className="rounded-full bg-[#f5e6b0] px-4 py-2 text-sm font-extrabold text-[#042713] hover:bg-[#f5e6b0]/90"
+              className="rounded-full bg-[color:var(--sec-accent)] px-4 py-2 text-sm font-extrabold text-[color:var(--ciaga-ground)] hover:bg-[color:color-mix(in_srgb,var(--sec-accent)_90%,transparent)]"
             >
               {ann.cta_label || "Learn more"}
             </button>
@@ -158,11 +158,11 @@ function OnboardingFlow({ ann, onDone }: { ann: Announcement; onDone: () => void
   const steps = [
     // 0 — welcome / navigation
     <div key="welcome" className="space-y-4">
-      <div className="grid h-12 w-12 place-items-center rounded-2xl bg-emerald-400/20 text-emerald-200">
+      <div className="grid h-12 w-12 place-items-center rounded-2xl bg-emerald-400/20 text-[color:var(--sec-text-2)]">
         <Sparkles size={24} />
       </div>
-      <div className="text-xl font-extrabold text-[#f5e6b0]">{ann.title}</div>
-      <ul className="space-y-2 text-sm font-medium text-emerald-100/85">
+      <div className="text-xl font-extrabold text-[color:var(--sec-accent)]">{ann.title}</div>
+      <ul className="space-y-2 text-sm font-medium text-[color:var(--sec-muted)]">
         <li>• Tap <b>New Round</b> on this screen to start playing.</li>
         <li>• <b>Press and hold</b> the logo in the bar below for quick links — they change with the screen you are on.</li>
         <li>• The <b>Social</b> feed shows rounds, records and posts from people you follow.</li>
@@ -173,11 +173,11 @@ function OnboardingFlow({ ann, onDone }: { ann: Announcement; onDone: () => void
 
     // 1 — notifications
     <div key="push" className="space-y-4">
-      <div className="grid h-12 w-12 place-items-center rounded-2xl bg-emerald-400/20 text-emerald-200">
+      <div className="grid h-12 w-12 place-items-center rounded-2xl bg-emerald-400/20 text-[color:var(--sec-text-2)]">
         <Bell size={24} />
       </div>
-      <div className="text-xl font-extrabold text-[#f5e6b0]">Stay in the loop</div>
-      <div className="text-sm font-medium text-emerald-100/85">
+      <div className="text-xl font-extrabold text-[color:var(--sec-accent)]">Stay in the loop</div>
+      <div className="text-sm font-medium text-[color:var(--sec-muted)]">
         Get notified about new events, when entry opens, mentions, and when people you follow play.
       </div>
       {iosNeedsInstall ? (
@@ -194,7 +194,7 @@ function OnboardingFlow({ ann, onDone }: { ann: Announcement; onDone: () => void
             type="button"
             onClick={enablePush}
             disabled={pushStatus === "working" || pushStatus === "subscribed"}
-            className="w-full rounded-full bg-[#f5e6b0] px-4 py-2.5 text-sm font-extrabold text-[#042713] disabled:opacity-60"
+            className="w-full rounded-full bg-[color:var(--sec-accent)] px-4 py-2.5 text-sm font-extrabold text-[color:var(--ciaga-ground)] disabled:opacity-60"
           >
             {pushStatus === "subscribed"
               ? "Notifications enabled ✓"
@@ -203,17 +203,17 @@ function OnboardingFlow({ ann, onDone }: { ann: Announcement; onDone: () => void
                 : "Enable notifications"}
           </button>
           {pushStatus === "denied" && (
-            <div className="text-xs font-medium text-emerald-100/60">
+            <div className="text-xs font-medium text-[color:var(--sec-muted)]">
               Permission was blocked — you can enable it later in your browser settings.
             </div>
           )}
           {pushStatus === "unsupported" && (
-            <div className="text-xs font-medium text-emerald-100/60">
+            <div className="text-xs font-medium text-[color:var(--sec-muted)]">
               Push isn’t supported on this device/browser.
             </div>
           )}
           {pushStatus === "error" && (
-            <div className="text-xs font-medium text-emerald-100/60">
+            <div className="text-xs font-medium text-[color:var(--sec-muted)]">
               Couldn’t enable notifications{pushError ? `: ${pushError}` : ""}. Tap to try
               again.
             </div>
@@ -224,18 +224,18 @@ function OnboardingFlow({ ann, onDone }: { ann: Announcement; onDone: () => void
 
     // 2 — location
     <div key="loc" className="space-y-4">
-      <div className="grid h-12 w-12 place-items-center rounded-2xl bg-emerald-400/20 text-emerald-200">
+      <div className="grid h-12 w-12 place-items-center rounded-2xl bg-emerald-400/20 text-[color:var(--sec-text-2)]">
         <MapPin size={24} />
       </div>
-      <div className="text-xl font-extrabold text-[#f5e6b0]">Find courses near you</div>
-      <div className="text-sm font-medium text-emerald-100/85">
+      <div className="text-xl font-extrabold text-[color:var(--sec-accent)]">Find courses near you</div>
+      <div className="text-sm font-medium text-[color:var(--sec-muted)]">
         Allow location so we can find nearby courses and power the rangefinder.
       </div>
       <button
         type="button"
         onClick={enableLocation}
         disabled={locStatus === "working" || locStatus === "granted"}
-        className="w-full rounded-full bg-[#f5e6b0] px-4 py-2.5 text-sm font-extrabold text-[#042713] disabled:opacity-60"
+        className="w-full rounded-full bg-[color:var(--sec-accent)] px-4 py-2.5 text-sm font-extrabold text-[color:var(--ciaga-ground)] disabled:opacity-60"
       >
         {locStatus === "granted"
           ? "Location enabled ✓"
@@ -244,7 +244,7 @@ function OnboardingFlow({ ann, onDone }: { ann: Announcement; onDone: () => void
             : "Enable location"}
       </button>
       {locStatus === "denied" && (
-        <div className="text-xs font-medium text-emerald-100/60">
+        <div className="text-xs font-medium text-[color:var(--sec-muted)]">
           No problem — you can still search for courses by name.
         </div>
       )}
@@ -252,11 +252,11 @@ function OnboardingFlow({ ann, onDone }: { ann: Announcement; onDone: () => void
 
     // 3 — done
     <div key="done" className="space-y-4">
-      <div className="grid h-12 w-12 place-items-center rounded-2xl bg-emerald-400/20 text-emerald-200">
+      <div className="grid h-12 w-12 place-items-center rounded-2xl bg-emerald-400/20 text-[color:var(--sec-text-2)]">
         <Check size={24} />
       </div>
-      <div className="text-xl font-extrabold text-[#f5e6b0]">You’re all set</div>
-      <div className="text-sm font-medium text-emerald-100/85">
+      <div className="text-xl font-extrabold text-[color:var(--sec-accent)]">You’re all set</div>
+      <div className="text-sm font-medium text-[color:var(--sec-muted)]">
         Enjoy CIAGA — go play a round and share it with your group.
       </div>
     </div>,
@@ -274,7 +274,7 @@ function OnboardingFlow({ ann, onDone }: { ann: Announcement; onDone: () => void
           <span
             key={i}
             className={`h-1.5 rounded-full transition-all ${
-              i === step ? "w-5 bg-emerald-400" : "w-1.5 bg-emerald-800/70"
+              i === step ? "w-5 bg-emerald-400" : "w-1.5 bg-[color:var(--sec-surface-2)]"
             }`}
           />
         ))}
@@ -284,14 +284,14 @@ function OnboardingFlow({ ann, onDone }: { ann: Announcement; onDone: () => void
         <button
           type="button"
           onClick={onDone}
-          className="text-sm font-semibold text-emerald-200/60 hover:text-emerald-100"
+          className="text-sm font-semibold text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
         >
           Skip
         </button>
         <button
           type="button"
           onClick={() => (isLast ? onDone() : setStep((s) => s + 1))}
-          className="rounded-full bg-emerald-400 px-5 py-2 text-sm font-extrabold text-emerald-950 hover:bg-emerald-300"
+          className="rounded-full bg-emerald-400 px-5 py-2 text-sm font-extrabold text-[color:var(--ciaga-ground)] hover:bg-emerald-300"
         >
           {isLast ? "Get started" : "Next"}
         </button>

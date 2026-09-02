@@ -46,10 +46,10 @@ export function AvailabilityPopup(props: {
           exit={{ y: "100%" }}
           transition={{ type: "spring", damping: 30, stiffness: 300 }}
         >
-          <div className="mx-auto w-full max-w-[520px] max-h-[85vh] overflow-y-auto rounded-t-3xl border border-emerald-900/70 bg-[#061f12] shadow-2xl">
-            <div className="sticky top-0 flex items-center justify-between border-b border-emerald-900/60 bg-[#061f12] p-4">
-              <div className="text-sm font-semibold text-emerald-50">{formatDayLabel(day)}</div>
-              <button onClick={onClose} className="text-emerald-100/70 hover:text-emerald-50" aria-label="Close">
+          <div className="mx-auto w-full max-w-[520px] max-h-[85vh] overflow-y-auto rounded-t-3xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] shadow-2xl">
+            <div className="sticky top-0 flex items-center justify-between border-b border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] p-4">
+              <div className="text-sm font-semibold text-[color:var(--sec-text)]">{formatDayLabel(day)}</div>
+              <button onClick={onClose} className="text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]" aria-label="Close">
                 <X size={18} aria-hidden="true" />
               </button>
             </div>
@@ -60,7 +60,7 @@ export function AvailabilityPopup(props: {
                 if (ids.length === 0) return null;
                 return (
                   <div key={status}>
-                    <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-200/60">
+                    <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[color:var(--sec-muted)]">
                       <span
                         className="h-2 w-2 rounded-full"
                         style={{ backgroundColor: STATUS_COLORS[status] }}
@@ -71,7 +71,7 @@ export function AvailabilityPopup(props: {
                       {ids.map((id) => (
                         <span
                           key={id}
-                          className="inline-flex items-center gap-1.5 rounded-full border border-emerald-900/70 bg-[#0b3b21]/40 py-1 pl-1 pr-2.5 text-xs text-emerald-50"
+                          className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] py-1 pl-1 pr-2.5 text-xs text-[color:var(--sec-text)]"
                         >
                           <InitialsAvatar profileId={id} name={nameById.get(id)?.name ?? null} size={18} />
                           {nameById.get(id)?.name ?? "Player"}
@@ -83,7 +83,7 @@ export function AvailabilityPopup(props: {
               })}
 
               <Button
-                className="w-full rounded-2xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c]"
+                className="w-full rounded-2xl bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] hover:bg-[color:var(--sec-accent)]"
                 onClick={() => onAddEvent(day)}
               >
                 <Plus size={16} /> Add event

@@ -224,10 +224,10 @@ export default function LeaderboardClient() {
   return (
     <div className="min-h-[100dvh] pb-[env(safe-area-inset-bottom)] px-4 pt-8 max-w-sm mx-auto space-y-5">
       <div className="flex items-center justify-between">
-        <button type="button" onClick={() => router.back()} className="text-[11px] text-emerald-100/70 hover:text-emerald-50">
+        <button type="button" onClick={() => router.back()} className="text-[11px] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]">
           ← Back
         </button>
-        <h1 className="text-lg font-semibold tracking-wide text-[#7CF0BE]">Leaderboard</h1>
+        <h1 className="text-lg font-semibold tracking-wide text-[color:var(--sec-accent)]">Leaderboard</h1>
         <div className="w-14" />
       </div>
 
@@ -241,8 +241,8 @@ export default function LeaderboardClient() {
               onClick={() => setTab(t)}
               className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors capitalize ${
                 tab === t
-                  ? "bg-emerald-700 text-white"
-                  : "border border-emerald-900/60 text-emerald-200/70"
+                  ? "bg-[color:var(--sec-primary)] text-white"
+                  : "border border-[color:var(--sec-hair)] text-[color:var(--sec-muted)]"
               }`}
             >
               {t === "competition" ? "Competition" : "Season"}
@@ -289,14 +289,14 @@ export default function LeaderboardClient() {
           <button
             type="button"
             onClick={() => { setTieDrawerScreen("playoff_setup"); setShowTieDrawer(true); }}
-            className="flex-1 py-3 rounded-full bg-[#7CF0BE] text-[#042713] text-sm font-semibold"
+            className="flex-1 py-3 rounded-full bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] text-sm font-semibold"
           >
             Playoff
           </button>
           <button
             type="button"
             onClick={() => { setTieDrawerScreen("choice"); setShowTieDrawer(true); }}
-            className="flex-1 py-3 rounded-full border border-[#7CF0BE]/50 text-[#7CF0BE] text-sm font-semibold"
+            className="flex-1 py-3 rounded-full border border-[color:color-mix(in_srgb,var(--sec-accent)_50%,transparent)] text-[color:var(--sec-accent)] text-sm font-semibold"
           >
             Countback
           </button>
@@ -309,18 +309,18 @@ export default function LeaderboardClient() {
           type="button"
           onClick={handleReveal}
           disabled={revealLoading}
-          className="w-full py-3 rounded-full bg-[#7CF0BE] text-[#042713] text-sm font-semibold disabled:opacity-50"
+          className="w-full py-3 rounded-full bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] text-sm font-semibold disabled:opacity-50"
         >
           {revealLoading ? "Revealing…" : isFrozen ? "Reveal Results" : "Start Ceremony"}
         </button>
       )}
 
       {loading && (
-        <div className="text-sm text-emerald-100/60 text-center py-10">Loading…</div>
+        <div className="text-sm text-[color:var(--sec-muted)] text-center py-10">Loading…</div>
       )}
 
       {!loading && rows.length === 0 && (
-        <div className="text-sm text-emerald-100/60 text-center py-10">
+        <div className="text-sm text-[color:var(--sec-muted)] text-center py-10">
           No results yet. Submit a round to appear here.
         </div>
       )}
@@ -355,10 +355,10 @@ export default function LeaderboardClient() {
               className={`flex items-center gap-3 rounded-xl border px-3 py-2 ${
                 isFrozenRow
                   ? "border-cyan-700/40 bg-cyan-900/30"
-                  : "border-emerald-900/50 bg-[#0b3b21]/60"
+                  : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)]"
               }`}
             >
-              <span className="w-7 text-center text-xs font-extrabold text-[#7CF0BE]">
+              <span className="w-7 text-center text-xs font-extrabold text-[color:var(--sec-accent)]">
                 {row.position == null
                   ? idx + 1
                   : (row as any).tied_count > 1
@@ -373,13 +373,13 @@ export default function LeaderboardClient() {
                 {row.profile?.avatar_url ? (
                   <img src={row.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
                 ) : (
-                  <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
+                  <div className="h-7 w-7 rounded-full bg-[color:var(--sec-surface)] grid place-items-center text-[10px] font-bold text-[color:var(--sec-text-2)] shrink-0">
                     {row.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1">
-                    <span className="block text-sm font-semibold text-emerald-50 truncate text-left">
+                    <span className="block text-sm font-semibold text-[color:var(--sec-text)] truncate text-left">
                       {row.profile?.name ?? "Unknown"}
                     </span>
                     {isFrozenRow && <span className="text-[11px] leading-none shrink-0">❄️</span>}
@@ -388,7 +388,7 @@ export default function LeaderboardClient() {
                     <span className={`text-[10px] font-medium ${
                       (row as any).playoff_result === "won_playoff" || (row as any).playoff_result === "won_countback"
                         ? "text-yellow-300/80"
-                        : "text-emerald-100/40"
+                        : "text-[color:var(--sec-muted)]"
                     }`}>
                       {(row as any).playoff_result === "won_playoff" && "Won by Playoff"}
                       {(row as any).playoff_result === "lost_playoff" && "Lost by Playoff"}
@@ -397,7 +397,7 @@ export default function LeaderboardClient() {
                     </span>
                   )}
                   {tab === "competition" && !(row as any).playoff_result && thruLabel && (
-                    <span className={`text-[10px] ${isFrozenRow ? "text-cyan-300/70" : "text-emerald-100/40"}`}>
+                    <span className={`text-[10px] ${isFrozenRow ? "text-cyan-300/70" : "text-[color:var(--sec-muted)]"}`}>
                       {thruLabel}
                     </span>
                   )}
@@ -407,33 +407,33 @@ export default function LeaderboardClient() {
                 {tab === "competition" ? (
                   scoringModel === "stableford_points" ? (
                     <>
-                      <div className="text-xs font-extrabold text-[#7CF0BE]">
+                      <div className="text-xs font-extrabold text-[color:var(--sec-accent)]">
                         {(row as any).format_points != null ? `${(row as any).format_points} pts` : "—"}
                       </div>
                       {getToPar(row) != null && (
-                        <div className="text-[10px] text-emerald-100/50">
+                        <div className="text-[10px] text-[color:var(--sec-muted)]">
                           {getToPar(row) === 0 ? "E" : getToPar(row)! > 0 ? `+${getToPar(row)}` : String(getToPar(row))}
                         </div>
                       )}
                       {(row as any).gross_score != null && (
-                        <div className="text-[10px] text-emerald-100/40">{(row as any).gross_score} gross</div>
+                        <div className="text-[10px] text-[color:var(--sec-muted)]">{(row as any).gross_score} gross</div>
                       )}
                     </>
                   ) : (
                     <>
-                      <div className="text-xs font-extrabold text-[#7CF0BE]">
+                      <div className="text-xs font-extrabold text-[color:var(--sec-accent)]">
                         {formatLeaderboardScore(getToPar(row), score)}
                       </div>
-                      <div className="text-[10px] text-emerald-100/50">to par</div>
+                      <div className="text-[10px] text-[color:var(--sec-muted)]">to par</div>
                       {(row as any).gross_score != null && (
-                        <div className="text-[10px] text-emerald-100/40">{(row as any).gross_score} gross</div>
+                        <div className="text-[10px] text-[color:var(--sec-muted)]">{(row as any).gross_score} gross</div>
                       )}
                     </>
                   )
                 ) : (
                   <>
-                    <div className="text-xs font-extrabold text-[#7CF0BE]">{row.season_points ?? 0} pts</div>
-                    <div className="text-[10px] text-emerald-100/50">{row.events_played ?? 0} events</div>
+                    <div className="text-xs font-extrabold text-[color:var(--sec-accent)]">{row.season_points ?? 0} pts</div>
+                    <div className="text-[10px] text-[color:var(--sec-muted)]">{row.events_played ?? 0} events</div>
                   </>
                 )}
               </div>
@@ -499,18 +499,18 @@ function PlayoffScorecardModal({
   }, []);
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#071f13] overflow-y-auto">
+    <div className="fixed inset-0 z-50 bg-[color:var(--ciaga-ground)] overflow-y-auto">
       <button
         type="button"
         onClick={onClose}
-        className="absolute top-4 right-4 text-emerald-100/60 text-sm z-10"
+        className="absolute top-4 right-4 text-[color:var(--sec-muted)] text-sm z-10"
       >
         ✕ Close
       </button>
       {Component ? (
         <Component playoff={playoff} eventId={eventId} canScore={false} />
       ) : (
-        <div className="flex items-center justify-center h-full text-emerald-100/60 text-sm">Loading…</div>
+        <div className="flex items-center justify-center h-full text-[color:var(--sec-muted)] text-sm">Loading…</div>
       )}
     </div>
   );

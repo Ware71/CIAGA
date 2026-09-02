@@ -110,17 +110,17 @@ export function AcceptTermsGate() {
   return (
     <div className="fixed inset-0 z-[2147483000] flex items-end sm:items-center sm:justify-center">
       <div className="absolute inset-0 bg-black/70" />
-      <div className="relative w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl border-t sm:border border-emerald-900/60 bg-[#071c10] p-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)]">
-        <h2 className="text-lg font-semibold text-[#f5e6b0]">
+      <div className="relative w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl border-t sm:border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] p-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)]">
+        <h2 className="text-lg font-semibold text-[color:var(--sec-accent)]">
           We&apos;ve updated our terms
         </h2>
-        <p className="mt-2 text-sm text-emerald-100/85">
+        <p className="mt-2 text-sm text-[color:var(--sec-muted)]">
           Please review and accept our{' '}
           <a
             href={LEGAL_LINKS.terms}
             target="_blank"
             rel="noopener noreferrer"
-            className="underline text-[#f5e6b0]"
+            className="underline text-[color:var(--sec-accent)]"
           >
             Terms
           </a>{' '}
@@ -129,7 +129,7 @@ export function AcceptTermsGate() {
             href={LEGAL_LINKS.privacy}
             target="_blank"
             rel="noopener noreferrer"
-            className="underline text-[#f5e6b0]"
+            className="underline text-[color:var(--sec-accent)]"
           >
             Privacy Policy
           </a>{' '}
@@ -139,7 +139,7 @@ export function AcceptTermsGate() {
           type="button"
           onClick={handleAgree}
           disabled={saving}
-          className="mt-4 w-full rounded-xl bg-emerald-700/80 hover:bg-emerald-700 px-4 py-2.5 text-sm font-medium disabled:opacity-50 transition-colors"
+          className="mt-4 w-full rounded-xl bg-[color:var(--sec-primary)] hover:bg-[color:var(--sec-primary-hover)] px-4 py-2.5 text-sm font-medium disabled:opacity-50 transition-colors"
         >
           {saving ? 'Saving…' : 'I agree'}
         </button>

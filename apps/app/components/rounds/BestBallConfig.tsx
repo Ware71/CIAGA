@@ -23,7 +23,7 @@ export function BestBallConfig({
   return (
     <div className="space-y-3">
       <div>
-        <label className="text-xs text-emerald-100/80 block mb-1">Scoring Type</label>
+        <label className="text-xs text-[color:var(--sec-muted)] block mb-1">Scoring Type</label>
         <select
           value={scoringType}
           onChange={(e) =>
@@ -33,14 +33,14 @@ export function BestBallConfig({
             })
           }
           disabled={disabled}
-          className="w-full rounded-lg border border-emerald-900/70 bg-[#0b3b21]/70 px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50"
+          className="w-full rounded-lg border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] px-3 py-2 text-sm text-[color:var(--sec-text)] focus:outline-none focus:ring-2 focus:ring-[color:var(--sec-accent)] disabled:opacity-50"
         >
           <option value="net_strokes">Net Strokes (lowest wins)</option>
           <option value="stableford">Stableford Points (highest wins)</option>
         </select>
       </div>
 
-      <p className="text-[11px] text-emerald-100/60">
+      <p className="text-[11px] text-[color:var(--sec-muted)]">
         {scoringType === "net_strokes"
           ? "Best (lowest) net stroke score per hole counts for the team."
           : "Best (highest) stableford points per hole count for the team."}
@@ -48,7 +48,7 @@ export function BestBallConfig({
 
       {teamSize > 2 && (
         <div>
-          <label className="text-xs text-emerald-100/80 block mb-1">
+          <label className="text-xs text-[color:var(--sec-muted)] block mb-1">
             Best X of {teamSize} per hole
           </label>
           <NumberField
@@ -64,7 +64,7 @@ export function BestBallConfig({
               })
             }
             disabled={disabled}
-            className="w-20 px-2 py-1 rounded border border-emerald-900/70 bg-[#0b3b21]/70 text-xs text-emerald-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            className="w-20 px-2 py-1 rounded border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] text-xs text-[color:var(--sec-text)] focus:outline-none focus:ring-1 focus:ring-[color:var(--sec-accent)]"
           />
         </div>
       )}

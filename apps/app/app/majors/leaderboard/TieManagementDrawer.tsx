@@ -134,11 +134,11 @@ export function TieManagementDrawer({ eventId, initialScreen, onClose, onResolve
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm mx-auto rounded-t-3xl bg-[#071f13] border-t border-emerald-900/70 px-4 pt-5 pb-10"
+        className="w-full max-w-sm mx-auto rounded-t-3xl bg-[color:var(--ciaga-ground)] border-t border-[color:var(--sec-hair)] px-4 pt-5 pb-10"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Handle bar */}
-        <div className="w-10 h-1 rounded-full bg-emerald-700/40 mx-auto mb-5" />
+        <div className="w-10 h-1 rounded-full bg-[color:var(--sec-primary)] mx-auto mb-5" />
 
         {screen === "choice" && (
           <ChoiceScreen
@@ -159,7 +159,7 @@ export function TieManagementDrawer({ eventId, initialScreen, onClose, onResolve
         )}
 
         {screen === "countback_loading" && (
-          <div className="py-10 text-center text-emerald-100/60 text-sm">
+          <div className="py-10 text-center text-[color:var(--sec-muted)] text-sm">
             Running countback…
           </div>
         )}
@@ -187,27 +187,27 @@ function ChoiceScreen({
 }) {
   return (
     <div className="space-y-4">
-      <h2 className="text-base font-semibold text-[#7CF0BE] text-center">Resolve Tie</h2>
-      <p className="text-[11px] text-emerald-100/50 text-center">
+      <h2 className="text-base font-semibold text-[color:var(--sec-accent)] text-center">Resolve Tie</h2>
+      <p className="text-[11px] text-[color:var(--sec-muted)] text-center">
         Choose how to decide the winner
       </p>
       <button
         type="button"
         onClick={onPlayoff}
-        className="w-full rounded-2xl border border-emerald-700/40 bg-emerald-900/30 px-4 py-4 text-left"
+        className="w-full rounded-2xl border border-[color:var(--sec-line)] bg-[color:var(--sec-surface)] px-4 py-4 text-left"
       >
-        <p className="text-sm font-semibold text-emerald-200">Playoff</p>
-        <p className="text-[11px] text-emerald-100/50 mt-0.5">
+        <p className="text-sm font-semibold text-[color:var(--sec-text-2)]">Playoff</p>
+        <p className="text-[11px] text-[color:var(--sec-muted)] mt-0.5">
           Sudden death — players compete hole-by-hole until one wins
         </p>
       </button>
       <button
         type="button"
         onClick={onCountback}
-        className="w-full rounded-2xl border border-emerald-700/40 bg-emerald-900/30 px-4 py-4 text-left"
+        className="w-full rounded-2xl border border-[color:var(--sec-line)] bg-[color:var(--sec-surface)] px-4 py-4 text-left"
       >
-        <p className="text-sm font-semibold text-emerald-200">Countback</p>
-        <p className="text-[11px] text-emerald-100/50 mt-0.5">
+        <p className="text-sm font-semibold text-[color:var(--sec-text-2)]">Countback</p>
+        <p className="text-[11px] text-[color:var(--sec-muted)] mt-0.5">
           Compare scores over the last 9, 6, 3 holes, then individual holes
         </p>
       </button>
@@ -233,10 +233,10 @@ function PlayoffSetupScreen({
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <button type="button" onClick={onBack} className="text-emerald-100/60 text-sm">←</button>
-        <h2 className="text-base font-semibold text-[#7CF0BE]">Select Playoff Hole</h2>
+        <button type="button" onClick={onBack} className="text-[color:var(--sec-muted)] text-sm">←</button>
+        <h2 className="text-base font-semibold text-[color:var(--sec-accent)]">Select Playoff Hole</h2>
       </div>
-      <p className="text-[11px] text-emerald-100/50">
+      <p className="text-[11px] text-[color:var(--sec-muted)]">
         Choose the hole for the sudden-death playoff. Tied players will be revealed once you start.
       </p>
 
@@ -248,8 +248,8 @@ function PlayoffSetupScreen({
             onClick={() => onSelectHole(h)}
             className={`rounded-xl py-2 text-sm font-bold transition-colors ${
               selectedHole === h
-                ? "bg-[#7CF0BE] text-[#042713]"
-                : "border border-emerald-700/40 text-emerald-200 hover:bg-emerald-900/40"
+                ? "bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)]"
+                : "border border-[color:var(--sec-line)] text-[color:var(--sec-text-2)] hover:bg-[color:var(--sec-surface-2)]"
             }`}
           >
             {h}
@@ -257,13 +257,13 @@ function PlayoffSetupScreen({
         ))}
       </div>
 
-      {error && <p className="text-xs text-red-400">{error}</p>}
+      {error && <p className="text-xs text-[color:var(--sec-bad)]">{error}</p>}
 
       <button
         type="button"
         onClick={onStart}
         disabled={!selectedHole || loading}
-        className="w-full py-3 rounded-full bg-[#7CF0BE] text-[#042713] text-sm font-semibold disabled:opacity-40"
+        className="w-full py-3 rounded-full bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] text-sm font-semibold disabled:opacity-40"
       >
         {loading ? "Starting…" : "Start Playoff"}
       </button>
@@ -287,8 +287,8 @@ function CountbackResultScreen({
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <button type="button" onClick={onBack} className="text-emerald-100/60 text-sm">←</button>
-        <h2 className="text-base font-semibold text-[#7CF0BE]">Countback Result</h2>
+        <button type="button" onClick={onBack} className="text-[color:var(--sec-muted)] text-sm">←</button>
+        <h2 className="text-base font-semibold text-[color:var(--sec-accent)]">Countback Result</h2>
       </div>
 
       <div className="space-y-2">
@@ -297,19 +297,19 @@ function CountbackResultScreen({
             key={step.step}
             className={`rounded-xl border px-3 py-2 text-[11px] ${
               step.resolvedAt
-                ? "border-emerald-600/50 bg-emerald-900/30"
-                : "border-emerald-900/30 bg-transparent"
+                ? "border-[color:var(--sec-line)] bg-[color:var(--sec-surface)]"
+                : "border-[color:var(--sec-hair)] bg-transparent"
             }`}
           >
             <div className="flex items-center justify-between mb-1">
-              <span className={`font-semibold ${step.resolvedAt ? "text-emerald-300" : "text-emerald-100/60"}`}>
+              <span className={`font-semibold ${step.resolvedAt ? "text-[color:var(--sec-good)]" : "text-[color:var(--sec-muted)]"}`}>
                 {step.step} (holes {step.holeRange})
                 {step.resolvedAt && " — Resolved ✓"}
               </span>
             </div>
             <div className="flex gap-4">
               {Object.entries(step.scores).map(([pid, score]) => (
-                <span key={pid} className="text-emerald-100/70">
+                <span key={pid} className="text-[color:var(--sec-muted)]">
                   {pid.slice(0, 6)}: {score ?? "—"}
                 </span>
               ))}
@@ -319,7 +319,7 @@ function CountbackResultScreen({
       </div>
 
       {result.winner_profile_id ? (
-        <p className="text-xs text-emerald-300 font-semibold text-center">
+        <p className="text-xs text-[color:var(--sec-good)] font-semibold text-center">
           Winner determined via {result.step_resolved}
         </p>
       ) : (
@@ -328,13 +328,13 @@ function CountbackResultScreen({
         </p>
       )}
 
-      {error && <p className="text-xs text-red-400">{error}</p>}
+      {error && <p className="text-xs text-[color:var(--sec-bad)]">{error}</p>}
 
       <button
         type="button"
         onClick={onConfirm}
         disabled={!result.winner_profile_id || loading}
-        className="w-full py-3 rounded-full bg-[#7CF0BE] text-[#042713] text-sm font-semibold disabled:opacity-40"
+        className="w-full py-3 rounded-full bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] text-sm font-semibold disabled:opacity-40"
       >
         {loading ? "Applying…" : "Confirm & Apply Result"}
       </button>

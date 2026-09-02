@@ -32,7 +32,7 @@ const FILTERS: { value: Filter; label: string }[] = [
 function entryStatusLabel(status: MajorScheduleItem["entry_status"]) {
   switch (status) {
     case "entered":
-      return { text: "Entered", className: "text-emerald-300 bg-emerald-900/60" };
+      return { text: "Entered", className: "text-[color:var(--sec-good)] bg-[color:var(--sec-surface)]" };
     case "open":
       return { text: "Open", className: "text-amber-300 bg-amber-900/40" };
     case "closed":
@@ -144,8 +144,8 @@ export default function ScheduleClient() {
       <header className="relative flex items-center justify-center">
         <BackButton className="absolute left-0 font-semibold" href="/majors" label="← Majors" />
         <div className="text-center">
-          <div className="text-lg font-extrabold tracking-wide text-[#7CF0BE]">Schedule</div>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-200/50">
+          <div className="text-lg font-extrabold tracking-wide text-[color:var(--sec-accent)]">Schedule</div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--sec-muted)]">
             Fixtures &amp; results
           </div>
         </div>
@@ -160,8 +160,8 @@ export default function ScheduleClient() {
             aria-pressed={filter === f.value}
             className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
               filter === f.value
-                ? "border border-[#7CF0BE]/50 bg-[#7CF0BE]/12 text-[#7CF0BE]"
-                : "border border-emerald-900/60 text-emerald-200/60 hover:text-emerald-50"
+                ? "border border-[color:color-mix(in_srgb,var(--sec-accent)_50%,transparent)] bg-[color:color-mix(in_srgb,var(--sec-accent)_12%,transparent)] text-[color:var(--sec-accent)]"
+                : "border border-[color:var(--sec-hair)] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
             }`}
           >
             {f.label}
@@ -169,10 +169,10 @@ export default function ScheduleClient() {
         ))}
       </div>
 
-      {loading && <div className="py-10 text-center text-sm text-emerald-100/60">Loading…</div>}
+      {loading && <div className="py-10 text-center text-sm text-[color:var(--sec-muted)]">Loading…</div>}
 
       {!loading && items.length === 0 && (
-        <div className="py-10 text-center text-sm text-emerald-100/60">
+        <div className="py-10 text-center text-sm text-[color:var(--sec-muted)]">
           {filter === "completed"
             ? "No completed competitions yet."
             : "Nothing scheduled right now."}
@@ -197,13 +197,13 @@ export default function ScheduleClient() {
                       className={`${MAJORS_CARD_INTERACTIVE} w-full space-y-2 p-4 text-left`}
                     >
                       {item.group && (
-                        <div className="text-[10px] uppercase tracking-[0.16em] text-emerald-200/55">
+                        <div className="text-[10px] uppercase tracking-[0.16em] text-[color:var(--sec-muted)]">
                           {item.group.name}
                         </div>
                       )}
 
                       <div className="flex items-start justify-between gap-2">
-                        <span className="text-sm font-semibold leading-tight text-emerald-50">
+                        <span className="text-sm font-semibold leading-tight text-[color:var(--sec-text)]">
                           {item.name}
                         </span>
                         {!finished && (
@@ -215,7 +215,7 @@ export default function ScheduleClient() {
                         )}
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-3 text-[11px] text-emerald-100/65">
+                      <div className="flex flex-wrap items-center gap-3 text-[11px] text-[color:var(--sec-muted)]">
                         {item.event_date && (
                           <span>{new Date(item.event_date).toLocaleDateString()}</span>
                         )}
@@ -225,25 +225,25 @@ export default function ScheduleClient() {
 
                       {/* The reason History existed: how you actually did. */}
                       {finished && entry && (
-                        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t border-[#7CF0BE]/15 pt-2">
+                        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t border-[color:color-mix(in_srgb,var(--sec-accent)_15%,transparent)] pt-2">
                           {entry.position != null && (
-                            <span className="text-sm font-extrabold text-[#7CF0BE]">
+                            <span className="text-sm font-extrabold text-[color:var(--sec-accent)]">
                               {ordinal(entry.position)}
                             </span>
                           )}
                           {entry.net_score != null && (
-                            <span className="text-[11px] text-emerald-100/70">
-                              Net <b className="text-emerald-50">{entry.net_score}</b>
+                            <span className="text-[11px] text-[color:var(--sec-muted)]">
+                              Net <b className="text-[color:var(--sec-text)]">{entry.net_score}</b>
                             </span>
                           )}
                           {entry.gross_score != null && (
-                            <span className="text-[11px] text-emerald-100/70">
-                              Gross <b className="text-emerald-50">{entry.gross_score}</b>
+                            <span className="text-[11px] text-[color:var(--sec-muted)]">
+                              Gross <b className="text-[color:var(--sec-text)]">{entry.gross_score}</b>
                             </span>
                           )}
                           {entry.points_earned != null && (
-                            <span className="text-[11px] text-emerald-100/70">
-                              <b className="text-emerald-50">{entry.points_earned}</b> pts
+                            <span className="text-[11px] text-[color:var(--sec-muted)]">
+                              <b className="text-[color:var(--sec-text)]">{entry.points_earned}</b> pts
                             </span>
                           )}
                         </div>

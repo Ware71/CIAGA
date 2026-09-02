@@ -252,8 +252,8 @@ export type RowTone = "default" | "accent" | "good" | "bad";
 const TONE: Record<RowTone, string> = {
   default: "text-[color:var(--sec-text)]",
   accent: "text-[color:var(--sec-accent)]",
-  good: "text-emerald-400",
-  bad: "text-red-400",
+  good: "text-[color:var(--sec-good)]",
+  bad: "text-[color:var(--sec-bad)]",
 };
 
 /**

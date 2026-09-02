@@ -151,12 +151,12 @@ export function ScopePicker(props: {
           exit={{ y: "100%" }}
           transition={{ type: "spring", damping: 30, stiffness: 300 }}
         >
-          <div className="mx-auto w-full max-w-[520px] max-h-[82vh] overflow-y-auto rounded-t-3xl border border-emerald-900/70 bg-[#061f12] shadow-2xl">
-            <div className="sticky top-0 flex items-center justify-between border-b border-emerald-900/60 bg-[#061f12] px-4 py-3">
-              <div className="text-sm font-semibold text-emerald-50">
+          <div className="mx-auto w-full max-w-[520px] max-h-[82vh] overflow-y-auto rounded-t-3xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] shadow-2xl">
+            <div className="sticky top-0 flex items-center justify-between border-b border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] px-4 py-3">
+              <div className="text-sm font-semibold text-[color:var(--sec-text)]">
                 {mode === "people" ? "Pick players" : "View calendar"}
               </div>
-              <button onClick={onClose} className="text-emerald-100/70 hover:text-emerald-50" aria-label="Close">
+              <button onClick={onClose} className="text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]" aria-label="Close">
                 <X size={18} aria-hidden="true" />
               </button>
             </div>
@@ -164,7 +164,7 @@ export function ScopePicker(props: {
             {mode === "root" ? (
               <div className="p-3 space-y-4">
                 <div className="space-y-1.5">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-emerald-200/50">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--sec-muted)]">
                     View
                   </div>
                   <SegmentedControl<CalendarMode>
@@ -186,31 +186,31 @@ export function ScopePicker(props: {
                       { value: "available_only", label: "Available" },
                     ]}
                   />
-                  <label className="flex items-center justify-between rounded-lg border border-emerald-900/60 bg-[#0b3b21]/40 px-3 py-2 text-xs text-emerald-100/80">
+                  <label className="flex items-center justify-between rounded-lg border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-3 py-2 text-xs text-[color:var(--sec-muted)]">
                     Weekends view
                     <input
                       type="checkbox"
                       checked={weekendsOnly}
                       onChange={(e) => onWeekendsOnly(e.target.checked)}
-                      className="h-4 w-4 accent-[#f5e6b0]"
+                      className="h-4 w-4 accent-[color:var(--sec-accent)]"
                     />
                   </label>
-                  <label className="flex items-center justify-between rounded-lg border border-emerald-900/60 bg-[#0b3b21]/40 px-3 py-2 text-xs text-emerald-100/80">
+                  <label className="flex items-center justify-between rounded-lg border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-3 py-2 text-xs text-[color:var(--sec-muted)]">
                     Grey out gaps under 3 hours
                     <input
                       type="checkbox"
                       checked={threeHourRule}
                       onChange={(e) => onThreeHourRule(e.target.checked)}
-                      className="h-4 w-4 accent-[#f5e6b0]"
+                      className="h-4 w-4 accent-[color:var(--sec-accent)]"
                     />
                   </label>
-                  <div className="px-1 text-[10px] leading-snug text-emerald-200/45">
+                  <div className="px-1 text-[10px] leading-snug text-[color:var(--sec-muted)]">
                     Pinch to zoom (Month → Week → Day) · tap a round or event to open it
                   </div>
                 </div>
 
                 <div className="space-y-1">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-emerald-200/50">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--sec-muted)]">
                     Viewing
                   </div>
                   <Row
@@ -235,18 +235,18 @@ export function ScopePicker(props: {
 
                 <div>
                   <div className="mb-1.5 flex items-center justify-between">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-200/50">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--sec-muted)]">
                       Circles
                     </span>
                     <button
                       onClick={onNewCircle}
-                      className="flex items-center gap-1 text-[11px] font-medium text-emerald-300 hover:text-emerald-200"
+                      className="flex items-center gap-1 text-[11px] font-medium text-[color:var(--sec-good)] hover:text-[color:var(--sec-text-2)]"
                     >
                       <Plus size={13} /> New
                     </button>
                   </div>
                   {circles.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-emerald-900/60 px-3 py-3 text-center text-[11px] text-emerald-100/50">
+                    <div className="rounded-xl border border-dashed border-[color:var(--sec-hair)] px-3 py-3 text-center text-[11px] text-[color:var(--sec-muted)]">
                       No circles yet — create one to layer several calendars.
                     </div>
                   ) : (
@@ -257,22 +257,22 @@ export function ScopePicker(props: {
                           className={cn(
                             "flex items-center gap-2 rounded-xl border px-3 py-2",
                             scope.kind === "circle" && scope.id === c.id
-                              ? "border-[#f5e6b0]/60 bg-[#f5e6b0]/10"
-                              : "border-emerald-900/60 bg-[#0b3b21]/40"
+                              ? "border-[color:color-mix(in_srgb,var(--sec-accent)_60%,transparent)] bg-[color:color-mix(in_srgb,var(--sec-accent)_10%,transparent)]"
+                              : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)]"
                           )}
                         >
                           <button
                             onClick={() => onSelect({ kind: "circle", id: c.id })}
                             className="flex-1 text-left"
                           >
-                            <div className="text-sm font-medium text-emerald-50">{c.name}</div>
-                            <div className="text-[10px] text-emerald-100/55">
+                            <div className="text-sm font-medium text-[color:var(--sec-text)]">{c.name}</div>
+                            <div className="text-[10px] text-[color:var(--sec-muted)]">
                               {c.members.length} {c.members.length === 1 ? "member" : "members"}
                             </div>
                           </button>
                           <button
                             onClick={() => onManageCircle(c.id)}
-                            className="text-emerald-200/60 hover:text-emerald-100"
+                            className="text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
                             aria-label="Edit circle"
                           >
                             <Pencil size={15} />
@@ -287,7 +287,7 @@ export function ScopePicker(props: {
               <div className="p-3 space-y-3">
                 <button
                   onClick={() => setMode("root")}
-                  className="text-[11px] text-emerald-300 hover:text-emerald-200"
+                  className="text-[11px] text-[color:var(--sec-good)] hover:text-[color:var(--sec-text-2)]"
                 >
                   ← Back
                 </button>
@@ -295,14 +295,14 @@ export function ScopePicker(props: {
                 <div className="relative">
                   <Search
                     size={14}
-                    className="absolute left-2.5 top-1/2 -translate-y-1/2 text-emerald-100/40"
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[color:var(--sec-muted)]"
                   />
                   <input
                     autoFocus
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder="Search players…"
-                    className="w-full rounded-lg border border-emerald-900/70 bg-[#042713] py-2 pl-8 pr-3 text-sm text-emerald-50 placeholder:text-emerald-100/40"
+                    className="w-full rounded-lg border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] py-2 pl-8 pr-3 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)]"
                   />
                 </div>
 
@@ -312,10 +312,10 @@ export function ScopePicker(props: {
                     {Array.from(selected.values()).map((p) => (
                       <span
                         key={p.id}
-                        className="inline-flex items-center gap-1 rounded-full border border-emerald-800/60 bg-[#0b3b21] px-2 py-1 text-[11px] text-emerald-50"
+                        className="inline-flex items-center gap-1 rounded-full border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-2 py-1 text-[11px] text-[color:var(--sec-text)]"
                       >
                         {p.name ?? "Player"}
-                        <button onClick={() => toggle(p)} className="text-emerald-100/50 hover:text-red-300">
+                        <button onClick={() => toggle(p)} className="text-[color:var(--sec-muted)] hover:text-[color:var(--sec-bad)]">
                           <X size={11} />
                         </button>
                       </span>
@@ -323,17 +323,17 @@ export function ScopePicker(props: {
                   </div>
                 ) : null}
 
-                <label className="flex items-center justify-between rounded-lg border border-emerald-900/60 bg-[#0b3b21]/40 px-3 py-2 text-xs text-emerald-100/80">
+                <label className="flex items-center justify-between rounded-lg border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-3 py-2 text-xs text-[color:var(--sec-muted)]">
                   Include me (find mutual free time)
                   <input
                     type="checkbox"
                     checked={includeSelf}
                     onChange={(e) => setIncludeSelf(e.target.checked)}
-                    className="h-4 w-4 accent-[#f5e6b0]"
+                    className="h-4 w-4 accent-[color:var(--sec-accent)]"
                   />
                 </label>
 
-                <div className="max-h-[38vh] overflow-y-auto rounded-xl border border-emerald-900/50 bg-[#042713] divide-y divide-emerald-900/40">
+                <div className="max-h-[38vh] overflow-y-auto rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] divide-y divide-[color:var(--sec-hair)]">
                   {(q.length >= 2 ? results : followingFiltered).map((p) => {
                     const lite: ProfileLite = {
                       id: p.id,
@@ -345,28 +345,28 @@ export function ScopePicker(props: {
                       <button
                         key={p.id}
                         onClick={() => toggle(lite)}
-                        className="flex w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-emerald-900/25"
+                        className="flex w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-[color:var(--sec-surface-2)]"
                       >
                         <InitialsAvatar profileId={p.id} name={p.name ?? null} size={26} />
-                        <span className="min-w-0 flex-1 truncate text-sm text-emerald-50">
+                        <span className="min-w-0 flex-1 truncate text-sm text-[color:var(--sec-text)]">
                           {p.name ?? "Player"}
                         </span>
-                        {on ? <Check size={16} className="text-emerald-300" /> : null}
+                        {on ? <Check size={16} className="text-[color:var(--sec-good)]" /> : null}
                       </button>
                     );
                   })}
                   {searching ? (
-                    <div className="px-3 py-2 text-[11px] text-emerald-100/50">Searching…</div>
+                    <div className="px-3 py-2 text-[11px] text-[color:var(--sec-muted)]">Searching…</div>
                   ) : null}
                   {q.length < 2 && followingFiltered.length === 0 ? (
-                    <div className="px-3 py-3 text-center text-[11px] text-emerald-100/50">
+                    <div className="px-3 py-3 text-center text-[11px] text-[color:var(--sec-muted)]">
                       Search for players by name.
                     </div>
                   ) : null}
                 </div>
 
                 <Button
-                  className="w-full rounded-2xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c]"
+                  className="w-full rounded-2xl bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] hover:bg-[color:var(--sec-accent)]"
                   onClick={applyPeople}
                 >
                   {selected.size === 0
@@ -391,13 +391,13 @@ function Row(props: { icon: React.ReactNode; label: string; active: boolean; onC
       className={cn(
         "flex w-full items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left text-sm transition-colors",
         props.active
-          ? "border-[#f5e6b0]/60 bg-[#f5e6b0]/10 text-emerald-50"
-          : "border-emerald-900/60 bg-[#0b3b21]/40 text-emerald-100/90 hover:bg-emerald-900/25"
+          ? "border-[color:color-mix(in_srgb,var(--sec-accent)_60%,transparent)] bg-[color:color-mix(in_srgb,var(--sec-accent)_10%,transparent)] text-[color:var(--sec-text)]"
+          : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]"
       )}
     >
-      <span className="text-emerald-200/70">{props.icon}</span>
+      <span className="text-[color:var(--sec-muted)]">{props.icon}</span>
       <span className="flex-1">{props.label}</span>
-      {props.active ? <Check size={16} className="text-[#f5e6b0]" /> : null}
+      {props.active ? <Check size={16} className="text-[color:var(--sec-accent)]" /> : null}
     </button>
   );
 }

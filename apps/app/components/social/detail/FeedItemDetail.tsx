@@ -8,13 +8,13 @@ import dynamic from "next/dynamic";
 // inside an opened feed detail — keep it out of the main bundle.
 const RoundProgressionChart = dynamic(() => import("./RoundProgressionChart"), {
   ssr: false,
-  loading: () => <div className="h-48 w-full animate-pulse rounded-2xl bg-emerald-900/30" />,
+  loading: () => <div className="h-48 w-full animate-pulse rounded-2xl bg-[color:var(--sec-surface)]" />,
 });
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/40 p-3">
-      <div className="mb-2 text-xs font-extrabold text-[#f5e6b0]">{title}</div>
+    <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] p-3">
+      <div className="mb-2 text-xs font-extrabold text-[color:var(--sec-accent)]">{title}</div>
       {children}
     </div>
   );
@@ -22,9 +22,9 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-emerald-900/50 bg-emerald-950/20 px-3 py-2 text-center">
-      <div className="text-[10px] font-extrabold uppercase tracking-wide text-emerald-100/50 truncate">{label}</div>
-      <div className="mt-0.5 text-base font-extrabold text-emerald-50">{value}</div>
+    <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-3 py-2 text-center">
+      <div className="text-[10px] font-extrabold uppercase tracking-wide text-[color:var(--sec-muted)] truncate">{label}</div>
+      <div className="mt-0.5 text-base font-extrabold text-[color:var(--sec-text)]">{value}</div>
     </div>
   );
 }
@@ -37,8 +37,8 @@ function ToggleBtn({ active, onClick, children }: { active: boolean; onClick: ()
       className={[
         "rounded-full px-2.5 py-1 text-[10px] font-extrabold tracking-wide transition",
         active
-          ? "bg-[#f5e6b0] text-[#042713]"
-          : "border border-emerald-800/60 bg-emerald-950/30 text-emerald-100/70 hover:bg-emerald-900/40",
+          ? "bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)]"
+          : "border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]",
       ].join(" ")}
     >
       {children}
@@ -48,21 +48,21 @@ function ToggleBtn({ active, onClick, children }: { active: boolean; onClick: ()
 
 function StatGroup({ title, block, eventLabel }: { title: string; block: HoleStatBlock; eventLabel: string }) {
   return (
-    <div className="rounded-xl border border-emerald-900/50 bg-emerald-950/20 p-2.5">
-      <div className="text-[10px] font-extrabold uppercase tracking-wide text-emerald-100/50">{title}</div>
+    <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] p-2.5">
+      <div className="text-[10px] font-extrabold uppercase tracking-wide text-[color:var(--sec-muted)]">{title}</div>
       <div className="mt-1.5 flex items-baseline justify-between">
-        <span className="text-[11px] font-semibold text-emerald-100/60">Avg</span>
-        <span className="text-sm font-extrabold text-emerald-50">
+        <span className="text-[11px] font-semibold text-[color:var(--sec-muted)]">Avg</span>
+        <span className="text-sm font-extrabold text-[color:var(--sec-text)]">
           {block.avg_score != null ? block.avg_score.toFixed(2) : "—"}
         </span>
       </div>
       <div className="mt-0.5 flex items-baseline justify-between">
-        <span className="text-[11px] font-semibold text-emerald-100/60">{eventLabel}</span>
-        <span className="text-sm font-extrabold text-[#f5e6b0]">
+        <span className="text-[11px] font-semibold text-[color:var(--sec-muted)]">{eventLabel}</span>
+        <span className="text-sm font-extrabold text-[color:var(--sec-accent)]">
           {block.event_pct != null ? `${block.event_pct.toFixed(1)}%` : "—"}
         </span>
       </div>
-      <div className="mt-1 text-[10px] font-semibold text-emerald-100/40">
+      <div className="mt-1 text-[10px] font-semibold text-[color:var(--sec-muted)]">
         {block.plays} {block.plays === 1 ? "play" : "plays"}
       </div>
     </div>
@@ -91,12 +91,12 @@ function MatchplayH2H({ mp }: { mp: MatchplayDetail }) {
             <Stat label="Drawn" value={String(t.draws)} />
             <Stat label={mp.b_name} value={String(t.b_wins)} />
           </div>
-          <div className="mt-1.5 text-[10px] font-semibold text-emerald-100/45">
+          <div className="mt-1.5 text-[10px] font-semibold text-[color:var(--sec-muted)]">
             {t.total} {t.total === 1 ? "match" : "matches"}
           </div>
         </>
       ) : (
-        <div className="text-xs font-semibold text-emerald-100/60">
+        <div className="text-xs font-semibold text-[color:var(--sec-muted)]">
           {scope === "all" ? "First meeting between these players." : "No earlier meetings."}
         </div>
       )}
@@ -146,7 +146,7 @@ export default function FeedItemDetail({ detail }: { detail: FeedItemDetailData 
           <Stat label="Previous best" value={detail.previous_best ? String(detail.previous_best.gross) : "—"} />
         </div>
         {detail.previous_best && detail.gross != null ? (
-          <div className="mt-2 text-[11px] font-semibold text-emerald-100/60">
+          <div className="mt-2 text-[11px] font-semibold text-[color:var(--sec-muted)]">
             Improved by {detail.previous_best.gross - detail.gross} shot
             {detail.previous_best.gross - detail.gross === 1 ? "" : "s"}.
           </div>
@@ -164,7 +164,7 @@ export default function FeedItemDetail({ detail }: { detail: FeedItemDetailData 
             <Stat label={`Beat ${detail.beat.name ?? "previous"}`} value={String(detail.beat.gross)} />
           </div>
         ) : (
-          <div className="text-sm font-semibold text-emerald-100/70">
+          <div className="text-sm font-semibold text-[color:var(--sec-muted)]">
             First recorded course record{detail.gross != null ? ` (${detail.gross})` : ""}.
           </div>
         )}

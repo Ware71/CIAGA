@@ -28,7 +28,7 @@ type BackButtonProps = BaseProps &
   );
 
 const BASE_CLASS =
-  "px-2 text-emerald-100 hover:bg-emerald-900/30 shrink-0 min-w-[64px] justify-center";
+  "px-2 text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)] shrink-0 min-w-[64px] justify-center";
 
 // Narrow on `props` directly — destructuring with a rest element collapses the
 // discriminated union and loses the href/onClick correlation.

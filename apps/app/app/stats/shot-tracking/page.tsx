@@ -56,9 +56,9 @@ function inferredNote(inferred: number | undefined, what: string): string | unde
 
 function Panel({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
-      <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">{title}</div>
-      {subtitle ? <div className="mt-1 text-[12px] text-emerald-100/70 font-semibold">{subtitle}</div> : null}
+    <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4">
+      <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] font-bold">{title}</div>
+      {subtitle ? <div className="mt-1 text-[12px] text-[color:var(--sec-muted)] font-semibold">{subtitle}</div> : null}
       <div className="mt-3">{children}</div>
     </div>
   );
@@ -77,15 +77,15 @@ function MetricCard({
   bar?: number | null;
 }) {
   return (
-    <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/45 p-3">
+    <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_45%,transparent)] p-3">
       <div className="flex items-start justify-between gap-2">
-        <div className="text-sm font-extrabold text-emerald-50 truncate">{title}</div>
-        <div className="text-[11px] text-emerald-100/70 font-semibold shrink-0">{meta}</div>
+        <div className="text-sm font-extrabold text-[color:var(--sec-text)] truncate">{title}</div>
+        <div className="text-[11px] text-[color:var(--sec-muted)] font-semibold shrink-0">{meta}</div>
       </div>
-      <div className="mt-1 text-lg font-extrabold tabular-nums text-[#f5e6b0]">{value}</div>
+      <div className="mt-1 text-lg font-extrabold tabular-nums text-[color:var(--sec-accent)]">{value}</div>
       {bar != null ? (
-        <div className="mt-2 h-2 w-full rounded-xl bg-[#042713]/60 border border-emerald-900/60 overflow-hidden">
-          <div className="h-full bg-[#f5e6b0]/70" style={{ width: `${Math.max(0, Math.min(100, bar * 100))}%` }} />
+        <div className="mt-2 h-2 w-full rounded-xl bg-[color:color-mix(in_srgb,var(--ciaga-ground)_60%,transparent)] border border-[color:var(--sec-hair)] overflow-hidden">
+          <div className="h-full bg-[color:color-mix(in_srgb,var(--sec-accent)_70%,transparent)]" style={{ width: `${Math.max(0, Math.min(100, bar * 100))}%` }} />
         </div>
       ) : null}
     </div>
@@ -96,12 +96,12 @@ function BarRow({ label, r }: { label: string; r: Rate }) {
   const w = r.rate == null ? 0 : r.rate * 100;
   return (
     <div className="flex items-center gap-3">
-      <div className="w-20 text-[12px] text-emerald-100/70 font-extrabold truncate">{label}</div>
-      <div className="flex-1 h-2 rounded-xl bg-[#042713]/60 border border-emerald-900/60 overflow-hidden">
-        <div className="h-full bg-emerald-100/55" style={{ width: `${w}%` }} />
+      <div className="w-20 text-[12px] text-[color:var(--sec-muted)] font-extrabold truncate">{label}</div>
+      <div className="flex-1 h-2 rounded-xl bg-[color:color-mix(in_srgb,var(--ciaga-ground)_60%,transparent)] border border-[color:var(--sec-hair)] overflow-hidden">
+        <div className="h-full bg-[color:var(--sec-surface-2)]" style={{ width: `${w}%` }} />
       </div>
-      <div className="w-12 text-right text-[12px] text-emerald-100/70 font-extrabold tabular-nums">{fmtRate(r)}</div>
-      <div className="w-10 text-right text-[11px] text-emerald-100/45 font-semibold tabular-nums">{r.hits}</div>
+      <div className="w-12 text-right text-[12px] text-[color:var(--sec-muted)] font-extrabold tabular-nums">{fmtRate(r)}</div>
+      <div className="w-10 text-right text-[11px] text-[color:var(--sec-muted)] font-semibold tabular-nums">{r.hits}</div>
     </div>
   );
 }
@@ -119,14 +119,14 @@ function CoverageRow({
 }) {
   return (
     <div className="flex items-start justify-between gap-3">
-      <div className="text-[12px] font-extrabold text-emerald-50 shrink-0">{label}</div>
+      <div className="text-[12px] font-extrabold text-[color:var(--sec-text)] shrink-0">{label}</div>
       <div className="text-right">
-        <div className="text-[12px] text-emerald-100/70 font-semibold tabular-nums">
+        <div className="text-[12px] text-[color:var(--sec-muted)] font-semibold tabular-nums">
           {holes === 0
             ? "not recorded"
             : `${holes} hole${holes === 1 ? "" : "s"} · ${rounds} round${rounds === 1 ? "" : "s"}`}
         </div>
-        {note ? <div className="text-[10px] text-emerald-100/45 font-semibold">{note}</div> : null}
+        {note ? <div className="text-[10px] text-[color:var(--sec-muted)] font-semibold">{note}</div> : null}
       </div>
     </div>
   );
@@ -148,17 +148,17 @@ function ApproachGrid({ grid, n }: { grid: Record<ApproachCell, number>; n: numb
         return (
           <div
             key={c}
-            className="rounded-xl border border-emerald-900/70 p-2 text-center"
+            className="rounded-xl border border-[color:var(--sec-hair)] p-2 text-center"
             style={{ backgroundColor: `rgba(245, 230, 176, ${count === 0 ? 0.04 : 0.1 + 0.55 * (count / max)})` }}
           >
             <div
-              className="text-[10px] font-bold text-emerald-100/70 truncate h-[14px] flex items-center justify-center"
+              className="text-[10px] font-bold text-[color:var(--sec-muted)] truncate h-[14px] flex items-center justify-center"
               title={APPROACH_CELL_ARIA[c]}
             >
               {APPROACH_CELL_LABEL[c] ?? <DirectionArrow dir={APPROACH_CELL_ARROW[c]!} size={12} />}
             </div>
-            <div className="text-[15px] font-extrabold tabular-nums text-emerald-50">{count}</div>
-            <div className="text-[10px] font-semibold tabular-nums text-emerald-100/60">
+            <div className="text-[15px] font-extrabold tabular-nums text-[color:var(--sec-text)]">{count}</div>
+            <div className="text-[10px] font-semibold tabular-nums text-[color:var(--sec-muted)]">
               {share == null ? "–" : pct(share)}
             </div>
           </div>
@@ -170,18 +170,18 @@ function ApproachGrid({ grid, n }: { grid: Record<ApproachCell, number>; n: numb
 
 function BreakdownTable({ rows }: { rows: Breakdown[] }) {
   if (!rows.length) {
-    return <div className="text-[12px] text-emerald-100/60 font-semibold">Nothing recorded yet.</div>;
+    return <div className="text-[12px] text-[color:var(--sec-muted)] font-semibold">Nothing recorded yet.</div>;
   }
   const cell = (main: string, n: number) => (
     <div className="text-right">
-      <div className="text-[13px] font-extrabold tabular-nums text-emerald-50">{main}</div>
-      <div className="text-[10px] text-emerald-100/45 font-semibold tabular-nums">n={n}</div>
+      <div className="text-[13px] font-extrabold tabular-nums text-[color:var(--sec-text)]">{main}</div>
+      <div className="text-[10px] text-[color:var(--sec-muted)] font-semibold tabular-nums">n={n}</div>
     </div>
   );
   return (
     <div className="overflow-x-auto">
       <div className="min-w-[320px] space-y-2">
-        <div className="grid grid-cols-5 gap-2 text-[10px] uppercase tracking-[0.1em] text-emerald-100/50 font-bold">
+        <div className="grid grid-cols-5 gap-2 text-[10px] uppercase tracking-[0.1em] text-[color:var(--sec-muted)] font-bold">
           <div />
           <div className="text-right">GIR</div>
           <div className="text-right">FIR</div>
@@ -190,7 +190,7 @@ function BreakdownTable({ rows }: { rows: Breakdown[] }) {
         </div>
         {rows.map((b) => (
           <div key={b.label} className="grid grid-cols-5 gap-2 items-center">
-            <div className="text-[12px] font-extrabold text-emerald-100/80 truncate">{b.label}</div>
+            <div className="text-[12px] font-extrabold text-[color:var(--sec-muted)] truncate">{b.label}</div>
             {cell(fmtRate(b.gir), b.gir.n)}
             {cell(fmtRate(b.fir), b.fir.n)}
             {cell(fmtAvg(b.putts), b.putts.n)}
@@ -340,17 +340,17 @@ export default function ShotTrackingPage() {
   }, [preset, courseId, teeBoxId, courseOptions, teeOptions]);
 
   return (
-    <div className="h-[calc(100dvh-var(--ciaga-nav-h))] bg-[#042713] text-slate-100 px-1.5 sm:px-2 pt-4">
+    <div className="h-[calc(100dvh-var(--ciaga-nav-h))] bg-[color:var(--ciaga-ground)] text-slate-100 px-1.5 sm:px-2 pt-4">
       <div className="mx-auto w-full max-w-3xl h-full flex flex-col">
-        <header className="sticky top-0 z-20 bg-[#042713] pb-3">
+        <header className="sticky top-0 z-20 bg-[color:var(--ciaga-ground)] pb-3">
           <div className="flex items-center justify-between gap-2 px-1">
             <BackButton onClick={() => router.back()} />
 
             <div className="text-center flex-1 min-w-0 px-2">
-              <div className="text-[15px] sm:text-base font-semibold tracking-wide text-[#f5e6b0] truncate">
+              <div className="text-[15px] sm:text-base font-semibold tracking-wide text-[color:var(--sec-accent)] truncate">
                 Shot tracking
               </div>
-              <div className="text-[11px] sm:text-[10px] uppercase tracking-[0.14em] text-emerald-200/70 truncate">
+              <div className="text-[11px] sm:text-[10px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] truncate">
                 {subtitle}
               </div>
             </div>
@@ -366,24 +366,24 @@ export default function ShotTrackingPage() {
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") setFiltersOpen((v) => !v);
               }}
-              className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-2 select-none cursor-pointer"
+              className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-2 select-none cursor-pointer"
               aria-expanded={filtersOpen}
               title="Tap to expand filters"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">Filters</div>
-                  <div className="mt-1 text-[12px] text-emerald-50/90 font-extrabold leading-tight">{subtitle}</div>
+                  <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] font-bold">Filters</div>
+                  <div className="mt-1 text-[12px] text-[color:var(--sec-text)] font-extrabold leading-tight">{subtitle}</div>
                 </div>
-                <div className="shrink-0 text-[12px] font-extrabold text-[#f5e6b0] pt-[2px]">
+                <div className="shrink-0 text-[12px] font-extrabold text-[color:var(--sec-accent)] pt-[2px]">
                   {filtersOpen ? "▲" : "▼"}
                 </div>
               </div>
 
               {filtersOpen ? (
                 <div className="mt-3 space-y-2">
-                  <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/40 p-2">
-                    <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold mb-2">
+                  <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_40%,transparent)] p-2">
+                    <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] font-bold mb-2">
                       Time range
                     </div>
 
@@ -397,8 +397,8 @@ export default function ShotTrackingPage() {
                         className={[
                           "rounded-2xl px-3 py-2 text-[13px] font-extrabold border w-full",
                           preset === "all"
-                            ? "bg-[#042713]/70 border-[#f5e6b0]/60 text-[#f5e6b0]"
-                            : "bg-[#042713]/30 border-emerald-900/70 text-emerald-50/90 hover:bg-emerald-900/20",
+                            ? "bg-[color:color-mix(in_srgb,var(--ciaga-ground)_70%,transparent)] border-[color:color-mix(in_srgb,var(--sec-accent)_60%,transparent)] text-[color:var(--sec-accent)]"
+                            : "bg-[color:color-mix(in_srgb,var(--ciaga-ground)_30%,transparent)] border-[color:var(--sec-hair)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]",
                         ].join(" ")}
                       >
                         All time
@@ -423,8 +423,8 @@ export default function ShotTrackingPage() {
                           className={[
                             "rounded-2xl px-3 py-2 text-[13px] font-extrabold border leading-tight",
                             preset === id
-                              ? "bg-[#042713]/70 border-[#f5e6b0]/60 text-[#f5e6b0]"
-                              : "bg-[#042713]/30 border-emerald-900/70 text-emerald-50/90 hover:bg-emerald-900/20",
+                              ? "bg-[color:color-mix(in_srgb,var(--ciaga-ground)_70%,transparent)] border-[color:color-mix(in_srgb,var(--sec-accent)_60%,transparent)] text-[color:var(--sec-accent)]"
+                              : "bg-[color:color-mix(in_srgb,var(--ciaga-ground)_30%,transparent)] border-[color:var(--sec-hair)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]",
                           ].join(" ")}
                         >
                           {label}
@@ -451,8 +451,8 @@ export default function ShotTrackingPage() {
                           className={[
                             "rounded-2xl px-3 py-2 text-[13px] font-extrabold border leading-tight",
                             preset === id
-                              ? "bg-[#042713]/70 border-[#f5e6b0]/60 text-[#f5e6b0]"
-                              : "bg-[#042713]/30 border-emerald-900/70 text-emerald-50/90 hover:bg-emerald-900/20",
+                              ? "bg-[color:color-mix(in_srgb,var(--ciaga-ground)_70%,transparent)] border-[color:color-mix(in_srgb,var(--sec-accent)_60%,transparent)] text-[color:var(--sec-accent)]"
+                              : "bg-[color:color-mix(in_srgb,var(--ciaga-ground)_30%,transparent)] border-[color:var(--sec-hair)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]",
                           ].join(" ")}
                         >
                           {label}
@@ -462,13 +462,13 @@ export default function ShotTrackingPage() {
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
-                    <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/40 p-2">
-                      <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">Course</div>
+                    <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_40%,transparent)] p-2">
+                      <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] font-bold">Course</div>
                       <select
                         value={courseId}
                         onChange={(e) => setCourseId(e.target.value)}
                         onClick={(e) => e.stopPropagation()}
-                        className="mt-1 w-full rounded-xl bg-[#042713]/70 border border-emerald-900/70 px-2 py-2 text-[13px] text-emerald-50"
+                        className="mt-1 w-full rounded-xl bg-[color:color-mix(in_srgb,var(--ciaga-ground)_70%,transparent)] border border-[color:var(--sec-hair)] px-2 py-2 text-[13px] text-[color:var(--sec-text)]"
                       >
                         <option value="">All</option>
                         {courseOptions.map((c) => (
@@ -479,13 +479,13 @@ export default function ShotTrackingPage() {
                       </select>
                     </div>
 
-                    <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/40 p-2">
-                      <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">Tee</div>
+                    <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_40%,transparent)] p-2">
+                      <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] font-bold">Tee</div>
                       <select
                         value={teeBoxId}
                         onChange={(e) => setTeeBoxId(e.target.value)}
                         onClick={(e) => e.stopPropagation()}
-                        className="mt-1 w-full rounded-xl bg-[#042713]/70 border border-emerald-900/70 px-2 py-2 text-[13px] text-emerald-50"
+                        className="mt-1 w-full rounded-xl bg-[color:color-mix(in_srgb,var(--ciaga-ground)_70%,transparent)] border border-[color:var(--sec-hair)] px-2 py-2 text-[13px] text-[color:var(--sec-text)]"
                       >
                         <option value="">All tees</option>
                         {teeOptions.map((t) => (
@@ -504,7 +504,7 @@ export default function ShotTrackingPage() {
 
         <div className="flex-1 overflow-y-auto overscroll-y-contain pb-[env(safe-area-inset-bottom)]">
           {loading ? (
-            <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">
+            <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4 text-sm text-[color:var(--sec-muted)]">
               Loading…
             </div>
           ) : err ? (
@@ -513,7 +513,7 @@ export default function ShotTrackingPage() {
               <div className="mt-3">
                 <Button
                   variant="outline"
-                  className="border-emerald-900/70 bg-[#0b3b21]/40 text-emerald-50 hover:bg-emerald-900/20"
+                  className="border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
                   onClick={() => window.location.reload()}
                 >
                   Retry
@@ -521,19 +521,19 @@ export default function ShotTrackingPage() {
               </div>
             </div>
           ) : !stats.anyData ? (
-            <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-6 space-y-2">
-              <div className="text-sm font-semibold text-emerald-50">Nothing tracked yet</div>
-              <p className="text-[12px] text-emerald-100/70 leading-relaxed">
+            <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-6 space-y-2">
+              <div className="text-sm font-semibold text-[color:var(--sec-text)]">Nothing tracked yet</div>
+              <p className="text-[12px] text-[color:var(--sec-muted)] leading-relaxed">
                 Shot tracking is optional and off to one side of scoring. While you&apos;re playing, tap a score cell on
-                the scorecard and expand <span className="font-extrabold text-emerald-50">Shot tracking</span> above the
+                the scorecard and expand <span className="font-extrabold text-[color:var(--sec-text)]">Shot tracking</span> above the
                 keypad, then tap whatever you care about — putts, fairway, approach, bunker, penalties.
               </p>
-              <p className="text-[12px] text-emerald-100/70 leading-relaxed">
+              <p className="text-[12px] text-[color:var(--sec-muted)] leading-relaxed">
                 Every stat here counts only the holes you actually recorded, so you can track one thing and ignore the
                 rest.
               </p>
               {rows.length ? (
-                <p className="text-[11px] text-emerald-100/50 font-semibold">
+                <p className="text-[11px] text-[color:var(--sec-muted)] font-semibold">
                   Nothing recorded in this filter — try widening the time range.
                 </p>
               ) : null}
@@ -555,12 +555,12 @@ export default function ShotTrackingPage() {
                     {...stats.coverage.penalties}
                     note={inferredNote(stats.coverage.penalties.inferred, "no penalty")}
                   />
-                  <div className="pt-1.5 mt-1.5 border-t border-emerald-900/60 space-y-1.5">
+                  <div className="pt-1.5 mt-1.5 border-t border-[color:var(--sec-hair)] space-y-1.5">
                     <CoverageRow label="GIR (from putts)" {...stats.coverage.gir} />
                     <CoverageRow label="Tracked holes" {...stats.coverage.tracked} />
                   </div>
                 </div>
-                <p className="mt-3 text-[11px] text-emerald-100/50 font-semibold leading-relaxed">
+                <p className="mt-3 text-[11px] text-[color:var(--sec-muted)] font-semibold leading-relaxed">
                   A hole counts as tracked once you record two or more things on it. Bunkers and penalties only get
                   tapped when they happen, so on a tracked hole an untouched one is read as &ldquo;didn&rsquo;t
                   happen&rdquo; — that&rsquo;s the only place a number here is inferred rather than entered.
@@ -639,7 +639,7 @@ export default function ShotTrackingPage() {
                   <BarRow label="Missed right" r={stats.fir.missRight} />
                 </div>
                 {stats.fir.byPar.length ? (
-                  <div className="mt-3 space-y-2 pt-3 border-t border-emerald-900/60">
+                  <div className="mt-3 space-y-2 pt-3 border-t border-[color:var(--sec-hair)]">
                     {stats.fir.byPar.map((b) => (
                       <BarRow key={b.label} label={b.label} r={b.rate} />
                     ))}
@@ -653,12 +653,12 @@ export default function ShotTrackingPage() {
               >
                 <ApproachGrid grid={stats.approach.grid} n={stats.approach.n} />
 
-                <div className="mt-3 pt-3 border-t border-emerald-900/60 text-[12px] font-semibold text-emerald-100/70 text-center tabular-nums">
+                <div className="mt-3 pt-3 border-t border-[color:var(--sec-hair)] text-[12px] font-semibold text-[color:var(--sec-muted)] text-center tabular-nums">
                   Short {fmtRate(stats.approach.short)} · Long {fmtRate(stats.approach.long)} · Left{" "}
                   {fmtRate(stats.approach.left)} · Right {fmtRate(stats.approach.right)}
                 </div>
 
-                <p className="mt-3 text-[11px] text-emerald-100/50 font-semibold leading-relaxed">
+                <p className="mt-3 text-[11px] text-[color:var(--sec-muted)] font-semibold leading-relaxed">
                   A corner counts on both axes, so the summary line reads short/long and left/right separately rather
                   than as one set adding to 100%. This is dispersion only — GIR above comes from putts, because the shot
                   you hit at the green isn&apos;t always the one that decides regulation.
@@ -695,7 +695,7 @@ export default function ShotTrackingPage() {
                   />
                 </div>
 
-                <p className="mt-3 text-[11px] text-emerald-100/50 font-semibold leading-relaxed">
+                <p className="mt-3 text-[11px] text-[color:var(--sec-muted)] font-semibold leading-relaxed">
                   A sand save needs both a bunker and a missed green on the same hole, so a fairway bunker on a green
                   you hit is never counted as a missed opportunity.
                 </p>
@@ -730,7 +730,7 @@ export default function ShotTrackingPage() {
                 <BreakdownTable rows={stats.breakdowns.byLength} />
               </Panel>
 
-              <div className="pt-1 pb-4 text-[10px] text-emerald-100/40 text-center font-semibold">
+              <div className="pt-1 pb-4 text-[10px] text-[color:var(--sec-muted)] text-center font-semibold">
                 CIAGA · Shot tracking
               </div>
             </div>

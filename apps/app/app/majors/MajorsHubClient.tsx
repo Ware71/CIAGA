@@ -217,7 +217,7 @@ export default function MajorsHubClient() {
                   className={`${MAJORS_CARD} px-3 py-3 space-y-2`}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-[#0D5E33] to-[#062C17] flex items-center justify-center text-sm font-bold text-[color:var(--sec-accent)] shrink-0 border border-[color:color-mix(in_srgb,var(--sec-accent)_25%,transparent)]">
+                    <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-[color:var(--sec-surface)] to-[color:var(--sec-surface)] flex items-center justify-center text-sm font-bold text-[color:var(--sec-accent)] shrink-0 border border-[color:color-mix(in_srgb,var(--sec-accent)_25%,transparent)]">
                       {invite.group?.name.slice(0, 2).toUpperCase() ?? "?"}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -239,7 +239,7 @@ export default function MajorsHubClient() {
                       type="button"
                       onClick={() => handleAcceptInvite(invite)}
                       disabled={acceptingInviteId === invite.id}
-                      className="flex-1 py-1.5 rounded-full bg-emerald-700 text-xs font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
+                      className="flex-1 py-1.5 rounded-full bg-[color:var(--sec-primary)] text-xs font-semibold text-white hover:bg-[color:var(--sec-primary-hover)] disabled:opacity-50"
                     >
                       {acceptingInviteId === invite.id ? "Joining…" : "Accept"}
                     </button>
@@ -247,7 +247,7 @@ export default function MajorsHubClient() {
                       type="button"
                       onClick={() => handleDeclineInvite(invite)}
                       disabled={decliningInviteId === invite.id}
-                      className="flex-1 py-1.5 rounded-full border border-emerald-800/50 text-xs text-[color:var(--sec-muted)] hover:text-emerald-200 disabled:opacity-50"
+                      className="flex-1 py-1.5 rounded-full border border-[color:var(--sec-hair)] text-xs text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text-2)] disabled:opacity-50"
                     >
                       Decline
                     </button>
@@ -282,7 +282,7 @@ export default function MajorsHubClient() {
                   <button
                     type="button"
                     onClick={() => router.push("/majors/groups/create")}
-                    className="px-5 py-2.5 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600"
+                    className="px-5 py-2.5 rounded-full bg-[color:var(--sec-primary)] text-sm font-semibold text-white hover:bg-[color:var(--sec-primary-hover)]"
                   >
                     Create a Group
                   </button>
@@ -320,7 +320,7 @@ export default function MajorsHubClient() {
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="text-[10px] text-[color:var(--sec-muted)] capitalize">{g.type.replace(/_/g, " ")}</span>
-                        <span className="text-emerald-800">·</span>
+                        <span className="text-[color:var(--ciaga-ground)]">·</span>
                         <span className="text-[10px] text-[color:var(--sec-muted)]">{g.member_count} {g.member_count === 1 ? "member" : "members"}</span>
                       </div>
                     </div>
@@ -336,7 +336,7 @@ export default function MajorsHubClient() {
 
             {filteredDiscover.length === 0 ? (
               <div className={`${MAJORS_CARD} p-5 text-center`}>
-                <p className="text-sm text-emerald-100/50">No public groups to discover right now.</p>
+                <p className="text-sm text-[color:var(--sec-muted)]">No public groups to discover right now.</p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -350,7 +350,7 @@ export default function MajorsHubClient() {
                       {g.image_url ? (
                         <img src={g.image_url} alt="" className="h-10 w-10 rounded-xl object-cover shrink-0" loading="lazy" decoding="async" />
                       ) : (
-                        <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#0D5E33] to-[#062C17] flex items-center justify-center text-sm font-bold text-[color:var(--sec-accent)] shrink-0 border border-[color:color-mix(in_srgb,var(--sec-accent)_25%,transparent)]">
+                        <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[color:var(--sec-surface)] to-[color:var(--sec-surface)] flex items-center justify-center text-sm font-bold text-[color:var(--sec-accent)] shrink-0 border border-[color:color-mix(in_srgb,var(--sec-accent)_25%,transparent)]">
                           {g.name.slice(0, 2).toUpperCase()}
                         </div>
                       )}
@@ -360,7 +360,7 @@ export default function MajorsHubClient() {
                           <span className="text-[10px] text-[color:var(--sec-muted)] capitalize">{g.type.replace(/_/g, " ")}</span>
                           {g.member_count > 0 && (
                             <>
-                              <span className="text-emerald-800">·</span>
+                              <span className="text-[color:var(--ciaga-ground)]">·</span>
                               <span className="text-[10px] text-[color:var(--sec-muted)]">{g.member_count} {g.member_count === 1 ? "member" : "members"}</span>
                             </>
                           )}
@@ -375,7 +375,7 @@ export default function MajorsHubClient() {
                           type="button"
                           disabled={joiningId === g.id}
                           onClick={() => handleJoin(g)}
-                          className="shrink-0 text-[11px] font-semibold text-emerald-300 border border-emerald-700/50 rounded-full px-3 py-1 hover:bg-emerald-900/40 disabled:opacity-50 transition-colors"
+                          className="shrink-0 text-[11px] font-semibold text-[color:var(--sec-good)] border border-[color:var(--sec-line)] rounded-full px-3 py-1 hover:bg-[color:var(--sec-surface-2)] disabled:opacity-50 transition-colors"
                         >
                           {joiningId === g.id ? "…" : g.join_method === "request" ? "Request" : "Join"}
                         </button>

@@ -24,11 +24,11 @@ export function MarketTable({
       <table className="w-full border-collapse">
         <thead>
           <tr>
-            <th className="sticky left-0 bg-[#0b3b21] px-1.5 py-1 text-left text-[9px] font-semibold uppercase tracking-wider text-emerald-200/45" />
+            <th className="sticky left-0 bg-[color:var(--sec-surface)] px-1.5 py-1 text-left text-[9px] font-semibold uppercase tracking-wider text-[color:var(--sec-muted)]" />
             {model.columns.map((c) => (
               <th
                 key={c.id}
-                className="px-1 py-1 text-center text-[9px] font-semibold uppercase tracking-wider text-emerald-200/50 whitespace-nowrap"
+                className="px-1 py-1 text-center text-[9px] font-semibold uppercase tracking-wider text-[color:var(--sec-muted)] whitespace-nowrap"
               >
                 {c.label}
               </th>
@@ -37,16 +37,16 @@ export function MarketTable({
         </thead>
         <tbody>
           {model.rows.map((row) => (
-            <tr key={row.profileId} className="border-t border-emerald-900/25">
-              <td className="sticky left-0 bg-[#0b3b21]/95 px-1.5 py-1 max-w-[120px]">
+            <tr key={row.profileId} className="border-t border-[color:var(--sec-hair)]">
+              <td className="sticky left-0 bg-[color:color-mix(in_srgb,var(--sec-surface)_95%,transparent)] px-1.5 py-1 max-w-[120px]">
                 <button
                   type="button"
                   disabled={!onPlayer}
                   onClick={() => onPlayer?.(row.profileId)}
-                  className="flex items-center gap-1 text-[12px] text-emerald-100/90 disabled:cursor-default"
+                  className="flex items-center gap-1 text-[12px] text-[color:var(--sec-muted)] disabled:cursor-default"
                 >
                   <span className="truncate">{row.name}</span>
-                  {onPlayer && <Info className="h-3 w-3 shrink-0 text-emerald-100/30" />}
+                  {onPlayer && <Info className="h-3 w-3 shrink-0 text-[color:var(--sec-muted)]" />}
                 </button>
               </td>
               {row.cells.map((cell, i) => (

@@ -239,9 +239,9 @@ export function CourseAndTeeSection({
   if (!courseId) {
     return (
       <>
-        <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
-          <div className="text-sm font-semibold text-emerald-50">Course & Tee</div>
-          <div className="text-[11px] text-emerald-100/70 mt-1">Choose where you're playing</div>
+        <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4">
+          <div className="text-sm font-semibold text-[color:var(--sec-text)]">Course & Tee</div>
+          <div className="text-[11px] text-[color:var(--sec-muted)] mt-1">Choose where you're playing</div>
 
           {error && (
             <div className="mt-3 rounded-lg border border-red-900/50 bg-red-950/20 p-2 text-xs text-red-200">
@@ -251,18 +251,18 @@ export function CourseAndTeeSection({
 
           <div className="mt-3 text-center py-4">
             <div className="text-2xl mb-2">🏌️</div>
-            <div className="text-sm text-emerald-100/70 mb-3">No course selected yet</div>
+            <div className="text-sm text-[color:var(--sec-muted)] mb-3">No course selected yet</div>
 
             {canEdit ? (
               <Button
                 size="sm"
-                className="rounded-xl bg-emerald-700/80 hover:bg-emerald-700"
+                className="rounded-xl bg-[color:var(--sec-primary)] hover:bg-[color:var(--sec-primary-hover)]"
                 onClick={() => setPickerOpen(true)}
               >
                 Choose Course
               </Button>
             ) : (
-              <div className="text-xs text-emerald-100/50">Owner must select course</div>
+              <div className="text-xs text-[color:var(--sec-muted)]">Owner must select course</div>
             )}
           </div>
         </div>
@@ -274,11 +274,11 @@ export function CourseAndTeeSection({
   // State B & C: Course selected
   return (
     <>
-    <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
-      <div className="text-sm font-semibold text-emerald-50">Course & Tee</div>
+    <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4">
+      <div className="text-sm font-semibold text-[color:var(--sec-text)]">Course & Tee</div>
 
       {loading ? (
-        <div className="mt-3 text-xs text-emerald-100/60">Loading course details...</div>
+        <div className="mt-3 text-xs text-[color:var(--sec-muted)]">Loading course details...</div>
       ) : error ? (
         <div className="mt-3 rounded-lg border border-red-900/50 bg-red-950/20 p-2 text-xs text-red-200">
           {error}
@@ -286,18 +286,18 @@ export function CourseAndTeeSection({
       ) : course ? (
         <>
           <div className="mt-3">
-            <div className="text-base font-semibold text-emerald-50">{course.name}</div>
+            <div className="text-base font-semibold text-[color:var(--sec-text)]">{course.name}</div>
             {courseSubtitle && (
-              <div className="text-[11px] text-emerald-200/70 mt-0.5">{courseSubtitle}</div>
+              <div className="text-[11px] text-[color:var(--sec-muted)] mt-0.5">{courseSubtitle}</div>
             )}
           </div>
 
           {selectedTee ? (
             // State C: Tee selected
             <>
-              <div className="mt-2 pt-2 border-t border-emerald-900/40">
-                <div className="text-sm text-emerald-50">{selectedTee.name}</div>
-                <div className="mt-1 text-xs text-emerald-100/70">
+              <div className="mt-2 pt-2 border-t border-[color:var(--sec-hair)]">
+                <div className="text-sm text-[color:var(--sec-text)]">{selectedTee.name}</div>
+                <div className="mt-1 text-xs text-[color:var(--sec-muted)]">
                   Par {fmtNum(selectedTee.par, 0)} · {fmtNum(selectedTee.yards, 0)} yds
                   {selectedTee.rating && selectedTee.slope && (
                     <span> · Rating {fmtNum(selectedTee.rating)} · Slope {fmtNum(selectedTee.slope, 0)}</span>
@@ -310,7 +310,7 @@ export function CourseAndTeeSection({
                   <Button
                     size="sm"
                     variant="outline"
-                    className="flex-1 rounded-xl border-emerald-900/70 bg-[#042713]/60 hover:bg-emerald-900/20"
+                    className="flex-1 rounded-xl border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_60%,transparent)] hover:bg-[color:var(--sec-surface-2)]"
                     onClick={() => setPickerOpen(true)}
                   >
                     Change Course
@@ -318,7 +318,7 @@ export function CourseAndTeeSection({
                   <Button
                     size="sm"
                     variant="outline"
-                    className="flex-1 rounded-xl border-emerald-900/70 bg-[#042713]/60 hover:bg-emerald-900/20"
+                    className="flex-1 rounded-xl border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_60%,transparent)] hover:bg-[color:var(--sec-surface-2)]"
                     onClick={() => setShowTeeSelector(!showTeeSelector)}
                   >
                     {showTeeSelector ? "Hide Tees" : "Change Tee"}
@@ -329,20 +329,20 @@ export function CourseAndTeeSection({
           ) : (
             // State B: No tee selected
             <>
-              <div className="mt-2 text-xs text-emerald-100/60">No tee selected</div>
+              <div className="mt-2 text-xs text-[color:var(--sec-muted)]">No tee selected</div>
               {canEdit && (
                 <div className="mt-2 flex gap-2">
                   <Button
                     size="sm"
                     variant="outline"
-                    className="flex-1 rounded-xl border-emerald-900/70 bg-[#042713]/60 hover:bg-emerald-900/20"
+                    className="flex-1 rounded-xl border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_60%,transparent)] hover:bg-[color:var(--sec-surface-2)]"
                     onClick={() => setPickerOpen(true)}
                   >
                     Change Course
                   </Button>
                   <Button
                     size="sm"
-                    className="flex-1 rounded-xl bg-emerald-700/80 hover:bg-emerald-700"
+                    className="flex-1 rounded-xl bg-[color:var(--sec-primary)] hover:bg-[color:var(--sec-primary-hover)]"
                     onClick={() => setShowTeeSelector(true)}
                   >
                     Select Tee
@@ -354,18 +354,18 @@ export function CourseAndTeeSection({
 
           {/* Inline tee selector */}
           {showTeeSelector && canEdit && (
-            <div className="mt-4 pt-4 border-t border-emerald-900/40 space-y-3">
+            <div className="mt-4 pt-4 border-t border-[color:var(--sec-hair)] space-y-3">
               {/* Filters */}
               <div className="flex gap-2">
-                <div className="flex-1 flex gap-1 p-1 rounded-xl border border-emerald-900/70 bg-[#042713]/60">
+                <div className="flex-1 flex gap-1 p-1 rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_60%,transparent)]">
                   <button
                     type="button"
                     onClick={() => setGenderFilter("all")}
                     className={[
                       "flex-1 rounded-lg px-2 py-1 text-[10px] font-medium transition-colors",
                       genderFilter === "all"
-                        ? "bg-emerald-900/40 text-emerald-50"
-                        : "text-emerald-100/60 hover:bg-emerald-900/20",
+                        ? "bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]"
+                        : "text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]",
                     ].join(" ")}
                   >
                     All
@@ -376,8 +376,8 @@ export function CourseAndTeeSection({
                     className={[
                       "flex-1 rounded-lg px-2 py-1 text-[10px] font-medium transition-colors",
                       genderFilter === "male"
-                        ? "bg-emerald-900/40 text-emerald-50"
-                        : "text-emerald-100/60 hover:bg-emerald-900/20",
+                        ? "bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]"
+                        : "text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]",
                     ].join(" ")}
                   >
                     Men
@@ -388,23 +388,23 @@ export function CourseAndTeeSection({
                     className={[
                       "flex-1 rounded-lg px-2 py-1 text-[10px] font-medium transition-colors",
                       genderFilter === "female"
-                        ? "bg-emerald-900/40 text-emerald-50"
-                        : "text-emerald-100/60 hover:bg-emerald-900/20",
+                        ? "bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]"
+                        : "text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]",
                     ].join(" ")}
                   >
                     Women
                   </button>
                 </div>
 
-                <div className="flex-1 flex gap-1 p-1 rounded-xl border border-emerald-900/70 bg-[#042713]/60">
+                <div className="flex-1 flex gap-1 p-1 rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_60%,transparent)]">
                   <button
                     type="button"
                     onClick={() => setHolesFilter("all")}
                     className={[
                       "flex-1 rounded-lg px-2 py-1 text-[10px] font-medium transition-colors",
                       holesFilter === "all"
-                        ? "bg-emerald-900/40 text-emerald-50"
-                        : "text-emerald-100/60 hover:bg-emerald-900/20",
+                        ? "bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]"
+                        : "text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]",
                     ].join(" ")}
                   >
                     All
@@ -415,8 +415,8 @@ export function CourseAndTeeSection({
                     className={[
                       "flex-1 rounded-lg px-2 py-1 text-[10px] font-medium transition-colors",
                       holesFilter === "18"
-                        ? "bg-emerald-900/40 text-emerald-50"
-                        : "text-emerald-100/60 hover:bg-emerald-900/20",
+                        ? "bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]"
+                        : "text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]",
                     ].join(" ")}
                   >
                     18
@@ -427,8 +427,8 @@ export function CourseAndTeeSection({
                     className={[
                       "flex-1 rounded-lg px-2 py-1 text-[10px] font-medium transition-colors",
                       holesFilter === "9"
-                        ? "bg-emerald-900/40 text-emerald-50"
-                        : "text-emerald-100/60 hover:bg-emerald-900/20",
+                        ? "bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]"
+                        : "text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]",
                     ].join(" ")}
                   >
                     9
@@ -439,7 +439,7 @@ export function CourseAndTeeSection({
               {/* Tee list */}
               <div className="max-h-[300px] overflow-y-auto space-y-2">
                 {filteredTees.length === 0 ? (
-                  <div className="text-center py-4 text-xs text-emerald-100/60">
+                  <div className="text-center py-4 text-xs text-[color:var(--sec-muted)]">
                     No tees match the selected filters
                   </div>
                 ) : (
@@ -448,12 +448,12 @@ export function CourseAndTeeSection({
                       key={tee.id}
                       type="button"
                       onClick={() => selectTee(tee.id)}
-                      className="w-full text-left rounded-xl border border-emerald-900/70 bg-[#042713]/60 p-3 hover:bg-emerald-900/20 transition-colors"
+                      className="w-full text-left rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_60%,transparent)] p-3 hover:bg-[color:var(--sec-surface-2)] transition-colors"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
-                          <div className="text-sm font-semibold text-emerald-50">{tee.name}</div>
-                          <div className="text-xs text-emerald-100/70 mt-0.5">
+                          <div className="text-sm font-semibold text-[color:var(--sec-text)]">{tee.name}</div>
+                          <div className="text-xs text-[color:var(--sec-muted)] mt-0.5">
                             Par {fmtNum(tee.par, 0)} · {fmtNum(tee.yards, 0)} yds
                             {tee.rating && tee.slope && (
                               <span className="ml-2">
@@ -462,7 +462,7 @@ export function CourseAndTeeSection({
                             )}
                           </div>
                         </div>
-                        <div className="text-[10px] text-emerald-100/50">Select ▸</div>
+                        <div className="text-[10px] text-[color:var(--sec-muted)]">Select ▸</div>
                       </div>
                     </button>
                   ))

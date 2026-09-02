@@ -51,7 +51,7 @@ export function EventChip(props: {
       style={{ borderLeftColor: accent }}
       className={cn(
         // @container drives progressive disclosure by the chip's own width.
-        "@container flex w-full items-center gap-1.5 overflow-hidden rounded-r-md border-l-[3px] bg-white/[0.04] pr-1 pl-1.5 text-left text-emerald-50/90 transition-colors hover:bg-white/[0.08]",
+        "@container flex w-full items-center gap-1.5 overflow-hidden rounded-r-md border-l-[3px] bg-white/[0.04] pr-1 pl-1.5 text-left text-[color:var(--sec-text)] transition-colors hover:bg-white/[0.08]",
         occ.kind === "event" &&
           (occ.entryState === "entry_soon" || occ.entryState === "entry_closed") &&
           "opacity-80",

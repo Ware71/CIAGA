@@ -21,9 +21,9 @@ type Entry = {
 };
 
 function pnlClass(pnl: number): string {
-  if (pnl > 0) return "text-emerald-300";
-  if (pnl < 0) return "text-red-300";
-  return "text-emerald-100/60";
+  if (pnl > 0) return "text-[color:var(--sec-good)]";
+  if (pnl < 0) return "text-[color:var(--sec-bad)]";
+  return "text-[color:var(--sec-muted)]";
 }
 
 export default function FantasyLeaderboardClient() {
@@ -85,19 +85,19 @@ export default function FantasyLeaderboardClient() {
         <button
           type="button"
           onClick={() => router.push("/majors/fantasy")}
-          className="text-[11px] text-emerald-100/70 hover:text-emerald-50"
+          className="text-[11px] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
         >
           ← Fantasy
         </button>
-        <h1 className="text-lg font-bold tracking-wide text-[#7CF0BE]">Leaderboard</h1>
+        <h1 className="text-lg font-bold tracking-wide text-[color:var(--sec-accent)]">Leaderboard</h1>
         <div className="w-12" />
       </div>
 
       {loading ? (
-        <div className="text-sm text-emerald-100/60 text-center py-20">Loading…</div>
+        <div className="text-sm text-[color:var(--sec-muted)] text-center py-20">Loading…</div>
       ) : groups.length === 0 ? (
         <div className="px-4">
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 px-4 py-6 text-center text-sm text-emerald-100/70">
+          <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_80%,transparent)] px-4 py-6 text-center text-sm text-[color:var(--sec-muted)]">
             Fantasy picks aren&apos;t enabled in any of your groups yet.
           </div>
         </div>
@@ -110,7 +110,7 @@ export default function FantasyLeaderboardClient() {
                   key={g.group.id}
                   type="button"
                   onClick={() => setGroupId(g.group.id)}
-                  className={`shrink-0 px-3 py-1 rounded-full text-xs font-semibold transition-colors ${groupId === g.group.id ? "bg-emerald-700 text-white" : "border border-emerald-900/60 text-emerald-200/70"}`}
+                  className={`shrink-0 px-3 py-1 rounded-full text-xs font-semibold transition-colors ${groupId === g.group.id ? "bg-[color:var(--sec-primary)] text-white" : "border border-[color:var(--sec-hair)] text-[color:var(--sec-muted)]"}`}
                 >
                   {g.group.name}
                 </button>
@@ -118,16 +118,16 @@ export default function FantasyLeaderboardClient() {
             </div>
           )}
 
-          <div className="text-[10px] text-emerald-200/45 text-center">
+          <div className="text-[10px] text-[color:var(--sec-muted)] text-center">
             Ranked by net profit — top-ups never count.
             {scope === "season" && " Current season."}
             {scope === "all_time" && " All time."}
           </div>
 
           {loadingEntries ? (
-            <div className="text-sm text-emerald-100/60 text-center py-10">Loading…</div>
+            <div className="text-sm text-[color:var(--sec-muted)] text-center py-10">Loading…</div>
           ) : entries.length === 0 ? (
-            <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 px-4 py-6 text-center text-sm text-emerald-100/70">
+            <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_80%,transparent)] px-4 py-6 text-center text-sm text-[color:var(--sec-muted)]">
               No picks placed yet — the leaderboard starts with the first pick.
             </div>
           ) : (
@@ -135,21 +135,21 @@ export default function FantasyLeaderboardClient() {
               {entries.map((e) => (
                 <div
                   key={e.profile_id}
-                  className="flex items-center gap-3 rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/70 px-3 py-2"
+                  className="flex items-center gap-3 rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] px-3 py-2"
                 >
-                  <span className="w-6 text-center text-[12px] font-bold text-emerald-200/60">
+                  <span className="w-6 text-center text-[12px] font-bold text-[color:var(--sec-muted)]">
                     {e.position}
                   </span>
                   {e.avatar_url ? (
                     <img src={e.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
                   ) : (
-                    <div className="h-8 w-8 rounded-full bg-emerald-900/60 grid place-items-center text-[11px] font-bold text-emerald-200 shrink-0">
+                    <div className="h-8 w-8 rounded-full bg-[color:var(--sec-surface)] grid place-items-center text-[11px] font-bold text-[color:var(--sec-text-2)] shrink-0">
                       {e.name.slice(0, 2).toUpperCase()}
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
-                    <div className="text-[13px] font-semibold text-emerald-50 truncate">{e.name}</div>
-                    <div className="text-[10px] text-emerald-200/45">
+                    <div className="text-[13px] font-semibold text-[color:var(--sec-text)] truncate">{e.name}</div>
+                    <div className="text-[10px] text-[color:var(--sec-muted)]">
                       {e.picks} pick{e.picks === 1 ? "" : "s"} · {e.staked} pts staked
                     </div>
                   </div>

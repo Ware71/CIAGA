@@ -115,7 +115,7 @@ export function SideGamesManager({
 
   return (
     <div className="space-y-3">
-      <div className="text-xs text-emerald-100/80 mb-2">
+      <div className="text-xs text-[color:var(--sec-muted)] mb-2">
         {enabledGames.size === 0
           ? "No side games enabled"
           : `${enabledGames.size} side game${enabledGames.size > 1 ? "s" : ""} enabled`}
@@ -135,12 +135,12 @@ export function SideGamesManager({
             key={game.id}
             className={`
               rounded-lg border transition-colors
-              ${!compatible ? "border-emerald-900/40 bg-[#0b3b21]/20 opacity-50" : ""}
+              ${!compatible ? "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_20%,transparent)] opacity-50" : ""}
               ${
                 compatible && isEnabled
-                  ? "border-emerald-700 bg-emerald-950/30"
+                  ? "border-[color:var(--sec-line)] bg-[color:var(--sec-surface)]"
                   : compatible
-                    ? "border-emerald-900/70 bg-[#0b3b21]/40"
+                    ? "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)]"
                     : ""
               }
             `}
@@ -154,13 +154,13 @@ export function SideGamesManager({
                     checked={isEnabled}
                     onChange={() => toggleGame(game.id)}
                     disabled={disabled || !compatible}
-                    className="rounded border-emerald-700 text-emerald-600 focus:ring-emerald-500 disabled:opacity-50"
+                    className="rounded border-[color:var(--sec-line)] text-emerald-600 focus:ring-[color:var(--sec-accent)] disabled:opacity-50"
                   />
-                  <label className="text-sm font-medium text-emerald-50 cursor-pointer select-none">
+                  <label className="text-sm font-medium text-[color:var(--sec-text)] cursor-pointer select-none">
                     {displayLabel}
                   </label>
                 </div>
-                <p className="text-[11px] text-emerald-100/60 mt-0.5 ml-6">
+                <p className="text-[11px] text-[color:var(--sec-muted)] mt-0.5 ml-6">
                   {compatible ? displayDesc : `Not available for this format`}
                 </p>
               </div>
@@ -168,7 +168,7 @@ export function SideGamesManager({
               {isEnabled && compatible && (
                 <button
                   onClick={() => setExpanded(isExpanded ? null : game.id)}
-                  className="px-2 py-1 text-[11px] rounded border border-emerald-700 text-emerald-200 hover:bg-emerald-900/30 transition-colors"
+                  className="px-2 py-1 text-[11px] rounded border border-[color:var(--sec-line)] text-[color:var(--sec-text-2)] hover:bg-[color:var(--sec-surface-2)] transition-colors"
                 >
                   {isExpanded ? "Hide" : "Config"}
                 </button>
@@ -177,7 +177,7 @@ export function SideGamesManager({
 
             {/* Game Config (Expanded) */}
             {isEnabled && isExpanded && compatible && (
-              <div className="px-3 pb-3 border-t border-emerald-900/50 pt-3 space-y-2">
+              <div className="px-3 pb-3 border-t border-[color:var(--sec-hair)] pt-3 space-y-2">
                 {game.id === "skins" && (
                   <>
                     <div className="flex items-center gap-2">
@@ -188,12 +188,12 @@ export function SideGamesManager({
                           updateGameConfig(game.id, { carryover: e.target.checked })
                         }
                         disabled={disabled}
-                        className="rounded border-emerald-700 text-emerald-600 focus:ring-emerald-500"
+                        className="rounded border-[color:var(--sec-line)] text-emerald-600 focus:ring-[color:var(--sec-accent)]"
                       />
-                      <label className="text-xs text-emerald-100">Carry over ties to next hole</label>
+                      <label className="text-xs text-[color:var(--sec-text)]">Carry over ties to next hole</label>
                     </div>
                     <div className="flex items-center gap-2">
-                      <label className="text-xs text-emerald-100">Value per skin:</label>
+                      <label className="text-xs text-[color:var(--sec-text)]">Value per skin:</label>
                       <NumberField
                         allowDecimal
                         min={0}
@@ -206,18 +206,18 @@ export function SideGamesManager({
                           })
                         }
                         disabled={disabled}
-                        className="w-20 px-2 py-1 rounded border border-emerald-900/70 bg-[#0b3b21]/70 text-xs text-emerald-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        className="w-20 px-2 py-1 rounded border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] text-xs text-[color:var(--sec-text)] focus:outline-none focus:ring-1 focus:ring-[color:var(--sec-accent)]"
                       />
                     </div>
                     <div className="flex items-center gap-2">
-                      <label className="text-xs text-emerald-100">Scoring:</label>
+                      <label className="text-xs text-[color:var(--sec-text)]">Scoring:</label>
                       <select
                         value={gameData?.config?.scoring ?? "net"}
                         onChange={(e) =>
                           updateGameConfig(game.id, { scoring: e.target.value })
                         }
                         disabled={disabled}
-                        className="px-2 py-1 rounded border border-emerald-900/70 bg-[#0b3b21]/70 text-xs text-emerald-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        className="px-2 py-1 rounded border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] text-xs text-[color:var(--sec-text)] focus:outline-none focus:ring-1 focus:ring-[color:var(--sec-accent)]"
                       >
                         <option value="net">Net</option>
                         <option value="gross">Gross</option>
@@ -236,7 +236,7 @@ export function SideGamesManager({
 
                 {game.id === "nassau" && (
                   <div className="flex items-center gap-2">
-                    <label className="text-xs text-emerald-100">Points per section:</label>
+                    <label className="text-xs text-[color:var(--sec-text)]">Points per section:</label>
                     <NumberField
                       min={1}
                       nullable={false}
@@ -246,7 +246,7 @@ export function SideGamesManager({
                         updateGameConfig(game.id, { points: v ?? 2 })
                       }
                       disabled={disabled}
-                      className="w-20 px-2 py-1 rounded border border-emerald-900/70 bg-[#0b3b21]/70 text-xs text-emerald-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      className="w-20 px-2 py-1 rounded border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] text-xs text-[color:var(--sec-text)] focus:outline-none focus:ring-1 focus:ring-[color:var(--sec-accent)]"
                     />
                   </div>
                 )}

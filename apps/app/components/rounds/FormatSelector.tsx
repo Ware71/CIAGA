@@ -75,10 +75,10 @@ export function FormatSelector({ value, onChange, disabled, isOwner }: FormatSel
     // Non-owners see read-only display
     return (
       <div className="space-y-2">
-        <label className="text-sm font-medium text-emerald-100">Round Format</label>
-        <div className="rounded-lg border border-emerald-900/70 bg-[#0b3b21]/50 p-3">
-          <div className="text-sm font-semibold text-emerald-50">{FORMAT_LABELS[value]}</div>
-          <div className="text-xs text-emerald-100/70 mt-1">{FORMAT_DESCRIPTIONS[value]}</div>
+        <label className="text-sm font-medium text-[color:var(--sec-text)]">Round Format</label>
+        <div className="rounded-lg border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_50%,transparent)] p-3">
+          <div className="text-sm font-semibold text-[color:var(--sec-text)]">{FORMAT_LABELS[value]}</div>
+          <div className="text-xs text-[color:var(--sec-muted)] mt-1">{FORMAT_DESCRIPTIONS[value]}</div>
         </div>
       </div>
     );
@@ -86,16 +86,16 @@ export function FormatSelector({ value, onChange, disabled, isOwner }: FormatSel
 
   return (
     <div className="space-y-2">
-      <label htmlFor="format-select" className="text-sm font-medium text-emerald-100">
+      <label htmlFor="format-select" className="text-sm font-medium text-[color:var(--sec-text)]">
         Round Format
-        <span className="text-xs text-emerald-200/60 ml-2">(Owner only)</span>
+        <span className="text-xs text-[color:var(--sec-muted)] ml-2">(Owner only)</span>
       </label>
       <select
         id="format-select"
         value={value}
         onChange={(e) => onChange(e.target.value as RoundFormatType)}
         disabled={disabled}
-        className="w-full rounded-lg border border-emerald-900/70 bg-[#0b3b21]/70 px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="w-full rounded-lg border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] px-3 py-2 text-sm text-[color:var(--sec-text)] focus:outline-none focus:ring-2 focus:ring-[color:var(--sec-accent)] disabled:opacity-50 disabled:cursor-not-allowed"
       >
         <optgroup label="Individual">
           <option value="strokeplay">{FORMAT_LABELS.strokeplay}</option>
@@ -114,7 +114,7 @@ export function FormatSelector({ value, onChange, disabled, isOwner }: FormatSel
           <option value="foursomes">{FORMAT_LABELS.foursomes}</option>
         </optgroup>
       </select>
-      <p className="text-xs text-emerald-100/60">{FORMAT_DESCRIPTIONS[value]}</p>
+      <p className="text-xs text-[color:var(--sec-muted)]">{FORMAT_DESCRIPTIONS[value]}</p>
     </div>
   );
 }

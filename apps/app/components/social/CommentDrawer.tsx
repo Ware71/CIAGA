@@ -38,13 +38,13 @@ export default function CommentDrawer({ open, onOpenChange, feedItemId, onCommen
       />
 
       <div
-        className="absolute inset-x-0 bottom-0 max-h-[80vh] overflow-hidden rounded-t-2xl border border-emerald-900/70 bg-[#042713] shadow-lg"
+        className="absolute inset-x-0 bottom-0 max-h-[80vh] overflow-hidden rounded-t-2xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] shadow-lg"
         onClick={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
         onPointerDown={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-emerald-900/70 p-4">
-          <div className="text-sm font-extrabold text-emerald-50">Comments</div>
+        <div className="flex items-center justify-between border-b border-[color:var(--sec-hair)] p-4">
+          <div className="text-sm font-extrabold text-[color:var(--sec-text)]">Comments</div>
           <Button
             variant="ghost"
             size="sm"
@@ -52,7 +52,7 @@ export default function CommentDrawer({ open, onOpenChange, feedItemId, onCommen
               e.stopPropagation();
               onOpenChange(false);
             }}
-            className="text-emerald-100 hover:bg-emerald-900/30"
+            className="text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
           >
             Close
           </Button>

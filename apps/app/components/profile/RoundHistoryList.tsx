@@ -60,7 +60,7 @@ export default function RoundHistoryList({
 
   if (rounds.length === 0) {
     return (
-      <div className="mt-2 rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/70">
+      <div className="mt-2 rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4 text-sm text-[color:var(--sec-muted)]">
         {emptyMessage}
       </div>
     );
@@ -71,11 +71,11 @@ export default function RoundHistoryList({
       {grouped.map(([month, list]) => (
         <section key={month} className="space-y-2">
           <div className="flex items-center justify-between px-1">
-            <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70">{month}</div>
-            <div className="text-[11px] text-emerald-100/60">{list.length}</div>
+            <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)]">{month}</div>
+            <div className="text-[11px] text-[color:var(--sec-muted)]">{list.length}</div>
           </div>
 
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 overflow-hidden">
+          <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] overflow-hidden">
             <div className="p-2 space-y-2">
               {list.map((r) => {
                 const course = one(r.courses)?.name ?? "Unknown course";
@@ -107,17 +107,17 @@ export default function RoundHistoryList({
                     key={r.id}
                     href={href}
                     className={[
-                      "block p-3 hover:bg-emerald-900/15 transition-colors",
-                      isCounting ? "rounded-2xl ring-2 ring-[#f5e6b0]/80" : "",
-                      isCutoff ? "border-b-6 border-b-[#f5e6b0]" : "",
+                      "block p-3 hover:bg-[color:var(--sec-surface-2)] transition-colors",
+                      isCounting ? "rounded-2xl ring-2 ring-[color:color-mix(in_srgb,var(--sec-accent)_80%,transparent)]" : "",
+                      isCutoff ? "border-b-6 border-b-[color:var(--sec-accent)]" : "",
                     ]
                       .filter(Boolean)
                       .join(" ")}
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0">
-                        <div className="text-[11px] font-semibold text-emerald-50 truncate">{titleText}</div>
-                        <div className="text-[9px] text-emerald-100/70 truncate">
+                        <div className="text-[11px] font-semibold text-[color:var(--sec-text)] truncate">{titleText}</div>
+                        <div className="text-[9px] text-[color:var(--sec-muted)] truncate">
                           {teeName} &middot; {played}
                         </div>
                         {rejectionText && (
@@ -129,24 +129,24 @@ export default function RoundHistoryList({
 
                       <div className="shrink-0 grid grid-cols-2 gap-1 items-center">
                         <div className="text-right">
-                          <div className="text-[12px] font-extrabold tabular-nums text-emerald-50 leading-none">
+                          <div className="text-[12px] font-extrabold tabular-nums text-[color:var(--sec-text)] leading-none">
                             {typeof hiForRound === "number" ? `HI ${formatHI(hiForRound)}` : "—"}
                           </div>
-                          <div className="mt-0.5 text-[9px] tabular-nums text-emerald-100/60">
+                          <div className="mt-0.5 text-[9px] tabular-nums text-[color:var(--sec-muted)]">
                             <span className="inline-flex items-center gap-0.5 justify-end">
                               {typeof sd === "number" ? `SD ${sd.toFixed(1)}` : ""}
                               {isExceptional && (
-                                <span className="text-[#f5e6b0]/80" title="Exceptional round">&#10024;</span>
+                                <span className="text-[color:color-mix(in_srgb,var(--sec-accent)_80%,transparent)]" title="Exceptional round">&#10024;</span>
                               )}
                             </span>
                           </div>
                         </div>
 
                         <div className="text-right">
-                          <div className="text-[14px] font-extrabold tabular-nums text-[#f5e6b0] leading-none">
+                          <div className="text-[14px] font-extrabold tabular-nums text-[color:var(--sec-accent)] leading-none">
                             {scoreText}
                           </div>
-                          <div className="mt-0.5 text-[9px] text-emerald-100/60">{netText || " "}</div>
+                          <div className="mt-0.5 text-[9px] text-[color:var(--sec-muted)]">{netText || " "}</div>
                         </div>
                       </div>
                     </div>

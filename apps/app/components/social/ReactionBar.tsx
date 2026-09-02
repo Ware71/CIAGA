@@ -180,7 +180,7 @@ export default function ReactionBar({ feedItemId, myReaction, reactionCounts, on
         size="sm"
         className={[
           "rounded-full px-2",
-          localMy ? "text-[#f5e6b0] hover:bg-emerald-900/25" : "text-emerald-100/80 hover:bg-emerald-900/25",
+          localMy ? "text-[color:var(--sec-accent)] hover:bg-[color:var(--sec-surface-2)]" : "text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]",
         ].join(" ")}
         onClick={(e) => {
           e.stopPropagation();
@@ -195,12 +195,12 @@ export default function ReactionBar({ feedItemId, myReaction, reactionCounts, on
       {/* Overlay */}
       {open ? (
         <div
-          className="absolute right-0 mt-2 w-[min(280px,calc(100vw-1rem))] rounded-2xl border border-emerald-900/70 bg-[#062a18] p-3 shadow-xl z-50"
+          className="absolute right-0 mt-2 w-[min(280px,calc(100vw-1rem))] rounded-2xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] p-3 shadow-xl z-50"
           onClick={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
         >
-          <div className="mb-2 text-[11px] font-semibold text-emerald-100/70">{topLine}</div>
+          <div className="mb-2 text-[11px] font-semibold text-[color:var(--sec-muted)]">{topLine}</div>
 
           {/* Quick row */}
           <div className="flex flex-wrap gap-2">
@@ -216,8 +216,8 @@ export default function ReactionBar({ feedItemId, myReaction, reactionCounts, on
                   className={[
                     "h-9 min-w-[42px] rounded-full border px-3 text-sm font-extrabold transition",
                     selected
-                      ? "border-[#f5e6b0]/60 bg-[#f5e6b0] text-[#042713]"
-                      : "border-emerald-900/60 bg-emerald-900/25 text-emerald-50 hover:bg-emerald-900/40",
+                      ? "border-[color:color-mix(in_srgb,var(--sec-accent)_60%,transparent)] bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)]"
+                      : "border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]",
                     busy ? "opacity-60" : "",
                   ].join(" ")}
                   aria-label={`React ${emoji}`}
@@ -330,7 +330,7 @@ function MoreEmojiButton(props: {
         onClick={() => setOpen((v) => !v)}
         className={[
           "h-9 rounded-full border px-3 text-sm font-extrabold transition",
-          "border-emerald-900/60 bg-emerald-900/25 text-emerald-50 hover:bg-emerald-900/40",
+          "border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]",
           props.disabled ? "opacity-60" : "",
         ].join(" ")}
         aria-label="More reactions"
@@ -343,16 +343,16 @@ function MoreEmojiButton(props: {
         <div
           ref={menuRef}
           style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width }}
-          className="rounded-2xl border border-emerald-900/70 bg-[#062a18] p-3 shadow-xl z-[9999]"
+          className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] p-3 shadow-xl z-[9999]"
           onClick={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
         >
           <div className="mb-2 flex items-center justify-between">
-            <div className="text-[11px] font-semibold text-emerald-100/70">Pick a reaction</div>
+            <div className="text-[11px] font-semibold text-[color:var(--sec-muted)]">Pick a reaction</div>
             <button
               type="button"
-              className="rounded-full px-2 py-1 text-emerald-100/80 hover:bg-emerald-900/30 text-xs font-extrabold"
+              className="rounded-full px-2 py-1 text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)] text-xs font-extrabold"
               onClick={() => setOpen(false)}
             >
               ✕
@@ -376,8 +376,8 @@ function MoreEmojiButton(props: {
                     className={[
                       "h-9 w-9 rounded-lg border text-lg leading-none flex items-center justify-center",
                       selected
-                        ? "border-[#f5e6b0]/60 bg-[#f5e6b0] text-[#042713]"
-                        : "border-emerald-900/60 bg-emerald-900/20 hover:bg-emerald-900/35 text-emerald-50",
+                        ? "border-[color:color-mix(in_srgb,var(--sec-accent)_60%,transparent)] bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)]"
+                        : "border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] hover:bg-[color:var(--sec-surface-2)] text-[color:var(--sec-text)]",
                       props.disabled ? "opacity-60" : "",
                     ].join(" ")}
                     aria-label={`React ${emoji}`}
