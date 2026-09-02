@@ -68,14 +68,15 @@ export function NavTab({
       className="relative flex h-full flex-1 flex-col items-center justify-center gap-0.5 rounded-[22px] transition-colors"
       style={{ color: active ? "var(--nav-accent)" : "var(--nav-idle)" }}
     >
+      {/* A dot, not a filled pill. The tinted block made the bar look like it
+          had a button pressed into it, and it competed with the docked logo
+          beside it; the colour change on the icon already says which tab you
+          are on, so the indicator only has to confirm it. */}
       {active && (
         <motion.span
           layoutId={indicatorId}
-          className="absolute inset-1 rounded-[22px]"
-          style={{
-            backgroundColor: "color-mix(in srgb, var(--nav-accent) 12%, transparent)",
-            boxShadow: "0 0 0 1px color-mix(in srgb, var(--nav-accent) 22%, transparent)",
-          }}
+          className="absolute bottom-[7px] h-[3px] w-[3px] rounded-full"
+          style={{ backgroundColor: "var(--nav-accent)" }}
           transition={
             reduceMotion ? { duration: 0 } : { type: "spring", stiffness: 380, damping: 32 }
           }

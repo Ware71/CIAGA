@@ -4,7 +4,14 @@ import { useState, useEffect, useLayoutEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { AuthUser } from "@/components/ui/auth-user";
-import { CARD, Masthead, Section } from "@/components/ui/chrome";
+import {
+  Group,
+  Hero,
+  PageHeader,
+  PrimaryAction,
+  Row,
+  Strip,
+} from "@/components/ui/chrome";
 
 import type { FeedItemVM } from "@/lib/feed/types";
 import type { HomeCore, HomeMiniFeed } from "@/lib/home/getHomeSummary";
@@ -321,21 +328,23 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
 
   // Mini cards now carry a second detail line, so they're a little taller.
   // The lower wheel frees vertical room to show them without clipping.
-  const MINI_CARD_H = 52;
-  const MINI_GAP = 8;
-  const miniFeedMaxH = MINI_CARD_H * 5 + MINI_GAP * 4;
+  // Highlights are rows now, not spaced cards: 44pt of content plus its
+  // divider, capped at five so the primary action stays above the fold.
+  const MINI_ROW_H = 45;
+  const miniFeedMaxH = MINI_ROW_H * 5;
 
   return (
     <div className="min-h-[100dvh] text-slate-100 flex flex-col items-center px-4">
           {/* HEADER */}
           <header className="w-full max-w-sm">
-            {/* The wordmark IS the masthead here. The small logo mark is gone —
-                the docked nav logo carries the brand now, and repeating it at the
-                top of the one screen that always shows it was noise. */}
-            <Masthead
+            {/* The brand lockup — mark and wordmark as one thing. The mark is
+                back at 26px: at 40px beside 13px type it had nothing anchoring
+                it, which is why it read as two objects rather than a signature. */}
+            <PageHeader
+              brand
               title="CIAGA"
               subtitle="Est. 2025"
-              right={
+              actions={
                 <>
                   <button
                     type="button"
@@ -344,17 +353,15 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
                     aria-label="Notifications"
                     title="Notifications"
                   >
-                    <BellIcon size={24} className="opacity-90" />
+                    <BellIcon size={22} className="opacity-90" />
                     {badgeCount > 0 && (
-                      <span className="absolute right-0.5 top-0.5 grid h-[18px] min-w-[18px] place-items-center rounded-full border border-[#071c10] bg-red-500 px-1 text-[10px] font-bold text-white">
+                      <span className="absolute right-0.5 top-0.5 grid h-[18px] min-w-[18px] place-items-center rounded-full border border-[#071c10] bg-red-500 px-1 text-[10px] font-semibold text-white">
                         {badgeCount > 9 ? "9+" : badgeCount}
                       </span>
                     )}
                   </button>
 
-                  <div className="scale-[1.4] origin-top-right -translate-y-[4px]">
-                    <AuthUser />
-                  </div>
+                  <AuthUser />
                 </>
               }
             />
@@ -544,118 +551,106 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
               )}
           </header>
 
-          <div className="w-full max-w-sm space-y-6">
-            <Section title="Handicap">
-              <div className={`${CARD} flex items-end justify-between gap-3 p-4`}>
-              <div>
-                <div className="mt-1 flex items-baseline gap-3">
-                  <span className="text-2xl font-extrabold text-[#f5e6b0] leading-none">
-                    {typeof handicapIndex === "number" ? formatHI(handicapIndex) : "—"}
-                  </span>
-                  <span className="text-[11px] font-extrabold text-emerald-50/90">
-                    {formatSigned(handicapDelta30, 1)}{" "}
-                    <span className="text-emerald-100/60 font-semibold">/ 30d</span>
-                  </span>
-                </div>
-              </div>
+          <div className="w-full max-w-sm">
+            <Group label="Handicap">
+              <Hero
+                figure={typeof handicapIndex === "number" ? formatHI(handicapIndex) : "—"}
+                caption={
+                  <>
+                    Index
+                    {typeof handicapIndex === "number" ? (
+                      <>
+                        {" · "}
+                        {formatSigned(handicapDelta30, 1)} over 30 days
+                      </>
+                    ) : null}
+                  </>
+                }
+                sideLabel="Rounds"
+                sideValue={typeof roundsPlayed === "number" ? roundsPlayed : "—"}
+              />
+            </Group>
 
-              <div className="text-right">
-                <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/65">Rounds</div>
-                <div className="mt-1 text-[12px] font-extrabold text-emerald-50/90">
-                  {typeof roundsPlayed === "number" ? roundsPlayed : "—"}
-                </div>
-              </div>
-              </div>
-            </Section>
+            <Group label="Last round">
+              <Row
+                title={lastRound?.course ?? "—"}
+                subtitle={
+                  [
+                    lastRound?.played_at
+                      ? new Date(lastRound.played_at).toLocaleDateString(undefined, {
+                          day: "numeric",
+                          month: "short",
+                        })
+                      : null,
+                    lastRound?.tee ?? null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ") || undefined
+                }
+                value={lastRound?.gross ?? "—"}
+                tone="accent"
+              />
+              {/* Gross, net and differential belong to one round, so they read
+                  across a strip rather than stacking as three separate rows. */}
+              <Strip
+                items={[
+                  { label: "Gross", value: lastRound?.gross ?? "—" },
+                  { label: "Net", value: lastRound?.net ?? "—" },
+                  {
+                    label: "Diff",
+                    value:
+                      typeof lastRound?.diff === "number" ? lastRound.diff.toFixed(1) : "—",
+                  },
+                ]}
+              />
+            </Group>
 
-            <Section title="Last Round">
-              <div className={`${CARD} flex items-center justify-between gap-3 p-4`}>
-              <div className="min-w-0">
-                <div className="text-sm font-extrabold text-emerald-50 truncate">
-                  {lastRound?.course ?? "—"}
-                  {lastRound?.tee ? <span className="text-emerald-100/70"> · {lastRound.tee}</span> : null}
-                </div>
-                {lastRound?.played_at ? (
-                  <div className="mt-0.5 text-[11px] font-semibold text-emerald-100/60">
-                    {new Date(lastRound.played_at).toLocaleDateString()}
-                  </div>
-                ) : null}
-              </div>
-
-              <div className="shrink-0 flex items-center gap-3">
-                <div className="text-right">
-                  <div className="text-[10px] font-extrabold text-emerald-100/45">G</div>
-                  <div className="text-sm font-extrabold text-[#f5e6b0]">{lastRound?.gross ?? "—"}</div>
-                </div>
-
-                <div className="w-px h-8 bg-emerald-900/35" />
-
-                <div className="text-right">
-                  <div className="text-[10px] font-extrabold text-emerald-100/45">N</div>
-                  <div className="text-sm font-extrabold text-emerald-50">{lastRound?.net ?? "—"}</div>
-                </div>
-
-                <div className="w-px h-8 bg-emerald-900/35" />
-
-                <div className="text-right">
-                  <div className="text-[10px] font-extrabold text-emerald-100/45">DIFF</div>
-                  <div className="text-sm font-extrabold text-emerald-50">
-                    {typeof lastRound?.diff === "number" ? lastRound.diff.toFixed(1) : "—"}
-                  </div>
-                </div>
-              </div>
-              </div>
-            </Section>
-
-            <Section
-              title="Highlights"
+            <Group
+              label="Highlights"
               action={
                 <button
                   type="button"
-                  className="text-[11px] font-extrabold text-emerald-100/80 hover:text-emerald-50"
+                  className="hover:text-emerald-50"
                   onClick={() => router.push("/social")}
                 >
-                  Open →
+                  Open ›
                 </button>
               }
             >
-            <div className="space-y-2 pr-1 overflow-hidden" style={{ maxHeight: miniFeedMaxH }}>
-              {/* Cached highlights stay on screen while the fresh ones load —
-                  "Loading…" is only for a genuine cold miss. */}
-              {miniFeed.length ? (
-                miniFeed.map((it) => (
-                  <MiniFeedTeaserCard
-                    key={it.id}
-                    item={it}
-                    onOpen={() => router.push(`/social?focus=${encodeURIComponent(it.id)}`)}
-                  />
-                ))
-              ) : miniFeedLoading ? (
-                <div className="text-sm font-semibold text-emerald-100/70">Loading…</div>
-              ) : miniFeedError ? (
-                <div className="text-sm font-semibold text-red-200/90">{miniFeedError}</div>
-              ) : (
-                <div className="text-sm font-semibold text-emerald-100/70">Nothing new yet.</div>
-              )}
-            </div>
-            </Section>
-          </div>
+              <div className="overflow-hidden" style={{ maxHeight: miniFeedMaxH }}>
+                {/* Cached highlights stay on screen while the fresh ones load —
+                    "Loading…" is only for a genuine cold miss. */}
+                {miniFeed.length ? (
+                  miniFeed.map((it) => (
+                    <MiniFeedTeaserCard
+                      key={it.id}
+                      item={it}
+                      onOpen={() => router.push(`/social?focus=${encodeURIComponent(it.id)}`)}
+                    />
+                  ))
+                ) : miniFeedLoading ? (
+                  <div className="py-3 text-[length:var(--t-body)] text-[color:var(--sec-muted)]">
+                    Loading…
+                  </div>
+                ) : miniFeedError ? (
+                  <div className="py-3 text-[length:var(--t-body)] text-red-300">{miniFeedError}</div>
+                ) : (
+                  <div className="py-3 text-[length:var(--t-body)] text-[color:var(--sec-muted)]">
+                    Nothing new yet.
+                  </div>
+                )}
+              </div>
+            </Group>
 
-          {/* Play. The wheel used to own this space; with it docked in the nav,
-              starting or resuming a round is the screen's primary action. */}
-          <div className="w-full max-w-sm mt-6 mb-8">
-            <button
-              type="button"
-              onClick={() => router.push(liveRoundId ? `/round/${liveRoundId}` : "/round")}
-              className="w-full rounded-2xl border border-[color:var(--sec-line-strong)] bg-[color:var(--sec-accent)]/10 px-5 py-4 text-center transition hover:bg-[color:var(--sec-accent)]/15 active:scale-[0.99]"
-            >
-              <div className="text-base font-extrabold tracking-wide text-[color:var(--sec-accent)]">
-                {liveRoundId ? "Resume Round" : "New Round"}
-              </div>
-              <div className="mt-0.5 text-[11px] font-semibold text-emerald-100/60">
-                {liveRoundId ? "You have a round in progress" : "Start a round at any course"}
-              </div>
-            </button>
+            {/* Play. The wheel used to own this space; with it docked in the nav,
+                starting or resuming a round is the screen's primary action. */}
+            <div className="mb-8">
+              <PrimaryAction
+                label={liveRoundId ? "Resume round" : "New round"}
+                hint={liveRoundId ? "You have a round in progress" : "Start a round at any course"}
+                onClick={() => router.push(liveRoundId ? `/round/${liveRoundId}` : "/round")}
+              />
+            </div>
           </div>
         </div>
   );

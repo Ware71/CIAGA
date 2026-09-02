@@ -2,7 +2,7 @@
 "use client";
 
 import { TileCard, type Tile } from "@/components/ui/TileCard";
-import { Masthead, Section } from "@/components/ui/chrome";
+import { Group, PageHeader } from "@/components/ui/chrome";
 
 // Simple inline icons (no new deps)
 function IconChart() {
@@ -198,25 +198,19 @@ export default function StatsHomePage() {
   return (
     <div className="min-h-screen px-4 pb-4 text-slate-100">
       <div className="mx-auto w-full max-w-sm">
-        <Masthead title="Stats" subtitle="Insights" backHref="/more" backLabel="← More" />
+        <PageHeader title="Stats" subtitle="Insights" parent="More" parentHref="/more" />
 
-        <div className="space-y-7">
-          <Section title="Trajectory">
-            <div className="space-y-3">
-              {trajectory.map((t) => (
-                <TileCard key={t.href} {...t} />
-              ))}
-            </div>
-          </Section>
+        <Group label="Trajectory">
+          {trajectory.map((t) => (
+            <TileCard key={t.href} {...t} />
+          ))}
+        </Group>
 
-          <Section title="Scoring">
-            <div className="space-y-3">
-              {scoring.map((t) => (
-                <TileCard key={t.href} {...t} />
-              ))}
-            </div>
-          </Section>
-        </div>
+        <Group label="Scoring">
+          {scoring.map((t) => (
+            <TileCard key={t.href} {...t} />
+          ))}
+        </Group>
       </div>
     </div>
   );

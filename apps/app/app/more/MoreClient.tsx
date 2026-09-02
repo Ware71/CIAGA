@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { TileCard, type Tile } from "@/components/ui/TileCard";
-import { Masthead, Section } from "@/components/ui/chrome";
+import { Group, PageHeader } from "@/components/ui/chrome";
 import {
   Calculator,
   Flag,
@@ -101,25 +101,19 @@ export default function MoreClient() {
   return (
     <div className="min-h-screen px-4 pb-4 text-slate-100">
       <div className="mx-auto w-full max-w-sm">
-        <Masthead title="More" subtitle="Everything else" />
+        <PageHeader title="More" subtitle="Everything else" />
 
-        <div className="space-y-7">
-          <Section title="You">
-            <div className="space-y-3">
-              {YOU_TILES.map((t) => (
-                <TileCard key={t.href} {...t} />
-              ))}
-            </div>
-          </Section>
+        <Group label="You">
+          {YOU_TILES.map((t) => (
+            <TileCard key={t.href} {...t} />
+          ))}
+        </Group>
 
-          <Section title="Tools">
-            <div className="space-y-3">
-              {tools.map((t) => (
-                <TileCard key={t.href} {...t} />
-              ))}
-            </div>
-          </Section>
-        </div>
+        <Group label="Tools">
+          {tools.map((t) => (
+            <TileCard key={t.href} {...t} />
+          ))}
+        </Group>
       </div>
     </div>
   );

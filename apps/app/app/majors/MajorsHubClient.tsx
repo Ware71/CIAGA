@@ -12,9 +12,9 @@ import { MajorsBalance, MajorsSnapshot } from "@/components/majors/MajorsOvervie
 import {
   MAJORS_CARD,
   MAJORS_CARD_INTERACTIVE,
-  Masthead,
   MajorsSection,
 } from "@/components/majors/majorsChrome";
+import { PageHeader } from "@/components/ui/chrome";
 
 type GroupSummary = MajorGroup & { member_count: number; role?: string };
 
@@ -181,20 +181,24 @@ export default function MajorsHubClient() {
   const filteredDiscover = discoverGroups.filter((g) => !myGroupIds.has(g.id));
 
   return (
-    <div className="min-h-[100dvh] bg-[radial-gradient(130%_65%_at_50%_0%,rgba(255,214,102,0.20)_0%,rgba(255,214,102,0.06)_38%,transparent_68%)]">
+    /* The gold radial wash that used to sit behind this header is gone. It was
+       an arbitrary value rather than a token, so the Bottle & Mint retint left
+       it behind — a #ffd666 glow on a section that no longer has any gold in
+       it. Nothing replaces it: the ground is the ground. */
+    <div className="min-h-[100dvh]">
       <div className="pb-[env(safe-area-inset-bottom)] max-w-sm mx-auto">
-      <Masthead
-        title="Majors"
-        subtitle="Groups · Events · Standings"
-        left={<MajorsBalance />}
-        right={
-          /* Same scale as the home header, so the emblem doesn't change size
-             as you move between tabs. */
-          <div className="scale-[1.4] origin-top-right -translate-y-[4px]">
-            <AuthUser />
-          </div>
-        }
-      />
+      <div className="px-4">
+        <PageHeader
+          title="Majors"
+          subtitle="Groups · Events · Standings"
+          actions={
+            <>
+              <MajorsBalance />
+              <AuthUser />
+            </>
+          }
+        />
+      </div>
 
       {loading ? (
         <div className="text-sm text-emerald-100/60 text-center py-20">Loading…</div>

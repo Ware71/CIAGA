@@ -2,6 +2,7 @@
 
 import type { FeedItemVM } from "@/lib/feed/types";
 import { isLiveItem, miniFeedCopy } from "@/lib/feed/feedItemUtils";
+import { Row, Tag } from "@/components/ui/chrome";
 
 // --- Avatar helpers ---
 
@@ -67,13 +68,13 @@ export function AvatarStack({ item }: { item: FeedItemVM }) {
   const avs = avatarStack(item);
 
   return (
-    <div className="flex -space-x-2">
+    <div className="flex -space-x-1.5">
       {avs.map((a, idx) => (
         <div
           key={`${a.key}-${idx}`}
           className={[
-            "h-7 w-7 rounded-full border border-emerald-900/45 bg-emerald-900/15 overflow-hidden",
-            "grid place-items-center text-[10px] font-extrabold text-emerald-50/90",
+            "h-6 w-6 rounded-full border border-[color:var(--hair)] bg-white/[0.05] overflow-hidden",
+            "grid place-items-center text-[10px] font-medium text-emerald-50/90",
           ].join(" ")}
           style={{ zIndex: 10 - idx }}
         >
@@ -132,48 +133,29 @@ function miniFeedDetail(item: FeedItemVM): string | null {
   return [name, stat, age].filter(Boolean).join(" · ") || null;
 }
 
+/**
+ * One highlight, as a row rather than a card. A live item takes the accent
+ * stripe down its left edge instead of a tinted border — one clear signal, and
+ * it keeps the stack reading as a single list.
+ */
 export function MiniFeedTeaserCard({ item, onOpen }: { item: FeedItemVM; onOpen: () => void }) {
   const live = isLiveItem(item);
   const detail = miniFeedDetail(item);
 
   return (
-    <button
-      type="button"
+    <Row
       onClick={onOpen}
-      className={[
-        "group w-full text-left rounded-2xl border",
-        live ? "border-emerald-300/35 bg-emerald-900/10" : "border-emerald-900/35 bg-emerald-950/10",
-        "px-2.5 py-2 hover:bg-emerald-900/25 active:scale-[0.99] transition",
-        "flex items-center gap-2.5",
-      ].join(" ")}
-      aria-label="Open in social feed"
-      title="Open in social feed"
-    >
-      <div className="shrink-0">
-        <AvatarStack item={item} />
-      </div>
-
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <div className="min-w-0 flex-1 text-[11px] font-extrabold text-emerald-50/95 leading-snug truncate">
-            {miniFeedCopy(item)}
-          </div>
-
-          {live ? (
-            <span className="shrink-0 text-[9px] font-extrabold tracking-wide px-2 py-0.5 rounded-full bg-emerald-400/15 text-emerald-100 border border-emerald-300/25">
-              LIVE
-            </span>
-          ) : null}
-        </div>
-
-        {detail ? (
-          <div className="mt-0.5 text-[10px] font-semibold text-emerald-100/55 truncate">{detail}</div>
-        ) : null}
-      </div>
-
-      <div className="shrink-0 text-emerald-100/40 group-hover:text-emerald-100/70 transition text-base leading-none">
-        ›
-      </div>
-    </button>
+      live={live}
+      lead={<AvatarStack item={item} />}
+      title={miniFeedCopy(item)}
+      subtitle={detail ?? undefined}
+      trailing={
+        live ? (
+          <Tag on>Live</Tag>
+        ) : (
+          <span className="text-[length:var(--t-fig)] leading-none text-[color:var(--sec-muted)]">›</span>
+        )
+      }
+    />
   );
 }

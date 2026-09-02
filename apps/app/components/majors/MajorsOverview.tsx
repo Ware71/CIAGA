@@ -39,18 +39,14 @@ function CompetitionCard({ comp }: { comp: EventWithGroup }) {
       style={
         // Live and completed keep their status hue on the edge; everything else
         // inherits the section's gold so the stack reads as one set.
-        isLive
-          ? { borderColor: "rgba(217,119,6,0.45)" }
-          : isCompleted
-            ? { borderColor: "rgba(52,211,153,0.30)" }
-            : undefined
+        isCompleted ? { borderColor: "rgba(52,211,153,0.30)" } : undefined
       }
     >
       <div
         className="absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl"
         style={{
           background: isLive
-            ? "linear-gradient(to bottom, #d97706, #92400e)"
+            ? "var(--sec-accent)"
             : isCompleted
             ? "#065f46"
             : "transparent",
@@ -67,7 +63,7 @@ function CompetitionCard({ comp }: { comp: EventWithGroup }) {
           <span
             className={`shrink-0 text-[9px] font-semibold px-2 py-0.5 rounded-full capitalize border ${
               isLive
-                ? "bg-amber-900/50 text-amber-300 border-amber-800/50"
+                ? "bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] border-transparent"
                 : isCompleted
                 ? "bg-emerald-900/60 text-emerald-300 border-emerald-800/50"
                 : "bg-emerald-900/40 text-emerald-200/70 border-emerald-900/60"

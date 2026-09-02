@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Masthead } from "@/components/ui/chrome";
+import { PageHeader } from "@/components/ui/chrome";
 import PostComposer from "@/components/social/PostComposer";
 import FeedList from "@/components/social/FeedList";
 import type { FeedItemVM } from "@/lib/feed/types";
@@ -26,7 +26,7 @@ export default function SocialClient({ initialFeedData, focusId }: Props) {
       <div className="mx-auto w-full max-w-sm">
         {/* A tab root, so it takes a masthead rather than a back button. The feed
             itself keeps its own ordering — live rounds already sort to the top. */}
-        <Masthead title="Social" subtitle="Feed · Live rounds · Posts" />
+        <PageHeader title="Social" subtitle="Feed · Live rounds · Posts" />
 
         {/* Feed (includes live rounds at top) */}
         <FeedList refreshKey={refreshKey} initialData={initialFeedData} focusId={focusId ?? null} />
