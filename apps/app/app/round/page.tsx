@@ -410,7 +410,7 @@ export default function RoundHomePage() {
   }
 
   return (
-    <div className="min-h-screen px-4 pb-[env(safe-area-inset-bottom)] text-slate-100">
+    <div className="min-h-screen px-4 pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto w-full max-w-sm">
         {/* Reached from the wheel and the Play CTA, so it takes a masthead. The
             calendar link stays — it is this page's only entry point. */}

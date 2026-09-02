@@ -194,14 +194,14 @@ export default function MajorsHubClient() {
           actions={
             <>
               <MajorsBalance />
-              <AuthUser />
+              <AuthUser size={38} />
             </>
           }
         />
       </div>
 
       {loading ? (
-        <div className="text-sm text-emerald-100/60 text-center py-20">Loading…</div>
+        <div className="text-sm text-[color:var(--sec-muted)] text-center py-20">Loading…</div>
       ) : (
         <div className="px-4 space-y-8 pb-12">
           {/* Season snapshot, Live Now and Upcoming — formerly the swipe-up face. */}
@@ -217,12 +217,12 @@ export default function MajorsHubClient() {
                   className={`${MAJORS_CARD} px-3 py-3 space-y-2`}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-[#0D5E33] to-[#062C17] flex items-center justify-center text-sm font-bold text-[#7CF0BE] shrink-0 border border-[#7CF0BE]/25">
+                    <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-[#0D5E33] to-[#062C17] flex items-center justify-center text-sm font-bold text-[color:var(--sec-accent)] shrink-0 border border-[color:color-mix(in_srgb,var(--sec-accent)_25%,transparent)]">
                       {invite.group?.name.slice(0, 2).toUpperCase() ?? "?"}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-semibold text-emerald-50 truncate">{invite.group?.name ?? "Unknown Group"}</div>
-                      <div className="text-[10px] text-emerald-200/50 mt-0.5">
+                      <div className="text-sm font-semibold text-[color:var(--sec-text)] truncate">{invite.group?.name ?? "Unknown Group"}</div>
+                      <div className="text-[10px] text-[color:var(--sec-muted)] mt-0.5">
                         Invited by {invite.inviter?.name ?? "someone"}
                       </div>
                     </div>
@@ -247,7 +247,7 @@ export default function MajorsHubClient() {
                       type="button"
                       onClick={() => handleDeclineInvite(invite)}
                       disabled={decliningInviteId === invite.id}
-                      className="flex-1 py-1.5 rounded-full border border-emerald-800/50 text-xs text-emerald-200/60 hover:text-emerald-200 disabled:opacity-50"
+                      className="flex-1 py-1.5 rounded-full border border-emerald-800/50 text-xs text-[color:var(--sec-muted)] hover:text-emerald-200 disabled:opacity-50"
                     >
                       Decline
                     </button>
@@ -266,7 +266,7 @@ export default function MajorsHubClient() {
                 <button
                   type="button"
                   onClick={() => router.push("/majors/groups/create")}
-                  className="text-[11px] font-semibold text-[#7CF0BE]/80 hover:text-[#7CF0BE]"
+                  className="text-[11px] font-semibold text-[color:color-mix(in_srgb,var(--sec-accent)_80%,transparent)] hover:text-[color:var(--sec-accent)]"
                 >
                   + New
                 </button>
@@ -277,7 +277,7 @@ export default function MajorsHubClient() {
             {myGroups.length === 0 ? (
               <div className={`${MAJORS_CARD} p-6 text-center space-y-3`}>
                 <p className="text-2xl">⛳</p>
-                <p className="text-sm text-emerald-100/60">You're not in any groups yet.</p>
+                <p className="text-sm text-[color:var(--sec-muted)]">You're not in any groups yet.</p>
                 {isAdmin && (
                   <button
                     type="button"
@@ -300,31 +300,31 @@ export default function MajorsHubClient() {
                     {g.image_url ? (
                       <img src={g.image_url} alt="" className="h-10 w-10 rounded-xl object-cover shrink-0" loading="lazy" decoding="async" />
                     ) : (
-                      <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#0D5E33] to-[#062C17] flex items-center justify-center text-sm font-bold text-[#7CF0BE] shrink-0 border border-[#7CF0BE]/25">
+                      <div className="h-10 w-10 rounded-xl bg-[color:var(--sec-surface-2)] flex items-center justify-center text-sm font-bold text-[color:var(--sec-accent)] shrink-0 border border-[color:color-mix(in_srgb,var(--sec-accent)_25%,transparent)]">
                         {g.name.slice(0, 2).toUpperCase()}
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-emerald-50 truncate">{g.name}</span>
+                        <span className="text-sm font-semibold text-[color:var(--sec-text)] truncate">{g.name}</span>
                         {g.role === "owner" && (
-                          <span className="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border border-[#7CF0BE]/30 bg-[#7CF0BE]/10 text-[#7CF0BE]">
+                          <span className="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border border-[color:color-mix(in_srgb,var(--sec-accent)_30%,transparent)] bg-[color:color-mix(in_srgb,var(--sec-accent)_10%,transparent)] text-[color:var(--sec-accent)]">
                             Owner
                           </span>
                         )}
                         {g.role === "admin" && (
-                          <span className="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border border-emerald-700/50 bg-emerald-900/30 text-emerald-300">
+                          <span className="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border border-[color:var(--sec-line)] bg-[color:var(--sec-surface-2)] text-[color:var(--sec-accent)]">
                             Admin
                           </span>
                         )}
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[10px] text-emerald-200/50 capitalize">{g.type.replace(/_/g, " ")}</span>
+                        <span className="text-[10px] text-[color:var(--sec-muted)] capitalize">{g.type.replace(/_/g, " ")}</span>
                         <span className="text-emerald-800">·</span>
-                        <span className="text-[10px] text-emerald-200/50">{g.member_count} {g.member_count === 1 ? "member" : "members"}</span>
+                        <span className="text-[10px] text-[color:var(--sec-muted)]">{g.member_count} {g.member_count === 1 ? "member" : "members"}</span>
                       </div>
                     </div>
-                    <span className="text-emerald-700 text-sm shrink-0">→</span>
+                    <span className="text-[color:var(--sec-muted)] text-sm shrink-0">→</span>
                   </button>
                 ))}
               </div>
@@ -350,18 +350,18 @@ export default function MajorsHubClient() {
                       {g.image_url ? (
                         <img src={g.image_url} alt="" className="h-10 w-10 rounded-xl object-cover shrink-0" loading="lazy" decoding="async" />
                       ) : (
-                        <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#0D5E33] to-[#062C17] flex items-center justify-center text-sm font-bold text-[#7CF0BE] shrink-0 border border-[#7CF0BE]/25">
+                        <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#0D5E33] to-[#062C17] flex items-center justify-center text-sm font-bold text-[color:var(--sec-accent)] shrink-0 border border-[color:color-mix(in_srgb,var(--sec-accent)_25%,transparent)]">
                           {g.name.slice(0, 2).toUpperCase()}
                         </div>
                       )}
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-semibold text-emerald-50 truncate">{g.name}</div>
+                        <div className="text-sm font-semibold text-[color:var(--sec-text)] truncate">{g.name}</div>
                         <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-[10px] text-emerald-200/50 capitalize">{g.type.replace(/_/g, " ")}</span>
+                          <span className="text-[10px] text-[color:var(--sec-muted)] capitalize">{g.type.replace(/_/g, " ")}</span>
                           {g.member_count > 0 && (
                             <>
                               <span className="text-emerald-800">·</span>
-                              <span className="text-[10px] text-emerald-200/50">{g.member_count} {g.member_count === 1 ? "member" : "members"}</span>
+                              <span className="text-[10px] text-[color:var(--sec-muted)]">{g.member_count} {g.member_count === 1 ? "member" : "members"}</span>
                             </>
                           )}
                         </div>

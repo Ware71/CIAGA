@@ -44,7 +44,11 @@ const SPLASH_CSS = `
   position: fixed;
   inset: 0;
   z-index: 10000;
-  background-color: #042713;
+  /* Follows the chosen theme. The literal fallback matters: this stylesheet is
+     inlined and can paint before globals.css has been applied, and the theme
+     bootstrap script runs in the same tick — so the var is usually resolved,
+     and Emerald Foil is the right answer when it isn't. */
+  background-color: var(--ciaga-ground, #042713);
   display: flex;
   align-items: center;
   justify-content: center;

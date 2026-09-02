@@ -22,7 +22,7 @@ export default function SocialClient({ initialFeedData, focusId }: Props) {
   const [refreshKey, setRefreshKey] = useState(0);
 
   return (
-    <div className="min-h-screen px-4 pb-[env(safe-area-inset-bottom)] text-slate-100">
+    <div className="min-h-screen px-4 pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto w-full max-w-sm">
         {/* A tab root, so it takes a masthead rather than a back button. The feed
             itself keeps its own ordering — live rounds already sort to the top. */}

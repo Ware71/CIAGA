@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { BottomNav } from "./BottomNav";
 import { hidesMainNav, sectionFor } from "./navConfig";
+import { THEME_EVENT } from "@/lib/theme/themes";
 
 /**
  * Mounts the bottom nav, reserves room for it, and tells the chrome which
@@ -21,6 +22,16 @@ export function AppFrame({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "/";
   const hidden = hidesMainNav(pathname);
   const section = sectionFor(pathname);
+
+  // Bumped whenever the theme changes, purely to re-run the effect below —
+  // the ground is read off computed style, so it has to be read again once the
+  // tokens have been repointed.
+  const [themeTick, setThemeTick] = useState(0);
+  useEffect(() => {
+    const bump = () => setThemeTick((n) => n + 1);
+    window.addEventListener(THEME_EVENT, bump);
+    return () => window.removeEventListener(THEME_EVENT, bump);
+  }, []);
 
   /**
    * Two pieces of chrome sit outside every route subtree and so can't be
@@ -55,7 +66,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
     const observer = new MutationObserver(apply);
     observer.observe(meta, { attributes: true, attributeFilter: ["content"] });
     return () => observer.disconnect();
-  }, [section]);
+  }, [section, themeTick]);
 
   return (
     <>

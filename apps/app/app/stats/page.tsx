@@ -196,7 +196,7 @@ export default function StatsHomePage() {
   ];
 
   return (
-    <div className="min-h-screen px-4 pb-4 text-slate-100">
+    <div className="min-h-screen px-4 pb-4">
       <div className="mx-auto w-full max-w-sm">
         <PageHeader title="Stats" subtitle="Insights" parent="More" parentHref="/more" />
 

@@ -9,6 +9,7 @@ import {
   Flag,
   History,
   LineChart,
+  Settings,
   Shield,
   User,
   type LucideIcon,
@@ -45,6 +46,13 @@ const YOU_TILES: Tile[] = [
     icon: <Icon as={History} />,
   },
 ];
+
+const SETTINGS_TILE: Tile = {
+  title: "Settings",
+  subtitle: "Theme, notifications, units and language",
+  href: "/more/settings",
+  icon: <Icon as={Settings} />,
+};
 
 const TOOL_TILES: Tile[] = [
   {
@@ -99,7 +107,7 @@ export default function MoreClient() {
   const tools = isAdmin ? [...TOOL_TILES, ADMIN_TILE] : TOOL_TILES;
 
   return (
-    <div className="min-h-screen px-4 pb-4 text-slate-100">
+    <div className="min-h-screen px-4 pb-4">
       <div className="mx-auto w-full max-w-sm">
         <PageHeader title="More" subtitle="Everything else" />
 
@@ -113,6 +121,10 @@ export default function MoreClient() {
           {tools.map((t) => (
             <TileCard key={t.href} {...t} />
           ))}
+        </Group>
+
+        <Group label="App">
+          <TileCard {...SETTINGS_TILE} />
         </Group>
       </div>
     </div>

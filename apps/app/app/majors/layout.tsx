@@ -9,7 +9,10 @@ export const metadata: Metadata = {
 
 export default function MajorsLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-[100dvh] bg-[#01100A] text-slate-100">
+    /* Ground and text come from the tokens, not literals. Hard-coding them here
+       pinned the whole section to one palette — on a light theme it painted a
+       dark ground under white cards and left the card text unreadable. */
+    <div className="min-h-[100dvh] bg-[color:var(--ciaga-ground)] text-[color:var(--sec-text)]">
       {children}
     </div>
   );

@@ -44,7 +44,7 @@ export const CARD =
   "rounded-[var(--r-ui)] border border-[color:var(--hair-panel)] bg-[color:var(--fill-panel)]";
 
 /** Interactive variant — same surface, with a press/hover response. */
-export const CARD_INTERACTIVE = `${CARD} transition hover:bg-white/[0.06] active:scale-[0.995]`;
+export const CARD_INTERACTIVE = `${CARD} transition hover:bg-[color:var(--sec-surface-2)] active:scale-[0.995]`;
 
 /** Accent text, for anything that can't take a component. */
 export const ACCENT_TEXT = "text-[color:var(--sec-accent)]";
@@ -86,24 +86,24 @@ export function PageHeader({
   return (
     <header
       className={cn(
-        "flex min-h-[52px] items-center justify-between gap-3 pb-3 pt-4",
+        "flex min-h-[48px] items-center justify-between gap-2.5 pb-2.5 pt-3",
         className
       )}
     >
       <div className="flex min-w-0 items-center gap-2">
         {brand ? (
           <>
-            <span className="grid h-[26px] w-[26px] shrink-0 place-items-center overflow-hidden rounded-full bg-[color:var(--nav-emblem)]">
+            <span className="grid h-[30px] w-[30px] shrink-0 place-items-center overflow-hidden rounded-full bg-[color:var(--nav-emblem)]">
               <Image
                 src="/ciaga-logo.png"
                 alt=""
-                width={26}
-                height={26}
+                width={30}
+                height={30}
                 className="h-full w-full object-contain"
               />
             </span>
             <span className="flex min-w-0 flex-col gap-[3px]">
-              <span className="truncate text-[length:var(--t-word)] font-semibold leading-[1.25] tracking-[-0.01em] text-emerald-50">
+              <span className="truncate text-[length:var(--t-word)] font-semibold leading-[1.25] tracking-[-0.01em] text-[color:var(--sec-text)]">
                 {title}
               </span>
               {subtitle ? (
@@ -118,12 +118,12 @@ export function PageHeader({
             {parent && parentHref ? (
               <Link
                 href={parentHref}
-                className="truncate text-[length:var(--t-sec)] font-normal leading-[1.35] text-[color:var(--sec-muted)] transition-colors hover:text-emerald-50"
+                className="truncate text-[length:var(--t-sec)] font-normal leading-[1.35] text-[color:var(--sec-muted)] transition-colors hover:text-[color:var(--sec-text)]"
               >
                 ‹ {parent}
               </Link>
             ) : null}
-            <h1 className="truncate text-[length:var(--t-fig)] font-semibold leading-tight tracking-[-0.01em] text-emerald-50">
+            <h1 className="truncate text-[length:var(--t-fig)] font-semibold leading-tight tracking-[-0.01em] text-[color:var(--sec-text)]">
               {title}
             </h1>
             {subtitle ? (
@@ -136,7 +136,7 @@ export function PageHeader({
       </div>
 
       {actions ? (
-        <div className="flex shrink-0 items-center gap-2">{actions}</div>
+        <div className="flex shrink-0 items-center gap-1.5">{actions}</div>
       ) : null}
     </header>
   );
@@ -197,12 +197,12 @@ export function Group({
 }) {
   return (
     <section className={cn("mb-[var(--sp-grp)]", className)}>
-      <div className="flex items-baseline gap-3 border-b border-[color:var(--sec-rule)] pb-[6px]">
+      <div className="flex items-baseline gap-3 border-b border-[color:var(--sec-rule)] pb-[5px]">
         <h2 className="shrink-0 text-[length:var(--t-label)] font-medium uppercase tracking-[0.1em] text-[color:var(--sec-muted)]">
           {label}
         </h2>
         {action ? (
-          <div className="ml-auto shrink-0 text-[length:var(--t-sec)] font-medium text-emerald-100/75">
+          <div className="ml-auto shrink-0 text-[length:var(--t-sec)] font-medium text-[color:var(--sec-text-2)]">
             {action}
           </div>
         ) : null}
@@ -228,12 +228,12 @@ export function Section({
 }) {
   return (
     <section>
-      <div className="flex items-baseline gap-3 border-b border-[color:var(--sec-rule)] pb-[6px]">
+      <div className="flex items-baseline gap-3 border-b border-[color:var(--sec-rule)] pb-[5px]">
         <h2 className="shrink-0 text-[length:var(--t-label)] font-medium uppercase tracking-[0.1em] text-[color:var(--sec-muted)]">
           {title}
         </h2>
         {action ? (
-          <div className="ml-auto shrink-0 text-[length:var(--t-sec)] font-medium text-emerald-100/75">
+          <div className="ml-auto shrink-0 text-[length:var(--t-sec)] font-medium text-[color:var(--sec-text-2)]">
             {action}
           </div>
         ) : null}
@@ -250,7 +250,7 @@ export function Section({
 export type RowTone = "default" | "accent" | "good" | "bad";
 
 const TONE: Record<RowTone, string> = {
-  default: "text-emerald-50",
+  default: "text-[color:var(--sec-text)]",
   accent: "text-[color:var(--sec-accent)]",
   good: "text-emerald-400",
   bad: "text-red-400",
@@ -298,13 +298,13 @@ export function Row({
       {live && (
         <span
           aria-hidden="true"
-          className="absolute bottom-[7px] left-0 top-[7px] w-[2px] rounded-full bg-[color:var(--sec-accent)]"
+          className="absolute bottom-[var(--row-pv)] left-0 top-[var(--row-pv)] w-[2px] rounded-full bg-[color:var(--sec-accent)]"
         />
       )}
       {lead ? <span className="flex shrink-0 items-center">{lead}</span> : null}
 
       <span className="flex min-w-0 flex-1 flex-col gap-[2px]">
-        <span className="truncate text-[length:var(--t-body)] font-normal text-emerald-50">
+        <span className="truncate text-[length:var(--t-body)] font-normal text-[color:var(--sec-text)]">
           {title}
         </span>
         {subtitle ? (
@@ -336,9 +336,9 @@ export function Row({
   );
 
   const classes = cn(
-    "relative flex min-h-[var(--row-h)] w-full items-center gap-[10px] border-b border-[color:var(--hair)] py-2 text-left last:border-b-0",
+    "relative flex min-h-[var(--row-h)] w-full items-center gap-[10px] border-b border-[color:var(--hair)] py-[var(--row-pv)] text-left last:border-b-0",
     live && "pl-[9px]",
-    (href || onClick) && "transition-colors hover:bg-white/[0.03]",
+    (href || onClick) && "transition-colors hover:bg-[color:var(--sec-surface)]",
     className
   );
 
@@ -375,7 +375,7 @@ export function Hero({
   sideValue?: ReactNode;
 }) {
   return (
-    <div className="flex items-end justify-between gap-3 border-b border-[color:var(--hair)] py-3 last:border-b-0">
+    <div className="flex items-end justify-between gap-3 border-b border-[color:var(--hair)] py-2.5 last:border-b-0">
       <div className="min-w-0">
         <div className="text-[length:var(--t-figlg)] font-semibold leading-none tracking-[-0.02em] tabular-nums text-[color:var(--sec-accent)]">
           {figure}
@@ -391,7 +391,7 @@ export function Hero({
           <div className="text-[length:var(--t-label)] font-medium uppercase tracking-[0.1em] text-[color:var(--sec-muted)]">
             {sideLabel}
           </div>
-          <div className="mt-[3px] text-[length:var(--t-fig)] font-medium tabular-nums text-emerald-50">
+          <div className="mt-[3px] text-[length:var(--t-fig)] font-medium tabular-nums text-[color:var(--sec-text)]">
             {sideValue}
           </div>
         </div>
@@ -416,14 +416,14 @@ export function Strip({
         <div
           key={it.label}
           className={cn(
-            "min-w-0 flex-1 py-2",
+            "min-w-0 flex-1 py-[var(--row-pv)]",
             i > 0 && "border-l border-[color:var(--hair)] pl-[10px]"
           )}
         >
           <div className="truncate text-[length:var(--t-label)] font-medium uppercase tracking-[0.1em] text-[color:var(--sec-muted)]">
             {it.label}
           </div>
-          <div className="mt-[3px] text-[length:var(--t-fig)] font-medium tabular-nums text-emerald-50">
+          <div className="mt-[3px] text-[length:var(--t-fig)] font-medium tabular-nums text-[color:var(--sec-text)]">
             {it.value}
           </div>
         </div>
@@ -449,7 +449,7 @@ export function PrimaryAction({
   onClick?: () => void;
 }) {
   const classes =
-    "block w-full rounded-[var(--r-ui)] border border-[color:var(--sec-rule)] px-4 py-[11px] text-center transition-colors hover:bg-[color:var(--sec-accent)]/10 active:scale-[0.99]";
+    "block w-full rounded-[var(--r-ui)] border border-[color:var(--sec-rule)] px-4 py-[11px] text-center transition-colors hover:bg-[color:var(--sec-surface)] active:scale-[0.99]";
   const body = (
     <>
       <span className="block text-[length:var(--t-body)] font-semibold text-[color:var(--sec-accent)]">

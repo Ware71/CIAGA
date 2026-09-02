@@ -21,7 +21,14 @@ type User = {
 
 type MenuPos = { top: number; right: number; width: number };
 
-export function AuthUser() {
+/**
+ * The signed-in avatar and its menu.
+ *
+ * `size` is a prop rather than a transform because the header used to scale it
+ * by 1.4 — which also scaled the border and blurred the image. 38px is the
+ * header's size; the default stays 32 for anywhere else it appears.
+ */
+export function AuthUser({ size = 32 }: { size?: number } = {}) {
   const router = useRouter();
 
   const buttonRef = useRef<HTMLButtonElement | null>(null);
@@ -250,7 +257,12 @@ export function AuthUser() {
   };
 
   if (loading) {
-    return <div className="w-8 h-8 rounded-full bg-muted animate-pulse" />;
+    return (
+      <div
+        className="rounded-full bg-[color:var(--sec-surface)] animate-pulse"
+        style={{ width: size, height: size }}
+      />
+    );
   }
 
   if (!user) {
@@ -343,7 +355,10 @@ export function AuthUser() {
           <span className="text-xs font-medium max-w-[140px] truncate">{name}</span>
         </div>
 
-        <Avatar className="h-8 w-8 border border-emerald-200/70">
+        <Avatar
+          className="border border-[color:var(--sec-line-strong)]"
+          style={{ width: size, height: size }}
+        >
           <AvatarImage src={user.user_metadata?.avatar_url || ''} />
           <AvatarFallback>{initials}</AvatarFallback>
         </Avatar>

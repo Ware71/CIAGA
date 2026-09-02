@@ -73,8 +73,8 @@ export function AvatarStack({ item }: { item: FeedItemVM }) {
         <div
           key={`${a.key}-${idx}`}
           className={[
-            "h-6 w-6 rounded-full border border-[color:var(--hair)] bg-white/[0.05] overflow-hidden",
-            "grid place-items-center text-[10px] font-medium text-emerald-50/90",
+            "h-6 w-6 rounded-full border border-[color:var(--hair)] bg-[color:var(--sec-surface)] overflow-hidden",
+            "grid place-items-center text-[10px] font-medium text-[color:var(--sec-text)]",
           ].join(" ")}
           style={{ zIndex: 10 - idx }}
         >

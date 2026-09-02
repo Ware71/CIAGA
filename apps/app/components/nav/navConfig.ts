@@ -131,6 +131,7 @@ const MORE_WHEEL: WheelItem[] = [
   { id: "courses", label: "Courses", href: "/courses" },
   { id: "history", label: "Round History", href: "/history" },
   { id: "calculator", label: "Handicap Calc", href: "/more/handicap-calculator" },
+  { id: "settings", label: "Settings", href: "/more/settings" },
 ];
 
 /**

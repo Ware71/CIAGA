@@ -334,7 +334,7 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
   const miniFeedMaxH = MINI_ROW_H * 5;
 
   return (
-    <div className="min-h-[100dvh] text-slate-100 flex flex-col items-center px-4">
+    <div className="min-h-[100dvh] flex flex-col items-center px-4">
           {/* HEADER */}
           <header className="w-full max-w-sm">
             {/* The brand lockup — mark and wordmark as one thing. The mark is
@@ -348,20 +348,20 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
                 <>
                   <button
                     type="button"
-                    className="relative grid h-11 w-11 place-items-center rounded-full text-emerald-100/75 hover:bg-emerald-900/25 hover:text-emerald-50"
+                    className="relative grid h-11 w-11 place-items-center rounded-full text-[color:var(--sec-text-2)] transition-colors hover:bg-[color:var(--sec-surface)] hover:text-[color:var(--sec-text)]"
                     onClick={() => setShowNotifications(true)}
                     aria-label="Notifications"
                     title="Notifications"
                   >
-                    <BellIcon size={22} className="opacity-90" />
+                    <BellIcon size={26} />
                     {badgeCount > 0 && (
-                      <span className="absolute right-0.5 top-0.5 grid h-[18px] min-w-[18px] place-items-center rounded-full border border-[#071c10] bg-red-500 px-1 text-[10px] font-semibold text-white">
+                      <span className="absolute right-0 top-0 grid h-[19px] min-w-[19px] place-items-center rounded-full border-2 border-[color:var(--ciaga-ground)] bg-red-500 px-1 text-[10px] font-semibold text-white">
                         {badgeCount > 9 ? "9+" : badgeCount}
                       </span>
                     )}
                   </button>
 
-                  <AuthUser />
+                  <AuthUser size={38} />
                 </>
               }
             />

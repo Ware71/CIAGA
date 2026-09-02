@@ -24,7 +24,7 @@ export function TileCard({ title, subtitle, href, icon, badge }: Tile) {
     <Row
       href={href}
       lead={
-        <span className="grid h-[26px] w-[26px] place-items-center rounded-[8px] bg-white/[0.05] text-[color:var(--sec-accent)]">
+        <span className="grid h-[26px] w-[26px] place-items-center rounded-[8px] bg-[color:var(--sec-surface)] text-[color:var(--sec-accent)]">
           {icon}
         </span>
       }

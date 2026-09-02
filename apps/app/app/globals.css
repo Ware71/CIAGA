@@ -156,6 +156,20 @@
 
     /* The rule a section label sits on — the one decorative use of the accent. */
     --sec-rule:       rgba(245, 230, 176, 0.22);
+
+    /* Text. Held as tokens rather than Tailwind literals so a light theme can
+       invert it — see the theme blocks further down. */
+    --sec-text:       #eaf3ed;
+    --sec-text-2:     rgba(234, 243, 237, 0.66);
+
+    /* Surfaces. A panel is a LIFT of the ground, not a white wash over it:
+       white over bottle green desaturates toward grey and reads as a smudge
+       that belongs to no palette. Same for the hairlines, which take the
+       section's own light rather than pure white. */
+    --sec-surface:    #0a3520;
+    --sec-surface-2:  #0e4028;
+    --sec-hair:       rgba(198, 225, 205, 0.14);
+    --sec-hair-soft:  rgba(198, 225, 205, 0.10);
   }
 
   /* ===== Type and shape system =====
@@ -185,19 +199,24 @@
     --w-med:  500;
     --w-semi: 600;
 
-    /* Spacing — a 4px grid. */
+    /* Spacing — a 4px grid, tightened back toward the density the app had
+       before the rework. The type scale is what makes the screens readable;
+       the air between groups was doing very little except pushing content off
+       the fold, so it costs nothing to take it back. */
     --sp-gut: 16px;   /* page gutter; everything aligns to it */
-    --sp-grp: 28px;   /* between one group and the next */
-    --sp-lab: 8px;    /* section label to its first row */
-    --row-h:  44px;   /* minimum row height — the platform touch target */
+    --sp-grp: 18px;   /* between one group and the next */
+    --sp-lab: 6px;    /* section label to its first row */
+    --row-h:  40px;   /* minimum row height */
+    --row-pv: 6px;    /* vertical padding inside a row */
 
     /* One radius. Pills stay round because a pill is a shape with a meaning. */
     --r-ui: 12px;
 
-    /* Hairlines — one meaning each. --sec-rule (above) is the third. */
-    --hair:       rgba(234, 243, 237, 0.10);  /* divider between rows */
-    --hair-panel: rgba(255, 255, 255, 0.075); /* border of a panel */
-    --fill-panel: rgba(255, 255, 255, 0.04);  /* fill of a panel */
+    /* Hairlines and fills, all pointed at the section's own values so a theme
+       only has to redefine the --sec-* block. */
+    --hair:       var(--sec-hair);        /* divider between rows */
+    --hair-panel: var(--sec-hair-soft);   /* border of a panel */
+    --fill-panel: var(--sec-surface);     /* fill of a panel */
   }
 
   /* Majors — "Bottle & Mint". No gold at all: the green goes cold and luminous,
@@ -219,12 +238,159 @@
     --sec-to:         #022415;
     --sec-muted:      rgba(160, 220, 195, 0.55);
     --sec-rule:       rgba(124, 240, 190, 0.24);
+    --sec-text:       #e6f5ee;
+    --sec-text-2:     rgba(230, 245, 238, 0.66);
+    --sec-surface:    #06301e;
+    --sec-surface-2:  #083a25;
+    --sec-hair:       rgba(160, 220, 195, 0.15);
+    --sec-hair-soft:  rgba(160, 220, 195, 0.10);
   }
 
   /* The ground itself, so nothing shows the app green behind a section. */
   body {
     background-color: var(--ciaga-ground);
+    color: var(--sec-text);
   }
+
+  /* ═══════════════════════════════════════════════════════════════════════
+     THEMES
+
+     A theme redefines the same `--sec-*` and `--nav-*` tokens the two section
+     blocks above use, so nothing else in the app has to know a theme exists.
+     Each one declares BOTH sections: the default and Majors. That is not
+     duplication for its own sake — a theme that only defined the default would
+     lose to `body[data-section="majors"]` on every Majors screen.
+
+     `data-theme` is stamped on <html> by an inline script in the root layout so
+     it lands before first paint; see lib/theme. The absence of the attribute is
+     Emerald Foil, which is why that theme is also written out below rather than
+     relying on the block being missing — the picker needs something to set.
+
+     Known gap: roughly 1,400 colour literals still live in leaf pages (the
+     scorecard, the Majors group and event clients, the social feed). Those do
+     not follow a theme yet, so the light themes are correct on every screen
+     built from components/ui/chrome.tsx and wrong below that. The settings
+     screen says so.
+     ═══════════════════════════════════════════════════════════════════════ */
+
+  /* ── Emerald Foil — bottle green and gold. The default. ──────────────── */
+  html[data-theme="emerald"] body {
+    color-scheme: dark;
+    --ciaga-ground: #042713;
+    --nav-pill: #07301a; --nav-ring: rgba(110,231,183,.12); --nav-accent: #f5e6b0;
+    --nav-idle: rgba(167,243,208,.45); --nav-emblem: #0a341c; --nav-sheen: rgba(245,230,176,.07);
+    --sec-accent: #f5e6b0;
+    --sec-line: rgba(245,230,176,.20); --sec-line-strong: rgba(245,230,176,.34);
+    --sec-sheen: rgba(245,230,176,.12); --sec-from: #0E3F24; --sec-to: #0A3218;
+    --sec-muted: rgba(198,225,205,.55); --sec-rule: rgba(245,230,176,.22);
+    --sec-text: #eaf3ed; --sec-text-2: rgba(234,243,237,.66);
+    --sec-surface: #0a3520; --sec-surface-2: #0e4028;
+    --sec-hair: rgba(198,225,205,.14); --sec-hair-soft: rgba(198,225,205,.10);
+  }
+  html[data-theme="emerald"] body[data-section="majors"] {
+    --ciaga-ground: #01100A;
+    --nav-pill: #032116; --nav-ring: rgba(124,240,190,.34); --nav-accent: #7CF0BE;
+    --nav-idle: rgba(160,220,195,.5); --nav-emblem: #04281A; --nav-sheen: rgba(124,240,190,.14);
+    --sec-accent: #7CF0BE;
+    --sec-line: rgba(124,240,190,.26); --sec-line-strong: rgba(124,240,190,.44);
+    --sec-sheen: rgba(124,240,190,.16); --sec-from: #06432A; --sec-to: #022415;
+    --sec-muted: rgba(160,220,195,.55); --sec-rule: rgba(124,240,190,.24);
+    --sec-text: #e6f5ee; --sec-text-2: rgba(230,245,238,.66);
+    --sec-surface: #06301e; --sec-surface-2: #083a25;
+    --sec-hair: rgba(160,220,195,.15); --sec-hair-soft: rgba(160,220,195,.10);
+  }
+
+  /* ── Night Course — neutral near-black, one mint accent. Majors goes bone,
+        so the formal section is the one with no colour in it at all. ─────── */
+  html[data-theme="night"] body {
+    color-scheme: dark;
+    --ciaga-ground: #0A0D0B;
+    --nav-pill: #141917; --nav-ring: rgba(255,255,255,.09); --nav-accent: #6EE7B7;
+    --nav-idle: rgba(234,239,234,.38); --nav-emblem: #1A211D; --nav-sheen: rgba(255,255,255,.05);
+    --sec-accent: #6EE7B7;
+    --sec-line: rgba(110,231,183,.20); --sec-line-strong: rgba(110,231,183,.34);
+    --sec-sheen: rgba(255,255,255,.05); --sec-from: #171D1A; --sec-to: #121714;
+    --sec-muted: rgba(234,239,234,.52); --sec-rule: rgba(110,231,183,.22);
+    --sec-text: #EAEFEA; --sec-text-2: rgba(234,239,234,.66);
+    --sec-surface: #141917; --sec-surface-2: #1A211D;
+    --sec-hair: rgba(234,239,234,.12); --sec-hair-soft: rgba(234,239,234,.08);
+  }
+  html[data-theme="night"] body[data-section="majors"] {
+    --ciaga-ground: #080A09;
+    --nav-pill: #12151300; --nav-pill: #121513; --nav-ring: rgba(232,228,214,.14);
+    --nav-accent: #E8E4D6; --nav-idle: rgba(232,228,214,.4); --nav-emblem: #181B17;
+    --nav-sheen: rgba(255,255,255,.05);
+    --sec-accent: #E8E4D6;
+    --sec-line: rgba(232,228,214,.20); --sec-line-strong: rgba(232,228,214,.34);
+    --sec-sheen: rgba(255,255,255,.05); --sec-from: #151814; --sec-to: #101310;
+    --sec-muted: rgba(232,228,214,.5); --sec-rule: rgba(232,228,214,.22);
+    --sec-text: #F1EFE7; --sec-text-2: rgba(241,239,231,.64);
+    --sec-surface: #121513; --sec-surface-2: #181B17;
+    --sec-hair: rgba(232,228,214,.12); --sec-hair-soft: rgba(232,228,214,.08);
+  }
+
+  /* ── Claret — the jug, not the fairway. Deep burgundy and cream; Majors
+        goes deeper rather than changing hue, as Bottle & Mint does. ──────── */
+  html[data-theme="claret"] body {
+    color-scheme: dark;
+    --ciaga-ground: #2A0E16;
+    --nav-pill: #3A141F; --nav-ring: rgba(240,214,168,.16); --nav-accent: #F0D6A8;
+    --nav-idle: rgba(240,214,168,.45); --nav-emblem: #3E1622; --nav-sheen: rgba(240,214,168,.07);
+    --sec-accent: #F0D6A8;
+    --sec-line: rgba(240,214,168,.20); --sec-line-strong: rgba(240,214,168,.34);
+    --sec-sheen: rgba(240,214,168,.10); --sec-from: #431824; --sec-to: #33111B;
+    --sec-muted: rgba(238,206,206,.55); --sec-rule: rgba(240,214,168,.22);
+    --sec-text: #F6EAE9; --sec-text-2: rgba(246,234,233,.66);
+    --sec-surface: #3A141F; --sec-surface-2: #471927;
+    --sec-hair: rgba(238,206,206,.15); --sec-hair-soft: rgba(238,206,206,.10);
+  }
+  html[data-theme="claret"] body[data-section="majors"] {
+    --ciaga-ground: #1B060D;
+    --nav-pill: #2B0D16; --nav-ring: rgba(247,229,193,.22); --nav-accent: #F7E5C1;
+    --nav-idle: rgba(247,229,193,.45); --nav-emblem: #2F0F19; --nav-sheen: rgba(247,229,193,.09);
+    --sec-accent: #F7E5C1;
+    --sec-line: rgba(247,229,193,.24); --sec-line-strong: rgba(247,229,193,.40);
+    --sec-sheen: rgba(247,229,193,.12); --sec-from: #341019; --sec-to: #22080F;
+    --sec-muted: rgba(243,214,214,.55); --sec-rule: rgba(247,229,193,.26);
+    --sec-text: #FAF0EE; --sec-text-2: rgba(250,240,238,.66);
+    --sec-surface: #2B0D16; --sec-surface-2: #38121D;
+    --sec-hair: rgba(243,214,214,.16); --sec-hair-soft: rgba(243,214,214,.11);
+  }
+
+  /* ── Linen — the daylight scheme. Ink on warm paper, brass for figures, and
+        the bottle green kept for the floating bar so the brand still holds the
+        screen from the bottom. ───────────────────────────────────────────── */
+  html[data-theme="linen"] body {
+    color-scheme: light;
+    --ciaga-ground: #F2F0E7;
+    --nav-pill: #0E3B22; --nav-ring: rgba(14,59,34,.20); --nav-accent: #F0E7C4;
+    --nav-idle: rgba(240,231,196,.5); --nav-emblem: #0A2E1A; --nav-sheen: rgba(255,255,255,.08);
+    --sec-accent: #7A5C12;
+    --sec-line: rgba(122,92,18,.22); --sec-line-strong: rgba(122,92,18,.36);
+    --sec-sheen: rgba(255,255,255,.6); --sec-from: #FFFFFF; --sec-to: #FAF9F3;
+    --sec-muted: #5C6B60; --sec-rule: rgba(122,92,18,.28);
+    --sec-text: #14251B; --sec-text-2: #55645B;
+    --sec-surface: #FFFFFF; --sec-surface-2: #F7F6EE;
+    --sec-hair: #E3E0D4; --sec-hair-soft: #EAE7DB;
+  }
+  html[data-theme="linen"] body[data-section="majors"] {
+    --ciaga-ground: #EDF2EC;
+    --nav-pill: #06301F; --nav-ring: rgba(6,48,31,.20); --nav-accent: #9FE9C8;
+    --nav-idle: rgba(159,233,200,.5); --nav-emblem: #04281A; --nav-sheen: rgba(255,255,255,.08);
+    --sec-accent: #0A5A3B;
+    --sec-line: rgba(10,90,59,.22); --sec-line-strong: rgba(10,90,59,.36);
+    --sec-sheen: rgba(255,255,255,.6); --sec-from: #FFFFFF; --sec-to: #F6FAF7;
+    --sec-muted: #4E6257; --sec-rule: rgba(10,90,59,.26);
+    --sec-text: #0F2419; --sec-text-2: #4E6257;
+    --sec-surface: #FFFFFF; --sec-surface-2: #F3F8F4;
+    --sec-hair: #DCE5DE; --sec-hair-soft: #E5ECE6;
+  }
+
+  /* A light theme has to reach the two chrome pieces that are painted, not
+     tokenised: the notification badge border and the splash. Both assume a dark
+     ground, and both would otherwise punch a dark hole in a pale screen. */
+  html[data-theme="linen"] body { --ciaga-badge-ring: #F2F0E7; }
+
 
   /* Prevent overscroll bounce / rubber-banding / pull-to-refresh */
   html, body {

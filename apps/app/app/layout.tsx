@@ -7,8 +7,10 @@ import { ServiceWorkerRegistrar } from "@/components/ServiceWorkerRegistrar";
 import { SplashHost } from "@/components/ui/SplashHost";
 import { AppFrame } from "@/components/nav/AppFrame";
 import { CookieConsent } from "@/components/CookieConsent";
+import { Analytics } from "@/components/analytics/Analytics";
 import { AcceptTermsGate } from "@/components/legal/AcceptTermsGate";
 import NextTopLoader from "nextjs-toploader";
+import { THEME_BOOTSTRAP_SCRIPT } from "@/lib/theme/themes";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -84,11 +86,22 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        /* No bg utility here: the ground is --ciaga-ground in globals.css,
-           which AppFrame repoints per section. A utility would outrank it. */
-        className={`${geistSans.variable} ${geistMono.variable} antialiased text-slate-100`}
+        /* No bg or text utility here: the ground is --ciaga-ground and the text
+           is --sec-text, both in globals.css, and both repointed per section by
+           AppFrame and per theme by the script below. A utility would outrank
+           them and pin every theme to one colour. */
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <NextTopLoader color="#f5e6b0" height={3} showSpinner={false} shadow="0 0 10px #f5e6b080" />
+        {/* Stamps data-theme on <html> before first paint, so a cold start on a
+            non-default theme doesn't flash the default palette. Same trick as
+            SplashHost's pre-paint script. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
+        <NextTopLoader
+          color="var(--sec-accent)"
+          height={3}
+          showSpinner={false}
+          shadow="0 0 10px var(--sec-accent)"
+        />
         <ServiceWorkerRegistrar />
         <OrientationManager />
         {/* Outside {children} on purpose — route Suspense swaps happen in
@@ -101,6 +114,10 @@ export default function RootLayout({
         <AppFrame>{children}</AppFrame>
         <AcceptTermsGate />
         <CookieConsent />
+        {/* autocapture deliberately OFF: these are authenticated pages, and
+            autocapture records the inner text of clicked elements — a tap on a
+            leaderboard row would put a member's name into event properties. */}
+        <Analytics />
         <SandboxDevTools />
       </body>
     </html>

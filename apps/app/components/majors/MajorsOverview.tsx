@@ -54,25 +54,25 @@ function CompetitionCard({ comp }: { comp: EventWithGroup }) {
       />
       <div className="pl-2">
         {comp.group && (
-          <div className="text-[10px] uppercase tracking-[0.16em] text-emerald-200/55 mb-0.5">
+          <div className="text-[10px] uppercase tracking-[0.16em] text-[color:var(--sec-muted)] mb-0.5">
             {comp.group.name}
           </div>
         )}
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-semibold text-emerald-50 leading-snug truncate">{comp.name}</span>
+          <span className="text-xs font-semibold text-[color:var(--sec-text)] leading-snug truncate">{comp.name}</span>
           <span
             className={`shrink-0 text-[9px] font-semibold px-2 py-0.5 rounded-full capitalize border ${
               isLive
                 ? "bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] border-transparent"
                 : isCompleted
                 ? "bg-emerald-900/60 text-emerald-300 border-emerald-800/50"
-                : "bg-emerald-900/40 text-emerald-200/70 border-emerald-900/60"
+                : "bg-emerald-900/40 text-[color:var(--sec-muted)] border-emerald-900/60"
             }`}
           >
             {eventStatusLabel(comp)}
           </span>
         </div>
-        <div className="text-[10px] text-emerald-100/60 flex items-center gap-2">
+        <div className="text-[10px] text-[color:var(--sec-muted)] flex items-center gap-2">
           {comp.event_date && (
             <span>{new Date(comp.event_date).toLocaleDateString([], { month: "short", day: "numeric" })}</span>
           )}
@@ -127,10 +127,10 @@ function BalanceDrawer({ balance, onClose }: { balance: BalanceData; onClose: ()
   const creditGroups = balance.groups.filter((g) => g.balance < 0);
 
   const totalDisplay = balance.total_balance === 0
-    ? <span className="text-lg font-bold text-emerald-400">Settled</span>
+    ? <span className="text-lg font-bold text-[color:var(--sec-accent)]">Settled</span>
     : balance.has_debt
     ? <span className="text-lg font-bold text-red-400">owe {fmtSigned(balance.total_balance)}</span>
-    : <span className="text-lg font-bold text-emerald-400">{fmtSigned(balance.total_balance)}</span>;
+    : <span className="text-lg font-bold text-[color:var(--sec-accent)]">{fmtSigned(balance.total_balance)}</span>;
 
   const content = (
     <div className="fixed inset-0 z-[200]" onClick={onClose}>
@@ -144,14 +144,14 @@ function BalanceDrawer({ balance, onClose }: { balance: BalanceData; onClose: ()
       >
         <div className="w-10 h-1 rounded-full bg-emerald-800/60 mx-auto mt-3 mb-1" />
         <div className="flex items-center justify-between px-4 py-3">
-          <div className="text-sm font-semibold text-emerald-50">Your Balance</div>
-          <button type="button" onClick={onClose} className="text-emerald-200/60 hover:text-emerald-100 text-lg leading-none">✕</button>
+          <div className="text-sm font-semibold text-[color:var(--sec-text)]">Your Balance</div>
+          <button type="button" onClick={onClose} className="text-[color:var(--sec-muted)] hover:text-emerald-100 text-lg leading-none">✕</button>
         </div>
 
         {/* Total summary */}
         <div className="mx-4 mb-3 rounded-2xl border bg-[#0b3b21]/80 p-4 flex items-center justify-between"
           style={{ borderColor: balance.has_debt ? "rgba(239,68,68,0.3)" : "rgba(16,185,129,0.3)" }}>
-          <div className="text-[11px] uppercase tracking-widest text-emerald-200/50">Total</div>
+          <div className="text-[11px] uppercase tracking-widest text-[color:var(--sec-muted)]">Total</div>
           {totalDisplay}
         </div>
 
@@ -163,20 +163,20 @@ function BalanceDrawer({ balance, onClose }: { balance: BalanceData; onClose: ()
               {debtGroups.map((g) => (
                 <div key={g.group_id} className="rounded-2xl border border-red-900/30 bg-red-950/20 p-3 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold text-emerald-50 truncate">{g.group_name}</span>
+                    <span className="text-sm font-semibold text-[color:var(--sec-text)] truncate">{g.group_name}</span>
                     <span className="text-sm font-bold text-red-400 shrink-0 ml-2">owe {fmtSigned(g.balance)}</span>
                   </div>
                   {g.by_event.filter((e) => e.net !== 0).map((e, i) => (
                     <div key={e.event_id ?? i} className="pl-1 space-y-1">
                       <div className="flex items-center justify-between text-[11px]">
-                        <span className="text-emerald-200/70 truncate font-medium">{e.event_name ?? "General"}</span>
+                        <span className="text-[color:var(--sec-muted)] truncate font-medium">{e.event_name ?? "General"}</span>
                         <span className={`shrink-0 ml-2 font-semibold ${e.net > 0 ? "text-red-400/80" : "text-emerald-400/80"}`}>
                           {fmtSigned(e.net)}
                         </span>
                       </div>
                       {(e.transactions ?? []).map((tx) => (
                         <div key={tx.id} className="flex items-center justify-between text-[10px] pl-2">
-                          <span className="text-emerald-200/50 truncate flex items-center gap-1.5">
+                          <span className="text-[color:var(--sec-muted)] truncate flex items-center gap-1.5">
                             {tx.note || humaniseType(tx.type)}
                             {isPrize(tx.type) && tx.amount < 0 && (
                               <span className="text-[9px] font-semibold text-emerald-300 border border-emerald-700/50 rounded-full px-1.5 py-0.5 leading-none">won</span>
@@ -201,20 +201,20 @@ function BalanceDrawer({ balance, onClose }: { balance: BalanceData; onClose: ()
               {creditGroups.map((g) => (
                 <div key={g.group_id} className="rounded-2xl border border-emerald-800/30 bg-emerald-950/20 p-3 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold text-emerald-50 truncate">{g.group_name}</span>
+                    <span className="text-sm font-semibold text-[color:var(--sec-text)] truncate">{g.group_name}</span>
                     <span className="text-sm font-bold text-emerald-400 shrink-0 ml-2">{fmtSigned(g.balance)}</span>
                   </div>
                   {g.by_event.filter((e) => e.net !== 0).map((e, i) => (
                     <div key={e.event_id ?? i} className="pl-1 space-y-1">
                       <div className="flex items-center justify-between text-[11px]">
-                        <span className="text-emerald-200/70 truncate font-medium">{e.event_name ?? "General"}</span>
+                        <span className="text-[color:var(--sec-muted)] truncate font-medium">{e.event_name ?? "General"}</span>
                         <span className={`shrink-0 ml-2 font-semibold ${e.net > 0 ? "text-red-400/80" : "text-emerald-400/80"}`}>
                           {fmtSigned(e.net)}
                         </span>
                       </div>
                       {(e.transactions ?? []).map((tx) => (
                         <div key={tx.id} className="flex items-center justify-between text-[10px] pl-2">
-                          <span className="text-emerald-200/50 truncate flex items-center gap-1.5">
+                          <span className="text-[color:var(--sec-muted)] truncate flex items-center gap-1.5">
                             {tx.note || humaniseType(tx.type)}
                             {isPrize(tx.type) && tx.amount < 0 && (
                               <span className="text-[9px] font-semibold text-emerald-300 border border-emerald-700/50 rounded-full px-1.5 py-0.5 leading-none">won</span>
@@ -284,11 +284,11 @@ function MajorsSnapshotInner({ initialHub }: { initialHub?: MajorHubSummary | nu
             className={`${MAJORS_CARD_INTERACTIVE} w-full p-4 text-left`}
           >
             <div className="mb-3 flex items-center gap-3">
-              <div className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.22em] text-[#7CF0BE]/80">
+              <div className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.22em] text-[color:color-mix(in_srgb,var(--sec-accent)_80%,transparent)]">
                 Season
               </div>
-              <div className="h-px flex-1 bg-gradient-to-r from-[#7CF0BE]/30 to-transparent" />
-              <div className="shrink-0 text-xs text-[#7CF0BE]/50">›</div>
+              <div className="h-px flex-1 bg-gradient-to-r from-[color:color-mix(in_srgb,var(--sec-accent)_30%,transparent)] to-transparent" />
+              <div className="shrink-0 text-xs text-[color:color-mix(in_srgb,var(--sec-accent)_50%,transparent)]">›</div>
             </div>
             <div className="grid grid-cols-4 gap-2 text-center">
               {[
@@ -298,10 +298,10 @@ function MajorsSnapshotInner({ initialHub }: { initialHub?: MajorHubSummary | nu
                 { label: "Earnings", value: hub.season_earnings === 0 ? "—" : `£${hub.season_earnings.toFixed(0)}` },
               ].map((stat) => (
                 <div key={stat.label}>
-                  <div className="text-2xl font-extrabold leading-none text-[#7CF0BE] tabular-nums">
+                  <div className="text-2xl font-extrabold leading-none text-[color:var(--sec-accent)] tabular-nums">
                     {stat.value}
                   </div>
-                  <div className="mt-1.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-emerald-200/50">
+                  <div className="mt-1.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-[color:var(--sec-muted)]">
                     {stat.label}
                   </div>
                 </div>
@@ -351,15 +351,15 @@ function AllTimeVsSeasonSection({ hub }: { hub: MajorHubSummary }) {
   ];
   return (
     <div className="mx-4 rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/60 overflow-hidden">
-      <div className="grid grid-cols-3 text-[10px] uppercase tracking-[0.14em] text-emerald-200/50 px-3 pt-3 pb-1">
+      <div className="grid grid-cols-3 text-[10px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] px-3 pt-3 pb-1">
         <div />
         <div className="text-center text-emerald-300/80 font-semibold">Season</div>
         <div className="text-center">All Time</div>
       </div>
       {rows.map((row) => (
         <div key={row.label} className="grid grid-cols-3 px-3 py-2 border-t border-emerald-900/40">
-          <div className="text-[11px] text-emerald-200/60 self-center">{row.label}</div>
-          <div className="text-center text-sm font-bold text-[#7CF0BE]">
+          <div className="text-[11px] text-[color:var(--sec-muted)] self-center">{row.label}</div>
+          <div className="text-center text-sm font-bold text-[color:var(--sec-accent)]">
             {row.isCurrency ? fmt(row.season) : (row.season || "—")}
           </div>
           <div className="text-center text-sm font-semibold text-emerald-100/80">
@@ -392,7 +392,7 @@ function GroupStatRow({ stat }: { stat: MajorGroupSeasonStats }) {
             {stat.group_name.slice(0, 2).toUpperCase()}
           </div>
         )}
-        <span className="text-xs font-semibold text-emerald-50 truncate">{stat.group_name}</span>
+        <span className="text-xs font-semibold text-[color:var(--sec-text)] truncate">{stat.group_name}</span>
         {stat.season_rank != null && (
           <span className="ml-auto shrink-0 text-[9px] text-emerald-300/60 border border-emerald-800/50 rounded-full px-1.5 py-0.5">
             #{stat.season_rank}
@@ -402,8 +402,8 @@ function GroupStatRow({ stat }: { stat: MajorGroupSeasonStats }) {
       <div className="grid grid-cols-3 gap-x-2 gap-y-2 text-center">
         {stats.map((s) => (
           <div key={s.label}>
-            <div className="text-sm font-bold text-emerald-50">{s.value}</div>
-            <div className="text-[9px] text-emerald-200/50 mt-0.5">{s.label}</div>
+            <div className="text-sm font-bold text-[color:var(--sec-text)]">{s.value}</div>
+            <div className="text-[9px] text-[color:var(--sec-muted)] mt-0.5">{s.label}</div>
           </div>
         ))}
       </div>
@@ -424,11 +424,11 @@ function SeasonStatsDrawer({ hub, onClose }: { hub: MajorHubSummary; onClose: ()
       >
         <div className="w-10 h-1 rounded-full bg-emerald-800/60 mx-auto mt-3 mb-1" />
         <div className="flex items-center justify-between px-4 py-3">
-          <div className="text-sm font-semibold text-emerald-50">Your Stats</div>
+          <div className="text-sm font-semibold text-[color:var(--sec-text)]">Your Stats</div>
           <button
             type="button"
             onClick={onClose}
-            className="text-emerald-200/60 hover:text-emerald-100 text-lg leading-none"
+            className="text-[color:var(--sec-muted)] hover:text-emerald-100 text-lg leading-none"
           >
             ✕
           </button>
@@ -439,7 +439,7 @@ function SeasonStatsDrawer({ hub, onClose }: { hub: MajorHubSummary; onClose: ()
         <div className="mx-4 border-t border-emerald-900/50 my-3" />
 
         <div className="px-4 pb-4 space-y-2">
-          <div className="text-[10px] uppercase tracking-[0.18em] text-[#7CF0BE]/75 mb-2">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-[color:color-mix(in_srgb,var(--sec-accent)_75%,transparent)] mb-2">
             By Group · Season
           </div>
           {hub.group_stats.length === 0 ? (
@@ -493,7 +493,7 @@ export function MajorsBalance() {
         aria-label="My balance"
       >
         <div className="relative">
-          <PurseIcon size={24} className="text-emerald-300/70" />
+          <PurseIcon size={24} className="text-[color:var(--sec-accent)]" />
           {balanceData?.has_debt && (
             <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-red-500 border border-[#042713]" />
           )}
