@@ -13,7 +13,7 @@ import { TABS_LEFT, TABS_RIGHT, hidesMainNav, wheelItemsFor } from "./navConfig"
  * The app's primary navigation: Majors · Social · [logo] · Calendar · More.
  *
  * The logo is the old rising, spinning wheel button, now docked into the bar and
- * sitting half-proud of its top edge. Tap goes home; press and hold raises the
+ * standing proud of its top edge. Tap goes home; press and hold raises the
  * wheel with options scoped to the current section.
  *
  * The rise is a framer-motion shared layout animation: the same `layoutId` is
@@ -72,12 +72,10 @@ export function BottomNav() {
           />
         ))}
 
-        {/* Reserves the centre slot. The logo itself is absolutely positioned so
-            it can break the pill's top edge — half proud, half sunk. */}
-        {/* h-full matters: the parent is items-center, so without it this slot
-            has auto height and the button's -top offset would measure from the
-            pill's middle instead of its top edge. */}
-        <div className="relative flex h-full w-[76px] shrink-0 justify-center">
+        {/* Reserves the centre slot. h-full matters: the parent row is
+            items-center, so without a definite height this slot collapses to
+            auto and `bottom-0` would have nothing to resolve against. */}
+        <div className="relative flex h-full w-[92px] shrink-0 justify-center">
           {!open && (
             <motion.button
               layoutId={LOGO_LAYOUT_ID}
@@ -87,18 +85,16 @@ export function BottomNav() {
               aria-expanded={false}
               onClick={() => router.push("/home")}
               {...longPress}
-              className="absolute -top-[34px] grid h-[68px] w-[68px] place-items-center rounded-full bg-[#0a341c] ring-1 ring-[#f5e6b0]/30 shadow-[0_6px_20px_rgba(0,0,0,0.55)]"
+              className="absolute bottom-0 h-[84px] w-[84px] overflow-hidden rounded-full bg-[#0a341c] ring-1 ring-[#f5e6b0]/30 shadow-[0_6px_20px_rgba(0,0,0,0.55)]"
             >
-              <span className="grid h-14 w-14 place-items-center overflow-hidden rounded-full">
-                <Image
-                  src="/ciaga-logo.png"
-                  alt=""
-                  width={56}
-                  height={56}
-                  className="h-full w-full object-contain"
-                  priority
-                />
-              </span>
+              <Image
+                src="/ciaga-logo.png"
+                alt=""
+                width={84}
+                height={84}
+                className="h-full w-full object-contain"
+                priority
+              />
             </motion.button>
           )}
         </div>
@@ -123,10 +119,10 @@ export function BottomNav() {
             aria-haspopup="menu"
             aria-expanded
             onClick={close}
-            className="pointer-events-auto grid h-24 w-24 place-items-center rounded-full bg-[#0a341c] ring-1 ring-[#f5e6b0]/60 shadow-[0_8px_28px_rgba(0,0,0,0.6)]"
+            className="pointer-events-auto h-[112px] w-[112px] overflow-hidden rounded-full bg-[#0a341c] ring-1 ring-[#f5e6b0]/60 shadow-[0_8px_28px_rgba(0,0,0,0.6)]"
           >
             <motion.span
-              className="grid h-20 w-20 place-items-center overflow-hidden rounded-full"
+              className="block h-full w-full"
               initial={spin.initial}
               animate={spin.animate}
               transition={LOGO_SPRING}
@@ -134,8 +130,8 @@ export function BottomNav() {
               <Image
                 src="/ciaga-logo.png"
                 alt=""
-                width={80}
-                height={80}
+                width={112}
+                height={112}
                 className="h-full w-full object-contain"
               />
             </motion.span>

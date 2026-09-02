@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { requireViewerSession } from "@/lib/auth/requireViewerSession";
 import type { MajorHubSummary, MajorGroupSeasonStats, EventWithGroup } from "@/lib/majors/types";
 import { eventStatusLabel } from "@/lib/majors/labels";
+import { MAJORS_CARD, MAJORS_CARD_INTERACTIVE, MajorsSection } from "./majorsChrome";
 
 /**
  * The rich Majors surface — purse, season snapshot, live and upcoming events.
@@ -34,10 +35,16 @@ function CompetitionCard({ comp }: { comp: EventWithGroup }) {
     <button
       type="button"
       onClick={() => router.push(`/majors/events/${comp.id}?from=home`)}
-      className="w-full text-left rounded-2xl border bg-[#0b3b21]/80 p-3.5 space-y-1.5 overflow-hidden relative"
-      style={{
-        borderColor: isLive ? "rgba(217,119,6,0.35)" : isCompleted ? "rgba(52,211,153,0.25)" : "rgba(6,78,59,0.7)",
-      }}
+      className={`${MAJORS_CARD_INTERACTIVE} relative w-full overflow-hidden p-3.5 pl-4 text-left space-y-1.5`}
+      style={
+        // Live and completed keep their status hue on the edge; everything else
+        // inherits the section's gold so the stack reads as one set.
+        isLive
+          ? { borderColor: "rgba(217,119,6,0.45)" }
+          : isCompleted
+            ? { borderColor: "rgba(52,211,153,0.30)" }
+            : undefined
+      }
     >
       <div
         className="absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl"
@@ -278,11 +285,14 @@ function MajorsSnapshotInner({ initialHub }: { initialHub?: MajorHubSummary | nu
           <button
             type="button"
             onClick={() => setDrawerOpen(true)}
-            className="w-full text-left rounded-2xl border border-[#f5e6b0]/25 bg-[#0b3b21]/80 p-4 active:opacity-80 transition-opacity"
+            className={`${MAJORS_CARD_INTERACTIVE} w-full p-4 text-left`}
           >
-            <div className="flex items-center justify-between mb-3">
-              <div className="text-[10px] uppercase tracking-[0.18em] text-[#f5e6b0]/75">Season</div>
-              <div className="text-emerald-400/60 text-xs">›</div>
+            <div className="mb-3 flex items-center gap-3">
+              <div className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.22em] text-[#f5e6b0]/80">
+                Season
+              </div>
+              <div className="h-px flex-1 bg-gradient-to-r from-[#f5e6b0]/30 to-transparent" />
+              <div className="shrink-0 text-xs text-[#f5e6b0]/50">›</div>
             </div>
             <div className="grid grid-cols-4 gap-2 text-center">
               {[
@@ -292,8 +302,12 @@ function MajorsSnapshotInner({ initialHub }: { initialHub?: MajorHubSummary | nu
                 { label: "Earnings", value: hub.season_earnings === 0 ? "—" : `£${hub.season_earnings.toFixed(0)}` },
               ].map((stat) => (
                 <div key={stat.label}>
-                  <div className="text-xl font-extrabold text-[#f5e6b0] leading-none">{stat.value}</div>
-                  <div className="text-[10px] text-emerald-200/55 mt-1">{stat.label}</div>
+                  <div className="text-2xl font-extrabold leading-none text-[#f5e6b0] tabular-nums">
+                    {stat.value}
+                  </div>
+                  <div className="mt-1.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-emerald-200/50">
+                    {stat.label}
+                  </div>
                 </div>
               ))}
             </div>
@@ -304,25 +318,27 @@ function MajorsSnapshotInner({ initialHub }: { initialHub?: MajorHubSummary | nu
 
       {/* Live events */}
       {hub && hub.active_events.length > 0 && (
-        <div className="space-y-1.5">
-          <div className="text-[10px] uppercase tracking-[0.18em] text-[#f5e6b0]/75 flex items-center gap-2">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400" />
-            Live Now
+        <MajorsSection
+          title="Live Now"
+          action={<span className="block h-1.5 w-1.5 rounded-full bg-amber-400" />}
+        >
+          <div className="space-y-2">
+            {hub.active_events.slice(0, 2).map((comp) => (
+              <CompetitionCard key={comp.id} comp={comp} />
+            ))}
           </div>
-          {hub.active_events.slice(0, 2).map((comp) => (
-            <CompetitionCard key={comp.id} comp={comp} />
-          ))}
-        </div>
+        </MajorsSection>
       )}
 
       {/* Upcoming events */}
       {hub && hub.active_events.length === 0 && hub.upcoming_events.length > 0 && (
-        <div className="space-y-1.5">
-          <div className="text-[10px] uppercase tracking-[0.18em] text-[#f5e6b0]/75">Upcoming</div>
-          {hub.upcoming_events.slice(0, 2).map((comp) => (
-            <CompetitionCard key={comp.id} comp={comp} />
-          ))}
-        </div>
+        <MajorsSection title="Upcoming">
+          <div className="space-y-2">
+            {hub.upcoming_events.slice(0, 2).map((comp) => (
+              <CompetitionCard key={comp.id} comp={comp} />
+            ))}
+          </div>
+        </MajorsSection>
       )}
 
     </div>

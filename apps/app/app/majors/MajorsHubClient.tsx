@@ -9,6 +9,12 @@ import { supabase } from "@/lib/supabaseClient";
 import type { MajorGroup } from "@/lib/majors/types";
 import { AuthUser } from "@/components/ui/auth-user";
 import { MajorsBalance, MajorsSnapshot } from "@/components/majors/MajorsOverview";
+import {
+  MAJORS_CARD,
+  MAJORS_CARD_INTERACTIVE,
+  MajorsMasthead,
+  MajorsSection,
+} from "@/components/majors/majorsChrome";
 
 type GroupSummary = MajorGroup & { member_count: number; role?: string };
 
@@ -177,27 +183,17 @@ export default function MajorsHubClient() {
   return (
     <div className="min-h-[100dvh] bg-[radial-gradient(120%_60%_at_50%_0%,rgba(245,230,176,0.10)_0%,rgba(245,230,176,0.03)_35%,transparent_70%)]">
       <div className="pb-[env(safe-area-inset-bottom)] max-w-sm mx-auto">
-      {/* Header */}
-      <div className="px-4 pt-8 flex items-center justify-between mb-6">
-        <MajorsBalance />
-        <h1 className="text-lg font-bold tracking-wide text-[#f5e6b0]">Majors</h1>
-        <div className="flex items-center gap-3 shrink-0">
-          {isAdmin && (
-            <button
-              type="button"
-              onClick={() => router.push("/majors/groups/create")}
-              className="text-[11px] text-emerald-400 hover:text-emerald-300"
-            >
-              + Create
-            </button>
-          )}
-          {/* Same scale as the home header, so the emblem doesn't change size
-              as you move between tabs. */}
+      <MajorsMasthead
+        subtitle="Groups · Events · Standings"
+        left={<MajorsBalance />}
+        right={
+          /* Same scale as the home header, so the emblem doesn't change size
+             as you move between tabs. */
           <div className="scale-[1.4] origin-top-right -translate-y-[4px]">
             <AuthUser />
           </div>
-        </div>
-      </div>
+        }
+      />
 
       {loading ? (
         <div className="text-sm text-emerald-100/60 text-center py-20">Loading…</div>
@@ -208,12 +204,12 @@ export default function MajorsHubClient() {
 
           {/* Pending Invitations */}
           {pendingInvites.length > 0 && (
-            <section className="space-y-2">
-              <h2 className="text-[10px] uppercase tracking-[0.18em] text-amber-300/70">Invitations</h2>
+            <MajorsSection title="Invitations">
+              <div className="space-y-2">
               {pendingInvites.map((invite) => (
                 <div
                   key={invite.id}
-                  className="rounded-2xl border border-amber-700/40 bg-amber-950/20 px-3 py-3 space-y-2"
+                  className={`${MAJORS_CARD} px-3 py-3 space-y-2`}
                 >
                   <div className="flex items-center gap-3">
                     <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-amber-800/60 to-amber-950 flex items-center justify-center text-sm font-bold text-amber-200 shrink-0">
@@ -253,26 +249,28 @@ export default function MajorsHubClient() {
                   </div>
                 </div>
               ))}
-            </section>
+              </div>
+            </MajorsSection>
           )}
 
           {/* My Groups */}
-          <section className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-[10px] uppercase tracking-[0.18em] text-[#f5e6b0]/75">My Groups</h2>
-              {isAdmin && (
+          <MajorsSection
+            title="My Groups"
+            action={
+              isAdmin ? (
                 <button
                   type="button"
                   onClick={() => router.push("/majors/groups/create")}
-                  className="text-[11px] text-emerald-400 hover:text-emerald-300"
+                  className="text-[11px] font-semibold text-[#f5e6b0]/80 hover:text-[#f5e6b0]"
                 >
                   + New
                 </button>
-              )}
-            </div>
+              ) : undefined
+            }
+          >
 
             {myGroups.length === 0 ? (
-              <div className="rounded-2xl border border-[#f5e6b0]/20 bg-[#0b3b21]/40 p-6 text-center space-y-3">
+              <div className={`${MAJORS_CARD} p-6 text-center space-y-3`}>
                 <p className="text-2xl">⛳</p>
                 <p className="text-sm text-emerald-100/60">You're not in any groups yet.</p>
                 {isAdmin && (
@@ -292,7 +290,7 @@ export default function MajorsHubClient() {
                     key={g.id}
                     type="button"
                     onClick={() => router.push(`/majors/groups/${g.id}`)}
-                    className="w-full flex items-center gap-3 rounded-2xl border border-[#f5e6b0]/20 bg-[#0b3b21]/60 px-3 py-3 hover:brightness-110 transition-all text-left"
+                    className={`${MAJORS_CARD_INTERACTIVE} w-full flex items-center gap-3 px-3 py-3 text-left`}
                   >
                     {g.image_url ? (
                       <img src={g.image_url} alt="" className="h-10 w-10 rounded-xl object-cover shrink-0" loading="lazy" decoding="async" />
@@ -326,14 +324,13 @@ export default function MajorsHubClient() {
                 ))}
               </div>
             )}
-          </section>
+          </MajorsSection>
 
           {/* Discover Groups */}
-          <section className="space-y-3">
-            <h2 className="text-[10px] uppercase tracking-[0.18em] text-[#f5e6b0]/75">Discover Groups</h2>
+          <MajorsSection title="Discover Groups">
 
             {filteredDiscover.length === 0 ? (
-              <div className="rounded-2xl border border-[#f5e6b0]/15 bg-[#0b3b21]/30 p-5 text-center">
+              <div className={`${MAJORS_CARD} p-5 text-center`}>
                 <p className="text-sm text-emerald-100/50">No public groups to discover right now.</p>
               </div>
             ) : (
@@ -343,7 +340,7 @@ export default function MajorsHubClient() {
                   return (
                     <div
                       key={g.id}
-                      className="flex items-center gap-3 rounded-2xl border border-[#f5e6b0]/20 bg-[#0b3b21]/60 px-3 py-3"
+                      className={`${MAJORS_CARD} flex items-center gap-3 px-3 py-3`}
                     >
                       {g.image_url ? (
                         <img src={g.image_url} alt="" className="h-10 w-10 rounded-xl object-cover shrink-0" loading="lazy" decoding="async" />
@@ -383,7 +380,7 @@ export default function MajorsHubClient() {
                 })}
               </div>
             )}
-          </section>
+          </MajorsSection>
         </div>
       )}
       </div>

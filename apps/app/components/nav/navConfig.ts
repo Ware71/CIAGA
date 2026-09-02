@@ -25,12 +25,12 @@ export type TabDef = {
 export type WheelItem = { id: string; label: string; href: string };
 
 /**
- * Total space the floating bar reserves at the bottom of every scroll container:
- * 60px pill + 12px margin + 34px for the docked logo's overhang (the logo sits
- * half proud of the pill's top edge). Mirrored as the `--ciaga-nav-h` custom
- * property in globals.css — change both together.
+ * Total space the floating bar reserves at the bottom of every scroll container.
+ * The docked logo, not the pill, sets this: its base sits on the pill's base, so
+ * the reserve is the 12px margin plus the 84px button — the 60px pill fits inside
+ * that. Mirrored as `--ciaga-nav-h` in globals.css — change both together.
  */
-export const NAV_H = 106;
+export const NAV_H = 96;
 
 const isMajors = (p: string) => p === "/majors" || p.startsWith("/majors/");
 const isFantasy = (p: string) => p === "/majors/fantasy" || p.startsWith("/majors/fantasy/");
