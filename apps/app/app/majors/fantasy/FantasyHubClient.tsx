@@ -160,7 +160,7 @@ export default function FantasyHubClient() {
         >
           ← Majors
         </button>
-        <h1 className="text-lg font-bold tracking-wide text-[#ffd666]">Fantasy Picks</h1>
+        <h1 className="text-lg font-bold tracking-wide text-[#7CF0BE]">Fantasy Picks</h1>
         <div className="w-12" />
       </div>
 
@@ -205,7 +205,7 @@ export default function FantasyHubClient() {
                         </div>
                         <div className="text-right shrink-0">
                           {g.balance !== null && (
-                            <div className="text-sm font-bold text-[#ffd666]">{formatPoints(g.balance)} pts</div>
+                            <div className="text-sm font-bold text-[#7CF0BE]">{formatPoints(g.balance)} pts</div>
                           )}
                           <div className={`text-[11px] font-semibold ${pnlClass(g.pnl)}`}>
                             {g.pnl > 0 ? "+" : ""}
@@ -258,7 +258,7 @@ export default function FantasyHubClient() {
               className="absolute inset-0 bg-black/60"
             />
             <div className="relative w-full max-w-sm mx-auto rounded-t-3xl border border-emerald-900/70 bg-[#07301a] px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+20px)]">
-              <div className="text-sm font-bold text-[#ffd666] mb-1">Top up wallet</div>
+              <div className="text-sm font-bold text-[#7CF0BE] mb-1">Top up wallet</div>
               <div className="text-[11px] text-emerald-200/60 mb-4">
                 {topupGroup.group.name} · {formatPoints(topupGroup.config.topupIncrement ?? 0)} pts per unit.
                 Top-ups don&apos;t count toward PnL.

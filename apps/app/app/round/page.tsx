@@ -8,7 +8,7 @@ import { Calendar } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { getMyProfileIdByAuthUserId } from "@/lib/myProfile";
 import { Button } from "@/components/ui/button";
-import { BackButton } from "@/components/ui/BackButton";
+import { Masthead } from "@/components/ui/chrome";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getWhsDefaultPolicy } from "@/lib/rounds/whsDefaults";
 
@@ -410,24 +410,27 @@ export default function RoundHomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
-      <div className="mx-auto w-full max-w-sm space-y-6">
-        <header className="flex items-center justify-between">
-          <BackButton href="/home" />
+    <div className="min-h-screen px-4 pb-[env(safe-area-inset-bottom)] text-slate-100">
+      <div className="mx-auto w-full max-w-sm">
+        {/* Reached from the wheel and the Play CTA, so it takes a masthead. The
+            calendar link stays — it is this page's only entry point. */}
+        <Masthead
+          title="Rounds"
+          subtitle="Live scorecards"
+          backHref="/home"
+          backLabel="← Home"
+          right={
+            <Link
+              href="/calendar"
+              aria-label="Open calendar"
+              className="flex h-9 items-center text-[color:var(--sec-muted)] hover:text-emerald-50"
+            >
+              <Calendar size={20} />
+            </Link>
+          }
+        />
 
-          <div className="text-center flex-1">
-            <div className="text-lg font-semibold tracking-wide text-[#f5e6b0]">Rounds</div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">Live scorecards</div>
-          </div>
-
-          <Link
-            href="/calendar"
-            aria-label="Open calendar"
-            className="flex h-9 w-[60px] items-center justify-end text-emerald-200/70 hover:text-emerald-50"
-          >
-            <Calendar size={20} />
-          </Link>
-        </header>
+        <div className="space-y-6">
 
         <Button
           className="w-full rounded-2xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c]"
@@ -571,6 +574,7 @@ export default function RoundHomePage() {
             />
           );
         })() : null}
+        </div>
       </div>
     </div>
   );

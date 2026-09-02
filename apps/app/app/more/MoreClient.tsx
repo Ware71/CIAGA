@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { TileCard, type Tile } from "@/components/ui/TileCard";
+import { Masthead, Section } from "@/components/ui/chrome";
 import {
   Calculator,
   Flag,
@@ -24,7 +25,7 @@ function Icon({ as: As }: { as: LucideIcon }) {
   return <As className="h-[18px] w-[18px] text-[#f5e6b0]" strokeWidth={2} />;
 }
 
-const BASE_TILES: Tile[] = [
+const YOU_TILES: Tile[] = [
   {
     title: "Profile",
     subtitle: "Your handicap record, followers, and account settings",
@@ -43,6 +44,9 @@ const BASE_TILES: Tile[] = [
     href: "/history",
     icon: <Icon as={History} />,
   },
+];
+
+const TOOL_TILES: Tile[] = [
   {
     title: "Courses",
     subtitle: "Search nearby or worldwide, and manage tee boxes",
@@ -92,26 +96,29 @@ export default function MoreClient() {
     };
   }, []);
 
-  const tiles = isAdmin ? [...BASE_TILES, ADMIN_TILE] : BASE_TILES;
+  const tools = isAdmin ? [...TOOL_TILES, ADMIN_TILE] : TOOL_TILES;
 
   return (
-    <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8">
-      <div className="mx-auto w-full max-w-sm space-y-6">
-        <header className="text-center">
-          <div className="text-lg font-extrabold tracking-wide text-[#f5e6b0]">More</div>
-          <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70 font-semibold">
-            Everything else
-          </div>
-        </header>
+    <div className="min-h-screen px-4 pb-4 text-slate-100">
+      <div className="mx-auto w-full max-w-sm">
+        <Masthead title="More" subtitle="Everything else" />
 
-        <div className="space-y-3">
-          {tiles.map((t) => (
-            <TileCard key={t.href} {...t} />
-          ))}
-        </div>
+        <div className="space-y-7">
+          <Section title="You">
+            <div className="space-y-3">
+              {YOU_TILES.map((t) => (
+                <TileCard key={t.href} {...t} />
+              ))}
+            </div>
+          </Section>
 
-        <div className="pt-1 text-[10px] text-emerald-100/50 text-center font-semibold">
-          CIAGA · More
+          <Section title="Tools">
+            <div className="space-y-3">
+              {tools.map((t) => (
+                <TileCard key={t.href} {...t} />
+              ))}
+            </div>
+          </Section>
         </div>
       </div>
     </div>

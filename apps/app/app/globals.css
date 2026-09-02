@@ -142,17 +142,37 @@
     --nav-idle:     rgba(167, 243, 208, 0.45);
     --nav-emblem:   #0a341c;
     --nav-sheen:    rgba(245, 230, 176, 0.07);
+
+    /* Page surfaces. components/ui/chrome.tsx builds its card, section rule and
+       masthead from these, so a section changes its whole look by redefining
+       the block rather than by every page picking its own hexes. */
+    --sec-accent:     #f5e6b0;
+    --sec-line:       rgba(245, 230, 176, 0.20);
+    --sec-line-strong:rgba(245, 230, 176, 0.34);
+    --sec-sheen:      rgba(245, 230, 176, 0.12);
+    --sec-from:       #0E3F24;
+    --sec-to:         #0A3218;
+    --sec-muted:      rgba(198, 225, 205, 0.55);
   }
 
-  /* Majors — the Emerald Foil scheme. Deeper ground, metallic gold. */
+  /* Majors — "Bottle & Mint". No gold at all: the green goes cold and luminous,
+     so the section differentiates by temperature rather than by a second hue. */
   body[data-section="majors"] {
-    --ciaga-ground: #03150C;
-    --nav-pill:     #062D17;
-    --nav-ring:     rgba(255, 214, 102, 0.32);
-    --nav-accent:   #ffd666;
-    --nav-idle:     rgba(190, 228, 201, 0.5);
-    --nav-emblem:   #08331A;
-    --nav-sheen:    rgba(255, 214, 102, 0.12);
+    --ciaga-ground: #01100A;
+    --nav-pill:     #032116;
+    --nav-ring:     rgba(124, 240, 190, 0.34);
+    --nav-accent:   #7CF0BE;
+    --nav-idle:     rgba(160, 220, 195, 0.5);
+    --nav-emblem:   #04281A;
+    --nav-sheen:    rgba(124, 240, 190, 0.14);
+
+    --sec-accent:     #7CF0BE;
+    --sec-line:       rgba(124, 240, 190, 0.26);
+    --sec-line-strong:rgba(124, 240, 190, 0.44);
+    --sec-sheen:      rgba(124, 240, 190, 0.16);
+    --sec-from:       #06432A;
+    --sec-to:         #022415;
+    --sec-muted:      rgba(160, 220, 195, 0.55);
   }
 
   /* The ground itself, so nothing shows the app green behind a section. */

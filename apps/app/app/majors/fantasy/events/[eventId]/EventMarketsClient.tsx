@@ -453,7 +453,7 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
           type="button"
           onClick={() => setScoreBasis(b)}
           className={`rounded-md px-3 py-1 font-semibold capitalize transition-colors ${
-            scoreBasis === b ? "bg-emerald-800/50 text-[#ffd666]" : "text-emerald-200/60"
+            scoreBasis === b ? "bg-emerald-800/50 text-[#7CF0BE]" : "text-emerald-200/60"
           }`}
         >
           {b}
@@ -670,7 +670,7 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
                           }}
                           className={`flex-1 rounded-md px-2 py-1 font-semibold transition-colors ${
                             outcome === o.id
-                              ? "bg-emerald-800/50 text-[#ffd666]"
+                              ? "bg-emerald-800/50 text-[#7CF0BE]"
                               : available
                               ? "text-emerald-200/60"
                               : "text-emerald-200/25 cursor-default"
@@ -750,7 +750,7 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
       </div>
       <div className="px-4 mb-3">
         <div className="flex items-start justify-between gap-2">
-          <h1 className="text-lg font-bold text-[#ffd666] leading-tight">
+          <h1 className="text-lg font-bold text-[#7CF0BE] leading-tight">
             {board?.event?.name ?? "Fantasy Markets"}
           </h1>
           {board?.generated && <OddsFormatMenu className="shrink-0" />}
@@ -768,7 +768,7 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
       {board?.generated && board.state?.narrative && (
         <div className="px-4 mb-4">
           <div className="rounded-2xl border border-emerald-900/60 bg-gradient-to-br from-[#0b3b21]/90 to-[#07301a]/90 px-4 py-3">
-            <div className="text-[9px] uppercase tracking-[0.2em] text-[#ffd666]/60 mb-1">
+            <div className="text-[9px] uppercase tracking-[0.2em] text-[#7CF0BE]/60 mb-1">
               Event preview
             </div>
             <p className="text-[12px] leading-relaxed text-emerald-100/85">
@@ -813,7 +813,7 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
                   onClick={() => setActiveTab(t.id)}
                   className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors ${
                     activeTab === t.id
-                      ? "bg-[#ffd666] text-[#042713]"
+                      ? "bg-[#7CF0BE] text-[#042713]"
                       : "border border-emerald-900/60 text-emerald-100/70 hover:text-emerald-50"
                   }`}
                 >

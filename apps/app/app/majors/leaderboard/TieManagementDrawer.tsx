@@ -187,7 +187,7 @@ function ChoiceScreen({
 }) {
   return (
     <div className="space-y-4">
-      <h2 className="text-base font-semibold text-[#ffd666] text-center">Resolve Tie</h2>
+      <h2 className="text-base font-semibold text-[#7CF0BE] text-center">Resolve Tie</h2>
       <p className="text-[11px] text-emerald-100/50 text-center">
         Choose how to decide the winner
       </p>
@@ -234,7 +234,7 @@ function PlayoffSetupScreen({
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <button type="button" onClick={onBack} className="text-emerald-100/60 text-sm">←</button>
-        <h2 className="text-base font-semibold text-[#ffd666]">Select Playoff Hole</h2>
+        <h2 className="text-base font-semibold text-[#7CF0BE]">Select Playoff Hole</h2>
       </div>
       <p className="text-[11px] text-emerald-100/50">
         Choose the hole for the sudden-death playoff. Tied players will be revealed once you start.
@@ -248,7 +248,7 @@ function PlayoffSetupScreen({
             onClick={() => onSelectHole(h)}
             className={`rounded-xl py-2 text-sm font-bold transition-colors ${
               selectedHole === h
-                ? "bg-[#ffd666] text-[#042713]"
+                ? "bg-[#7CF0BE] text-[#042713]"
                 : "border border-emerald-700/40 text-emerald-200 hover:bg-emerald-900/40"
             }`}
           >
@@ -263,7 +263,7 @@ function PlayoffSetupScreen({
         type="button"
         onClick={onStart}
         disabled={!selectedHole || loading}
-        className="w-full py-3 rounded-full bg-[#ffd666] text-[#042713] text-sm font-semibold disabled:opacity-40"
+        className="w-full py-3 rounded-full bg-[#7CF0BE] text-[#042713] text-sm font-semibold disabled:opacity-40"
       >
         {loading ? "Starting…" : "Start Playoff"}
       </button>
@@ -288,7 +288,7 @@ function CountbackResultScreen({
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <button type="button" onClick={onBack} className="text-emerald-100/60 text-sm">←</button>
-        <h2 className="text-base font-semibold text-[#ffd666]">Countback Result</h2>
+        <h2 className="text-base font-semibold text-[#7CF0BE]">Countback Result</h2>
       </div>
 
       <div className="space-y-2">
@@ -334,7 +334,7 @@ function CountbackResultScreen({
         type="button"
         onClick={onConfirm}
         disabled={!result.winner_profile_id || loading}
-        className="w-full py-3 rounded-full bg-[#ffd666] text-[#042713] text-sm font-semibold disabled:opacity-40"
+        className="w-full py-3 rounded-full bg-[#7CF0BE] text-[#042713] text-sm font-semibold disabled:opacity-40"
       >
         {loading ? "Applying…" : "Confirm & Apply Result"}
       </button>

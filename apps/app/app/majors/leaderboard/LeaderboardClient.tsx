@@ -227,7 +227,7 @@ export default function LeaderboardClient() {
         <button type="button" onClick={() => router.back()} className="text-[11px] text-emerald-100/70 hover:text-emerald-50">
           ← Back
         </button>
-        <h1 className="text-lg font-semibold tracking-wide text-[#ffd666]">Leaderboard</h1>
+        <h1 className="text-lg font-semibold tracking-wide text-[#7CF0BE]">Leaderboard</h1>
         <div className="w-14" />
       </div>
 
@@ -289,14 +289,14 @@ export default function LeaderboardClient() {
           <button
             type="button"
             onClick={() => { setTieDrawerScreen("playoff_setup"); setShowTieDrawer(true); }}
-            className="flex-1 py-3 rounded-full bg-[#ffd666] text-[#042713] text-sm font-semibold"
+            className="flex-1 py-3 rounded-full bg-[#7CF0BE] text-[#042713] text-sm font-semibold"
           >
             Playoff
           </button>
           <button
             type="button"
             onClick={() => { setTieDrawerScreen("choice"); setShowTieDrawer(true); }}
-            className="flex-1 py-3 rounded-full border border-[#ffd666]/50 text-[#ffd666] text-sm font-semibold"
+            className="flex-1 py-3 rounded-full border border-[#7CF0BE]/50 text-[#7CF0BE] text-sm font-semibold"
           >
             Countback
           </button>
@@ -309,7 +309,7 @@ export default function LeaderboardClient() {
           type="button"
           onClick={handleReveal}
           disabled={revealLoading}
-          className="w-full py-3 rounded-full bg-[#ffd666] text-[#042713] text-sm font-semibold disabled:opacity-50"
+          className="w-full py-3 rounded-full bg-[#7CF0BE] text-[#042713] text-sm font-semibold disabled:opacity-50"
         >
           {revealLoading ? "Revealing…" : isFrozen ? "Reveal Results" : "Start Ceremony"}
         </button>
@@ -358,7 +358,7 @@ export default function LeaderboardClient() {
                   : "border-emerald-900/50 bg-[#0b3b21]/60"
               }`}
             >
-              <span className="w-7 text-center text-xs font-extrabold text-[#ffd666]">
+              <span className="w-7 text-center text-xs font-extrabold text-[#7CF0BE]">
                 {row.position == null
                   ? idx + 1
                   : (row as any).tied_count > 1
@@ -407,7 +407,7 @@ export default function LeaderboardClient() {
                 {tab === "competition" ? (
                   scoringModel === "stableford_points" ? (
                     <>
-                      <div className="text-xs font-extrabold text-[#ffd666]">
+                      <div className="text-xs font-extrabold text-[#7CF0BE]">
                         {(row as any).format_points != null ? `${(row as any).format_points} pts` : "—"}
                       </div>
                       {getToPar(row) != null && (
@@ -421,7 +421,7 @@ export default function LeaderboardClient() {
                     </>
                   ) : (
                     <>
-                      <div className="text-xs font-extrabold text-[#ffd666]">
+                      <div className="text-xs font-extrabold text-[#7CF0BE]">
                         {formatLeaderboardScore(getToPar(row), score)}
                       </div>
                       <div className="text-[10px] text-emerald-100/50">to par</div>
@@ -432,7 +432,7 @@ export default function LeaderboardClient() {
                   )
                 ) : (
                   <>
-                    <div className="text-xs font-extrabold text-[#ffd666]">{row.season_points ?? 0} pts</div>
+                    <div className="text-xs font-extrabold text-[#7CF0BE]">{row.season_points ?? 0} pts</div>
                     <div className="text-[10px] text-emerald-100/50">{row.events_played ?? 0} events</div>
                   </>
                 )}

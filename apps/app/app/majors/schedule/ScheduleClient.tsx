@@ -144,7 +144,7 @@ export default function ScheduleClient() {
       <header className="relative flex items-center justify-center">
         <BackButton className="absolute left-0 font-semibold" href="/majors" label="← Majors" />
         <div className="text-center">
-          <div className="text-lg font-extrabold tracking-wide text-[#ffd666]">Schedule</div>
+          <div className="text-lg font-extrabold tracking-wide text-[#7CF0BE]">Schedule</div>
           <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-200/50">
             Fixtures &amp; results
           </div>
@@ -160,7 +160,7 @@ export default function ScheduleClient() {
             aria-pressed={filter === f.value}
             className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
               filter === f.value
-                ? "border border-[#ffd666]/50 bg-[#ffd666]/12 text-[#ffd666]"
+                ? "border border-[#7CF0BE]/50 bg-[#7CF0BE]/12 text-[#7CF0BE]"
                 : "border border-emerald-900/60 text-emerald-200/60 hover:text-emerald-50"
             }`}
           >
@@ -225,9 +225,9 @@ export default function ScheduleClient() {
 
                       {/* The reason History existed: how you actually did. */}
                       {finished && entry && (
-                        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t border-[#ffd666]/15 pt-2">
+                        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t border-[#7CF0BE]/15 pt-2">
                           {entry.position != null && (
-                            <span className="text-sm font-extrabold text-[#ffd666]">
+                            <span className="text-sm font-extrabold text-[#7CF0BE]">
                               {ordinal(entry.position)}
                             </span>
                           )}

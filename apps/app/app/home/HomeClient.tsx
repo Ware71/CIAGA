@@ -1,10 +1,10 @@
 "use client";
 
-import Image from "next/image";
 import { useState, useEffect, useLayoutEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { AuthUser } from "@/components/ui/auth-user";
+import { CARD, Masthead, Section } from "@/components/ui/chrome";
 
 import type { FeedItemVM } from "@/lib/feed/types";
 import type { HomeCore, HomeMiniFeed } from "@/lib/home/getHomeSummary";
@@ -326,46 +326,38 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
   const miniFeedMaxH = MINI_CARD_H * 5 + MINI_GAP * 4;
 
   return (
-    <div className="min-h-[100dvh] bg-[#042713] text-slate-100 flex flex-col items-center pt-8 px-4">
+    <div className="min-h-[100dvh] text-slate-100 flex flex-col items-center px-4">
           {/* HEADER */}
-          <header className="w-full max-w-sm flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-[#0a341c]/70 backdrop-blur-sm border border-[#0a341c]/40 grid place-items-center">
-                <Image
-                  src="/ciaga-logo.png"
-                  alt="CIAGA logo"
-                  width={40}
-                  height={40}
-                  className="object-contain rounded-full"
-                />
-              </div>
+          <header className="w-full max-w-sm">
+            {/* The wordmark IS the masthead here. The small logo mark is gone —
+                the docked nav logo carries the brand now, and repeating it at the
+                top of the one screen that always shows it was noise. */}
+            <Masthead
+              title="CIAGA"
+              subtitle="Est. 2025"
+              right={
+                <>
+                  <button
+                    type="button"
+                    className="relative grid h-11 w-11 place-items-center rounded-full text-emerald-100/75 hover:bg-emerald-900/25 hover:text-emerald-50"
+                    onClick={() => setShowNotifications(true)}
+                    aria-label="Notifications"
+                    title="Notifications"
+                  >
+                    <BellIcon size={24} className="opacity-90" />
+                    {badgeCount > 0 && (
+                      <span className="absolute right-0.5 top-0.5 grid h-[18px] min-w-[18px] place-items-center rounded-full border border-[#071c10] bg-red-500 px-1 text-[10px] font-bold text-white">
+                        {badgeCount > 9 ? "9+" : badgeCount}
+                      </span>
+                    )}
+                  </button>
 
-              <div className="flex flex-col leading-tight">
-                <span className="text-lg font-semibold tracking-wide text-[#f5e6b0]">CIAGA</span>
-                <span className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">Est. 2025</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <button
-                type="button"
-                className="relative h-14 w-14 rounded-full grid place-items-center text-emerald-100/75 hover:text-emerald-50 hover:bg-emerald-900/25"
-                onClick={() => setShowNotifications(true)}
-                aria-label="Notifications"
-                title="Notifications"
-              >
-                <BellIcon size={28} className="opacity-90" />
-                {badgeCount > 0 && (
-                  <span className="absolute top-1.5 right-1.5 min-w-[18px] h-[18px] px-1 grid place-items-center rounded-full bg-red-500 text-[10px] font-bold text-white border border-[#071c10]">
-                    {badgeCount > 9 ? "9+" : badgeCount}
-                  </span>
-                )}
-              </button>
-
-              <div className="scale-[1.4] origin-top-right -translate-y-[4px]">
-                <AuthUser />
-              </div>
-            </div>
+                  <div className="scale-[1.4] origin-top-right -translate-y-[4px]">
+                    <AuthUser />
+                  </div>
+                </>
+              }
+            />
 
             {/* Invite sheet — portalled to <body> so drags inside it don't bubble
                 into this screen's drag-to-Majors handler. */}
@@ -552,12 +544,10 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
               )}
           </header>
 
-          {/* Subtle summary */}
-          <div className="w-full max-w-sm mt-4">
-            {/* Handicap line */}
-            <div className="flex items-end justify-between gap-3">
+          <div className="w-full max-w-sm space-y-6">
+            <Section title="Handicap">
+              <div className={`${CARD} flex items-end justify-between gap-3 p-4`}>
               <div>
-                <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/65">Handicap</div>
                 <div className="mt-1 flex items-baseline gap-3">
                   <span className="text-2xl font-extrabold text-[#f5e6b0] leading-none">
                     {typeof handicapIndex === "number" ? formatHI(handicapIndex) : "—"}
@@ -575,15 +565,13 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
                   {typeof roundsPlayed === "number" ? roundsPlayed : "—"}
                 </div>
               </div>
-            </div>
+              </div>
+            </Section>
 
-            <div className="mt-3 h-px bg-emerald-900/35" />
-
-            {/* Last round line */}
-            <div className="mt-3 flex items-center justify-between gap-3">
+            <Section title="Last Round">
+              <div className={`${CARD} flex items-center justify-between gap-3 p-4`}>
               <div className="min-w-0">
-                <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/65">Last Round</div>
-                <div className="mt-1 text-sm font-extrabold text-emerald-50 truncate">
+                <div className="text-sm font-extrabold text-emerald-50 truncate">
                   {lastRound?.course ?? "—"}
                   {lastRound?.tee ? <span className="text-emerald-100/70"> · {lastRound.tee}</span> : null}
                 </div>
@@ -616,23 +604,22 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
                   </div>
                 </div>
               </div>
-            </div>
+              </div>
+            </Section>
 
-            <div className="mt-3 h-px bg-emerald-900/35" />
-
-            {/* Social Highlight */}
-            <div className="mt-3 flex items-center justify-between">
-              <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/65">Social Highlights</div>
-              <button
-                type="button"
-                className="text-[11px] font-extrabold text-emerald-100/80 hover:text-emerald-50"
-                onClick={() => router.push("/social")}
-              >
-                Open →
-              </button>
-            </div>
-
-            <div className="mt-3 space-y-2 pr-1 overflow-hidden" style={{ maxHeight: miniFeedMaxH }}>
+            <Section
+              title="Highlights"
+              action={
+                <button
+                  type="button"
+                  className="text-[11px] font-extrabold text-emerald-100/80 hover:text-emerald-50"
+                  onClick={() => router.push("/social")}
+                >
+                  Open →
+                </button>
+              }
+            >
+            <div className="space-y-2 pr-1 overflow-hidden" style={{ maxHeight: miniFeedMaxH }}>
               {/* Cached highlights stay on screen while the fresh ones load —
                   "Loading…" is only for a genuine cold miss. */}
               {miniFeed.length ? (
@@ -651,17 +638,18 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
                 <div className="text-sm font-semibold text-emerald-100/70">Nothing new yet.</div>
               )}
             </div>
+            </Section>
           </div>
 
           {/* Play. The wheel used to own this space; with it docked in the nav,
               starting or resuming a round is the screen's primary action. */}
-          <div className="w-full max-w-sm mt-5 mb-8">
+          <div className="w-full max-w-sm mt-6 mb-8">
             <button
               type="button"
               onClick={() => router.push(liveRoundId ? `/round/${liveRoundId}` : "/round")}
-              className="w-full rounded-2xl border border-[#f5e6b0]/45 bg-[#f5e6b0]/10 px-5 py-4 text-center transition hover:bg-[#f5e6b0]/15 active:scale-[0.99]"
+              className="w-full rounded-2xl border border-[color:var(--sec-line-strong)] bg-[color:var(--sec-accent)]/10 px-5 py-4 text-center transition hover:bg-[color:var(--sec-accent)]/15 active:scale-[0.99]"
             >
-              <div className="text-base font-extrabold tracking-wide text-[#f5e6b0]">
+              <div className="text-base font-extrabold tracking-wide text-[color:var(--sec-accent)]">
                 {liveRoundId ? "Resume Round" : "New Round"}
               </div>
               <div className="mt-0.5 text-[11px] font-semibold text-emerald-100/60">

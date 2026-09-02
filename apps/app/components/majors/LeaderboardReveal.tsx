@@ -82,18 +82,18 @@ function RevealRow({ row, springProps, scoringModel }: { row: Row; springProps: 
       transition={springProps}
       className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${
         isWinner
-          ? "border-[#ffd666]/60 bg-[#ffd666]/10 shadow-lg shadow-[#ffd666]/10"
+          ? "border-[#7CF0BE]/60 bg-[#7CF0BE]/10 shadow-lg shadow-[#7CF0BE]/10"
           : "border-emerald-900/50 bg-[#0b3b21]/70"
       }`}
     >
-      <span className={`w-7 text-center font-extrabold ${isWinner ? "text-[#ffd666] text-base" : "text-xs text-[#ffd666]/70"}`}>
+      <span className={`w-7 text-center font-extrabold ${isWinner ? "text-[#7CF0BE] text-base" : "text-xs text-[#7CF0BE]/70"}`}>
         {isWinner ? "🏆" : pos}
       </span>
       <AvatarCircle profile={profile} size="md" />
-      <span className={`flex-1 font-semibold truncate ${isWinner ? "text-[#ffd666] text-base" : "text-sm text-emerald-50"}`}>
+      <span className={`flex-1 font-semibold truncate ${isWinner ? "text-[#7CF0BE] text-base" : "text-sm text-emerald-50"}`}>
         {profile?.name ?? "Unknown"}
       </span>
-      <span className={`font-extrabold shrink-0 ${isWinner ? "text-[#ffd666] text-base" : "text-xs text-[#ffd666]"}`}>
+      <span className={`font-extrabold shrink-0 ${isWinner ? "text-[#7CF0BE] text-base" : "text-xs text-[#7CF0BE]"}`}>
         {score}
       </span>
     </motion.div>
@@ -119,11 +119,11 @@ function SuspenseCard({ row, delay, scoringModel }: { row: Row; delay: number; s
       transition={{ type: "spring", stiffness: 260, damping: 22 }}
       className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${
         isWinner && revealed
-          ? "border-[#ffd666]/60 bg-[#ffd666]/10 shadow-lg shadow-[#ffd666]/10"
+          ? "border-[#7CF0BE]/60 bg-[#7CF0BE]/10 shadow-lg shadow-[#7CF0BE]/10"
           : "border-emerald-900/50 bg-[#0b3b21]/70"
       }`}
     >
-      <span className={`w-7 text-center font-extrabold ${isWinner && revealed ? "text-[#ffd666] text-base" : "text-xs text-[#ffd666]/70"}`}>
+      <span className={`w-7 text-center font-extrabold ${isWinner && revealed ? "text-[#7CF0BE] text-base" : "text-xs text-[#7CF0BE]/70"}`}>
         {isWinner && revealed ? "🏆" : pos}
       </span>
       <AnimatePresence mode="wait">
@@ -131,13 +131,13 @@ function SuspenseCard({ row, delay, scoringModel }: { row: Row; delay: number; s
           <motion.div key="hidden" initial={{ rotateY: 0 }} exit={{ rotateY: 90 }} transition={{ duration: 0.25 }} className="flex flex-1 items-center gap-3">
             <div className="h-8 w-8 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200/40 shrink-0">?</div>
             <span className="flex-1 font-semibold text-sm text-emerald-200/40 tracking-widest">— — —</span>
-            <span className="font-extrabold text-xs text-[#ffd666]/30 shrink-0">??</span>
+            <span className="font-extrabold text-xs text-[#7CF0BE]/30 shrink-0">??</span>
           </motion.div>
         ) : (
           <motion.div key="revealed" initial={{ rotateY: -90 }} animate={{ rotateY: 0 }} transition={{ duration: 0.35, type: "spring", stiffness: 300, damping: 24 }} className="flex flex-1 items-center gap-3">
             <AvatarCircle profile={profile} size="md" />
-            <span className={`flex-1 font-semibold truncate ${isWinner ? "text-[#ffd666] text-base" : "text-sm text-emerald-50"}`}>{profile?.name ?? "Unknown"}</span>
-            <span className={`font-extrabold shrink-0 ${isWinner ? "text-[#ffd666] text-base" : "text-xs text-[#ffd666]"}`}>{score}</span>
+            <span className={`flex-1 font-semibold truncate ${isWinner ? "text-[#7CF0BE] text-base" : "text-sm text-emerald-50"}`}>{profile?.name ?? "Unknown"}</span>
+            <span className={`font-extrabold shrink-0 ${isWinner ? "text-[#7CF0BE] text-base" : "text-xs text-[#7CF0BE]"}`}>{score}</span>
           </motion.div>
         )}
       </AnimatePresence>
@@ -152,16 +152,16 @@ function ScrollRow({ row, scoringModel }: { row: Row; scoringModel?: string }) {
   const isWinner = pos === 1;
   return (
     <div className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${
-      isWinner ? "border-[#ffd666]/60 bg-[#ffd666]/10" : "border-emerald-900/50 bg-[#0b3b21]/70"
+      isWinner ? "border-[#7CF0BE]/60 bg-[#7CF0BE]/10" : "border-emerald-900/50 bg-[#0b3b21]/70"
     }`}>
-      <span className={`w-7 text-center font-extrabold ${isWinner ? "text-[#ffd666] text-base" : "text-xs text-[#ffd666]/70"}`}>
+      <span className={`w-7 text-center font-extrabold ${isWinner ? "text-[#7CF0BE] text-base" : "text-xs text-[#7CF0BE]/70"}`}>
         {isWinner ? "🏆" : pos}
       </span>
       <AvatarCircle profile={profile} size="md" />
-      <span className={`flex-1 font-semibold truncate ${isWinner ? "text-[#ffd666] text-base" : "text-sm text-emerald-50"}`}>
+      <span className={`flex-1 font-semibold truncate ${isWinner ? "text-[#7CF0BE] text-base" : "text-sm text-emerald-50"}`}>
         {profile?.name ?? "Unknown"}
       </span>
-      <span className={`font-extrabold shrink-0 ${isWinner ? "text-[#ffd666] text-base" : "text-xs text-[#ffd666]"}`}>
+      <span className={`font-extrabold shrink-0 ${isWinner ? "text-[#7CF0BE] text-base" : "text-xs text-[#7CF0BE]"}`}>
         {score}
       </span>
     </div>
@@ -230,7 +230,7 @@ function FakeTicker({ scoringModel }: { scoringModel?: string }) {
     const t = setInterval(() => setVal(rand()), 300);
     return () => clearInterval(t);
   }, [scoringModel]);
-  return <span className="text-[11px] font-bold text-[#ffd666]">{val}</span>;
+  return <span className="text-[11px] font-bold text-[#7CF0BE]">{val}</span>;
 }
 
 // ─── Dramatic Podium ─────────────────────────────────────────────────────────
@@ -239,13 +239,13 @@ type PodiumPhase = "bubbles" | "tension" | "popping" | "celebrate";
 
 const PODIUM_COLORS = {
   1: {
-    border: "border-[#ffd666]/70",
-    bg: "bg-[#ffd666]/15",
-    text: "text-[#ffd666]",
+    border: "border-[#7CF0BE]/70",
+    bg: "bg-[#7CF0BE]/15",
+    text: "text-[#7CF0BE]",
     height: "180px",
     label: "1",
     gradient: "linear-gradient(180deg, #c9a227 0%, #9a7b1a 40%, #6b5112 100%)",
-    ring: "ring-[#ffd666]",
+    ring: "ring-[#7CF0BE]",
   },
   2: {
     border: "border-slate-400/50",
@@ -389,7 +389,7 @@ const FloatingBubble = memo(function FloatingBubble({
               delay: ringIdx * 0.45,
               ease: "easeOut",
             }}
-            className="absolute inset-0 rounded-full border-2 border-[#ffd666]"
+            className="absolute inset-0 rounded-full border-2 border-[#7CF0BE]"
           />
         ))}
     </motion.div>
@@ -693,7 +693,7 @@ function PodiumRevealInner({
               key="tension-label"
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="text-[#ffd666] text-lg font-bold tracking-widest uppercase"
+              className="text-[#7CF0BE] text-lg font-bold tracking-widest uppercase"
             >
               {podiumPhase === "tension" ? "The results are in…" : "And the podium is…"}
             </motion.p>
@@ -745,7 +745,7 @@ function PodiumRevealInner({
             initial={{ opacity: 0 }}
             animate={{ opacity: [0, 0.3, 0] }}
             transition={{ duration: 1.2, delay: 0.3 }}
-            className="absolute inset-0 bg-[#ffd666] pointer-events-none"
+            className="absolute inset-0 bg-[#7CF0BE] pointer-events-none"
           />
         )}
       </AnimatePresence>
@@ -875,7 +875,7 @@ export function LeaderboardReveal({ rows, revealStyle, revealTopX, scoringModel,
             <button type="button" onClick={handleReplay} className="text-xs text-emerald-200/40 hover:text-emerald-100 transition-colors">
               ↺ Replay
             </button>
-            <p className="text-[#ffd666] text-sm font-semibold tracking-widest uppercase">
+            <p className="text-[#7CF0BE] text-sm font-semibold tracking-widest uppercase">
               {revealTopX != null ? `Top ${revealTopX}` : "Final Results"}
             </p>
             <button type="button" onClick={onDone} className="text-emerald-200/40 hover:text-emerald-100 transition-colors text-xl leading-none px-1">
@@ -916,19 +916,19 @@ export function LeaderboardReveal({ rows, revealStyle, revealTopX, scoringModel,
                 {revealStyle === "suspense" ? (
                   <>
                     <AnimatePresence mode="wait">
-                      <motion.p key={suspenseLabel} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="text-[#ffd666] text-2xl font-bold tracking-widest uppercase">
+                      <motion.p key={suspenseLabel} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="text-[#7CF0BE] text-2xl font-bold tracking-widest uppercase">
                         {SUSPENSE_COUNTDOWN_LABELS[suspenseLabel]}
                       </motion.p>
                     </AnimatePresence>
                     <div className="flex justify-center gap-2">
                       {[0, 1, 2, 3].map((i) => (
-                        <motion.div key={i} className="w-2 h-2 rounded-full bg-[#ffd666]" animate={{ opacity: [0.15, 1, 0.15], scale: [0.8, 1.2, 0.8] }} transition={{ duration: 1.8, repeat: Infinity, delay: i * 0.45 }} />
+                        <motion.div key={i} className="w-2 h-2 rounded-full bg-[#7CF0BE]" animate={{ opacity: [0.15, 1, 0.15], scale: [0.8, 1.2, 0.8] }} transition={{ duration: 1.8, repeat: Infinity, delay: i * 0.45 }} />
                       ))}
                     </div>
                   </>
                 ) : (
                   <>
-                    <p className="text-[#ffd666] text-2xl font-bold tracking-widest uppercase">
+                    <p className="text-[#7CF0BE] text-2xl font-bold tracking-widest uppercase">
                       {revealStyle === "rapid" ? "Stand by…" : "Results incoming"}
                     </p>
                     <div className="flex justify-center gap-1">
@@ -943,7 +943,7 @@ export function LeaderboardReveal({ rows, revealStyle, revealTopX, scoringModel,
 
             {phase === "reveal" && (
               <motion.div key={`reveal-${replayKey}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full max-w-sm px-4 space-y-3">
-                <p className="text-center text-[#ffd666] text-sm font-semibold tracking-widest uppercase mb-4">
+                <p className="text-center text-[#7CF0BE] text-sm font-semibold tracking-widest uppercase mb-4">
                   {revealTopX != null ? `Top ${revealTopX} Results` : "Final Results"}
                 </p>
                 <div className="space-y-2">

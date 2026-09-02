@@ -2,7 +2,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export default function GroupDetailLoading() {
   return (
-    <div className="min-h-[100dvh] bg-[#03150C] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
+    <div className="min-h-[100dvh] bg-[#01100A] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto w-full max-w-sm space-y-4">
         <div className="flex items-center gap-3">
           <Skeleton className="h-12 w-12 rounded-full" />

@@ -1,9 +1,8 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { BackButton } from "@/components/ui/BackButton";
+import { Masthead } from "@/components/ui/chrome";
 import PostComposer from "@/components/social/PostComposer";
 import FeedList from "@/components/social/FeedList";
 import type { FeedItemVM } from "@/lib/feed/types";
@@ -18,30 +17,16 @@ type Props = {
 };
 
 export default function SocialClient({ initialFeedData, focusId }: Props) {
-  const router = useRouter();
 
   const [composerOpen, setComposerOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
   return (
-    <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
-      <div className="mx-auto w-full max-w-sm space-y-6">
-        {/* Header (match Stats pages) */}
-        <header className="relative flex items-center justify-center">
-          <BackButton
-            className="absolute left-0 font-semibold"
-            onClick={() => router.push("/")}
-          />
-
-          <div className="text-center">
-            <div className="text-lg font-extrabold tracking-wide text-[#f5e6b0]">
-              Social
-            </div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70 font-semibold">
-              Feed · Live rounds · Posts
-            </div>
-          </div>
-        </header>
+    <div className="min-h-screen px-4 pb-[env(safe-area-inset-bottom)] text-slate-100">
+      <div className="mx-auto w-full max-w-sm">
+        {/* A tab root, so it takes a masthead rather than a back button. The feed
+            itself keeps its own ordering — live rounds already sort to the top. */}
+        <Masthead title="Social" subtitle="Feed · Live rounds · Posts" />
 
         {/* Feed (includes live rounds at top) */}
         <FeedList refreshKey={refreshKey} initialData={initialFeedData} focusId={focusId ?? null} />

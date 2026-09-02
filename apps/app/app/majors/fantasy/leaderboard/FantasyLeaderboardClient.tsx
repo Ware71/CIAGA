@@ -89,7 +89,7 @@ export default function FantasyLeaderboardClient() {
         >
           ← Fantasy
         </button>
-        <h1 className="text-lg font-bold tracking-wide text-[#ffd666]">Leaderboard</h1>
+        <h1 className="text-lg font-bold tracking-wide text-[#7CF0BE]">Leaderboard</h1>
         <div className="w-12" />
       </div>
 

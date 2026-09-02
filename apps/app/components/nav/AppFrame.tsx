@@ -38,11 +38,23 @@ export function AppFrame({ children }: { children: ReactNode }) {
     document.body.dataset.section = section;
 
     const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
-    if (meta) {
-      // Read the resolved token rather than duplicating hex values here.
-      const ground = getComputedStyle(document.body).getPropertyValue("--ciaga-ground").trim();
-      if (ground) meta.setAttribute("content", ground);
-    }
+    if (!meta) return;
+
+    // Read the resolved token rather than duplicating hex values here.
+    const ground = getComputedStyle(document.body).getPropertyValue("--ciaga-ground").trim();
+    if (!ground) return;
+
+    const apply = () => {
+      if (meta.getAttribute("content") !== ground) meta.setAttribute("content", ground);
+    };
+    apply();
+
+    // Next owns this tag through the `viewport` export and rewrites it after we
+    // do, which silently reverted the status bar to the app green. Watch it and
+    // re-assert; the guard above stops the observer from seeing its own write.
+    const observer = new MutationObserver(apply);
+    observer.observe(meta, { attributes: true, attributeFilter: ["content"] });
+    return () => observer.disconnect();
   }, [section]);
 
   return (

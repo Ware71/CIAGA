@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { CARD_INTERACTIVE } from "@/components/ui/chrome";
 
 /**
  * The linked tile used by the /stats and /more landing screens. Extracted from
@@ -17,18 +18,18 @@ export function TileCard({ title, subtitle, href, icon, badge }: Tile) {
   return (
     <Link
       href={href}
-      className="block rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-5 hover:bg-[#0b3b21]/80 transition"
+      className={`${CARD_INTERACTIVE} block p-5`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-2xl border border-emerald-900/70 bg-[#042713]/55">
+          <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-2xl border border-[color:var(--sec-line)] bg-[color:var(--ciaga-ground)]/55">
             {icon}
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <div className="text-sm font-extrabold tracking-wide text-[#f5e6b0]">{title}</div>
+              <div className="text-sm font-extrabold tracking-wide text-[color:var(--sec-accent)]">{title}</div>
               {badge ? (
-                <span className="rounded-full border border-emerald-900/70 bg-[#042713]/55 px-2 py-0.5 text-[10px] font-extrabold text-emerald-100/80">
+                <span className="rounded-full border border-[color:var(--sec-line)] bg-[color:var(--ciaga-ground)]/55 px-2 py-0.5 text-[10px] font-extrabold text-emerald-100/80">
                   {badge}
                 </span>
               ) : null}

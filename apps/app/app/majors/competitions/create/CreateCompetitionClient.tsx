@@ -359,7 +359,7 @@ export default function CreateCompetitionClient() {
               placeholder={`${form.name || "Event"} Prize`}
               value={potDefault.name}
               onChange={(e) => setPotDefault((p) => ({ ...p, name: e.target.value }))}
-              className="w-full rounded-xl border border-emerald-900/60 bg-[#03150C] px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/30 focus:outline-none focus:border-emerald-600"
+              className="w-full rounded-xl border border-emerald-900/60 bg-[#01100A] px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/30 focus:outline-none focus:border-emerald-600"
             />
           </div>
           <div className="space-y-1.5">
@@ -367,7 +367,7 @@ export default function CreateCompetitionClient() {
             <select
               value={potDefault.distribution_type}
               onChange={(e) => setPotDefault((p) => ({ ...p, distribution_type: e.target.value }))}
-              className="w-full rounded-xl border border-emerald-900/60 bg-[#03150C] px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
+              className="w-full rounded-xl border border-emerald-900/60 bg-[#01100A] px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
             >
               <option value="winner_takes_all">Winner takes all</option>
               <option value="position_based">By finishing position (custom splits)</option>
@@ -385,7 +385,7 @@ export default function CreateCompetitionClient() {
               placeholder="e.g. 10"
               value={potDefault.entry_fee_amount}
               onChange={(e) => setPotDefault((p) => ({ ...p, entry_fee_amount: e.target.value }))}
-              className="w-full rounded-xl border border-emerald-900/60 bg-[#03150C] px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/30 focus:outline-none focus:border-emerald-600"
+              className="w-full rounded-xl border border-emerald-900/60 bg-[#01100A] px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/30 focus:outline-none focus:border-emerald-600"
             />
           </div>
           <div className="flex items-center justify-between">
@@ -470,7 +470,7 @@ export default function CreateCompetitionClient() {
         >
           ← {step === 0 ? "Back" : "Previous"}
         </button>
-        <h1 className="text-base font-semibold text-[#ffd666]">Create Competition</h1>
+        <h1 className="text-base font-semibold text-[#7CF0BE]">Create Competition</h1>
         <div className="text-[11px] text-emerald-200/55">
           {step + 1}/{totalSteps}
         </div>

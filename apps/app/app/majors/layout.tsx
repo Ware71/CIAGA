@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function MajorsLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-[100dvh] bg-[#03150C] text-slate-100">
+    <div className="min-h-[100dvh] bg-[#01100A] text-slate-100">
       {children}
     </div>
   );

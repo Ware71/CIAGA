@@ -73,7 +73,7 @@ export default function EventHistoryClient({ eventTemplateId }: { eventTemplateI
       </div>
 
       <div className="px-4 mb-5 space-y-1">
-        <h1 className="text-xl font-bold text-[#ffd666] leading-tight">{templateName}</h1>
+        <h1 className="text-xl font-bold text-[#7CF0BE] leading-tight">{templateName}</h1>
         <p className="text-[11px] text-emerald-100/55">All-time history</p>
       </div>
 
@@ -98,7 +98,7 @@ export default function EventHistoryClient({ eventTemplateId }: { eventTemplateI
                 },
               ].map((stat) => (
                 <div key={stat.label}>
-                  <div className="text-base font-extrabold text-[#ffd666]">{stat.value}</div>
+                  <div className="text-base font-extrabold text-[#7CF0BE]">{stat.value}</div>
                   <div className="text-[10px] text-emerald-200/60">{stat.label}</div>
                 </div>
               ))}
@@ -128,7 +128,7 @@ export default function EventHistoryClient({ eventTemplateId }: { eventTemplateI
               className="w-full text-left rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/80 p-3 space-y-2 hover:border-emerald-700/60 transition-colors"
             >
               <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-[#ffd666]">{row.season_year}</span>
+                <span className="text-sm font-bold text-[#7CF0BE]">{row.season_year}</span>
                 <span className="text-[10px] text-emerald-200/50">{row.field_size} players</span>
               </div>
 

@@ -12,7 +12,7 @@ import { MajorsBalance, MajorsSnapshot } from "@/components/majors/MajorsOvervie
 import {
   MAJORS_CARD,
   MAJORS_CARD_INTERACTIVE,
-  MajorsMasthead,
+  Masthead,
   MajorsSection,
 } from "@/components/majors/majorsChrome";
 
@@ -183,7 +183,8 @@ export default function MajorsHubClient() {
   return (
     <div className="min-h-[100dvh] bg-[radial-gradient(130%_65%_at_50%_0%,rgba(255,214,102,0.20)_0%,rgba(255,214,102,0.06)_38%,transparent_68%)]">
       <div className="pb-[env(safe-area-inset-bottom)] max-w-sm mx-auto">
-      <MajorsMasthead
+      <Masthead
+        title="Majors"
         subtitle="Groups · Events · Standings"
         left={<MajorsBalance />}
         right={
@@ -212,7 +213,7 @@ export default function MajorsHubClient() {
                   className={`${MAJORS_CARD} px-3 py-3 space-y-2`}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-[#0D5E33] to-[#062C17] flex items-center justify-center text-sm font-bold text-[#ffd666] shrink-0 border border-[#ffd666]/25">
+                    <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-[#0D5E33] to-[#062C17] flex items-center justify-center text-sm font-bold text-[#7CF0BE] shrink-0 border border-[#7CF0BE]/25">
                       {invite.group?.name.slice(0, 2).toUpperCase() ?? "?"}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -261,7 +262,7 @@ export default function MajorsHubClient() {
                 <button
                   type="button"
                   onClick={() => router.push("/majors/groups/create")}
-                  className="text-[11px] font-semibold text-[#ffd666]/80 hover:text-[#ffd666]"
+                  className="text-[11px] font-semibold text-[#7CF0BE]/80 hover:text-[#7CF0BE]"
                 >
                   + New
                 </button>
@@ -295,7 +296,7 @@ export default function MajorsHubClient() {
                     {g.image_url ? (
                       <img src={g.image_url} alt="" className="h-10 w-10 rounded-xl object-cover shrink-0" loading="lazy" decoding="async" />
                     ) : (
-                      <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#0D5E33] to-[#062C17] flex items-center justify-center text-sm font-bold text-[#ffd666] shrink-0 border border-[#ffd666]/25">
+                      <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#0D5E33] to-[#062C17] flex items-center justify-center text-sm font-bold text-[#7CF0BE] shrink-0 border border-[#7CF0BE]/25">
                         {g.name.slice(0, 2).toUpperCase()}
                       </div>
                     )}
@@ -303,7 +304,7 @@ export default function MajorsHubClient() {
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-semibold text-emerald-50 truncate">{g.name}</span>
                         {g.role === "owner" && (
-                          <span className="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border border-[#ffd666]/30 bg-[#ffd666]/10 text-[#ffd666]">
+                          <span className="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border border-[#7CF0BE]/30 bg-[#7CF0BE]/10 text-[#7CF0BE]">
                             Owner
                           </span>
                         )}
@@ -345,7 +346,7 @@ export default function MajorsHubClient() {
                       {g.image_url ? (
                         <img src={g.image_url} alt="" className="h-10 w-10 rounded-xl object-cover shrink-0" loading="lazy" decoding="async" />
                       ) : (
-                        <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#0D5E33] to-[#062C17] flex items-center justify-center text-sm font-bold text-[#ffd666] shrink-0 border border-[#ffd666]/25">
+                        <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#0D5E33] to-[#062C17] flex items-center justify-center text-sm font-bold text-[#7CF0BE] shrink-0 border border-[#7CF0BE]/25">
                           {g.name.slice(0, 2).toUpperCase()}
                         </div>
                       )}

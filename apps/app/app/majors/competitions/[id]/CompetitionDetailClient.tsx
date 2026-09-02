@@ -499,7 +499,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
                       },
                     ].map((stat) => (
                       <div key={stat.label}>
-                        <div className="text-base font-extrabold text-[#ffd666]">{stat.value}</div>
+                        <div className="text-base font-extrabold text-[#7CF0BE]">{stat.value}</div>
                         <div className="text-[10px] text-emerald-200/60">{stat.label}</div>
                       </div>
                     ))}

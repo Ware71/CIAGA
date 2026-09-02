@@ -1,9 +1,8 @@
 // src/app/stats/page.tsx
 "use client";
 
-import { useRouter } from "next/navigation";
-import { BackButton } from "@/components/ui/BackButton";
 import { TileCard, type Tile } from "@/components/ui/TileCard";
+import { Masthead, Section } from "@/components/ui/chrome";
 
 // Simple inline icons (no new deps)
 function IconChart() {
@@ -148,11 +147,10 @@ function IconPin() {
 }
 
 export default function StatsHomePage() {
-  const router = useRouter();
 
   // If you moved the projections page to /stats/projections
   // this tile points there.
-  const tiles: Tile[] = [
+  const trajectory: Tile[] = [
     {
       title: "Projections",
       subtitle: "Trajectory, goal ETA, intercepts, and projected HI by date",
@@ -167,6 +165,9 @@ export default function StatsHomePage() {
       icon: <IconTrophy />,
       badge: "PBs",
     },
+  ];
+
+  const scoring: Tile[] = [
     {
       title: "Hole scoring",
       subtitle: "Average score by hole, hardest holes, blow-up patterns",
@@ -195,33 +196,26 @@ export default function StatsHomePage() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
-      <div className="mx-auto w-full max-w-sm space-y-6">
-        {/* Header (matches projections styling) */}
-        <header className="relative flex items-center justify-center">
-          <BackButton
-            className="absolute left-0 font-semibold"
-            onClick={() => router.back()}
-          />
+    <div className="min-h-screen px-4 pb-4 text-slate-100">
+      <div className="mx-auto w-full max-w-sm">
+        <Masthead title="Stats" subtitle="Insights" backHref="/more" backLabel="← More" />
 
-          <div className="text-center">
-            <div className="text-lg font-extrabold tracking-wide text-[#f5e6b0]">Stats</div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70 font-semibold">
-              Insights
+        <div className="space-y-7">
+          <Section title="Trajectory">
+            <div className="space-y-3">
+              {trajectory.map((t) => (
+                <TileCard key={t.href} {...t} />
+              ))}
             </div>
-          </div>
-        </header>
+          </Section>
 
-        {/* Tiles */}
-        <div className="space-y-3">
-          {tiles.map((t) => (
-            <TileCard key={t.href} {...t} />
-          ))}
-        </div>
-
-        {/* Small footer note */}
-        <div className="pt-1 text-[10px] text-emerald-100/50 text-center font-semibold">
-          CIAGA · Stats
+          <Section title="Scoring">
+            <div className="space-y-3">
+              {scoring.map((t) => (
+                <TileCard key={t.href} {...t} />
+              ))}
+            </div>
+          </Section>
         </div>
       </div>
     </div>
