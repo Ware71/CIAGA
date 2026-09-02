@@ -175,7 +175,8 @@ export default function MajorsHubClient() {
   const filteredDiscover = discoverGroups.filter((g) => !myGroupIds.has(g.id));
 
   return (
-    <div className="min-h-[100dvh] pb-[env(safe-area-inset-bottom)] max-w-sm mx-auto">
+    <div className="min-h-[100dvh] bg-[radial-gradient(120%_60%_at_50%_0%,rgba(245,230,176,0.10)_0%,rgba(245,230,176,0.03)_35%,transparent_70%)]">
+      <div className="pb-[env(safe-area-inset-bottom)] max-w-sm mx-auto">
       {/* Header */}
       <div className="px-4 pt-8 flex items-center justify-between mb-6">
         <MajorsBalance />
@@ -190,7 +191,11 @@ export default function MajorsHubClient() {
               + Create
             </button>
           )}
-          <AuthUser />
+          {/* Same scale as the home header, so the emblem doesn't change size
+              as you move between tabs. */}
+          <div className="scale-[1.4] origin-top-right -translate-y-[4px]">
+            <AuthUser />
+          </div>
         </div>
       </div>
 
@@ -254,7 +259,7 @@ export default function MajorsHubClient() {
           {/* My Groups */}
           <section className="space-y-3">
             <div className="flex items-center justify-between">
-              <h2 className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/55">My Groups</h2>
+              <h2 className="text-[10px] uppercase tracking-[0.18em] text-[#f5e6b0]/75">My Groups</h2>
               {isAdmin && (
                 <button
                   type="button"
@@ -267,7 +272,7 @@ export default function MajorsHubClient() {
             </div>
 
             {myGroups.length === 0 ? (
-              <div className="rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/40 p-6 text-center space-y-3">
+              <div className="rounded-2xl border border-[#f5e6b0]/20 bg-[#0b3b21]/40 p-6 text-center space-y-3">
                 <p className="text-2xl">⛳</p>
                 <p className="text-sm text-emerald-100/60">You're not in any groups yet.</p>
                 {isAdmin && (
@@ -287,7 +292,7 @@ export default function MajorsHubClient() {
                     key={g.id}
                     type="button"
                     onClick={() => router.push(`/majors/groups/${g.id}`)}
-                    className="w-full flex items-center gap-3 rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-3 hover:brightness-110 transition-all text-left"
+                    className="w-full flex items-center gap-3 rounded-2xl border border-[#f5e6b0]/20 bg-[#0b3b21]/60 px-3 py-3 hover:brightness-110 transition-all text-left"
                   >
                     {g.image_url ? (
                       <img src={g.image_url} alt="" className="h-10 w-10 rounded-xl object-cover shrink-0" loading="lazy" decoding="async" />
@@ -325,10 +330,10 @@ export default function MajorsHubClient() {
 
           {/* Discover Groups */}
           <section className="space-y-3">
-            <h2 className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/55">Discover Groups</h2>
+            <h2 className="text-[10px] uppercase tracking-[0.18em] text-[#f5e6b0]/75">Discover Groups</h2>
 
             {filteredDiscover.length === 0 ? (
-              <div className="rounded-2xl border border-emerald-900/40 bg-[#0b3b21]/30 p-5 text-center">
+              <div className="rounded-2xl border border-[#f5e6b0]/15 bg-[#0b3b21]/30 p-5 text-center">
                 <p className="text-sm text-emerald-100/50">No public groups to discover right now.</p>
               </div>
             ) : (
@@ -338,7 +343,7 @@ export default function MajorsHubClient() {
                   return (
                     <div
                       key={g.id}
-                      className="flex items-center gap-3 rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-3"
+                      className="flex items-center gap-3 rounded-2xl border border-[#f5e6b0]/20 bg-[#0b3b21]/60 px-3 py-3"
                     >
                       {g.image_url ? (
                         <img src={g.image_url} alt="" className="h-10 w-10 rounded-xl object-cover shrink-0" loading="lazy" decoding="async" />
@@ -381,6 +386,7 @@ export default function MajorsHubClient() {
           </section>
         </div>
       )}
+      </div>
     </div>
   );
 }

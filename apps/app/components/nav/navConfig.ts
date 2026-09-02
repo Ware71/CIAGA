@@ -26,27 +26,28 @@ export type WheelItem = { id: string; label: string; href: string };
 
 /**
  * Total space the floating bar reserves at the bottom of every scroll container:
- * 60px pill + 12px margin + 12px for the docked logo's overhang. Mirrored as the
- * `--ciaga-nav-h` custom property in globals.css — change both together.
+ * 60px pill + 12px margin + 34px for the docked logo's overhang (the logo sits
+ * half proud of the pill's top edge). Mirrored as the `--ciaga-nav-h` custom
+ * property in globals.css — change both together.
  */
-export const NAV_H = 84;
+export const NAV_H = 106;
 
 const isMajors = (p: string) => p === "/majors" || p.startsWith("/majors/");
 const isFantasy = (p: string) => p === "/majors/fantasy" || p.startsWith("/majors/fantasy/");
 
-/** Rendered left of the docked logo. */
+/** Rendered left of the docked logo. Majors leads — it's the reason the society exists. */
 export const TABS_LEFT: TabDef[] = [
-  {
-    href: "/social",
-    label: "Social",
-    Icon: MessageCircle,
-    match: (p) => p === "/social" || p.startsWith("/social/"),
-  },
   {
     href: "/majors",
     label: "Majors",
     Icon: Trophy,
     match: isMajors,
+  },
+  {
+    href: "/social",
+    label: "Social",
+    Icon: MessageCircle,
+    match: (p) => p === "/social" || p.startsWith("/social/"),
   },
 ];
 

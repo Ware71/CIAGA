@@ -278,10 +278,10 @@ function MajorsSnapshotInner({ initialHub }: { initialHub?: MajorHubSummary | nu
           <button
             type="button"
             onClick={() => setDrawerOpen(true)}
-            className="w-full text-left rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4 active:opacity-80 transition-opacity"
+            className="w-full text-left rounded-2xl border border-[#f5e6b0]/25 bg-[#0b3b21]/80 p-4 active:opacity-80 transition-opacity"
           >
             <div className="flex items-center justify-between mb-3">
-              <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/65">Season</div>
+              <div className="text-[10px] uppercase tracking-[0.18em] text-[#f5e6b0]/75">Season</div>
               <div className="text-emerald-400/60 text-xs">›</div>
             </div>
             <div className="grid grid-cols-4 gap-2 text-center">
@@ -305,7 +305,7 @@ function MajorsSnapshotInner({ initialHub }: { initialHub?: MajorHubSummary | nu
       {/* Live events */}
       {hub && hub.active_events.length > 0 && (
         <div className="space-y-1.5">
-          <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/55 flex items-center gap-2">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-[#f5e6b0]/75 flex items-center gap-2">
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400" />
             Live Now
           </div>
@@ -318,7 +318,7 @@ function MajorsSnapshotInner({ initialHub }: { initialHub?: MajorHubSummary | nu
       {/* Upcoming events */}
       {hub && hub.active_events.length === 0 && hub.upcoming_events.length > 0 && (
         <div className="space-y-1.5">
-          <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/55">Upcoming</div>
+          <div className="text-[10px] uppercase tracking-[0.18em] text-[#f5e6b0]/75">Upcoming</div>
           {hub.upcoming_events.slice(0, 2).map((comp) => (
             <CompetitionCard key={comp.id} comp={comp} />
           ))}
@@ -427,7 +427,7 @@ function SeasonStatsDrawer({ hub, onClose }: { hub: MajorHubSummary; onClose: ()
         <div className="mx-4 border-t border-emerald-900/50 my-3" />
 
         <div className="px-4 pb-4 space-y-2">
-          <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/55 mb-2">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-[#f5e6b0]/75 mb-2">
             By Group · Season
           </div>
           {hub.group_stats.length === 0 ? (
