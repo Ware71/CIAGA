@@ -198,7 +198,7 @@ export function BetSlip({ onPlaced }: { onPlaced?: () => void }) {
     <>
       {/* Floating slip bar */}
       {!open && (
-        <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+78px)] left-0 right-0 z-40 px-4">
+        <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+var(--ciaga-nav-h)+8px)] left-0 right-0 z-40 px-4">
           <button
             type="button"
             onClick={() => {

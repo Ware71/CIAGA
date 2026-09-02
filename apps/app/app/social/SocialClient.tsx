@@ -51,7 +51,7 @@ export default function SocialClient({ initialFeedData, focusId }: Props) {
       <button
         type="button"
         onClick={() => setComposerOpen(true)}
-        className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full border border-emerald-900/60 bg-[#0b3b21] text-[#f5e6b0] shadow-lg hover:bg-[#0b3b21]/85 active:scale-95"
+        className="fixed bottom-[calc(env(safe-area-inset-bottom)+var(--ciaga-nav-h)+12px)] right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full border border-emerald-900/60 bg-[#0b3b21] text-[#f5e6b0] shadow-lg hover:bg-[#0b3b21]/85 active:scale-95"
         aria-label="Create post"
         title="Create post"
       >

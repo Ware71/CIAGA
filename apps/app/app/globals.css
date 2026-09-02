@@ -122,6 +122,13 @@
 
   /* ===== Native app feel ===== */
 
+  /* Space the floating bottom nav reserves at the base of every scroll
+     container: 60px pill + 12px margin + 12px for the docked logo's overhang.
+     Mirrored as NAV_H in components/nav/navConfig.ts — change both together. */
+  body {
+    --ciaga-nav-h: 84px;
+  }
+
   /* Prevent overscroll bounce / rubber-banding / pull-to-refresh */
   html, body {
     overscroll-behavior: none;

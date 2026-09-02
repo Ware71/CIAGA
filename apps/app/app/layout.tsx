@@ -5,6 +5,7 @@ import { OrientationManager } from "@/components/OrientationManager";
 import { SandboxDevTools } from "@/components/sandbox/SandboxDevTools";
 import { ServiceWorkerRegistrar } from "@/components/ServiceWorkerRegistrar";
 import { SplashHost } from "@/components/ui/SplashHost";
+import { AppFrame } from "@/components/nav/AppFrame";
 import { CookieConsent } from "@/components/CookieConsent";
 import { AcceptTermsGate } from "@/components/legal/AcceptTermsGate";
 import NextTopLoader from "nextjs-toploader";
@@ -92,7 +93,10 @@ export default function RootLayout({
             there, and the splash must own a single DOM node from first paint
             through to its exit. See components/ui/SplashHost.tsx. */}
         <SplashHost />
-        {children}
+        {/* AppFrame owns the bottom nav and the space it reserves. It's a client
+            boundary, but children pass through as a prop so pages stay server
+            components. */}
+        <AppFrame>{children}</AppFrame>
         <AcceptTermsGate />
         <CookieConsent />
         <SandboxDevTools />

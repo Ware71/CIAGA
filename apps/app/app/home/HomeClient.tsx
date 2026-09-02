@@ -1,19 +1,17 @@
 "use client";
 
 import Image from "next/image";
-import { useState, useEffect, useLayoutEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useLayoutEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
 import { AuthUser } from "@/components/ui/auth-user";
 
 import type { FeedItemVM } from "@/lib/feed/types";
 import type { HomeCore, HomeMiniFeed } from "@/lib/home/getHomeSummary";
 
-import { clamp, formatSigned } from "@/lib/feed/feedItemUtils";
+import { formatSigned } from "@/lib/feed/feedItemUtils";
 import { formatHI } from "@/lib/rounds/handicapUtils";
 import { MiniFeedTeaserCard } from "@/components/social/MiniFeedTeaser";
-import { MajorsView } from "@/components/home/MajorsView";
 import type { MajorHubSummary } from "@/lib/majors/types";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 import { requireViewerSession } from "@/lib/auth/requireViewerSession";
@@ -25,26 +23,6 @@ import { useAppBadge } from "@/lib/notifications/useAppBadge";
 import AnnouncementModal from "@/components/announcements/AnnouncementModal";
 import { useAnnouncements } from "@/lib/announcements/useAnnouncements";
 import PushPermissionPrompt from "@/components/notifications/PushPermissionPrompt";
-
-type MenuItem = { id: string; label: string };
-
-const homeMenuItemsBase: MenuItem[] = [
-  { id: "round", label: "New Round" },
-  { id: "history", label: "Round History" },
-  { id: "stats", label: "Stats" },
-  { id: "social", label: "Social" },
-  { id: "courses", label: "Courses" },
-];
-
-const majorsMenuItems: MenuItem[] = [
-  { id: "majors-hub", label: "Majors Hub" },
-  { id: "schedule", label: "Schedule" },
-  { id: "fantasy", label: "Fantasy Picks" },
-  { id: "history", label: "History" },
-  { id: "profile", label: "Majors Profile" },
-];
-
-type ViewMode = "home" | "majors";
 
 function BellIcon(props: { size?: number; className?: string }) {
   const s = props.size ?? 28;
@@ -97,12 +75,6 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
   // can't pop up behind it.
   const [splashDone, setSplashDone] = useState(false);
 
-  const [open, setOpen] = useState(false);
-  const [view, setView] = useState<ViewMode>("home");
-
-  const [vw, setVw] = useState(390);
-  const [vh, setVh] = useState(844);
-
   const [liveRoundId, setLiveRoundId] = useState<string | null>(null);
   const [myProfileId, setMyProfileId] = useState<string | null>(initialProfileId ?? null);
 
@@ -152,28 +124,6 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
       setSplashDone(true);
     }
     return () => window.removeEventListener("splash:done", onSplashDone);
-  }, []);
-
-  useEffect(() => {
-    const updateViewport = () => {
-      if (typeof window === "undefined") return;
-      const w = window.visualViewport?.width ?? window.innerWidth;
-      const h = window.visualViewport?.height ?? window.innerHeight;
-      setVw(w);
-      setVh(h);
-    };
-
-    updateViewport();
-    window.addEventListener("resize", updateViewport);
-    const vv = window.visualViewport;
-    vv?.addEventListener("resize", updateViewport);
-    vv?.addEventListener("scroll", updateViewport);
-
-    return () => {
-      window.removeEventListener("resize", updateViewport);
-      vv?.removeEventListener("resize", updateViewport);
-      vv?.removeEventListener("scroll", updateViewport);
-    };
   }, []);
 
   const applyCore = useCallback((data: HomeCore) => {
@@ -369,99 +319,6 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [retryKey]);
 
-  const homeMenuItems: MenuItem[] = useMemo(() => {
-    return homeMenuItemsBase.map((it) =>
-      it.id === "round" ? { ...it, label: liveRoundId ? "Resume Round" : "New Round" } : it
-    );
-  }, [liveRoundId]);
-
-  // Sit the closed wheel a touch lower to reclaim dead space for the mini feed.
-  const closedOffset = clamp(vh * 0.34, 210, 300);
-
-  const goToMajors = () => {
-    setOpen(false);
-    setView("majors");
-  };
-
-  const goToHome = () => {
-    setOpen(false);
-    setView("home");
-  };
-
-  const handleHomeSelect = (id: string) => {
-    setOpen(false);
-
-    if (id === "courses") { router.push("/courses"); return; }
-    if (id === "round") {
-      if (liveRoundId) router.push(`/round/${liveRoundId}`);
-      else router.push("/round");
-      return;
-    }
-    if (id === "history") { router.push("/history"); return; }
-    if (id === "stats") { router.push("/stats"); return; }
-    if (id === "social") { router.push("/social"); return; }
-  };
-
-  const handleMajorsSelect = (id: string) => {
-    setOpen(false);
-
-    if (id === "majors-hub") { router.push("/majors"); return; }
-    if (id === "schedule") { router.push("/majors/schedule"); return; }
-    if (id === "fantasy") { router.push("/majors/fantasy"); return; }
-    if (id === "history") { router.push("/majors/history"); return; }
-    if (id === "profile") { router.push("/majors/profile"); return; }
-  };
-
-  const wheelRadius = clamp(Math.min(vw, vh) * 0.38, 115, 170);
-  const wheelSide = clamp(wheelRadius * 0.85, 90, 120);
-
-  const wheelPositions = [
-    { x: 0, y: -wheelRadius },
-    { x: wheelSide, y: -wheelRadius * 0.38 },
-    { x: wheelSide * 0.82, y: wheelRadius * 0.54 },
-    { x: -wheelSide * 0.82, y: wheelRadius * 0.54 },
-    { x: -wheelSide, y: -wheelRadius * 0.38 },
-  ];
-
-  const renderRadialMenu = (items: MenuItem[], onSelect: (id: string) => void) => (
-    <AnimatePresence>
-      {open && (
-        <>
-          <motion.div
-            className="fixed inset-0 backdrop-blur-md z-10"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setOpen(false)}
-          />
-
-          {items.map((item, index) => {
-            const pos = wheelPositions[index] ?? { x: 0, y: 0 };
-
-            return (
-              <motion.button
-                key={item.id}
-                onClick={() => onSelect(item.id)}
-                className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-auto z-20 flex items-center justify-center rounded-full border border-emerald-200/70 bg-[#0b3b21]/95 px-4 py-2 shadow-lg text-xs font-medium tracking-wide"
-                initial={{ opacity: 0, scale: 0.4, x: 0, y: 0 }}
-                animate={{ opacity: 1, scale: 1, x: pos.x, y: pos.y }}
-                exit={{ opacity: 0, scale: 0.4, x: 0, y: 0 }}
-                transition={{
-                  type: "spring",
-                  stiffness: 260,
-                  damping: 20,
-                  delay: 0.05 * index,
-                }}
-              >
-                {item.label}
-              </motion.button>
-            );
-          })}
-        </>
-      )}
-    </AnimatePresence>
-  );
-
   // Mini cards now carry a second detail line, so they're a little taller.
   // The lower wheel frees vertical room to show them without clipping.
   const MINI_CARD_H = 52;
@@ -469,27 +326,7 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
   const miniFeedMaxH = MINI_CARD_H * 5 + MINI_GAP * 4;
 
   return (
-    <>
-    <AnimatePresence initial={false} mode="wait">
-      {view === "home" ? (
-        <motion.div
-          key="home"
-          className="h-[100dvh] bg-[#042713] text-slate-100 flex flex-col items-center justify-between pb-[env(safe-area-inset-bottom)] pt-8 px-4 overflow-hidden"
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -16 }}
-          transition={{ duration: 0.22 }}
-          // Sheets portal out of this container, but disabling drag while one is
-          // open stops an in-flight gesture from throwing us to Majors underneath.
-          drag={showNotifications || showInviteSheet ? false : "y"}
-          dragConstraints={{ top: -160, bottom: 0 }}
-          dragElastic={0.2}
-          onDragEnd={(_, info) => {
-            if (info.offset.y < -80 || info.velocity.y < -500) {
-              goToMajors();
-            }
-          }}
-        >
+    <div className="min-h-[100dvh] bg-[#042713] text-slate-100 flex flex-col items-center pt-8 px-4">
           {/* HEADER */}
           <header className="w-full max-w-sm flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -716,19 +553,7 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
           </header>
 
           {/* Subtle summary */}
-          <motion.div
-            className="w-full max-w-sm mt-4"
-            initial={false}
-            animate={{
-              opacity: open ? 0.25 : 1,
-              scale: open ? 0.995 : 1,
-            }}
-            transition={{ duration: 0.18 }}
-            style={{
-              filter: open ? "blur(2px)" : "blur(0px)",
-              pointerEvents: open ? "none" : "auto",
-            }}
-          >
+          <div className="w-full max-w-sm mt-4">
             {/* Handicap line */}
             <div className="flex items-end justify-between gap-3">
               <div>
@@ -826,51 +651,24 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
                 <div className="text-sm font-semibold text-emerald-100/70">Nothing new yet.</div>
               )}
             </div>
-          </motion.div>
-
-          <div className="relative flex-1 w-full max-w-sm">
-            {renderRadialMenu(homeMenuItems, handleHomeSelect)}
-
-            <motion.div
-              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-20 w-20 grid place-items-center z-30"
-              initial={false}
-              animate={{ y: open ? 0 : closedOffset }}
-              transition={{ type: "spring", stiffness: 180, damping: 18 }}
-            >
-              <motion.button
-                className="h-20 w-20 rounded-full bg-transparent grid place-items-center"
-                onClick={() => setOpen((prev) => !prev)}
-                whileTap={{ scale: 0.92 }}
-                initial={false}
-                animate={{ rotate: open ? 360 : 0 }}
-                transition={{ type: "spring", stiffness: 200, damping: 18 }}
-              >
-                <motion.div
-                  className="h-[72px] w-[72px] rounded-full overflow-hidden flex items-center justify-center"
-                  animate={{ scale: open ? 1.05 : 1 }}
-                  transition={{ type: "spring", stiffness: 220, damping: 18 }}
-                >
-                  <Image src="/ciaga-logo.png" alt="CIAGA logo" width={72} height={72} className="object-contain" />
-                </motion.div>
-              </motion.button>
-            </motion.div>
           </div>
 
-          <footer className="mt-4 text-[10px] text-emerald-100/60 text-center">Tap to explore. Swipe up for Majors.</footer>
-        </motion.div>
-      ) : (
-        <MajorsView
-          open={open}
-          setOpen={setOpen}
-          goToHome={goToHome}
-          majorsMenuItems={majorsMenuItems}
-          handleMajorsSelect={handleMajorsSelect}
-          renderRadialMenu={renderRadialMenu}
-          vh={vh}
-          initialHub={majorsPreload}
-        />
-      )}
-    </AnimatePresence>
-    </>
+          {/* Play. The wheel used to own this space; with it docked in the nav,
+              starting or resuming a round is the screen's primary action. */}
+          <div className="w-full max-w-sm mt-5 mb-8">
+            <button
+              type="button"
+              onClick={() => router.push(liveRoundId ? `/round/${liveRoundId}` : "/round")}
+              className="w-full rounded-2xl border border-[#f5e6b0]/45 bg-[#f5e6b0]/10 px-5 py-4 text-center transition hover:bg-[#f5e6b0]/15 active:scale-[0.99]"
+            >
+              <div className="text-base font-extrabold tracking-wide text-[#f5e6b0]">
+                {liveRoundId ? "Resume Round" : "New Round"}
+              </div>
+              <div className="mt-0.5 text-[11px] font-semibold text-emerald-100/60">
+                {liveRoundId ? "You have a round in progress" : "Start a round at any course"}
+              </div>
+            </button>
+          </div>
+        </div>
   );
 }

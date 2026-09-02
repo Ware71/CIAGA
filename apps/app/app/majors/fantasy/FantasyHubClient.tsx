@@ -155,10 +155,10 @@ export default function FantasyHubClient() {
       <div className="px-4 pt-8 flex items-center justify-between mb-6">
         <button
           type="button"
-          onClick={() => router.push("/")}
+          onClick={() => router.push("/majors")}
           className="text-[11px] text-emerald-100/70 hover:text-emerald-50 flex items-center gap-1"
         >
-          ← Home
+          ← Majors
         </button>
         <h1 className="text-lg font-bold tracking-wide text-[#f5e6b0]">Fantasy Picks</h1>
         <div className="w-12" />

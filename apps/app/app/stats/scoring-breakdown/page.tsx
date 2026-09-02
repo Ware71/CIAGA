@@ -321,7 +321,7 @@ export default function ScoringBreakdownPage() {
   // UI (match hole-scoring layout)
   // -----------------------------
   return (
-    <div className="h-screen bg-[#042713] text-slate-100 px-1.5 sm:px-2 pt-4">
+    <div className="h-[calc(100dvh-var(--ciaga-nav-h))] bg-[#042713] text-slate-100 px-1.5 sm:px-2 pt-4">
       <div className="mx-auto w-full max-w-3xl h-full flex flex-col">
         <header className="sticky top-0 z-20 bg-[#042713] pb-3">
           <div className="flex items-center justify-between gap-2 px-1">

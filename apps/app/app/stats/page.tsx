@@ -2,47 +2,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import { BackButton } from "@/components/ui/BackButton";
-
-type Tile = {
-  title: string;
-  subtitle: string;
-  href: string;
-  icon: React.ReactNode;
-  badge?: string;
-};
-
-function TileCard({ title, subtitle, href, icon, badge }: Tile) {
-  return (
-    <Link
-      href={href}
-      className="block rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-5 hover:bg-[#0b3b21]/80 transition"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-2xl border border-emerald-900/70 bg-[#042713]/55">
-            {icon}
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <div className="text-sm font-extrabold tracking-wide text-[#f5e6b0]">{title}</div>
-              {badge ? (
-                <span className="rounded-full border border-emerald-900/70 bg-[#042713]/55 px-2 py-0.5 text-[10px] font-extrabold text-emerald-100/80">
-                  {badge}
-                </span>
-              ) : null}
-            </div>
-            <div className="mt-1 text-[11px] font-semibold text-emerald-100/60">{subtitle}</div>
-          </div>
-        </div>
-
-        <div className="text-emerald-100/70 text-sm font-extrabold">→</div>
-      </div>
-    </Link>
-  );
-}
+import { TileCard, type Tile } from "@/components/ui/TileCard";
 
 // Simple inline icons (no new deps)
 function IconChart() {

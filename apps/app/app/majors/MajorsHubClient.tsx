@@ -7,6 +7,8 @@ import { requireViewerSession } from "@/lib/auth/requireViewerSession";
 import { fetchWithCache, invalidateCache, readCache, writeCache, setCacheScope } from "@/lib/cache/clientCache";
 import { supabase } from "@/lib/supabaseClient";
 import type { MajorGroup } from "@/lib/majors/types";
+import { AuthUser } from "@/components/ui/auth-user";
+import { MajorsBalance, MajorsSnapshot } from "@/components/majors/MajorsOverview";
 
 type GroupSummary = MajorGroup & { member_count: number; role?: string };
 
@@ -176,29 +178,29 @@ export default function MajorsHubClient() {
     <div className="min-h-[100dvh] pb-[env(safe-area-inset-bottom)] max-w-sm mx-auto">
       {/* Header */}
       <div className="px-4 pt-8 flex items-center justify-between mb-6">
-        <button
-          type="button"
-          onClick={() => router.push("/")}
-          className="text-[11px] text-emerald-100/70 hover:text-emerald-50 flex items-center gap-1"
-        >
-          ← Home
-        </button>
-        <h1 className="text-lg font-bold tracking-wide text-[#f5e6b0]">Majors Hub</h1>
-        {isAdmin && (
-          <button
-            type="button"
-            onClick={() => router.push("/majors/groups/create")}
-            className="text-[11px] text-emerald-400 hover:text-emerald-300"
-          >
-            + Create
-          </button>
-        )}
+        <MajorsBalance />
+        <h1 className="text-lg font-bold tracking-wide text-[#f5e6b0]">Majors</h1>
+        <div className="flex items-center gap-3 shrink-0">
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => router.push("/majors/groups/create")}
+              className="text-[11px] text-emerald-400 hover:text-emerald-300"
+            >
+              + Create
+            </button>
+          )}
+          <AuthUser />
+        </div>
       </div>
 
       {loading ? (
         <div className="text-sm text-emerald-100/60 text-center py-20">Loading…</div>
       ) : (
         <div className="px-4 space-y-8 pb-12">
+          {/* Season snapshot, Live Now and Upcoming — formerly the swipe-up face. */}
+          <MajorsSnapshot />
+
           {/* Pending Invitations */}
           {pendingInvites.length > 0 && (
             <section className="space-y-2">

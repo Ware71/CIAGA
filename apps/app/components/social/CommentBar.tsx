@@ -44,7 +44,7 @@ export default function CommentBar({ feedItemId }: { feedItemId: string }) {
 
   return (
     <>
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-emerald-900/70 bg-[#04220f]/95 px-4 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur">
+      <div className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+var(--ciaga-nav-h))] z-30 border-t border-emerald-900/70 bg-[#04220f]/95 px-4 py-2 backdrop-blur">
         <button type="button" onClick={() => setOpen(true)} className="mx-auto block w-full max-w-sm text-left">
           <div className="flex items-center justify-between">
             <div className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-emerald-100/55">

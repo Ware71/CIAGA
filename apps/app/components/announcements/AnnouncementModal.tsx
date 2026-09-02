@@ -163,7 +163,8 @@ function OnboardingFlow({ ann, onDone }: { ann: Announcement; onDone: () => void
       </div>
       <div className="text-xl font-extrabold text-[#f5e6b0]">{ann.title}</div>
       <ul className="space-y-2 text-sm font-medium text-emerald-100/85">
-        <li>• Tap the menu to start a <b>New Round</b>, view <b>Stats</b> or browse <b>Courses</b>.</li>
+        <li>• Tap <b>New Round</b> on this screen to start playing.</li>
+        <li>• <b>Press and hold</b> the logo in the bar below for quick links — they change with the screen you are on.</li>
         <li>• The <b>Social</b> feed shows rounds, records and posts from people you follow.</li>
         <li>• <b>Majors</b> is your hub for groups, events and leaderboards.</li>
         <li>• The <b>bell</b> (top-right) holds your notifications.</li>

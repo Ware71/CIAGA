@@ -7,7 +7,11 @@ import { Button } from "@/components/ui/button";
 type BaseProps = {
   disabled?: boolean;
   className?: string;
+  /** Overrides the default "← Back" — e.g. "← Majors" when the target is known. */
+  label?: string;
 };
+
+const DEFAULT_LABEL = "← Back";
 
 type BackButtonProps = BaseProps &
   (
@@ -29,7 +33,7 @@ const BASE_CLASS =
 // Narrow on `props` directly — destructuring with a rest element collapses the
 // discriminated union and loses the href/onClick correlation.
 export function BackButton(props: BackButtonProps) {
-  const { disabled, className } = props;
+  const { disabled, className, label } = props;
 
   // Prefer `href`: it prefetches, supports middle-click / open-in-new-tab, and
   // is announced as a link. `onClick` stays for step-back within a page.
@@ -41,13 +45,18 @@ export function BackButton(props: BackButtonProps) {
         size="sm"
         className={cn(BASE_CLASS, disabled && "pointer-events-none opacity-50", className)}
       >
-        <Link href={props.href}>← Back</Link>
+        <Link href={props.href}>{label ?? DEFAULT_LABEL}</Link>
       </Button>
     );
   }
 
   return (
-    <ImperativeBackButton onClick={props.onClick} disabled={disabled} className={className} />
+    <ImperativeBackButton
+      onClick={props.onClick}
+      disabled={disabled}
+      className={className}
+      label={label}
+    />
   );
 }
 
@@ -55,6 +64,7 @@ function ImperativeBackButton({
   onClick,
   disabled,
   className,
+  label,
 }: { onClick: () => void } & BaseProps) {
   const [navigating, setNavigating] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -77,7 +87,7 @@ function ImperativeBackButton({
         onClick();
       }}
     >
-      {navigating ? "…" : "← Back"}
+      {navigating ? "…" : label ?? DEFAULT_LABEL}
     </Button>
   );
 }
