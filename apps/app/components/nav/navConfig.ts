@@ -108,12 +108,12 @@ const HOME_WHEEL: WheelItem[] = [
   { id: "calendar", label: "Calendar", href: "/calendar" },
 ];
 
+// History merged into Schedule (fixtures + results), so this is four, not five.
 const MAJORS_WHEEL: WheelItem[] = [
   { id: "majors-hub", label: "Majors Hub", href: "/majors" },
   { id: "schedule", label: "Schedule", href: "/majors/schedule" },
   { id: "fantasy", label: "Fantasy Picks", href: "/majors/fantasy" },
-  { id: "majors-history", label: "History", href: "/majors/history" },
-  { id: "majors-profile", label: "Majors Profile", href: "/majors/profile" },
+  { id: "majors-profile", label: "Profile", href: "/majors/profile" },
 ];
 
 const STATS_WHEEL: WheelItem[] = [
@@ -132,6 +132,15 @@ const MORE_WHEEL: WheelItem[] = [
   { id: "history", label: "Round History", href: "/history" },
   { id: "calculator", label: "Handicap Calc", href: "/more/handicap-calculator" },
 ];
+
+/**
+ * Which palette the app chrome should wear. The bottom bar and the body ground
+ * are mounted outside every route subtree, so they can't inherit a section's
+ * styling — AppFrame stamps this on <body> and globals.css does the repaint.
+ */
+export function sectionFor(pathname: string): "majors" | "default" {
+  return isMajors(pathname) ? "majors" : "default";
+}
 
 export function wheelItemsFor(pathname: string): WheelItem[] {
   if (pathname === "/more" || pathname.startsWith("/more/") || pathname === "/profile") {

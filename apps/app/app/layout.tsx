@@ -84,7 +84,9 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-[#042713] text-slate-100`}
+        /* No bg utility here: the ground is --ciaga-ground in globals.css,
+           which AppFrame repoints per section. A utility would outrank it. */
+        className={`${geistSans.variable} ${geistMono.variable} antialiased text-slate-100`}
       >
         <NextTopLoader color="#f5e6b0" height={3} showSpinner={false} shadow="0 0 10px #f5e6b080" />
         <ServiceWorkerRegistrar />

@@ -1,12 +1,13 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { BottomNav } from "./BottomNav";
-import { hidesMainNav } from "./navConfig";
+import { hidesMainNav, sectionFor } from "./navConfig";
 
 /**
- * Mounts the bottom nav and reserves room for it.
+ * Mounts the bottom nav, reserves room for it, and tells the chrome which
+ * section it's in.
  *
  * One wrapper here covers every `min-h-screen` page in the app, which is the same
  * trick the Fantasy section's layout already used. Screens that hard-pin to the
@@ -19,6 +20,30 @@ import { hidesMainNav } from "./navConfig";
 export function AppFrame({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "/";
   const hidden = hidesMainNav(pathname);
+  const section = sectionFor(pathname);
+
+  /**
+   * Two pieces of chrome sit outside every route subtree and so can't be
+   * restyled by a section's own layout:
+   *
+   *   - the body background, which shows through around the floating bar and
+   *     anywhere a page is shorter than the viewport;
+   *   - the status bar in an installed PWA, which takes its colour from the
+   *     theme-color meta tag.
+   *
+   * Both are repainted here. globals.css holds the palettes; this only says
+   * which one is in force.
+   */
+  useEffect(() => {
+    document.body.dataset.section = section;
+
+    const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+    if (meta) {
+      // Read the resolved token rather than duplicating hex values here.
+      const ground = getComputedStyle(document.body).getPropertyValue("--ciaga-ground").trim();
+      if (ground) meta.setAttribute("content", ground);
+    }
+  }, [section]);
 
   return (
     <>

@@ -85,7 +85,12 @@ export function BottomNav() {
               aria-expanded={false}
               onClick={() => router.push("/home")}
               {...longPress}
-              className="absolute bottom-0 h-[84px] w-[84px] overflow-hidden rounded-full bg-[#0a341c] ring-1 ring-[#f5e6b0]/30 shadow-[0_6px_20px_rgba(0,0,0,0.55)]"
+              className="absolute bottom-0 h-[84px] w-[84px] overflow-hidden rounded-full shadow-[0_6px_20px_rgba(0,0,0,0.55)]"
+              style={{
+                backgroundColor: "var(--nav-emblem)",
+                boxShadow:
+                  "0 6px 20px rgba(0,0,0,0.55), 0 0 0 1px color-mix(in srgb, var(--nav-accent) 34%, transparent)",
+              }}
             >
               <Image
                 src="/ciaga-logo.png"
@@ -119,7 +124,12 @@ export function BottomNav() {
             aria-haspopup="menu"
             aria-expanded
             onClick={close}
-            className="pointer-events-auto h-[112px] w-[112px] overflow-hidden rounded-full bg-[#0a341c] ring-1 ring-[#f5e6b0]/60 shadow-[0_8px_28px_rgba(0,0,0,0.6)]"
+            className="pointer-events-auto h-[112px] w-[112px] overflow-hidden rounded-full"
+            style={{
+              backgroundColor: "var(--nav-emblem)",
+              boxShadow:
+                "0 8px 28px rgba(0,0,0,0.6), 0 0 0 1px color-mix(in srgb, var(--nav-accent) 65%, transparent)",
+            }}
           >
             <motion.span
               className="block h-full w-full"

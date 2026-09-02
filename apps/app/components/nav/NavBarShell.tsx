@@ -11,6 +11,12 @@ import type { TabDef } from "./navConfig";
  *
  * Sits inset from the screen edges rather than flush, matching the app's
  * rounded-2xl card language, with the content behind visible through the gap.
+ *
+ * Colours come from the `--nav-*` tokens in globals.css rather than literals,
+ * because the bar is mounted at the root and has to retint itself per section —
+ * see AppFrame. They're applied inline: Tailwind can hold a CSS variable in an
+ * arbitrary value, but not inside a colour-with-opacity shorthand, and half the
+ * surfaces here need alpha.
  */
 export function NavBarShell({
   children,
@@ -23,7 +29,12 @@ export function NavBarShell({
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 pb-[env(safe-area-inset-bottom)]">
       <nav
         aria-label={label}
-        className="pointer-events-auto mx-auto mb-3 h-[60px] w-[calc(100%-1.5rem)] max-w-sm rounded-[28px] bg-[#07301a]/90 ring-1 ring-emerald-300/12 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(245,230,176,0.07)]"
+        className="pointer-events-auto mx-auto mb-3 h-[60px] w-[calc(100%-1.5rem)] max-w-sm rounded-[28px] backdrop-blur-xl"
+        style={{
+          backgroundColor: "color-mix(in srgb, var(--nav-pill) 90%, transparent)",
+          boxShadow:
+            "0 8px 32px rgba(0,0,0,0.45), inset 0 1px 0 var(--nav-sheen), 0 0 0 1px var(--nav-ring)",
+        }}
       >
         <div className="mx-auto flex h-full max-w-sm items-center">{children}</div>
       </nav>
@@ -54,14 +65,17 @@ export function NavTab({
       href={href}
       aria-label={showLabel ? undefined : label}
       aria-current={active ? "page" : undefined}
-      className={`relative flex h-full flex-1 flex-col items-center justify-center gap-0.5 rounded-[22px] transition-colors ${
-        active ? "text-[#f5e6b0]" : "text-emerald-200/45 hover:text-emerald-100/80"
-      }`}
+      className="relative flex h-full flex-1 flex-col items-center justify-center gap-0.5 rounded-[22px] transition-colors"
+      style={{ color: active ? "var(--nav-accent)" : "var(--nav-idle)" }}
     >
       {active && (
         <motion.span
           layoutId={indicatorId}
-          className="absolute inset-1 rounded-[22px] bg-[#f5e6b0]/10 ring-1 ring-[#f5e6b0]/20"
+          className="absolute inset-1 rounded-[22px]"
+          style={{
+            backgroundColor: "color-mix(in srgb, var(--nav-accent) 12%, transparent)",
+            boxShadow: "0 0 0 1px color-mix(in srgb, var(--nav-accent) 22%, transparent)",
+          }}
           transition={
             reduceMotion ? { duration: 0 } : { type: "spring", stiffness: 380, damping: 32 }
           }

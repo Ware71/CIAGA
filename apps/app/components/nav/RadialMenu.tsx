@@ -18,7 +18,20 @@ function clamp(n: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, n));
 }
 
-/** Points on a squashed circle, starting at 12 o'clock and going clockwise. */
+/**
+ * Points on a squashed circle, starting at 12 o'clock and going clockwise.
+ *
+ * The radii are bounded at both ends, which is what makes the ring read as
+ * even. The lower bound keeps every item clear of the 112px logo at the centre;
+ * the upper bound keeps the widest item inside the viewport. Items are a fixed
+ * width, so the ring stays regular whether a label says "Stats" or "Course
+ * Records" — letting them size to their text was what made it look scattered.
+ */
+const ITEM_W = 108;
+const LOGO_R = 56;
+const GAP = 14;
+const EDGE = 10;
+
 function wheelPositions(count: number, radiusY: number, radiusX: number) {
   return Array.from({ length: count }, (_, i) => {
     const angle = -Math.PI / 2 + (i * 2 * Math.PI) / count;
@@ -64,8 +77,15 @@ export function RadialMenu({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  const radiusY = clamp(Math.min(size.vw, size.vh) * 0.38, 115, 170);
-  const radiusX = clamp(radiusY * 0.85, 90, 120);
+  // Horizontal: far enough out that a full-width item clears the logo, near
+  // enough in that it still fits on screen. On a 390px viewport that band is
+  // roughly [122, 135], so the clamp does real work rather than decorating.
+  const minX = LOGO_R + ITEM_W / 2 + GAP;
+  const maxX = Math.max(minX, size.vw / 2 - ITEM_W / 2 - EDGE);
+  const radiusX = clamp(size.vw * 0.33, minX, maxX);
+
+  // Vertical has more room, so the ring is a touch taller than it is wide.
+  const radiusY = clamp(size.vh * 0.19, LOGO_R + 44, 172);
   const positions = wheelPositions(items.length, radiusY, radiusX);
 
   const select = (href: string) => {
@@ -93,7 +113,14 @@ export function RadialMenu({
                   key={item.id}
                   role="menuitem"
                   onClick={() => select(item.href)}
-                  className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 pointer-events-auto flex items-center justify-center rounded-full border border-emerald-200/70 bg-[#0b3b21]/95 px-4 py-2 text-xs font-medium tracking-wide shadow-lg"
+                  className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 pointer-events-auto flex h-9 items-center justify-center rounded-full px-3 text-center text-[11px] font-semibold leading-tight tracking-wide shadow-lg backdrop-blur-sm"
+                  style={{
+                    width: ITEM_W,
+                    backgroundColor: "color-mix(in srgb, var(--nav-pill) 95%, transparent)",
+                    color: "var(--nav-accent)",
+                    boxShadow:
+                      "0 4px 16px rgba(0,0,0,0.45), 0 0 0 1px color-mix(in srgb, var(--nav-accent) 38%, transparent)",
+                  }}
                   initial={{ opacity: 0, scale: 0.4, x: 0, y: 0 }}
                   animate={{ opacity: 1, scale: 1, x: pos.x, y: pos.y }}
                   exit={{ opacity: 0, scale: 0.4, x: 0, y: 0 }}

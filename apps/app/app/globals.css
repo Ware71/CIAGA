@@ -129,6 +129,35 @@
      Mirrored as NAV_H in components/nav/navConfig.ts — change both together. */
   body {
     --ciaga-nav-h: 96px;
+
+    /* Section palette. The bottom bar and the page ground live OUTSIDE any
+       route subtree — the nav is mounted at the root and the ground is the body
+       itself — so a section can't retint them by styling its own layout. These
+       tokens are the seam: AppFrame stamps data-section on <body>, and the block
+       below repaints the chrome to match whichever section you're in. */
+    --ciaga-ground: #042713;
+    --nav-pill:     #07301a;
+    --nav-ring:     rgba(110, 231, 183, 0.12);
+    --nav-accent:   #f5e6b0;
+    --nav-idle:     rgba(167, 243, 208, 0.45);
+    --nav-emblem:   #0a341c;
+    --nav-sheen:    rgba(245, 230, 176, 0.07);
+  }
+
+  /* Majors — the Emerald Foil scheme. Deeper ground, metallic gold. */
+  body[data-section="majors"] {
+    --ciaga-ground: #03150C;
+    --nav-pill:     #062D17;
+    --nav-ring:     rgba(255, 214, 102, 0.32);
+    --nav-accent:   #ffd666;
+    --nav-idle:     rgba(190, 228, 201, 0.5);
+    --nav-emblem:   #08331A;
+    --nav-sheen:    rgba(255, 214, 102, 0.12);
+  }
+
+  /* The ground itself, so nothing shows the app green behind a section. */
+  body {
+    background-color: var(--ciaga-ground);
   }
 
   /* Prevent overscroll bounce / rubber-banding / pull-to-refresh */
