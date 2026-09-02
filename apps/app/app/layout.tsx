@@ -7,7 +7,6 @@ import { ServiceWorkerRegistrar } from "@/components/ServiceWorkerRegistrar";
 import { SplashHost } from "@/components/ui/SplashHost";
 import { AppFrame } from "@/components/nav/AppFrame";
 import { CookieConsent } from "@/components/CookieConsent";
-import { Analytics } from "@/components/analytics/Analytics";
 import { AcceptTermsGate } from "@/components/legal/AcceptTermsGate";
 import NextTopLoader from "nextjs-toploader";
 import { THEME_BOOTSTRAP_SCRIPT } from "@/lib/theme/themes";
@@ -114,10 +113,6 @@ export default function RootLayout({
         <AppFrame>{children}</AppFrame>
         <AcceptTermsGate />
         <CookieConsent />
-        {/* autocapture deliberately OFF: these are authenticated pages, and
-            autocapture records the inner text of clicked elements — a tap on a
-            leaderboard row would put a member's name into event properties. */}
-        <Analytics />
         <SandboxDevTools />
       </body>
     </html>
