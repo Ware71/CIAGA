@@ -79,6 +79,13 @@ export async function POST(req: Request) {
     await del("invites", (q) => q.eq("profile_id", profileId));
 
     // --- 2. Read current name + avatar, then delete the avatar from storage ---
+    // Only the avatar. Photos attached to posts stay, for the same reason the
+    // posts themselves do: they're shared content — other members' record of a
+    // round they were also on — and deleting them would leave retained posts
+    // full of broken images. They carry no EXIF or GPS (stripped at upload by
+    // lib/media/compressImage.ts) and the profile they hang off is reduced to
+    // an initial and surname below. A post's photos ARE purged when its author
+    // deletes that post, in app/api/feed/[id]/route.ts.
     let currentName: string | null = null;
     try {
       const { data: prof } = await supabaseAdmin

@@ -317,6 +317,14 @@ export default function AdminPage() {
             <div className="text-sm font-semibold text-[#f5e6b0]">Announcements</div>
             <div className="text-xs text-emerald-100/50 mt-1">Push info &amp; promos to users&apos; startup pop-up</div>
           </button>
+          <button
+            type="button"
+            onClick={() => router.push("/admin/reports")}
+            className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-left hover:bg-emerald-900/30 transition-colors"
+          >
+            <div className="text-sm font-semibold text-[#f5e6b0]">Reports</div>
+            <div className="text-xs text-emerald-100/50 mt-1">Review reported posts &amp; comments, hide or remove</div>
+          </button>
         </div>
 
         {/* PUSH DIAGNOSTICS */}

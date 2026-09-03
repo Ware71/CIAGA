@@ -29,7 +29,7 @@ export default function SocialDetailClient({
   const roundId = roundIdForItem(item);
 
   return (
-    <div className="min-h-screen bg-[color:var(--ciaga-ground)] text-slate-100 px-4 pt-4 pb-[26vh]">
+    <div className="min-h-screen px-4 pt-4 pb-[26vh] text-[color:var(--sec-text)]">
       <div className="mx-auto w-full max-w-sm space-y-3">
         <div className="flex items-center">
           <BackButton className="font-semibold" onClick={() => router.push("/social")} />
@@ -43,7 +43,7 @@ export default function SocialDetailClient({
           <button
             type="button"
             onClick={() => router.push(`/round/${roundId}?from=social`)}
-            className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-3 py-2 text-center text-xs font-semibold text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]"
+            className="w-full rounded-[var(--r-ui)] border border-[color:var(--hair-panel)] bg-[color:var(--sec-surface)] px-3 py-2.5 text-center text-[length:var(--t-sec)] font-medium text-[color:var(--sec-text-2)] transition hover:bg-[color:var(--sec-surface-2)]"
           >
             View scorecard →
           </button>

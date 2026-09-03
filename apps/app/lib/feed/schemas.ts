@@ -1,4 +1,4 @@
-import type { FeedCursor, FeedItemType, FeedPayloadByType } from "@/lib/feed/types";
+import type { FeedCursor, FeedItemType, FeedMedia, FeedPayloadByType } from "@/lib/feed/types";
 
 /**
  * Cursor helpers
@@ -69,8 +69,82 @@ function isStringOrNull(v: unknown): v is string | null {
   return v === null || typeof v === "string";
 }
 
-function isStringArrayOrNull(v: unknown): v is string[] | null {
-  return v === null || (Array.isArray(v) && v.every((x) => typeof x === "string"));
+/**
+ * How many attachments a post may carry. The card renders four tiles and rolls
+ * the rest into a "+N" overlay; before this cap existed the composer silently
+ * dropped everything past the fourth.
+ */
+export const MAX_POST_MEDIA = 10;
+
+/**
+ * Post media must live in our own public bucket.
+ *
+ * Without this, `POST /api/feed/post` accepts any string and the feed renders it
+ * as an <img> for every follower — which is a tracking pixel that reports each
+ * viewer's IP to whoever posted it, and a way to point next/image's optimiser at
+ * an arbitrary host.
+ *
+ * Deliberately a filter rather than a validation failure: parseFeedPayload runs
+ * on READ as well as write, so rejecting the whole field would blank an existing
+ * post. A bad URL drops out on its own and the rest of the post survives.
+ */
+function isPostMediaUrl(v: unknown): v is string {
+  if (typeof v !== "string" || v.length === 0 || v.length > 512) return false;
+
+  let url: URL;
+  try {
+    url = new URL(v);
+  } catch {
+    return false;
+  }
+
+  return (
+    url.protocol === "https:" &&
+    (url.hostname === "supabase.co" || url.hostname.endsWith(".supabase.co")) &&
+    url.pathname.startsWith("/storage/v1/object/public/post-images/")
+  );
+}
+
+function sanitizeImageUrls(v: unknown): string[] | null {
+  if (!Array.isArray(v)) return null;
+  const clean = v.filter(isPostMediaUrl).slice(0, MAX_POST_MEDIA);
+  return clean.length > 0 ? clean : null;
+}
+
+/**
+ * Parse the richer `media[]` attachment list. Anything whose `url` isn't ours is
+ * dropped; dimensions and video fields are optional and normalise to null.
+ */
+function sanitizeMedia(v: unknown): FeedMedia[] | null {
+  if (!Array.isArray(v)) return null;
+
+  const clean: FeedMedia[] = [];
+
+  for (const raw of v) {
+    if (!isRecord(raw)) continue;
+    if (!isPostMediaUrl(raw.url)) continue;
+
+    const kind = raw.kind === "video" ? "video" : "image";
+    const thumb = isPostMediaUrl(raw.thumb_url) ? raw.thumb_url : null;
+    const poster = isPostMediaUrl(raw.poster_url) ? raw.poster_url : null;
+
+    clean.push({
+      kind,
+      url: raw.url,
+      thumb_url: thumb,
+      w: isPositiveNumberOrNull(raw.w) ? raw.w : null,
+      h: isPositiveNumberOrNull(raw.h) ? raw.h : null,
+      poster_url: poster,
+      duration_ms: isPositiveNumberOrNull(raw.duration_ms) ? raw.duration_ms : null,
+      provider:
+        raw.provider === "supabase" || raw.provider === "cloudflare" ? raw.provider : null,
+      provider_id: typeof raw.provider_id === "string" ? raw.provider_id : null,
+    });
+
+    if (clean.length >= MAX_POST_MEDIA) break;
+  }
+
+  return clean.length > 0 ? clean : null;
 }
 
 function isNumberOrNull(v: unknown): v is number | null {
@@ -168,12 +242,14 @@ export function parseFeedPayload<TType extends FeedItemType>(
       const text =
         "text" in payload ? (isStringOrNull(payload.text) ? payload.text : undefined) : undefined;
 
+      // `media` is authoritative when present; `image_urls` is the legacy flat
+      // view kept in step for the readers that predate it. Either can be the one
+      // that exists, so derive whichever is missing from the other.
+      const media = sanitizeMedia(payload.media);
       const image_urls =
-        "image_urls" in payload
-          ? isStringArrayOrNull(payload.image_urls)
-            ? payload.image_urls
-            : undefined
-          : undefined;
+        media
+          ? media.filter((m) => m.kind === "image").map((m) => m.url)
+          : sanitizeImageUrls(payload.image_urls);
 
       const tagged_profiles =
         "tagged_profiles" in payload
@@ -205,15 +281,16 @@ export function parseFeedPayload<TType extends FeedItemType>(
           ? payload.created_from
           : undefined;
 
-      // Require at least text or at least one image URL (so empty posts aren't valid)
+      // Require at least text or one attachment (so empty posts aren't valid)
       const hasText = typeof text === "string" && text.trim().length > 0;
-      const hasImage = Array.isArray(image_urls) && image_urls.length > 0;
+      const hasMedia = (media?.length ?? 0) > 0 || (image_urls?.length ?? 0) > 0;
 
-      if (!hasText && !hasImage) return null;
+      if (!hasText && !hasMedia) return null;
 
       return {
         text: text ?? null,
-        image_urls: image_urls ?? null,
+        media: media ?? null,
+        image_urls: image_urls && image_urls.length > 0 ? image_urls : null,
         tagged_profiles: tagged_profiles ?? null,
         tagged_round_id: tagged_round_id ?? null,
         tagged_course_id: tagged_course_id ?? null,

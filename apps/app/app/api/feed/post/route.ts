@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
 import { createUserPost } from "@/lib/feed/commands";
-import type { FeedAudience } from "@/lib/feed/types";
+import type { FeedAudience, FeedMedia } from "@/lib/feed/types";
 
 type Body = {
   audience?: FeedAudience;
   text?: string | null;
+  media?: FeedMedia[] | null;
+  /** Legacy: pre-`media` clients. parseFeedPayload validates either. */
   image_urls?: string[] | null;
   tagged_profiles?: Array<{ profile_id: string; name: string }> | null;
   tagged_round_id?: string | null;
@@ -38,6 +40,9 @@ export async function POST(req: Request) {
       audience,
       payload: {
         text: body.text ?? null,
+        // Both go through parseFeedPayload, which drops any URL that isn't in
+        // our own public post-images bucket and derives image_urls from media.
+        media: Array.isArray(body.media) ? body.media : null,
         image_urls: Array.isArray(body.image_urls) ? body.image_urls : null,
         tagged_profiles: Array.isArray(body.tagged_profiles)
           ? body.tagged_profiles

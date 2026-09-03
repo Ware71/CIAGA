@@ -2,9 +2,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Flag, ThumbsUp } from "lucide-react";
 import { commentOnFeedItem, fetchComments, toggleCommentLike } from "@/lib/social/api";
 import { Button } from "@/components/ui/button";
 import MentionInput, { type Mention } from "@/components/social/MentionInput";
+import ReactorsSheet from "@/components/social/ReactorsSheet";
+import ReportSheet from "@/components/social/ReportSheet";
 import { renderWithMentions } from "@/lib/social/mentions";
 
 type Comment = {
@@ -68,6 +71,11 @@ export default function CommentSection({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
+
+  /** Comment id whose likers sheet is open. */
+  const [likersFor, setLikersFor] = useState<string | null>(null);
+  /** Comment id being reported. */
+  const [reportFor, setReportFor] = useState<string | null>(null);
 
   // Prevent race conditions from double taps / slow network:
   const pendingLikesRef = useRef<Set<string>>(new Set());
@@ -197,59 +205,132 @@ export default function CommentSection({
 
   return (
     <div className={className}>
-      <div className={listClassName + " p-4 space-y-3"}>
-        {error ? <div className="text-xs font-semibold text-red-200">{error}</div> : null}
+      <div className={listClassName + " px-4 py-2"}>
+        {error ? (
+          <div className="py-2 text-[length:var(--t-sec)] font-normal text-[color:var(--sec-bad)]">
+            {error}
+          </div>
+        ) : null}
 
         {isLoading && comments.length === 0 ? (
-          <div className="text-sm font-semibold text-[color:var(--sec-muted)]">Loading comments…</div>
+          <div className="py-3 text-[length:var(--t-sec)] font-normal text-[color:var(--sec-muted)]">
+            Loading comments…
+          </div>
         ) : comments.length === 0 ? (
-          <div className="text-sm font-semibold text-[color:var(--sec-muted)]">No comments yet.</div>
+          <div className="py-3 text-[length:var(--t-sec)] font-normal text-[color:var(--sec-muted)]">
+            No comments yet.
+          </div>
         ) : (
-          comments.map((c) => (
-            <div key={c.id} className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] p-3">
-              <div className="flex items-center gap-2">
-                {c.author?.avatar_url ? (
-                  <img
-                    src={c.author.avatar_url}
-                    alt=""
-                    className="h-7 w-7 rounded-full object-cover border border-[color:var(--sec-hair)]"
-                    loading="lazy"
-                  />
-                ) : (
-                  <div className="h-7 w-7 rounded-full border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)]" />
-                )}
-                <div className="min-w-0">
-                  <div className="text-xs font-extrabold text-[color:var(--sec-text)] truncate">{displayAuthorName(c)}</div>
-                  <div className="text-[10px] font-semibold text-[color:var(--sec-muted)]">{formatWhen(c.created_at)}</div>
-                </div>
+          <div className="flex flex-col">
+            {comments.map((c) => (
+              <div
+                key={c.id}
+                className="border-b border-[color:var(--hair)] py-2.5 last:border-b-0"
+              >
+                <div className="flex items-start gap-2.5">
+                  {c.author?.avatar_url ? (
+                    <img
+                      src={c.author.avatar_url}
+                      alt=""
+                      className="h-8 w-8 shrink-0 rounded-full border border-[color:var(--hair-panel)] object-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-[color:var(--hair-panel)] bg-[color:var(--sec-surface)] text-[length:var(--t-sec)] font-medium text-[color:var(--sec-text)]">
+                      {displayAuthorName(c).slice(0, 1).toUpperCase()}
+                    </div>
+                  )}
 
-                <div className="ml-auto flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void likeComment(c.id);
-                    }}
-                    disabled={pendingLikesRef.current.has(c.id)}
-                  >
-                    👍 {typeof c.like_count === "number" ? c.like_count : 0}
-                    {c.i_liked ? " (You)" : ""}
-                  </Button>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-baseline gap-2">
+                      <span className="truncate text-[length:var(--t-body)] font-medium text-[color:var(--sec-text)]">
+                        {displayAuthorName(c)}
+                      </span>
+                      <span className="shrink-0 text-[length:var(--t-label)] font-normal text-[color:var(--sec-muted)]">
+                        {formatWhen(c.created_at)}
+                      </span>
+                    </div>
+
+                    <div className="mt-0.5 whitespace-pre-wrap text-[length:var(--t-body)] font-normal leading-[1.45] text-[color:var(--sec-text)]">
+                      {renderWithMentions(c.body, c.mentions)}
+                    </div>
+
+                    <div className="mt-1.5 flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void likeComment(c.id);
+                        }}
+                        disabled={pendingLikesRef.current.has(c.id)}
+                        className={[
+                          "flex items-center gap-1 rounded-full px-2 py-1 text-[length:var(--t-sec)] font-medium transition",
+                          "hover:bg-[color:var(--sec-surface-2)]",
+                          c.i_liked
+                            ? "text-[color:var(--sec-accent)]"
+                            : "text-[color:var(--sec-muted)]",
+                        ].join(" ")}
+                        aria-pressed={!!c.i_liked}
+                        aria-label={c.i_liked ? "Remove your like" : "Like this comment"}
+                      >
+                        <ThumbsUp
+                          size={14}
+                          strokeWidth={1.75}
+                          fill={c.i_liked ? "currentColor" : "none"}
+                        />
+                        Like
+                      </button>
+
+                      {(c.like_count ?? 0) > 0 ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setLikersFor(c.id);
+                          }}
+                          className="rounded-full px-2 py-1 text-[length:var(--t-sec)] font-normal tabular-nums text-[color:var(--sec-muted)] transition hover:text-[color:var(--sec-text-2)]"
+                        >
+                          {c.like_count}
+                        </button>
+                      ) : null}
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setReportFor(c.id);
+                        }}
+                        className="ml-auto rounded-full px-2 py-1 text-[length:var(--t-sec)] font-normal text-[color:var(--sec-muted)] transition hover:bg-[color:var(--sec-surface-2)] hover:text-[color:var(--sec-text)]"
+                        aria-label="Report this comment"
+                      >
+                        <Flag size={14} strokeWidth={1.75} />
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
-
-              <div className="mt-2 text-sm font-semibold text-[color:var(--sec-muted)] whitespace-pre-wrap">
-                {renderWithMentions(c.body, c.mentions)}
-              </div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
       </div>
 
-      <div className="border-t border-[color:var(--sec-hair)] p-4 space-y-2">
-        <div className="text-[11px] font-semibold text-[color:var(--sec-muted)]">{commentCountLabel}</div>
+      <ReactorsSheet
+        open={likersFor !== null}
+        onClose={() => setLikersFor(null)}
+        target={{ kind: "comment", id: likersFor ?? "" }}
+      />
+
+      <ReportSheet
+        open={reportFor !== null}
+        onClose={() => setReportFor(null)}
+        targetType="comment"
+        targetId={reportFor ?? ""}
+      />
+
+      <div className="space-y-2 border-t border-[color:var(--hair)] p-4">
+        <div className="text-[length:var(--t-label)] font-medium uppercase tracking-[0.1em] text-[color:var(--sec-muted)]">
+          {commentCountLabel}
+        </div>
         <MentionInput
           value={body}
           onChange={setBody}
@@ -257,19 +338,20 @@ export default function CommentSection({
           onMentionsChange={setMentions}
           dropdownDirection={mentionDirection}
           placeholder="Write a comment… use @ to mention"
-          className="w-full min-h-[72px] rounded-md border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-3 py-2 text-base text-[color:var(--sec-text)] outline-none focus:ring-2 focus:ring-[color:var(--sec-accent)]"
+          className="w-full min-h-[72px] rounded-[var(--r-ui)] border border-[color:var(--hair-panel)] bg-[color:var(--sec-surface)] px-3 py-2 text-[length:var(--t-body)] font-normal text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] outline-none focus:ring-2 focus:ring-[color:var(--sec-accent)]"
         />
         <div className="flex justify-end">
           <Button
-            variant="secondary"
+            size="sm"
             onClick={(e) => {
               e.stopPropagation();
               void send();
             }}
-            disabled={isSending || !body.trim()}
-            className="bg-[color:var(--sec-surface)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
+            disabled={!body.trim()}
+            pending={isSending}
+            className="bg-[color:var(--sec-accent)] font-medium text-[color:var(--ciaga-ground)] hover:bg-[color:color-mix(in_srgb,var(--sec-accent)_90%,transparent)]"
           >
-            {isSending ? "Sending…" : "Comment"}
+            Comment
           </Button>
         </div>
       </div>

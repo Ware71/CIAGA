@@ -1,6 +1,7 @@
 // app/api/feed/[id]/comments/route.ts
 import { NextResponse } from "next/server";
 import { getAuthedProfileOrThrow } from "@/lib/auth/getAuthedProfile";
+import { assertViewerCanReadFeedItem } from "@/lib/feed/commands";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const runtime = "nodejs";
@@ -36,16 +37,22 @@ export async function GET(req: Request, context: { params: any }) {
     const { profileId } = await getAuthedProfileOrThrow(req);
 
     const resolvedParams = await resolveParams(context?.params);
-    let feedItemId = pickFeedItemId(resolvedParams);
-
-    // Support "live:<round_id>"
-    if (typeof feedItemId === "string" && feedItemId.startsWith("live:")) {
-      feedItemId = feedItemId.slice("live:".length);
-    }
+    const feedItemId = pickFeedItemId(resolvedParams);
 
     if (!feedItemId || typeof feedItemId !== "string") {
       return NextResponse.json({ error: "Invalid feed item id" }, { status: 400 });
     }
+
+    // "live:<round_id>" is a synthetic id for a round in progress. It isn't a
+    // stored feed item, so it has no comments and nothing to authorize against.
+    if (feedItemId.startsWith("live:")) {
+      return NextResponse.json({ comments: [] }, { headers: { "Cache-Control": "no-store" } });
+    }
+
+    // This route never checked that the caller can see the item the comments
+    // belong to, so any signed-in user could read the thread on any feed item
+    // by id, bypassing feed_item_targets entirely.
+    await assertViewerCanReadFeedItem(feedItemId, profileId);
 
     const url = new URL(req.url);
     const limit = clampInt(url.searchParams.get("limit"), 100, 1, 200);
@@ -56,6 +63,8 @@ export async function GET(req: Request, context: { params: any }) {
       .from("feed_comments")
       .select("*")
       .eq("feed_item_id", feedItemId)
+      // Moderated-away comments stay out of the thread.
+      .eq("visibility", "visible")
       .order("created_at", { ascending: false })
       .limit(limit);
 
@@ -146,7 +155,12 @@ export async function GET(req: Request, context: { params: any }) {
     return NextResponse.json({ comments: items });
   } catch (e: any) {
     const msg = e?.message ?? "Unknown error";
-    const status = msg.toLowerCase().includes("auth") || msg.toLowerCase().includes("unauth") ? 401 : 400;
+    const lower = String(msg).toLowerCase();
+    const status = lower.includes("forbidden")
+      ? 403
+      : lower.includes("auth") || lower.includes("unauth")
+        ? 401
+        : 400;
     return NextResponse.json({ error: msg }, { status });
   }
 }

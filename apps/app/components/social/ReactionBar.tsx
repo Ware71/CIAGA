@@ -1,18 +1,20 @@
 // components/social/ReactionBar.tsx
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { SmilePlus } from "lucide-react";
 import { reactToFeedItem } from "@/lib/social/api";
-import { Button } from "@/components/ui/button";
+import { Sheet } from "@/components/ui/Sheet";
 
-const QUICK_EMOJIS = ["👍", "🔥", "😂", "😮", "👏", "❤️", "⛳"];
+/** The seven that cover most of what gets said about a round. */
+export const QUICK_EMOJIS = ["👍", "🔥", "😂", "😮", "👏", "❤️", "⛳"];
 
-// A bigger list for "More…"
+/** Everything else, for when one of the seven won't do. */
 const MORE_EMOJIS = [
   "😀","😃","😄","😁","😆","😅","😂","🤣","😊","😍","😘","😮","😯","😲","😳","🤯",
   "😎","🤩","🥳","🤔","🙌","👏","👍","👎","🔥","💯","❤️","🧡","💛","💚","💙","💜",
   "🖤","🤍","🤎","💥","⚡","✨","🌟","🎯","🏆","⛳","🏌️","🏌️‍♂️","🏌️‍♀️","🎉",
-  "😤","😭","😡","😱","🤝","🙏","💪","🫡","😴","🤤","🤢","🤮","🤡","💀"
+  "😤","😭","😡","😱","🤝","🙏","💪","🫡","😴","🤤","🤢","🤮","🤡","💀",
 ];
 
 type Props = {
@@ -34,13 +36,11 @@ function applyOptimisticReaction(params: {
   const { counts, prevMy, nextMy } = params;
   const nextCounts = { ...counts };
 
-  // remove previous
   if (prevMy) {
     nextCounts[prevMy] = clampCount((nextCounts[prevMy] ?? 0) - 1);
     if (nextCounts[prevMy] === 0) delete nextCounts[prevMy];
   }
 
-  // add new
   if (nextMy) {
     nextCounts[nextMy] = (nextCounts[nextMy] ?? 0) + 1;
   }
@@ -74,41 +74,10 @@ export default function ReactionBar({ feedItemId, myReaction, reactionCounts, on
   useEffect(() => {
     setLocalMy(myReaction ?? null);
     setLocalCounts(countsProp);
-    // update refs immediately too
     localMyRef.current = myReaction ?? null;
     localCountsRef.current = countsProp;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myReaction, reactionCounts]);
-
-  const total = useMemo(() => {
-    return Object.values(localCounts).reduce((acc, n) => acc + (n ?? 0), 0);
-  }, [localCounts]);
-
-  const topLine = useMemo(() => {
-    const entries = Object.entries(localCounts).filter(([, n]) => (n ?? 0) > 0);
-    if (entries.length === 0) return "React";
-    return entries
-      .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))
-      .slice(0, 3)
-      .map(([e, n]) => `${e} ${n}`)
-      .join(" · ");
-  }, [localCounts]);
-
-  // Close overlay on outside click (within the page)
-  const rootRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (!open) return;
-
-    const onDocDown = (e: MouseEvent | PointerEvent) => {
-      const el = rootRef.current;
-      if (!el) return;
-      if (e.target instanceof Node && el.contains(e.target)) return;
-      setOpen(false);
-    };
-
-    document.addEventListener("pointerdown", onDocDown, { capture: true });
-    return () => document.removeEventListener("pointerdown", onDocDown, { capture: true } as any);
-  }, [open]);
 
   async function doReact(emoji: string) {
     if (busy) return;
@@ -119,25 +88,19 @@ export default function ReactionBar({ feedItemId, myReaction, reactionCounts, on
     const nextMy = prevMy === emoji ? null : emoji;
 
     // optimistic apply instantly
-    const optimisticCounts = applyOptimisticReaction({
-      counts: prevCounts,
-      prevMy,
-      nextMy,
-    });
+    const optimisticCounts = applyOptimisticReaction({ counts: prevCounts, prevMy, nextMy });
 
     setLocalMy(nextMy);
     setLocalCounts(optimisticCounts);
     onChanged?.({ myReaction: nextMy, reactionCounts: optimisticCounts });
 
     setBusy(true);
+    setOpen(false);
 
     try {
       const res = await reactToFeedItem(feedItemId, emoji);
 
-      // server may return:
-      //  - { status: "set", emoji }
-      //  - { status: "removed", emoji: null }
-      // tolerate legacy "cleared"
+      // Server is { status: "set" | "removed", emoji }. Tolerate legacy "cleared".
       const serverMy = res.status === "set" && res.emoji ? res.emoji : null;
 
       // reconcile against the SAME base (prevCounts), not against current state
@@ -165,232 +128,116 @@ export default function ReactionBar({ feedItemId, myReaction, reactionCounts, on
       onChanged?.({ myReaction: prevMy, reactionCounts: revertedCounts });
     } finally {
       setBusy(false);
-      setOpen(false);
     }
   }
 
-  const triggerEmoji = localMy ?? "😊";
+  // A picked emoji that isn't one of the seven still needs a home in the quick
+  // row, or the only way to clear it is to choose something else first.
+  const quickRow =
+    localMy && !QUICK_EMOJIS.includes(localMy) ? [...QUICK_EMOJIS, localMy] : QUICK_EMOJIS;
 
   return (
-    <div className="relative" ref={rootRef}>
-      {/* Trigger button (compact) */}
-      <Button
+    <>
+      <button
         type="button"
-        variant="ghost"
-        size="sm"
+        onClick={() => setOpen(true)}
+        disabled={busy}
         className={[
-          "rounded-full px-2",
-          localMy ? "text-[color:var(--sec-accent)] hover:bg-[color:var(--sec-surface-2)]" : "text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]",
+          "flex h-11 flex-1 items-center justify-center gap-1.5 rounded-[var(--r-ui)] transition",
+          "text-[length:var(--t-sec)] font-medium",
+          "hover:bg-[color:var(--sec-surface-2)] disabled:opacity-60",
+          localMy ? "text-[color:var(--sec-accent)]" : "text-[color:var(--sec-muted)]",
         ].join(" ")}
-        onClick={(e) => {
-          e.stopPropagation();
-          setOpen((v) => !v);
-        }}
-        aria-label="React"
-        title="React"
+        aria-label={localMy ? `Your reaction: ${localMy}. Change it` : "React"}
       >
-        {triggerEmoji} <span className="ml-1 text-xs tabular-nums font-extrabold">{total}</span>
-      </Button>
+        {localMy ? (
+          <span className="text-[15px] leading-none">{localMy}</span>
+        ) : (
+          <SmilePlus size={18} strokeWidth={1.75} />
+        )}
+        React
+      </button>
 
-      {/* Overlay */}
-      {open ? (
-        <div
-          className="absolute right-0 mt-2 w-[min(280px,calc(100vw-1rem))] rounded-2xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] p-3 shadow-xl z-50"
-          onClick={(e) => e.stopPropagation()}
-          onMouseDown={(e) => e.stopPropagation()}
-          onPointerDown={(e) => e.stopPropagation()}
-        >
-          <div className="mb-2 text-[11px] font-semibold text-[color:var(--sec-muted)]">{topLine}</div>
+      {/* A sheet, not a popover anchored to this button. The old overlay was
+          positioned inside the card and clipped at the screen edge — worse on
+          the detail page, where the card sits flush to the gutter. */}
+      <Sheet open={open} onClose={() => setOpen(false)} title="React" maxHeight="70vh">
+        <div className="pb-1">
+          <div className="grid grid-cols-4 gap-2">
+            {quickRow.map((emoji) => (
+              <EmojiButton
+                key={emoji}
+                emoji={emoji}
+                count={localCounts[emoji] ?? 0}
+                selected={localMy === emoji}
+                disabled={busy}
+                onPick={doReact}
+                large
+              />
+            ))}
+          </div>
 
-          {/* Quick row */}
-          <div className="flex flex-wrap gap-2">
-            {QUICK_EMOJIS.map((emoji) => {
-              const selected = localMy === emoji;
+          <div className="mt-4 mb-2 border-b border-[color:var(--sec-rule)] pb-[5px] text-[length:var(--t-label)] font-medium uppercase tracking-[0.1em] text-[color:var(--sec-muted)]">
+            More
+          </div>
 
-              return (
-                <button
-                  key={emoji}
-                  type="button"
-                  disabled={busy}
-                  onClick={() => doReact(emoji)}
-                  className={[
-                    "h-9 min-w-[42px] rounded-full border px-3 text-sm font-extrabold transition",
-                    selected
-                      ? "border-[color:color-mix(in_srgb,var(--sec-accent)_60%,transparent)] bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)]"
-                      : "border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]",
-                    busy ? "opacity-60" : "",
-                  ].join(" ")}
-                  aria-label={`React ${emoji}`}
-                  title={emoji}
-                >
-                  <span className="mr-1">{emoji}</span>
-                  <span className="text-[11px] tabular-nums font-extrabold">{localCounts[emoji] ?? 0}</span>
-                </button>
-              );
-            })}
-
-            {/* More */}
-            <MoreEmojiButton
-              disabled={busy}
-              onPick={(emoji) => doReact(emoji)}
-              selected={localMy}
-              counts={localCounts}
-            />
+          <div className="grid grid-cols-8 gap-1.5">
+            {MORE_EMOJIS.map((emoji, i) => (
+              <EmojiButton
+                key={`${emoji}-${i}`}
+                emoji={emoji}
+                count={0}
+                selected={localMy === emoji}
+                disabled={busy}
+                onPick={doReact}
+              />
+            ))}
           </div>
         </div>
-      ) : null}
-    </div>
+      </Sheet>
+    </>
   );
 }
 
-function MoreEmojiButton(props: {
+function EmojiButton({
+  emoji,
+  count,
+  selected,
+  disabled,
+  onPick,
+  large,
+}: {
+  emoji: string;
+  count: number;
+  selected: boolean;
   disabled: boolean;
   onPick: (emoji: string) => void;
-  selected: string | null;
-  counts: Record<string, number>;
+  large?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-
-  // Fixed-position menu anchored to button with viewport clamping
-  const btnRef = useRef<HTMLButtonElement | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-
-    const update = () => {
-      const btn = btnRef.current;
-      if (!btn) return;
-
-      const r = btn.getBoundingClientRect();
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
-
-      const margin = 8; // px
-      const width = Math.min(280, vw - margin * 2);
-
-      // prefer align-right to the button, then clamp into viewport
-      let left = r.right - width;
-      left = Math.max(margin, Math.min(left, vw - width - margin));
-
-      // initial "below" position; we’ll flip above if needed after measuring menu height
-      let top = r.bottom + 8;
-      top = Math.max(margin, Math.min(top, vh - margin));
-
-      setPos({ top, left, width });
-
-      // second pass: if it would overflow bottom, flip above
-      requestAnimationFrame(() => {
-        const menu = menuRef.current;
-        if (!menu) return;
-
-        const mh = menu.getBoundingClientRect().height;
-        const wouldOverflowBottom = top + mh > vh - margin;
-
-        if (wouldOverflowBottom) {
-          const flippedTop = Math.max(margin, r.top - 8 - mh);
-          setPos((p) => (p ? { ...p, top: flippedTop } : p));
-        }
-      });
-    };
-
-    update();
-    window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, true);
-    return () => {
-      window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update, true);
-    };
-  }, [open]);
-
-  // Close the "More" menu on outside click
-  useEffect(() => {
-    if (!open) return;
-
-    const onDocDown = (e: MouseEvent | PointerEvent) => {
-      const btn = btnRef.current;
-      const menu = menuRef.current;
-      if (!btn || !menu) return;
-
-      if (e.target instanceof Node && (btn.contains(e.target) || menu.contains(e.target))) return;
-      setOpen(false);
-    };
-
-    document.addEventListener("pointerdown", onDocDown, { capture: true });
-    return () => document.removeEventListener("pointerdown", onDocDown, { capture: true } as any);
-  }, [open]);
-
   return (
-    <div className="relative">
-      <button
-        ref={btnRef}
-        type="button"
-        disabled={props.disabled}
-        onClick={() => setOpen((v) => !v)}
-        className={[
-          "h-9 rounded-full border px-3 text-sm font-extrabold transition",
-          "border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]",
-          props.disabled ? "opacity-60" : "",
-        ].join(" ")}
-        aria-label="More reactions"
-        title="More reactions"
-      >
-        More…
-      </button>
-
-      {open && pos ? (
-        <div
-          ref={menuRef}
-          style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width }}
-          className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] p-3 shadow-xl z-[9999]"
-          onClick={(e) => e.stopPropagation()}
-          onMouseDown={(e) => e.stopPropagation()}
-          onPointerDown={(e) => e.stopPropagation()}
-        >
-          <div className="mb-2 flex items-center justify-between">
-            <div className="text-[11px] font-semibold text-[color:var(--sec-muted)]">Pick a reaction</div>
-            <button
-              type="button"
-              className="rounded-full px-2 py-1 text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)] text-xs font-extrabold"
-              onClick={() => setOpen(false)}
-            >
-              ✕
-            </button>
-          </div>
-
-          <div className="max-h-[180px] overflow-auto pr-1">
-            <div className="grid grid-cols-8 gap-2">
-              {MORE_EMOJIS.map((emoji) => {
-                const selected = props.selected === emoji;
-
-                return (
-                  <button
-                    key={emoji}
-                    type="button"
-                    disabled={props.disabled}
-                    onClick={() => {
-                      props.onPick(emoji);
-                      setOpen(false);
-                    }}
-                    className={[
-                      "h-9 w-9 rounded-lg border text-lg leading-none flex items-center justify-center",
-                      selected
-                        ? "border-[color:color-mix(in_srgb,var(--sec-accent)_60%,transparent)] bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)]"
-                        : "border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] hover:bg-[color:var(--sec-surface-2)] text-[color:var(--sec-text)]",
-                      props.disabled ? "opacity-60" : "",
-                    ].join(" ")}
-                    aria-label={`React ${emoji}`}
-                    title={emoji}
-                  >
-                    {emoji}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={() => onPick(emoji)}
+      className={[
+        "flex items-center justify-center gap-1 rounded-[var(--r-ui)] border transition",
+        large ? "h-12" : "h-10",
+        selected
+          ? "border-[color:color-mix(in_srgb,var(--sec-accent)_60%,transparent)] bg-[color:color-mix(in_srgb,var(--sec-accent)_18%,transparent)]"
+          : "border-[color:var(--hair-panel)] bg-[color:var(--sec-surface)] hover:bg-[color:var(--sec-surface-2)]",
+        disabled ? "opacity-60" : "",
+      ].join(" ")}
+      aria-label={`React ${emoji}`}
+      aria-pressed={selected}
+    >
+      <span className={large ? "text-[19px] leading-none" : "text-[17px] leading-none"}>
+        {emoji}
+      </span>
+      {large && count > 0 ? (
+        <span className="text-[length:var(--t-sec)] font-medium tabular-nums text-[color:var(--sec-muted)]">
+          {count}
+        </span>
       ) : null}
-    </div>
+    </button>
   );
 }

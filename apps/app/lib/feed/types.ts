@@ -76,9 +76,42 @@ export type FeedReactionSummary = Array<{
   count: number;
 }>;
 
+/**
+ * One piece of attached media on a post.
+ *
+ * Posts store this alongside the older `image_urls`, which stays as the derived
+ * legacy view for the several readers that only want a flat list of image URLs
+ * (MiniFeedTeaser, notification excerpts, feedItemUtils.hasImages). Write both;
+ * read `media` when it's there and synthesise it from `image_urls` when it
+ * isn't. `payload` is jsonb, so neither needed a migration.
+ *
+ * `kind: "video"` is described but not yet produced — see docs/analytics.md's
+ * sibling note in the feed rework plan. Having the shape settled now means the
+ * grid, the lightbox and the aspect-ratio maths don't get rebuilt when video
+ * eventually lands, whether that's Supabase files or a provider like Cloudflare
+ * Stream (hence `provider`/`provider_id`).
+ */
+export type FeedMedia = {
+  kind: "image" | "video";
+  /** Full-size variant — what the lightbox opens. */
+  url: string;
+  /** Smaller variant rendered in the card. Falls back to `url` when absent. */
+  thumb_url?: string | null;
+  /** Intrinsic dimensions of `url`, used to reserve layout space and pick a grid aspect. */
+  w?: number | null;
+  h?: number | null;
+  /** Video only. */
+  poster_url?: string | null;
+  duration_ms?: number | null;
+  provider?: "supabase" | "cloudflare" | null;
+  provider_id?: string | null;
+};
+
 export type FeedPayloadByType = {
   user_post: {
     text?: string | null;
+    media?: FeedMedia[] | null;
+    /** Derived from `media`. Kept for readers that predate it. */
     image_urls?: string[] | null;
     tagged_profiles?: Array<{ profile_id: string; name: string }> | null;
     tagged_round_id?: string | null;

@@ -47,11 +47,19 @@ export default function AcceptableUsePage() {
       <h2>4. Reporting content</h2>
       <p>
         If you see something that breaks these rules, please <strong>report
-        it</strong> using the report option on the post or comment in the app.
-        Reports reach the group's administrators and us. You can also email{" "}
+        it</strong>: open the <strong>···</strong> menu on any post, or the flag
+        on any comment, choose a reason, and add anything else we should know.
+        We&rsquo;ll confirm on screen that your report has been received, and it
+        goes to the group&rsquo;s administrators and us. Reports are not shown to
+        the person you reported. You can also email{" "}
         <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>. If content may be
         illegal, we will act promptly once we are aware of it, in line with our
         duties under the Online Safety Act 2023.
+      </p>
+      <p>
+        If you would simply rather not see something, <strong>Hide this
+        post</strong> in the same menu removes it from your feed straight away,
+        without involving anyone else.
       </p>
 
       <h2>5. What we may do</h2>

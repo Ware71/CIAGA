@@ -5,9 +5,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchFeed, fetchFeedItem } from "@/lib/social/api";
 import type { FeedItemVM } from "@/lib/feed/types";
 import FeedCard from "@/components/social/FeedCard";
+import FeedSkeleton from "@/components/social/FeedSkeleton";
 import { Button } from "@/components/ui/button";
+import { CARD } from "@/components/ui/chrome";
 import { sortByOccurredAtDesc, scoreNonLiveItems, isLiveItem } from "@/lib/feed/feedItemUtils";
 import { getSeen, markSeen } from "@/lib/social/seen";
+import { getHidden } from "@/lib/social/hidden";
 
 type Props = {
   refreshKey?: number;
@@ -21,7 +24,15 @@ type Props = {
 };
 
 /** Marks the wrapped card as "seen" once it scrolls ~halfway into view. */
-function SeenCard({ item, highlight }: { item: FeedItemVM; highlight?: boolean }) {
+function SeenCard({
+  item,
+  highlight,
+  onHidden,
+}: {
+  item: FeedItemVM;
+  highlight?: boolean;
+  onHidden?: (feedItemId: string) => void;
+}) {
   const ref = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -44,8 +55,15 @@ function SeenCard({ item, highlight }: { item: FeedItemVM; highlight?: boolean }
   }, [item.id]);
 
   return (
-    <div ref={ref} className={highlight ? "rounded-2xl ring-2 ring-[color:color-mix(in_srgb,var(--sec-accent)_70%,transparent)]" : undefined}>
-      <FeedCard item={item} />
+    <div
+      ref={ref}
+      className={
+        highlight
+          ? "rounded-[var(--r-ui)] ring-2 ring-[color:color-mix(in_srgb,var(--sec-accent)_70%,transparent)]"
+          : undefined
+      }
+    >
+      <FeedCard item={item} onHidden={onHidden} />
     </div>
   );
 }
@@ -74,6 +92,19 @@ export default function FeedList({ refreshKey, focusId, initialData }: Props) {
   // so the unseen/seen partition is stable for the session (cards don't jump).
   const [seenSnapshot, setSeenSnapshot] = useState<Set<string> | null>(null);
   const [initialIds, setInitialIds] = useState<Set<string> | null>(null);
+
+  // Hidden-for-me ids. Seeded from localStorage on mount (never during render —
+  // the server has no localStorage and would hydrate a different tree), then
+  // added to as the viewer hides or deletes things.
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set());
+
+  useEffect(() => {
+    setHiddenIds(getHidden());
+  }, []);
+
+  function handleHidden(feedItemId: string) {
+    setHiddenIds((prev) => new Set(prev).add(feedItemId));
+  }
 
   // The deep-linked card, pinned to the top — fetched separately if it isn't
   // already in the loaded page.
@@ -194,6 +225,7 @@ export default function FeedList({ refreshKey, focusId, initialData }: Props) {
 
     const filteredFeed = items.filter((it) => {
       if (it.id === focusId) return false; // pinned separately
+      if (hiddenIds.has(it.id)) return false; // hidden by this viewer, this device
       if (it.type !== "round_played") return true;
       const rid = (it.payload as any)?.round_id as string | undefined;
       if (!rid) return true;
@@ -222,23 +254,24 @@ export default function FeedList({ refreshKey, focusId, initialData }: Props) {
     });
 
     return { live: sortedLive, unseen: unseenOrdered, seen: [...belowItems].sort(sortByOccurredAtDesc) };
-  }, [liveItems, items, seenSnapshot, initialIds, focusId]);
+  }, [liveItems, items, seenSnapshot, initialIds, focusId, hiddenIds]);
 
   const showDivider = unseen.length > 0 && seen.length > 0;
   const isEmpty = live.length + unseen.length + seen.length === 0 && !focusItem;
 
   if (isLoading) {
-    return <div className="text-sm font-semibold text-[color:var(--sec-muted)]">Loading feed…</div>;
+    return <FeedSkeleton />;
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-[var(--sp-grp)]">
       {error ? (
-        <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4 text-sm font-semibold text-red-200">
+        <div className={`${CARD} p-4 text-[length:var(--t-body)] font-normal text-[color:var(--sec-bad)]`}>
           {error}
           <div className="mt-3">
             <Button
               variant="secondary"
+              size="sm"
               className="bg-[color:var(--sec-surface)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
               onClick={loadInitial}
             >
@@ -249,13 +282,15 @@ export default function FeedList({ refreshKey, focusId, initialData }: Props) {
       ) : null}
 
       {isEmpty ? (
-        <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-6 text-sm font-semibold text-[color:var(--sec-muted)]">
+        <div className={`${CARD} p-6 text-center text-[length:var(--t-body)] font-normal text-[color:var(--sec-muted)]`}>
           No activity yet. Be the first to post.
         </div>
       ) : null}
 
       {/* Pinned / deep-linked card */}
-      {focusItem ? <SeenCard key={`focus-${focusItem.id}`} item={focusItem} highlight /> : null}
+      {focusItem ? (
+        <SeenCard key={`focus-${focusItem.id}`} item={focusItem} highlight onHidden={handleHidden} />
+      ) : null}
 
       {/* Live rounds */}
       {live.map((item) => (
@@ -264,14 +299,14 @@ export default function FeedList({ refreshKey, focusId, initialData }: Props) {
 
       {/* Unseen first (prioritised) */}
       {unseen.map((item) => (
-        <SeenCard key={item.id} item={item} />
+        <SeenCard key={item.id} item={item} onHidden={handleHidden} />
       ))}
 
       {showDivider ? <CaughtUpDivider /> : null}
 
       {/* Already-seen, chronological */}
       {seen.map((item) => (
-        <SeenCard key={item.id} item={item} />
+        <SeenCard key={item.id} item={item} onHidden={handleHidden} />
       ))}
 
       {/* Auto-load sentinel — the observer below fires loadMore() as it comes

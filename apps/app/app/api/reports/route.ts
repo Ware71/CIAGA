@@ -5,6 +5,7 @@ import { reportContent } from "@/lib/feed/commands";
 type Body = {
   target_type?: "feed_item" | "comment";
   target_id?: string;
+  reason_code?: string;
   reason?: string;
 };
 
@@ -16,6 +17,7 @@ export async function POST(req: Request) {
     const targetType = body.target_type;
     const targetId = (body.target_id ?? "").trim();
     const reason = (body.reason ?? "").trim();
+    const reasonCode = (body.reason_code ?? "").trim();
 
     if (targetType !== "feed_item" && targetType !== "comment") {
       throw new Error("Invalid target_type");
@@ -26,6 +28,7 @@ export async function POST(req: Request) {
       reporterProfileId: profileId,
       targetType,
       targetId,
+      reasonCode: reasonCode || null,
       reason,
     });
 
