@@ -504,7 +504,7 @@ export function renderNotification(
       return {
         title: "Round scheduled",
         body: `${who} scheduled a round for you${where}${when}`,
-        url: p.round_id ? `/round/${p.round_id}/setup` : "/round",
+        url: p.round_id ? `/round/${p.round_id}/setup` : "/play",
         icon: "calendar-plus",
       };
     }
@@ -517,7 +517,7 @@ export function renderNotification(
       return {
         title: "Round time changed",
         body: `${who} changed the time of your round${where}${when}`,
-        url: p.round_id ? `/round/${p.round_id}/setup` : "/round",
+        url: p.round_id ? `/round/${p.round_id}/setup` : "/play",
         icon: "calendar-clock",
       };
     }
@@ -530,7 +530,7 @@ export function renderNotification(
       return {
         title: "Round cancelled",
         body: `${who} cancelled a scheduled round${where}${when}`,
-        url: "/round",
+        url: "/play",
         icon: "calendar-x",
       };
     }

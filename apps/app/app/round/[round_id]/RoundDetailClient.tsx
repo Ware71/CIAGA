@@ -1740,7 +1740,7 @@ export default function RoundDetailClient({ roundId, initialSnapshot }: RoundDet
               } else if (from === "milestones") {
                 router.push("/stats/milestones");
               } else {
-                router.push("/round");
+                router.push("/play");
               }
             }}
           />

@@ -73,8 +73,8 @@ export function AvatarStack({ item }: { item: FeedItemVM }) {
         <div
           key={`${a.key}-${idx}`}
           className={[
-            "h-6 w-6 rounded-full border border-[color:var(--hair)] bg-[color:var(--sec-surface)] overflow-hidden",
-            "grid place-items-center text-[10px] font-medium text-[color:var(--sec-text)]",
+            "h-5 w-5 rounded-full border border-[color:var(--hair)] bg-[color:var(--sec-surface)] overflow-hidden",
+            "grid place-items-center text-[9px] font-medium text-[color:var(--sec-text)]",
           ].join(" ")}
           style={{ zIndex: 10 - idx }}
         >
@@ -137,6 +137,11 @@ function miniFeedDetail(item: FeedItemVM): string | null {
  * One highlight, as a row rather than a card. A live item takes the accent
  * stripe down its left edge instead of a tinted border — one clear signal, and
  * it keeps the stack reading as a single list.
+ *
+ * `sm` because these are Home's background reading: the handicap and last round
+ * above them are what the screen is for, and at full size the highlights read as
+ * a third thing of equal weight. The row keeps its height, so nothing here is
+ * harder to hit than anything else — only the type steps back.
  */
 export function MiniFeedTeaserCard({ item, onOpen }: { item: FeedItemVM; onOpen: () => void }) {
   const live = isLiveItem(item);
@@ -144,6 +149,7 @@ export function MiniFeedTeaserCard({ item, onOpen }: { item: FeedItemVM; onOpen:
 
   return (
     <Row
+      size="sm"
       onClick={onOpen}
       live={live}
       lead={<AvatarStack item={item} />}
@@ -153,7 +159,7 @@ export function MiniFeedTeaserCard({ item, onOpen }: { item: FeedItemVM; onOpen:
         live ? (
           <Tag on>Live</Tag>
         ) : (
-          <span className="text-[length:var(--t-fig)] leading-none text-[color:var(--sec-muted)]">›</span>
+          <span className="text-[length:var(--t-sec)] leading-none text-[color:var(--sec-muted)]">›</span>
         )
       }
     />

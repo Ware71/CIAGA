@@ -5,18 +5,19 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { AuthUser } from "@/components/ui/auth-user";
 import {
+  Delta,
+  Figures,
   Group,
   Hero,
   PageHeader,
-  PrimaryAction,
   Row,
-  Strip,
 } from "@/components/ui/chrome";
+import { ResumeRoundBar } from "@/components/home/ResumeRoundBar";
 
 import type { FeedItemVM } from "@/lib/feed/types";
 import type { HomeCore, HomeMiniFeed } from "@/lib/home/getHomeSummary";
 
-import { formatSigned } from "@/lib/feed/feedItemUtils";
+import { pickCourseName } from "@/lib/feed/feedItemUtils";
 import { formatHI } from "@/lib/rounds/handicapUtils";
 import { MiniFeedTeaserCard } from "@/components/social/MiniFeedTeaser";
 import type { MajorHubSummary } from "@/lib/majors/types";
@@ -326,15 +327,30 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [retryKey]);
 
-  // Mini cards now carry a second detail line, so they're a little taller.
-  // The lower wheel frees vertical room to show them without clipping.
-  // Highlights are rows now, not spaced cards: 44pt of content plus its
-  // divider, capped at five so the primary action stays above the fold.
-  const MINI_ROW_H = 45;
+  // Highlights are rows, not spaced cards, and they run one type size quieter
+  // than the groups above them — they're the screen's background reading, not
+  // its headline. Still capped at five; curateMiniFeed slices to the same.
+  const MINI_ROW_H = 40;
   const miniFeedMaxH = MINI_ROW_H * 5;
 
+  // The resume bar's sub-line. Core knows the live round's id but not where it
+  // is being played, and the mini feed already carries a live item for the same
+  // round — so read it from there rather than pay for a second query. It arrives
+  // after core does, so the bar renders unlabelled for a beat.
+  const liveRoundHint = liveRoundId
+    ? (miniFeed
+        .filter((it) => (it.payload as any)?.round_id === liveRoundId)
+        .map(pickCourseName)
+        .find(Boolean) ?? null)
+    : null;
+
   return (
-    <div className="min-h-[100dvh] flex flex-col items-center px-4">
+    // The resume bar floats over the scroll, so the last highlight needs room to
+    // clear it — its own height plus the gap it sits on above the nav.
+    <div
+      className="min-h-[100dvh] flex flex-col items-center px-4"
+      style={liveRoundId ? { paddingBottom: 64 } : undefined}
+    >
           {/* HEADER */}
           <header className="w-full max-w-sm">
             {/* The brand lockup — mark and wordmark as one thing. The mark is
@@ -553,26 +569,31 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
 
           <div className="w-full max-w-sm">
             <Group label="Handicap">
+              {/* The 30-day move rides the index rather than sitting under it in
+                  prose: it is the same measurement, one step down in size. An
+                  arrow, not a ± — a falling index is an improvement, and the
+                  sign alone can't say so. */}
               <Hero
-                figure={typeof handicapIndex === "number" ? formatHI(handicapIndex) : "—"}
-                caption={
-                  <>
-                    Index
+                figure={
+                  <span className="flex items-baseline gap-2">
+                    <span>{typeof handicapIndex === "number" ? formatHI(handicapIndex) : "—"}</span>
                     {typeof handicapIndex === "number" ? (
-                      <>
-                        {" · "}
-                        {formatSigned(handicapDelta30, 1)} over 30 days
-                      </>
+                      <Delta value={handicapDelta30} digits={1} />
                     ) : null}
-                  </>
+                  </span>
                 }
+                caption="Index · last 30 days"
                 sideLabel="Rounds"
                 sideValue={typeof roundsPlayed === "number" ? roundsPlayed : "—"}
               />
             </Group>
 
             <Group label="Last round">
+              {/* One band, not two. Gross, net and differential are small enough
+                  to sit beside the course they belong to, and the whole row is
+                  the way into the full history. */}
               <Row
+                href="/history"
                 title={lastRound?.course ?? "—"}
                 subtitle={
                   [
@@ -587,21 +608,19 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
                     .filter(Boolean)
                     .join(" · ") || undefined
                 }
-                value={lastRound?.gross ?? "—"}
-                tone="accent"
-              />
-              {/* Gross, net and differential belong to one round, so they read
-                  across a strip rather than stacking as three separate rows. */}
-              <Strip
-                items={[
-                  { label: "Gross", value: lastRound?.gross ?? "—" },
-                  { label: "Net", value: lastRound?.net ?? "—" },
-                  {
-                    label: "Diff",
-                    value:
-                      typeof lastRound?.diff === "number" ? lastRound.diff.toFixed(1) : "—",
-                  },
-                ]}
+                trailing={
+                  <Figures
+                    items={[
+                      { label: "Gross", value: lastRound?.gross ?? "—", tone: "accent" },
+                      { label: "Net", value: lastRound?.net ?? "—" },
+                      {
+                        label: "Diff",
+                        value:
+                          typeof lastRound?.diff === "number" ? lastRound.diff.toFixed(1) : "—",
+                      },
+                    ]}
+                  />
+                }
               />
             </Group>
 
@@ -642,16 +661,12 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
               </div>
             </Group>
 
-            {/* Play. The wheel used to own this space; with it docked in the nav,
-                starting or resuming a round is the screen's primary action. */}
-            <div className="mb-8">
-              <PrimaryAction
-                label={liveRoundId ? "Resume round" : "New round"}
-                hint={liveRoundId ? "You have a round in progress" : "Start a round at any course"}
-                onClick={() => router.push(liveRoundId ? `/round/${liveRoundId}` : "/round")}
-              />
-            </div>
           </div>
+
+          {/* Starting a round is the Play tab's job now. What's left is getting
+              back into one already underway, which floats above the bar rather
+              than waiting at the bottom of the scroll. */}
+          {liveRoundId ? <ResumeRoundBar roundId={liveRoundId} hint={liveRoundHint} /> : null}
         </div>
   );
 }

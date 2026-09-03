@@ -58,7 +58,12 @@ export function NavTab({
   indicatorId: string;
 }) {
   const reduceMotion = useReducedMotion();
-  const { href, label, Icon } = tab;
+  const { href, label, Icon, ActiveIcon } = tab;
+
+  // Most tabs just restroke when active. A tab can instead swap glyph entirely —
+  // the Play tee grows a ball — and swapping the component type (rather than
+  // passing an `active` prop) is what lets the new glyph animate its entrance.
+  const Glyph = active && ActiveIcon ? ActiveIcon : Icon;
 
   return (
     <Link
@@ -83,7 +88,7 @@ export function NavTab({
         />
       )}
       <span className="relative flex flex-col items-center gap-0.5">
-        <Icon className="h-5 w-5" strokeWidth={active ? 2.4 : 1.8} />
+        <Glyph className="h-5 w-5" strokeWidth={active ? 2.4 : 1.8} />
         {showLabel && <span className="text-[10px] font-semibold">{label}</span>}
       </span>
     </Link>

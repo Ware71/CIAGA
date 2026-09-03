@@ -653,7 +653,7 @@ export default function RoundsHistoryPage() {
               <div className="text-sm font-semibold text-[color:var(--sec-text)]">No finished rounds yet</div>
               <p className="text-[12px] text-[color:var(--sec-muted)]">Finish a round and it will show up here.</p>
               <Button asChild variant="ghost" size="sm" className="mt-2 px-2 text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]">
-                <Link href="/round">Go to rounds</Link>
+                <Link href="/play">Go to rounds</Link>
               </Button>
             </div>
           )}

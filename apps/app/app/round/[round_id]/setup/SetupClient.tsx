@@ -1063,7 +1063,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
         {/* Header */}
         <header className="flex items-center justify-between">
           <BackButton
-            onClick={() => router.push("/round")}
+            onClick={() => router.push("/play")}
             disabled={starting}
           />
 

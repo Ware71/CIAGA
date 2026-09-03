@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { ArrowDown, ArrowUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -270,6 +271,7 @@ export function Row({
   subtitle,
   value,
   tone = "default",
+  size = "default",
   aux,
   trailing,
   live = false,
@@ -283,6 +285,12 @@ export function Row({
   /** Pinned right, tabular. */
   value?: ReactNode;
   tone?: RowTone;
+  /**
+   * `sm` steps the two text lines down one rung, for a list that supports the
+   * screen rather than being it — the home highlights. The row keeps its full
+   * height, so the tap target is unchanged; only the type recedes.
+   */
+  size?: "default" | "sm";
   /** A quiet figure between the title and the value — "thru 14", "3W". */
   aux?: ReactNode;
   /** Anything that isn't a value: a pill, a chevron. */
@@ -293,6 +301,8 @@ export function Row({
   onClick?: () => void;
   className?: string;
 }) {
+  const sm = size === "sm";
+
   const body = (
     <>
       {live && (
@@ -304,11 +314,21 @@ export function Row({
       {lead ? <span className="flex shrink-0 items-center">{lead}</span> : null}
 
       <span className="flex min-w-0 flex-1 flex-col gap-[2px]">
-        <span className="truncate text-[length:var(--t-body)] font-normal text-[color:var(--sec-text)]">
+        <span
+          className={cn(
+            "truncate font-normal text-[color:var(--sec-text)]",
+            sm ? "text-[length:var(--t-sec)]" : "text-[length:var(--t-body)]"
+          )}
+        >
           {title}
         </span>
         {subtitle ? (
-          <span className="truncate text-[length:var(--t-sec)] font-normal text-[color:var(--sec-muted)]">
+          <span
+            className={cn(
+              "truncate font-normal text-[color:var(--sec-muted)]",
+              sm ? "text-[length:var(--t-label)]" : "text-[length:var(--t-sec)]"
+            )}
+          >
             {subtitle}
           </span>
         ) : null}
@@ -397,6 +417,78 @@ export function Hero({
         </div>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * A movement, beside the figure it moved. An arrow rather than a ± sign, because
+ * the sign of a handicap delta says nothing on its own: a falling index is an
+ * improvement, so down is good and up is bad, and the colour has to say which.
+ *
+ * The arrows are drawn by lucide rather than set as ↑ ↓, which carry emoji
+ * presentation defaults on Windows and Android — see DirectionArrow.
+ */
+export function Delta({ value, digits = 1 }: { value: number | null; digits?: number }) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+
+  const magnitude = Math.abs(value).toFixed(digits);
+  // Rounded, not raw: a -0.04 drift reads as flat at one decimal, so it should
+  // render flat rather than claim a direction the figure beside it can't show.
+  const flat = Number(magnitude) === 0;
+  const down = value < 0;
+  const Arrow = down ? ArrowDown : ArrowUp;
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-[2px] text-[length:var(--t-sec)] font-medium tabular-nums tracking-normal",
+        flat
+          ? "text-[color:var(--sec-muted)]"
+          : down
+            ? "text-[color:var(--sec-good)]"
+            : "text-[color:var(--sec-bad)]"
+      )}
+    >
+      {/* No movement takes the ± the rest of the app already uses for this
+          (see formatSigned), not a flat arrow — there is no direction to point. */}
+      {flat ? (
+        <span aria-hidden="true">±</span>
+      ) : (
+        <Arrow className="h-3 w-3" strokeWidth={2.5} aria-hidden="true" />
+      )}
+      <span>{magnitude}</span>
+    </span>
+  );
+}
+
+/**
+ * The compact form of `Strip` — the same label-over-figure pairs, but sized to
+ * ride in a `Row`'s trailing slot rather than span its own band. For a set of
+ * numbers small enough to sit beside the thing they describe instead of under it.
+ */
+export function Figures({
+  items,
+}: {
+  items: { label: string; value: ReactNode; tone?: RowTone }[];
+}) {
+  return (
+    <span className="flex items-start gap-[10px]">
+      {items.map((it) => (
+        <span key={it.label} className="flex flex-col items-end">
+          <span className="text-[length:var(--t-label)] font-medium uppercase leading-none tracking-[0.1em] text-[color:var(--sec-muted)]">
+            {it.label}
+          </span>
+          <span
+            className={cn(
+              "mt-[4px] text-[length:var(--t-sec)] font-medium leading-none tabular-nums",
+              TONE[it.tone ?? "default"]
+            )}
+          >
+            {it.value}
+          </span>
+        </span>
+      ))}
+    </span>
   );
 }
 

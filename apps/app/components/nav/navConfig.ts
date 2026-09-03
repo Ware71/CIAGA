@@ -1,10 +1,6 @@
-import {
-  CalendarDays,
-  LayoutGrid,
-  MessageCircle,
-  Trophy,
-  type LucideIcon,
-} from "lucide-react";
+import type { ComponentType } from "react";
+import { LayoutGrid, MessageCircle, Trophy } from "lucide-react";
+import { TeeBallIcon, TeeIcon } from "@/components/ui/GolfTee";
 
 /**
  * Every routing decision the bottom nav makes lives here: which tabs exist, where
@@ -13,11 +9,20 @@ import {
  * Kept free of React so it can be unit-tested and imported from both bars.
  */
 
+/**
+ * Widened from LucideIcon so a tab can carry a drawn glyph. Every lucide icon is
+ * assignable to this, so the tabs that use one need no change — it only has to
+ * take the className and the stroke weight NavTab hands it.
+ */
+export type NavIcon = ComponentType<{ className?: string; strokeWidth?: number }>;
+
 export type TabDef = {
   href: string;
   /** Icon-only in the UI, so this is the accessible name. */
   label: string;
-  Icon: LucideIcon;
+  Icon: NavIcon;
+  /** Swapped in while the tab is active. Optional — most tabs just restroke. */
+  ActiveIcon?: NavIcon;
   /** Keeps the parent tab lit across its children. */
   match: (pathname: string) => boolean;
 };
@@ -54,10 +59,14 @@ export const TABS_LEFT: TabDef[] = [
 /** Rendered right of the docked logo. */
 export const TABS_RIGHT: TabDef[] = [
   {
-    href: "/calendar",
-    label: "Calendar",
-    Icon: CalendarDays,
-    match: (p) => p === "/calendar",
+    // Starting a round used to be the last thing on Home, below three groups of
+    // content. It is the app's most common action, so it takes the tab; the
+    // calendar it replaced is now an icon in this page's header.
+    href: "/play",
+    label: "Play",
+    Icon: TeeIcon,
+    ActiveIcon: TeeBallIcon,
+    match: (p) => p === "/play",
   },
   {
     href: "/more",
@@ -83,8 +92,10 @@ export function hidesMainNav(pathname: string): boolean {
   if (pathname.startsWith("/onboarding/")) return true;
   if (pathname.startsWith("/invite/")) return true;
   if (isFantasy(pathname)) return true;
+  if (pathname === "/round") return true; // redirects to /play; same reason as "/"
 
-  // Live scoring and the setup wizard, but NOT the /round list itself.
+  // Live scoring and the setup wizard. The bare /round list is gone — it was
+  // absorbed into /play — so this now covers the whole subtree that remains.
   if (/^\/round\/[^/]+/.test(pathname)) return true;
 
   // Full-page creation wizards and the odds inspector.
@@ -101,11 +112,21 @@ export function hidesMainNav(pathname: string): boolean {
  * Anything unmapped falls back to the home set, so the wheel is never empty.
  */
 const HOME_WHEEL: WheelItem[] = [
-  { id: "round", label: "New Round", href: "/round" },
+  { id: "play", label: "Play", href: "/play" },
   { id: "history", label: "Round History", href: "/history" },
   { id: "stats", label: "Stats", href: "/stats" },
   { id: "courses", label: "Courses", href: "/courses" },
   { id: "calendar", label: "Calendar", href: "/calendar" },
+];
+
+// No "Play" item — the hub already owns that button, and the wheel is opened
+// from a logo docked on the same screen.
+const PLAY_WHEEL: WheelItem[] = [
+  { id: "history", label: "Round History", href: "/history" },
+  { id: "calendar", label: "Calendar", href: "/calendar" },
+  { id: "courses", label: "Courses", href: "/courses" },
+  { id: "calculator", label: "Handicap Calc", href: "/more/handicap-calculator" },
+  { id: "stats", label: "Stats", href: "/stats" },
 ];
 
 // History merged into Schedule (fixtures + results), so this is four, not five.
@@ -149,5 +170,6 @@ export function wheelItemsFor(pathname: string): WheelItem[] {
   }
   if (pathname === "/stats" || pathname.startsWith("/stats/")) return STATS_WHEEL;
   if (isMajors(pathname)) return MAJORS_WHEEL;
+  if (pathname === "/play") return PLAY_WHEEL;
   return HOME_WHEEL;
 }

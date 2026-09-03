@@ -15,7 +15,7 @@ export default function RoundError({
       message="Any scores you've already entered are saved — they sync from this device even if this screen won't load."
       digest={error.digest}
       onRetry={reset}
-      homeHref="/round"
+      homeHref="/play"
     />
   );
 }
