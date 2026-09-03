@@ -85,10 +85,11 @@ export type FeedReactionSummary = Array<{
  * read `media` when it's there and synthesise it from `image_urls` when it
  * isn't. `payload` is jsonb, so neither needed a migration.
  *
- * `kind: "video"` is described but not yet produced — see docs/analytics.md's
- * sibling note in the feed rework plan. Having the shape settled now means the
- * grid, the lightbox and the aspect-ratio maths don't get rebuilt when video
- * eventually lands, whether that's Supabase files or a provider like Cloudflare
+ * `kind: "video"` is described but not yet produced — video was investigated
+ * and deliberately deferred (see the social feed rework plan). Having the
+ * shape settled now means the grid, the lightbox and the aspect-ratio maths
+ * don't get rebuilt when video eventually lands, whether that's Supabase
+ * files or a provider like Cloudflare
  * Stream (hence `provider`/`provider_id`).
  */
 export type FeedMedia = {
