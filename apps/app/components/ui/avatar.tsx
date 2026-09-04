@@ -21,6 +21,16 @@ function Avatar({
   )
 }
 
+// No `loading="lazy"` here, deliberately: it would not do anything. Radix
+// decides between the image and the fallback by preloading through a detached
+// `new window.Image()` in an effect (react-avatar/dist/index.mjs:84), so the
+// fetch fires for every mounted avatar whatever the rendered <img> asks for.
+// A screen of 30 avatars requests 30 images either way.
+//
+// That is survivable now the objects are ~25 KB and the service worker caches
+// them (next.config.mjs), and off-screen deferral is not worth swapping Radix
+// out for. The plain-<img> avatars elsewhere — FeedCard, CommentSection,
+// ReactorsSheet, MentionInput — do lazy-load properly.
 function AvatarImage({
   className,
   ...props
@@ -28,6 +38,7 @@ function AvatarImage({
   return (
     <AvatarPrimitive.Image
       data-slot="avatar-image"
+      decoding="async"
       className={cn("aspect-square size-full", className)}
       {...props}
     />

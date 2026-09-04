@@ -17,6 +17,7 @@ import ProfileFeedTab from "@/components/profile/ProfileFeedTab";
 import AcceptableRoundsTab from "@/components/profile/AcceptableRoundsTab";
 import NonAcceptableRoundsTab from "@/components/profile/NonAcceptableRoundsTab";
 import { AccountLegalSection } from "@/components/profile/AccountLegalSection";
+import { compressAvatar, ImageCompressionError, outputExtension } from "@/lib/media/compressImage";
 
 type User = {
   id: string; // auth.users.id
@@ -101,6 +102,7 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
   // -------- Self-only: avatar upload --------
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
 
   // -------- Followers/Following modal state --------
   const [listOpen, setListOpen] = useState(false);
@@ -590,19 +592,31 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
       if (!isMe) return;
       const file = e.target.files?.[0];
       if (!file) return;
-      if (!file.type.startsWith("image/")) return;
-
+      // No `file.type.startsWith("image/")` guard here: compressAvatar does that
+      // check itself and, unlike a bare early return, it also recognises a HEIC
+      // by filename. Browsers hand back an empty type for HEIC often enough that
+      // the guard used to swallow exactly the case with the most useful error.
       setUploading(true);
+      setAvatarError(null);
 
-      const ext = file.name.split(".").pop() || "jpg";
       const folder = authUser?.id;
       if (!folder) throw new Error("Not logged in");
-      const path = `${folder}/${Date.now()}.${ext}`;
 
-      const { error: uploadError } = await supabase.storage.from(AVATAR_BUCKET).upload(path, file, {
-        cacheControl: "3600",
+      // Re-encode before upload. The picker hands us the camera original — 3-5 MB
+      // from a phone — and this is rendered at 16-96px across ~45 sites, so the
+      // raw file was costing gigabytes of CDN egress a month. Also strips EXIF,
+      // including the GPS coordinates iPhones attach, on the way into a public
+      // bucket. See lib/media/compressImage.ts.
+      const avatar = await compressAvatar(file);
+      const path = `${folder}/${Date.now()}.${outputExtension()}`;
+
+      const { error: uploadError } = await supabase.storage.from(AVATAR_BUCKET).upload(path, avatar.blob, {
+        // A year, not an hour. The path carries a timestamp, so the bytes behind
+        // a given URL can never change; an hourly revalidation only bought us a
+        // repeat download of every avatar on screen.
+        cacheControl: "31536000",
         upsert: true,
-        contentType: file.type,
+        contentType: avatar.type,
       });
       if (uploadError) throw uploadError;
 
@@ -639,6 +653,13 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
       setProfile((prev) => (prev ? { ...prev, avatar_url: publicUrl } : prev));
     } catch (err) {
       console.error("Avatar upload failed:", err);
+      // ImageCompressionError messages are written to be shown verbatim — the
+      // HEIC one in particular tells iPhone users exactly which setting to change.
+      setAvatarError(
+        err instanceof ImageCompressionError
+          ? err.message
+          : "Couldn't update your profile picture. Try again.",
+      );
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -1274,6 +1295,11 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
               <Button onClick={onPickFile} disabled={uploading} className="mt-4 rounded-xl bg-[color:var(--sec-primary)] hover:bg-[color:var(--sec-primary-hover)]">
                 {uploading ? "Uploading…" : "Change profile picture"}
               </Button>
+              {avatarError ? (
+                <div className="mt-2 max-w-xs text-center text-[length:var(--t-sec)] font-normal text-[color:var(--sec-bad)]">
+                  {avatarError}
+                </div>
+              ) : null}
             </>
           )}
 

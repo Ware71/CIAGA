@@ -1,6 +1,7 @@
 // lib/media/compressImage.ts
 //
-// Client-side image compression for social post uploads.
+// Client-side image compression for every image the app uploads: social posts,
+// avatars and group images.
 //
 // Why this exists at all: the project is on the Supabase free plan, which has no
 // server-side image transformation (that's Pro-only) and a 1 GB / 5 GB-a-month
@@ -8,7 +9,8 @@
 // is already exactly the right size — there is no CDN behind it that will resize
 // on the way out.
 //
-// Every photo produces TWO encodes:
+// Avatars and group images take a single small encode (`compressAvatar`,
+// `compressGroupImage`). Every photo in a post produces TWO encodes:
 //
 //   feed  900px max edge  — what the card renders. ~120 KB.
 //   full  1600px max edge — what the lightbox renders. ~350 KB.
@@ -68,6 +70,16 @@ const MAX_INPUT_BYTES = 25 * 1024 * 1024;
 const VARIANTS = {
   feed: { maxEdge: 900, targetBytes: 140 * 1024 },
   full: { maxEdge: 1600, targetBytes: 400 * 1024 },
+  // Avatars are the most-rendered image class in the app — roughly 45 sites, at
+  // 16px to 96px — and until the 2026-09 egress audit they were uploaded as the
+  // raw file off the picker. A 4 MB phone photo drawn into a 24px circle, with
+  // no service-worker cache behind it, was most of a 6.5 GB cached-egress month
+  // on a userbase of ten. 320px covers the largest render (96px in
+  // ProfileHeader) at 3x DPR, and lands around 25 KB.
+  avatar: { maxEdge: 320, targetBytes: 40 * 1024 },
+  // Group images top out at 64px today but fill their container on the home
+  // screen, so they get more headroom than an avatar.
+  group: { maxEdge: 512, targetBytes: 80 * 1024 },
 } as const;
 
 /**
@@ -270,11 +282,7 @@ async function encodeVariant(
 
 // ---- Public API -------------------------------------------------------------
 
-/**
- * Decode once, encode twice. Throws `ImageCompressionError` with a `code` and a
- * message that is safe to show the user verbatim.
- */
-export async function compressImage(file: File): Promise<CompressedImage> {
+function assertUsableImage(file: File) {
   if (!file.type.startsWith("image/") && !looksLikeHeic(file)) {
     throw new ImageCompressionError("not_an_image", `"${file.name}" isn't an image.`);
   }
@@ -285,6 +293,42 @@ export async function compressImage(file: File): Promise<CompressedImage> {
       `"${file.name}" is ${formatBytes(file.size)}. The limit is ${formatBytes(MAX_INPUT_BYTES)}.`,
     );
   }
+}
+
+/** Decode once, encode once. Shared by the single-variant entry points below. */
+async function compressToVariant(
+  file: File,
+  variant: (typeof VARIANTS)[keyof typeof VARIANTS],
+): Promise<EncodedImage> {
+  assertUsableImage(file);
+
+  const decoded = await decode(file);
+  try {
+    return await encodeVariant(decoded, variant.maxEdge, variant.targetBytes);
+  } finally {
+    decoded.release();
+  }
+}
+
+/**
+ * A profile picture: one 320px variant, ~25 KB. Throws `ImageCompressionError`
+ * with a `code` and a user-safe message, same contract as `compressImage`.
+ */
+export function compressAvatar(file: File): Promise<EncodedImage> {
+  return compressToVariant(file, VARIANTS.avatar);
+}
+
+/** A group's image: one 512px variant, ~50 KB. */
+export function compressGroupImage(file: File): Promise<EncodedImage> {
+  return compressToVariant(file, VARIANTS.group);
+}
+
+/**
+ * Decode once, encode twice. Throws `ImageCompressionError` with a `code` and a
+ * message that is safe to show the user verbatim.
+ */
+export async function compressImage(file: File): Promise<CompressedImage> {
+  assertUsableImage(file);
 
   const decoded = await decode(file);
   try {

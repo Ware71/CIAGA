@@ -146,6 +146,8 @@ export default function MentionInput({
                 <img
                   src={r.avatar_url}
                   alt=""
+                  loading="lazy"
+                  decoding="async"
                   className="h-6 w-6 rounded-full object-cover border border-[color:var(--sec-hair)]"
                 />
               ) : (

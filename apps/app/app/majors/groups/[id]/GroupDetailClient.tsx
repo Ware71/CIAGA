@@ -913,11 +913,20 @@ export default function GroupDetailClient({ groupId }: { groupId: string }) {
     setUploadingImage(true);
     try {
       const { supabase } = await import("@/lib/supabaseClient");
-      const ext = file.name.split(".").pop() ?? "jpg";
-      const path = `groups/${groupId}/${Date.now()}.${ext}`;
+      const { compressGroupImage, outputExtension } = await import("@/lib/media/compressImage");
+      // Re-encode before upload — the picker hands us the camera original, and
+      // this renders at 24-64px. See lib/media/compressImage.ts.
+      const image = await compressGroupImage(file);
+      const path = `groups/${groupId}/${Date.now()}.${outputExtension()}`;
       const { error: uploadError } = await supabase.storage
         .from("group-images")
-        .upload(path, file, { cacheControl: "3600", upsert: true });
+        // A year, not an hour: the path carries a timestamp, so the bytes behind
+        // a given URL can never change.
+        .upload(path, image.blob, {
+          cacheControl: "31536000",
+          upsert: true,
+          contentType: image.type,
+        });
       if (uploadError) throw uploadError;
       const { data: urlData } = supabase.storage.from("group-images").getPublicUrl(path);
       const session = await getViewerSession();
