@@ -54,16 +54,6 @@ function fmtNum(n: number | null | undefined, digits = 1) {
   return x.toFixed(digits);
 }
 
-type NearbyCourseLite = {
-  id: string;
-  name: string;
-  lat: number;
-  lng: number;
-  distance_m: number;
-  website: string | null;
-  phone: string | null;
-};
-
 type Props = {
   roundId: string;
   courseId: string | null;
@@ -71,8 +61,6 @@ type Props = {
   isOwner: boolean;
   isEditable: boolean;
   onUpdate: () => void;
-  preloadedNearby?: NearbyCourseLite[] | null;
-  nearbyGpsPos?: { lat: number; lng: number } | null;
 };
 
 export function CourseAndTeeSection({
@@ -82,8 +70,6 @@ export function CourseAndTeeSection({
   isOwner,
   isEditable,
   onUpdate,
-  preloadedNearby,
-  nearbyGpsPos,
 }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -230,8 +216,6 @@ export function CourseAndTeeSection({
         setPickerOpen(false);
         await updateCourse(selectedCourseId, null);
       }}
-      preloadedNearby={preloadedNearby}
-      nearbyGpsPos={nearbyGpsPos}
     />
   );
 

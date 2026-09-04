@@ -22,6 +22,7 @@ import type { TeamBuilderTeam, TeamBuilderParticipant } from "@/components/round
 import { isTeamFormat } from "@/components/rounds/FormatSelector";
 import { PlayerSetupRow } from "@/components/rounds/PlayerSetupRow";
 import type { TeeBoxOption } from "@/components/rounds/PlayerSetupRow";
+import { AUTO_DETECT_RADIUS_M } from "@/lib/courses/constants";
 
 
 function Avatar({
@@ -358,7 +359,9 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
 
   const setupLocked = !!(round as any)?.setup_locked;
 
-  // GPS + nearby courses fetch at page load (for instant picker + auto-detect)
+  // GPS + a tight nearby sweep, purely to auto-detect the course for a brand-new
+  // round. The picker no longer takes a preload — it loads its own, wider list —
+  // and the two radii are deliberately different: see AUTO_DETECT_RADIUS_M.
   useEffect(() => {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
@@ -366,7 +369,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
         nearbyGpsPosRef.current = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         try {
           const res = await fetch(
-            `/api/courses/nearby?lat=${pos.coords.latitude}&lng=${pos.coords.longitude}&radius=5000`,
+            `/api/courses/nearby?lat=${pos.coords.latitude}&lng=${pos.coords.longitude}&radius=${AUTO_DETECT_RADIUS_M}`,
             { cache: "no-store" }
           );
           const data = await res.json();
@@ -1111,8 +1114,6 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
                 isOwner={false}
                 isEditable={false}
                 onUpdate={fetchAll}
-                preloadedNearby={null}
-                nearbyGpsPos={null}
               />
             </SectionCard>
 
@@ -1267,8 +1268,6 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
               isOwner={isOwner}
               isEditable={round.status === "draft" || round.status === "scheduled"}
               onUpdate={fetchAll}
-              preloadedNearby={nearbyForPicker}
-              nearbyGpsPos={nearbyGpsPosRef.current}
             />
           </SectionCard>
         ) : null}

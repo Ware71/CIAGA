@@ -302,24 +302,31 @@ export default function MapLocationPicker({
     );
   }
 
+  // The picker is mounted inside its own scrim by the caller, so this is just
+  // the panel. Colours come from the --sec-* tokens rather than the shadcn ones
+  // it shipped with, and the width is fluid — it used to be a fixed 420px,
+  // which overflowed a phone.
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-background w-[420px] rounded-lg shadow-lg overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-2 border-b">
-          <div className="font-semibold text-sm flex items-center gap-2">
-            <MapPin size={16} />
-            Pick Location on Map
-          </div>
-          <button onClick={onClose} aria-label="Close">
-            <X size={18} />
-          </button>
+    <div className="w-full max-w-[420px] overflow-hidden rounded-[var(--r-ui)] border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] shadow-2xl">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-[color:var(--sec-hair)] px-4 py-2.5">
+        <div className="flex items-center gap-2 text-[length:var(--t-body)] font-semibold text-[color:var(--sec-text)]">
+          <MapPin size={16} className="text-[color:var(--sec-accent)]" />
+          Drop a pin
         </div>
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          className="grid h-8 w-8 place-items-center rounded-full text-[color:var(--sec-muted)] transition-colors hover:bg-[color:var(--sec-surface)] hover:text-[color:var(--sec-text)]"
+        >
+          <X size={18} />
+        </button>
+      </div>
 
-        {/* Map */}
-        <div
+      {/* Map */}
+      <div
           ref={containerRef}
-          className="relative h-[320px] bg-muted overflow-hidden touch-none"
+          className="relative h-[min(52vh,320px)] overflow-hidden bg-[color:var(--sec-surface)] touch-none"
           style={{ cursor: pointerRef.current.active ? "grabbing" : "grab" }}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
@@ -355,16 +362,16 @@ export default function MapLocationPicker({
 
           {/* Controls */}
           <div className="absolute right-2 top-2 flex flex-col gap-2">
-            <div className="flex flex-col bg-background border rounded">
+            <div className="flex flex-col overflow-hidden rounded-[8px] border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)]">
               <button
-                className="p-1"
+                className="p-1.5 text-[color:var(--sec-text-2)] hover:bg-[color:var(--sec-surface)]"
                 onClick={() => setZoom((z) => clamp(z + 1, 2, 18))}
                 aria-label="Zoom in"
               >
                 <Plus size={14} />
               </button>
               <button
-                className="p-1 border-t"
+                className="border-t border-[color:var(--sec-hair)] p-1.5 text-[color:var(--sec-text-2)] hover:bg-[color:var(--sec-surface)]"
                 onClick={() => setZoom((z) => clamp(z - 1, 2, 18))}
                 aria-label="Zoom out"
               >
@@ -373,7 +380,7 @@ export default function MapLocationPicker({
             </div>
 
             <button
-              className="p-2 bg-background border rounded"
+              className="rounded-[8px] border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] p-2 text-[color:var(--sec-text-2)] hover:bg-[color:var(--sec-surface)]"
               onClick={centerOnMe}
               aria-label="Center on my location"
               title="Center on my location"
@@ -383,46 +390,44 @@ export default function MapLocationPicker({
           </div>
 
           {/* Hint */}
-          <div className="absolute left-2 bottom-2 rounded bg-black/40 px-2 py-1 text-[10px] text-white/90">
-            Drag to move • Scroll to zoom • Tap/click to drop pin
+          <div className="absolute bottom-2 left-2 rounded-full bg-black/55 px-2.5 py-1 text-[length:var(--t-label)] text-white/90">
+            Drag to move · pinch to zoom · tap to drop
           </div>
+      </div>
+
+      {/* Footer */}
+      <div className="space-y-2.5 border-t border-[color:var(--sec-hair)] px-4 py-3">
+        <div className="text-[length:var(--t-sec)] tabular-nums text-[color:var(--sec-muted)]">
+          {pin
+            ? `${pin.lat.toFixed(5)}, ${pin.lng.toFixed(5)}`
+            : "Tap the map to choose a spot."}
         </div>
 
-        {/* Footer */}
-        <div className="px-4 py-3 border-t space-y-2">
-          {/* coords preview */}
-          <div className="text-[11px] text-muted-foreground">
-            {pin
-              ? `Selected: ${pin.lat.toFixed(5)}, ${pin.lng.toFixed(5)}`
-              : "Tap/click the map to choose a location."}
-          </div>
+        <div className="flex items-center justify-between gap-2">
+          <button
+            className="text-[length:var(--t-sec)] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
+            onClick={() => {
+              setPin(null);
+              onClear();
+            }}
+          >
+            Clear
+          </button>
 
-          <div className="flex items-center justify-between">
+          <div className="flex gap-2">
             <button
-              className="text-sm text-muted-foreground hover:text-foreground"
-              onClick={() => {
-                setPin(null);
-                onClear();
-              }}
+              className="rounded-[var(--r-ui)] border border-[color:var(--sec-hair)] px-3 py-1.5 text-[length:var(--t-sec)] text-[color:var(--sec-text-2)] hover:bg-[color:var(--sec-surface)]"
+              onClick={onClose}
             >
-              Clear
+              Cancel
             </button>
-
-            <div className="flex gap-2">
-              <button
-                className="px-3 py-1 text-sm rounded border"
-                onClick={onClose}
-              >
-                Cancel
-              </button>
-              <button
-                className="px-3 py-1 text-sm rounded bg-primary text-primary-foreground disabled:opacity-50"
-                disabled={!pin}
-                onClick={() => pin && onConfirm(pin)}
-              >
-                Use location
-              </button>
-            </div>
+            <button
+              className="rounded-[var(--r-ui)] bg-[color:var(--sec-accent)] px-3 py-1.5 text-[length:var(--t-sec)] font-semibold text-[color:var(--ciaga-ground)] disabled:opacity-50"
+              disabled={!pin}
+              onClick={() => pin && onConfirm(pin)}
+            >
+              Search here
+            </button>
           </div>
         </div>
       </div>
