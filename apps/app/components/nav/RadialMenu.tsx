@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useState } from "react";
+import { createRound, newRoundSetupHref } from "@/lib/rounds/createRound";
 import type { WheelItem } from "./navConfig";
 
 /**
@@ -51,6 +52,9 @@ export function RadialMenu({
   const router = useRouter();
   const reduceMotion = useReducedMotion();
   const [size, setSize] = useState({ vw: 0, vh: 0 });
+  /** Id of the item running an action, so only it shows a busy label. */
+  const [pending, setPending] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     const measure = () =>
@@ -66,6 +70,14 @@ export function RadialMenu({
       window.visualViewport?.removeEventListener("resize", measure);
     };
   }, []);
+
+  // A failure from last time shouldn't greet the next long-press.
+  useEffect(() => {
+    if (!open) {
+      setActionError(null);
+      setPending(null);
+    }
+  }, [open]);
 
   // Close on Escape — the scrim covers pointer dismissal.
   useEffect(() => {
@@ -88,9 +100,33 @@ export function RadialMenu({
   const radiusY = clamp(size.vh * 0.19, LOGO_R + 44, 172);
   const positions = wheelPositions(items.length, radiusY, radiusX);
 
-  const select = (href: string) => {
+  /**
+   * A navigating item closes the wheel and goes. An action item cannot: the
+   * wheel would unmount mid-request (and `hidesMainNav` unmounts the whole bar
+   * the moment we land on /round/{id}/setup), so there would be nowhere to show
+   * "Creating…" or an error. So the wheel stays up, the item reports progress,
+   * and it only closes once the round exists — or the attempt has failed.
+   */
+  const select = async (item: WheelItem) => {
+    if (item.action === "new-round") {
+      if (pending) return;
+      setPending(item.id);
+      setActionError(null);
+      try {
+        const roundId = await createRound();
+        onClose();
+        router.push(newRoundSetupHref(roundId));
+      } catch (e: any) {
+        setActionError(e?.message || "Couldn't start a round");
+      } finally {
+        setPending(null);
+      }
+      return;
+    }
+
+    if (!item.href) return;
     onClose();
-    router.push(href);
+    router.push(item.href);
   };
 
   return (
@@ -112,8 +148,9 @@ export function RadialMenu({
                 <motion.button
                   key={item.id}
                   role="menuitem"
-                  onClick={() => select(item.href)}
-                  className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 pointer-events-auto flex h-9 items-center justify-center rounded-full px-3 text-center text-[11px] font-semibold leading-tight tracking-wide shadow-lg backdrop-blur-sm"
+                  onClick={() => void select(item)}
+                  disabled={!!pending && pending !== item.id}
+                  className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 pointer-events-auto flex h-9 items-center justify-center rounded-full px-3 text-center text-[11px] font-semibold leading-tight tracking-wide shadow-lg backdrop-blur-sm disabled:opacity-45"
                   style={{
                     width: ITEM_W,
                     backgroundColor: "color-mix(in srgb, var(--nav-pill) 95%, transparent)",
@@ -130,10 +167,27 @@ export function RadialMenu({
                       : { type: "spring", stiffness: 260, damping: 20, delay: 0.05 * index }
                   }
                 >
-                  {item.label}
+                  {pending === item.id ? "Creating…" : item.label}
                 </motion.button>
               );
             })}
+
+            {/* The wheel is still up when an action fails, so it can say so —
+                a silent no-op would read as a dead button. */}
+            {actionError ? (
+              <motion.div
+                className="fixed left-1/2 top-1/2 z-50 w-[240px] -translate-x-1/2 translate-y-[92px] rounded-full px-3 py-2 text-center text-[11px] font-medium"
+                style={{
+                  backgroundColor: "color-mix(in srgb, var(--nav-pill) 95%, transparent)",
+                  color: "var(--sec-bad)",
+                  boxShadow: "0 4px 16px rgba(0,0,0,0.45)",
+                }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+              >
+                {actionError}
+              </motion.div>
+            ) : null}
           </div>
         </>
       )}

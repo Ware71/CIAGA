@@ -27,7 +27,17 @@ export type TabDef = {
   match: (pathname: string) => boolean;
 };
 
-export type WheelItem = { id: string; label: string; href: string };
+/**
+ * A wheel entry either navigates or performs an action. `action` is a string
+ * discriminator rather than a callback so this module stays React-free and
+ * unit-testable — RadialMenu owns what "new-round" actually does.
+ */
+export type WheelItem = {
+  id: string;
+  label: string;
+  href?: string;
+  action?: "new-round";
+};
 
 /**
  * Total space the floating bar reserves at the bottom of every scroll container.
@@ -112,7 +122,9 @@ export function hidesMainNav(pathname: string): boolean {
  * Anything unmapped falls back to the home set, so the wheel is never empty.
  */
 const HOME_WHEEL: WheelItem[] = [
-  { id: "play", label: "Play", href: "/play" },
+  // Creates the round outright rather than linking to /play — from Home, /play
+  // is one tap away in the bar, so a wheel item pointing at it earns nothing.
+  { id: "new-round", label: "New Round", action: "new-round" },
   { id: "history", label: "Round History", href: "/history" },
   { id: "stats", label: "Stats", href: "/stats" },
   { id: "courses", label: "Courses", href: "/courses" },

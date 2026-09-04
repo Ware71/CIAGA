@@ -7,10 +7,11 @@ import { CalendarDays, History, Users } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { getMyProfileIdByAuthUserId } from "@/lib/myProfile";
 import { Button } from "@/components/ui/button";
-import { Group, PageHeader, PrimaryAction, Row, Tag } from "@/components/ui/chrome";
+import { Group, PageHeader, PrimaryAction } from "@/components/ui/chrome";
 import { TileCard } from "@/components/ui/TileCard";
+import { RoundCard } from "@/components/rounds/RoundCard";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getWhsDefaultPolicy } from "@/lib/rounds/whsDefaults";
+import { createRound, newRoundSetupHref } from "@/lib/rounds/createRound";
 
 /**
  * The Play hub — the 4th tab, and the round list that used to live at /round.
@@ -30,6 +31,8 @@ type LinkedEvent = {
   event_type: string;
 } | null;
 
+type TeeRef = { id: string; name: string | null } | null;
+
 type RoundRow = {
   id: string;
   name: string | null;
@@ -39,18 +42,45 @@ type RoundRow = {
   course_id: string | null;
   scheduled_at: string | null;
   event_tee_time_id: string | null;
+  pending_tee_box_id: string | null;
   courses?: { name: string | null } | null;
+  /** The round's default tee, used when the viewer has no override. */
+  default_tee?: TeeRef;
   /** Populated when the round is linked to a Majors tee time */
   linked_event?: LinkedEvent;
   /** The viewer's role on this round (owner vs scorer/player) */
   myRole?: "owner" | "scorer" | "player";
+  /** Resolved viewer's tee name — see resolveMyTeeName. */
+  myTee?: string | null;
 };
 
 type ParticipantRow = {
   id: string;
   role: "owner" | "scorer" | "player";
+  pending_tee_box_id: string | null;
+  tee_snapshot_id: string | null;
+  my_tee_box?: TeeRef;
+  my_tee_snapshot?: TeeRef;
   round: RoundRow;
 };
+
+/**
+ * Which tee this player is on, in precedence order.
+ *
+ * A round's tees move table when it starts: before that they are a pointer into
+ * the live course catalogue, after it a frozen snapshot (so a club re-rating a
+ * tee can't rewrite a played round). A participant may also override the round
+ * default with their own. So: my snapshot, then my override, then the round's
+ * default, then nothing.
+ */
+function resolveMyTeeName(p: ParticipantRow): string | null {
+  return (
+    p.my_tee_snapshot?.name ??
+    p.my_tee_box?.name ??
+    p.round?.default_tee?.name ??
+    null
+  );
+}
 
 function ConfirmSheet(props: {
   title: string;
@@ -96,12 +126,11 @@ function ConfirmSheet(props: {
 }
 
 /**
- * Swipe-left to reveal a destructive action. Square-cornered now that the rows
- * it wraps sit flush in a `Group` rather than floating as separate cards.
+ * Swipe-left to reveal a destructive action.
  *
- * The divider lives on this wrapper, not on the Row inside it: wrapping makes
- * every Row the last child of its own container, so Row's `last:border-b-0`
- * would strip every divider in the list rather than just the final one.
+ * Rounded to match the card it wraps, and it owns the gap between cards: its
+ * overflow-hidden clips the reveal rail to this box, so a margin on the card
+ * itself would leave a strip of red showing between rows mid-swipe.
  */
 function SwipeToDeleteRow(props: {
   children: React.ReactNode;
@@ -188,7 +217,7 @@ function SwipeToDeleteRow(props: {
   const showRail = enabled && (open || x < -10);
 
   return (
-    <div className="relative overflow-hidden border-b border-[color:var(--hair)] last:border-b-0">
+    <div className="relative mb-2 overflow-hidden rounded-[var(--r-ui)] last:mb-0">
       {/* Rail: hidden unless swiping/open */}
       <div
         className={[
@@ -212,7 +241,7 @@ function SwipeToDeleteRow(props: {
       <div
         // Key: let the browser know vertical pan is allowed, horizontal is handled by us
         style={{ transform: `translateX(${x}px)`, touchAction: enabled ? "pan-y" : "auto" }}
-        className="bg-[color:var(--ciaga-ground)] will-change-transform"
+        className="will-change-transform"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -258,12 +287,19 @@ export default function PlayClient() {
 
       const myProfileId = await getMyProfileIdByAuthUserId(auth.user.id);
 
+      // The two tee embeds are the viewer's own tee, which lives in a different
+      // table either side of the round starting — see resolveMyTeeName. Both are
+      // FK embeds on named constraints, so the whole card is still one round trip.
       const { data, error } = await supabase
         .from("round_participants")
-        .select(`id, role, round:rounds!round_id(
+        .select(`id, role, pending_tee_box_id, tee_snapshot_id,
+          my_tee_box:course_tee_boxes!round_participants_pending_tee_box_id_fkey(id, name),
+          my_tee_snapshot:round_tee_snapshots!fk_round_participants_tee_snapshot(id, name),
+          round:rounds!round_id(
           id, name, status, started_at, created_at, course_id, scheduled_at,
-          event_tee_time_id,
+          event_tee_time_id, pending_tee_box_id,
           courses(name),
+          default_tee:course_tee_boxes!rounds_pending_tee_box_id_fkey(id, name),
           event_tee_time:event_tee_times!event_tee_time_id(
             event_id,
             events!event_id(id, name, event_type)
@@ -297,7 +333,12 @@ export default function PlayClient() {
         // Flatten the nested event join into a top-level field
         const teeTimeJoin = round.event_tee_time;
         const linked_event: LinkedEvent = teeTimeJoin?.events ?? null;
-        return { ...round, linked_event, myRole: r.role } as RoundRow;
+        return {
+          ...round,
+          linked_event,
+          myRole: r.role,
+          myTee: resolveMyTeeName(r),
+        } as RoundRow;
       })
       .filter(Boolean)
       .sort((a, b) => {
@@ -336,32 +377,9 @@ export default function PlayClient() {
     setErr(null);
 
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData.session?.access_token;
-      if (!accessToken) throw new Error("Not authenticated");
-
-      const res = await fetch("/api/rounds/create", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          // Create round without course/tee - user will select in setup
-          course_id: null,
-          pending_tee_box_id: null,
-          format_type: "strokeplay",
-          // Seed the WHS default for the initial format (still editable in setup).
-          default_playing_handicap_mode: getWhsDefaultPolicy("strokeplay").mode,
-          default_playing_handicap_value: getWhsDefaultPolicy("strokeplay").allowance_pct,
-        }),
-      });
-
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Failed to create round");
-
-      // Navigate directly to setup, flagging this as a brand-new round
-      router.push(`/round/${json.round_id}/setup?new=1`);
+      // Shared with the nav wheel's "New round" — see lib/rounds/createRound.
+      const roundId = await createRound();
+      router.push(newRoundSetupHref(roundId));
     } catch (e: any) {
       setErr(e?.message || "Failed to create round");
       setCreatingRound(false);
@@ -513,38 +531,49 @@ export default function PlayClient() {
               const swipeAction: "delete" | "withdraw" = isOwner ? "delete" : "withdraw";
               const isDeleting = deletingId === r.id;
 
-              const title = r.linked_event?.name ?? r.name ?? r.courses?.name ?? "Round";
+              // A Majors round's own name carries the round label the event name
+              // doesn't ("The OPEN 2026 · Round 2"), so prefer it — the event is
+              // already identified by the competition pill on the right.
+              const title = r.name ?? r.linked_event?.name ?? r.courses?.name ?? "Round";
 
-              // Course name if the title already used the event/round name,
-              // otherwise the status word — never repeat the title back.
-              const context =
-                r.courses?.name && (r.linked_event?.name ?? r.name)
-                  ? r.courses.name
-                  : isMajorsRound
-                    ? "Majors"
-                    : null;
+              // Competition type reads better than a flat "Majors": "Matchplay",
+              // "Order Of Merit". Same de-underscore + title-case as production.
+              const competitionLabel = r.linked_event?.event_type
+                ? r.linked_event.event_type
+                    .replace(/_/g, " ")
+                    .replace(/\b\w/g, (c) => c.toUpperCase())
+                : null;
 
-              const when = r.scheduled_at
-                ? new Date(r.scheduled_at).toLocaleString(undefined, {
+              const status = isLive
+                ? "Live"
+                : isDraft
+                  ? "Draft"
+                  : competitionLabel ?? (isMajorsRound ? "Majors" : "Scheduled");
+
+              // A draft has no scheduled_at and a live round may not either, so
+              // fall through rather than showing a card with no date at all.
+              const whenIso = r.scheduled_at ?? r.started_at ?? r.created_at ?? null;
+              const when = whenIso
+                ? new Date(whenIso).toLocaleString(undefined, {
                     weekday: "short",
-                    month: "short",
                     day: "numeric",
+                    month: "short",
                     hour: "numeric",
                     minute: "2-digit",
                   })
                 : null;
 
-              const swipeHint = canSwipe
-                ? `Swipe to ${isOwner ? "delete" : "withdraw"}`
-                : null;
-
-              const subtitle = [context, when, swipeHint].filter(Boolean).join(" · ") || undefined;
-
-              const statusTag = isLive ? (
-                <Tag on>Live</Tag>
-              ) : (
-                <Tag>{isDraft ? "Draft" : isMajorsRound ? "Majors" : "Scheduled"}</Tag>
-              );
+              const footnote = canSwipe ? (
+                `Swipe to ${isOwner ? "delete" : "withdraw"}`
+              ) : isMajorsRound && isScheduled ? (
+                <Link
+                  href={`/majors/events/${r.linked_event?.id ?? ""}`}
+                  className="underline underline-offset-2 hover:text-[color:var(--sec-text)]"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Withdraw in Majors to remove
+                </Link>
+              ) : null;
 
               return (
                 <SwipeToDeleteRow
@@ -554,25 +583,21 @@ export default function PlayClient() {
                   actionLabel={isOwner ? "Delete" : "Withdraw"}
                   onDelete={() => setConfirmAction({ id: r.id, type: swipeAction })}
                 >
-                  <Row
+                  <RoundCard
                     href={isDraft || isScheduled ? `/round/${r.id}/setup` : `/round/${r.id}`}
-                    live={isLive}
                     title={title}
-                    subtitle={subtitle}
-                    trailing={statusTag}
+                    status={status}
+                    live={isLive}
+                    course={r.courses?.name ?? null}
+                    tee={r.myTee ?? null}
+                    when={when}
+                    footnote={footnote}
                   />
                 </SwipeToDeleteRow>
               );
             })
           )}
         </Group>
-
-        {/* A Majors round can't be removed here — say where it can be. */}
-        {rounds.some((r) => !!r.event_tee_time_id && r.status === "scheduled") ? (
-          <p className="-mt-[calc(var(--sp-grp)-4px)] mb-[var(--sp-grp)] text-[length:var(--t-label)] text-[color:var(--sec-muted)]">
-            Majors rounds are withdrawn from the event, not from here.
-          </p>
-        ) : null}
 
         {confirmAction ? (() => {
           const round = rounds.find((r) => r.id === confirmAction.id);

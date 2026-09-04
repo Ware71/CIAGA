@@ -568,21 +568,28 @@ export default function HomeClient({ initialCore, initialRest, initialProfileId 
           </header>
 
           <div className="w-full max-w-sm">
-            <Group label="Handicap">
-              {/* The 30-day move rides the index rather than sitting under it in
-                  prose: it is the same measurement, one step down in size. An
-                  arrow, not a ± — a falling index is an improvement, and the
+            {/* One line, and tight to Last round beneath it. The caption that
+                used to sit under the figure said the same thing in prose; with
+                the move and its window on the figure's own baseline, the second
+                line was carrying nothing. `mb-2` overrides Group's 18px — the
+                token itself is shared by every group on every screen. */}
+            <Group label="Handicap" className="mb-2">
+              {/* An arrow, not a ± — a falling index is an improvement, and the
                   sign alone can't say so. */}
               <Hero
                 figure={
                   <span className="flex items-baseline gap-2">
                     <span>{typeof handicapIndex === "number" ? formatHI(handicapIndex) : "—"}</span>
                     {typeof handicapIndex === "number" ? (
-                      <Delta value={handicapDelta30} digits={1} />
+                      <>
+                        <Delta value={handicapDelta30} digits={1} />
+                        <span className="text-[length:var(--t-sec)] font-normal tracking-normal text-[color:var(--sec-muted)]">
+                          last 30 days
+                        </span>
+                      </>
                     ) : null}
                   </span>
                 }
-                caption="Index · last 30 days"
                 sideLabel="Rounds"
                 sideValue={typeof roundsPlayed === "number" ? roundsPlayed : "—"}
               />
