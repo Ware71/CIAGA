@@ -113,10 +113,10 @@ export function DayCell(props: {
       onClick={() => onEmptyClick(day)}
       style={removed ? REMOVED_CELL_STYLE : cellStyle}
       className={cn(
-        "flex h-full min-h-0 w-full flex-col overflow-hidden rounded-lg border p-1 text-left transition-colors hover:bg-emerald-900/20",
-        inScope ? "border-emerald-900/50" : "border-emerald-900/40 bg-[#0b3b21]/10",
+        "flex h-full min-h-0 w-full flex-col overflow-hidden rounded-lg border p-1 text-left transition-colors hover:bg-[color:var(--sec-surface-2)]",
+        inScope ? "border-[color:var(--sec-hair)]" : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_10%,transparent)]",
         removed && REMOVED_CELL_CLASS,
-        isToday(day) && "ring-1 ring-[#f5e6b0]/60"
+        isToday(day) && "ring-1 ring-[color:color-mix(in_srgb,var(--sec-accent)_60%,transparent)]"
       )}
     >
       <div className="mb-0.5 flex items-center justify-between">
@@ -124,10 +124,10 @@ export function DayCell(props: {
           className={cn(
             "flex h-5 w-5 items-center justify-center rounded-full text-[10px]",
             isToday(day)
-              ? "bg-[#f5e6b0] font-bold text-[#042713]"
+              ? "bg-[color:var(--sec-accent)] font-bold text-[color:var(--ciaga-ground)]"
               : inScope
-                ? "text-emerald-100/80"
-                : "text-emerald-100/40"
+                ? "text-[color:var(--sec-muted)]"
+                : "text-[color:var(--sec-muted)]"
           )}
         >
           {day.getDate()}
@@ -152,7 +152,7 @@ export function DayCell(props: {
               </span>
             ))}
             {roundEvents.length > 3 ? (
-              <span className="text-[8px] text-emerald-200/60">+{roundEvents.length - 3}</span>
+              <span className="text-[8px] text-[color:var(--sec-muted)]">+{roundEvents.length - 3}</span>
             ) : null}
           </span>
         ) : null}
@@ -175,7 +175,7 @@ export function DayCell(props: {
               ))
             : null}
           {!isPip && extraBlocks > 0 ? (
-            <div className="text-[8px] text-emerald-200/60">+{extraBlocks} more</div>
+            <div className="text-[8px] text-[color:var(--sec-muted)]">+{extraBlocks} more</div>
           ) : null}
 
           {/* availability: dots at pip, an "Available" chip when there's room */}
@@ -189,7 +189,7 @@ export function DayCell(props: {
                 />
               ))}
               {dots.length > MAX_DOTS ? (
-                <span className="text-[8px] leading-none text-emerald-200/60">
+                <span className="text-[8px] leading-none text-[color:var(--sec-muted)]">
                   +{dots.length - MAX_DOTS}
                 </span>
               ) : null}
@@ -229,18 +229,18 @@ function PastTiles(props: {
               e.stopPropagation();
               onOpen(occ);
             }}
-            className="flex min-h-0 flex-1 items-center justify-center rounded bg-[#f5e6b0]/10"
+            className="flex min-h-0 flex-1 items-center justify-center rounded bg-[color:color-mix(in_srgb,var(--sec-accent)_10%,transparent)]"
           >
             {showScore && occ.resultLabel ? (
               one ? (
-                <span className="flex flex-col items-center leading-none text-[#f5e6b0]">
+                <span className="flex flex-col items-center leading-none text-[color:var(--sec-accent)]">
                   <span className="text-lg font-bold tabular-nums">{occ.resultLabel}</span>
                   {diffText ? (
                     <span className="mt-0.5 text-[10px] tabular-nums opacity-70">{diffText}</span>
                   ) : null}
                 </span>
               ) : (
-                <span className="flex items-baseline gap-0.5 text-[#f5e6b0]">
+                <span className="flex items-baseline gap-0.5 text-[color:var(--sec-accent)]">
                   <span className="text-xs font-bold tabular-nums">{occ.resultLabel}</span>
                   {diffText ? (
                     <span className="text-[8px] tabular-nums opacity-70">{diffText}</span>
@@ -254,7 +254,7 @@ function PastTiles(props: {
                 max={3}
               />
             ) : (
-              <span className="text-[9px] text-emerald-200/60">Round</span>
+              <span className="text-[9px] text-[color:var(--sec-muted)]">Round</span>
             )}
           </button>
         );

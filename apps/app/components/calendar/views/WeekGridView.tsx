@@ -64,7 +64,7 @@ export function WeekGridView(props: {
       {weeks.map((week, c) => (
         <div
           key={`h${c}`}
-          className="truncate text-center text-[9px] uppercase tracking-wide text-emerald-200/50"
+          className="truncate text-center text-[9px] uppercase tracking-wide text-[color:var(--sec-muted)]"
         >
           {weekLabel(week[0])}
         </div>
@@ -73,7 +73,7 @@ export function WeekGridView(props: {
       {/* One row per weekday: left label + a DayCell for each week */}
       {WEEKDAYS.map((wd, r) => (
         <FragmentRow key={wd}>
-          <div className="flex items-center justify-end pr-0.5 text-[9px] uppercase tracking-wide text-emerald-200/50">
+          <div className="flex items-center justify-end pr-0.5 text-[9px] uppercase tracking-wide text-[color:var(--sec-muted)]">
             {wd}
           </div>
           {weeks.map((week, c) => {

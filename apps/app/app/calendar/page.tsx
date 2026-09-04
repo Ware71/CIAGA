@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: "Calendar" };
 
 export default function CalendarPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#042713]" />}>
+    <Suspense fallback={<div className="min-h-screen bg-[color:var(--ciaga-ground)]" />}>
       <CalendarClient />
     </Suspense>
   );

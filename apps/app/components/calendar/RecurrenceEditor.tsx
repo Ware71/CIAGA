@@ -99,8 +99,8 @@ export function RecurrenceEditor(props: {
                 className={cn(
                   "h-8 w-8 rounded-full text-[11px] font-semibold transition-colors",
                   active
-                    ? "bg-[#f5e6b0] text-[#042713]"
-                    : "border border-emerald-900/70 text-emerald-100/70 hover:bg-emerald-900/30"
+                    ? "bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)]"
+                    : "border border-[color:var(--sec-hair)] text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]"
                 )}
               >
                 {lbl}
@@ -111,7 +111,7 @@ export function RecurrenceEditor(props: {
       ) : null}
 
       {value.freq !== "none" ? (
-        <div className="flex items-center gap-2 text-xs text-emerald-100/80">
+        <div className="flex items-center gap-2 text-xs text-[color:var(--sec-muted)]">
           <span>Every</span>
           <NumberField
             min={1}
@@ -119,7 +119,7 @@ export function RecurrenceEditor(props: {
             fallback={1}
             value={value.interval}
             onValueChange={(v) => onChange({ ...value, interval: v ?? 1 })}
-            className="w-14 rounded-md border border-emerald-900/70 bg-[#042713] px-2 py-1 text-emerald-50"
+            className="w-14 rounded-md border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] px-2 py-1 text-[color:var(--sec-text)]"
           />
           <span>
             {value.freq === "daily" ? "day(s)" : value.freq === "weekly" ? "week(s)" : "month(s)"}
@@ -128,18 +128,18 @@ export function RecurrenceEditor(props: {
       ) : null}
 
       {value.freq !== "none" ? (
-        <label className="flex items-center gap-2 text-xs text-emerald-100/80">
+        <label className="flex items-center gap-2 text-xs text-[color:var(--sec-muted)]">
           <span className="shrink-0">Until</span>
           <input
             type="date"
             value={value.until ?? ""}
             onChange={(e) => onChange({ ...value, until: e.target.value || null })}
-            className="rounded-md border border-emerald-900/70 bg-[#042713] px-2 py-1 text-emerald-50"
+            className="rounded-md border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] px-2 py-1 text-[color:var(--sec-text)]"
           />
           {value.until ? (
             <button
               type="button"
-              className="text-emerald-300/70 underline"
+              className="text-[color:var(--sec-muted)] underline"
               onClick={() => onChange({ ...value, until: null })}
             >
               clear
@@ -148,7 +148,7 @@ export function RecurrenceEditor(props: {
         </label>
       ) : null}
 
-      <div className="text-[11px] italic text-emerald-200/60 capitalize">{summary}</div>
+      <div className="text-[11px] italic text-[color:var(--sec-muted)] capitalize">{summary}</div>
     </div>
   );
 }

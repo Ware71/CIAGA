@@ -651,25 +651,25 @@ export default function MilestonesPage() {
           if (e.key === "Enter" || e.key === " ") onClick();
         }}
         className={[
-          "rounded-2xl border border-emerald-900/70 bg-[#042713]/45 p-3",
-          onClick ? "cursor-pointer hover:bg-[#042713]/60" : "",
+          "rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_45%,transparent)] p-3",
+          onClick ? "cursor-pointer hover:bg-[color:color-mix(in_srgb,var(--ciaga-ground)_60%,transparent)]" : "",
         ].join(" ")}
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="text-sm font-extrabold text-emerald-50 truncate">{title}</div>
+            <div className="text-sm font-extrabold text-[color:var(--sec-text)] truncate">{title}</div>
             {subtitle ? (
-              <div className="mt-0.5 text-[12px] text-emerald-100/70 font-semibold leading-snug break-words">
+              <div className="mt-0.5 text-[12px] text-[color:var(--sec-muted)] font-semibold leading-snug break-words">
                 {subtitle}
               </div>
             ) : null}
           </div>
-          {right ? <div className="shrink-0 text-[11px] text-emerald-100/70 font-semibold">{right}</div> : null}
+          {right ? <div className="shrink-0 text-[11px] text-[color:var(--sec-muted)] font-semibold">{right}</div> : null}
         </div>
 
         <div className="mt-2">
-          <div className="text-[11px] text-emerald-100/70 font-bold">Result</div>
-          <div className="text-lg font-extrabold tabular-nums text-[#f5e6b0]">{value}</div>
+          <div className="text-[11px] text-[color:var(--sec-muted)] font-bold">Result</div>
+          <div className="text-lg font-extrabold tabular-nums text-[color:var(--sec-accent)]">{value}</div>
         </div>
       </div>
     );
@@ -682,17 +682,17 @@ export default function MilestonesPage() {
   ].join(" · ");
 
   return (
-    <div className="h-screen bg-[#042713] text-slate-100 px-1.5 sm:px-2 pt-4">
+    <div className="h-[calc(100dvh-var(--ciaga-nav-h))] bg-[color:var(--ciaga-ground)] text-slate-100 px-1.5 sm:px-2 pt-4">
       <div className="mx-auto w-full max-w-3xl h-full flex flex-col">
-        <header className="sticky top-0 z-20 bg-[#042713] pb-3">
+        <header className="sticky top-0 z-20 bg-[color:var(--ciaga-ground)] pb-3">
           <div className="flex items-center justify-between gap-2 px-1">
             <BackButton onClick={() => router.back()} />
 
             <div className="text-center flex-1 min-w-0 px-2">
-              <div className="text-[15px] sm:text-base font-semibold tracking-wide text-[#f5e6b0] truncate">
+              <div className="text-[15px] sm:text-base font-semibold tracking-wide text-[color:var(--sec-accent)] truncate">
                 Streaks & milestones
               </div>
-              <div className="text-[11px] sm:text-[10px] uppercase tracking-[0.14em] text-emerald-200/70 truncate">
+              <div className="text-[11px] sm:text-[10px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] truncate">
                 {presetLabel(preset)}
               </div>
             </div>
@@ -710,18 +710,18 @@ export default function MilestonesPage() {
                 if (e.key === "Enter" || e.key === " ") setFiltersOpen((v) => !v);
               }}
               className={[
-                "rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70",
+                "rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)]",
                 "p-2 select-none cursor-pointer",
               ].join(" ")}
               aria-expanded={filtersOpen}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">Filters</div>
-                  <div className="mt-1 text-[12px] text-emerald-50/90 font-extrabold leading-tight">{filtersSummary}</div>
+                  <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] font-bold">Filters</div>
+                  <div className="mt-1 text-[12px] text-[color:var(--sec-text)] font-extrabold leading-tight">{filtersSummary}</div>
                 </div>
 
-                <div className="shrink-0 text-[12px] font-extrabold text-[#f5e6b0] pt-[2px]">
+                <div className="shrink-0 text-[12px] font-extrabold text-[color:var(--sec-accent)] pt-[2px]">
                   {filtersOpen ? "▲" : "▼"}
                 </div>
               </div>
@@ -729,8 +729,8 @@ export default function MilestonesPage() {
               {filtersOpen ? (
                 <div className="mt-3 space-y-2">
                   {/* Time range */}
-                  <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/40 p-2">
-                    <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold mb-2">
+                  <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_40%,transparent)] p-2">
+                    <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] font-bold mb-2">
                       Time range
                     </div>
 
@@ -744,8 +744,8 @@ export default function MilestonesPage() {
                         className={[
                           "rounded-2xl px-3 py-2 text-[13px] font-extrabold border w-full",
                           preset === "all"
-                            ? "bg-[#042713]/70 border-[#f5e6b0]/60 text-[#f5e6b0]"
-                            : "bg-[#042713]/30 border-emerald-900/70 text-emerald-50/90 hover:bg-emerald-900/20",
+                            ? "bg-[color:color-mix(in_srgb,var(--ciaga-ground)_70%,transparent)] border-[color:color-mix(in_srgb,var(--sec-accent)_60%,transparent)] text-[color:var(--sec-accent)]"
+                            : "bg-[color:color-mix(in_srgb,var(--ciaga-ground)_30%,transparent)] border-[color:var(--sec-hair)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]",
                         ].join(" ")}
                       >
                         All time
@@ -770,8 +770,8 @@ export default function MilestonesPage() {
                             className={[
                               "rounded-2xl px-3 py-2 text-[13px] font-extrabold border leading-tight",
                               active
-                                ? "bg-[#042713]/70 border-[#f5e6b0]/60 text-[#f5e6b0]"
-                                : "bg-[#042713]/30 border-emerald-900/70 text-emerald-50/90 hover:bg-emerald-900/20",
+                                ? "bg-[color:color-mix(in_srgb,var(--ciaga-ground)_70%,transparent)] border-[color:color-mix(in_srgb,var(--sec-accent)_60%,transparent)] text-[color:var(--sec-accent)]"
+                                : "bg-[color:color-mix(in_srgb,var(--ciaga-ground)_30%,transparent)] border-[color:var(--sec-hair)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]",
                             ].join(" ")}
                           >
                             {label}
@@ -799,8 +799,8 @@ export default function MilestonesPage() {
                             className={[
                               "rounded-2xl px-3 py-2 text-[13px] font-extrabold border leading-tight",
                               active
-                                ? "bg-[#042713]/70 border-[#f5e6b0]/60 text-[#f5e6b0]"
-                                : "bg-[#042713]/30 border-emerald-900/70 text-emerald-50/90 hover:bg-emerald-900/20",
+                                ? "bg-[color:color-mix(in_srgb,var(--ciaga-ground)_70%,transparent)] border-[color:color-mix(in_srgb,var(--sec-accent)_60%,transparent)] text-[color:var(--sec-accent)]"
+                                : "bg-[color:color-mix(in_srgb,var(--ciaga-ground)_30%,transparent)] border-[color:var(--sec-hair)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]",
                             ].join(" ")}
                           >
                             {label}
@@ -812,13 +812,13 @@ export default function MilestonesPage() {
 
                   {/* Course + tee */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/40 p-2 col-span-2">
-                      <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">Course</div>
+                    <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_40%,transparent)] p-2 col-span-2">
+                      <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] font-bold">Course</div>
                       <select
                         value={courseId}
                         onChange={(e) => setCourseId(e.target.value)}
                         onClick={(e) => e.stopPropagation()}
-                        className="mt-1 w-full rounded-xl bg-[#042713]/70 border border-emerald-900/70 px-2 py-2 text-[13px] text-emerald-50"
+                        className="mt-1 w-full rounded-xl bg-[color:color-mix(in_srgb,var(--ciaga-ground)_70%,transparent)] border border-[color:var(--sec-hair)] px-2 py-2 text-[13px] text-[color:var(--sec-text)]"
                       >
                         <option value="">All</option>
                         {courseOptions.map((c) => (
@@ -829,13 +829,13 @@ export default function MilestonesPage() {
                       </select>
                     </div>
 
-                    <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/40 p-2 col-span-2 sm:col-span-1">
-                      <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">Tee</div>
+                    <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_40%,transparent)] p-2 col-span-2 sm:col-span-1">
+                      <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] font-bold">Tee</div>
                       <select
                         value={teeBoxId}
                         onChange={(e) => setTeeBoxId(e.target.value)}
                         onClick={(e) => e.stopPropagation()}
-                        className="mt-1 w-full rounded-xl bg-[#042713]/70 border border-emerald-900/70 px-2 py-2 text-[13px] text-emerald-50"
+                        className="mt-1 w-full rounded-xl bg-[color:color-mix(in_srgb,var(--ciaga-ground)_70%,transparent)] border border-[color:var(--sec-hair)] px-2 py-2 text-[13px] text-[color:var(--sec-text)]"
                       >
                         <option value="">All tees</option>
                         {teeOptions.map((t) => (
@@ -847,8 +847,8 @@ export default function MilestonesPage() {
                     </div>
 
                     {/* Streak gap */}
-                    <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/40 p-2 col-span-2 sm:col-span-1">
-                      <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">
+                    <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_40%,transparent)] p-2 col-span-2 sm:col-span-1">
+                      <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] font-bold">
                         Streak gap
                       </div>
                       <div className="mt-2 grid grid-cols-5 gap-2">
@@ -865,8 +865,8 @@ export default function MilestonesPage() {
                               className={[
                                 "rounded-2xl px-2 py-2 text-[13px] font-extrabold border",
                                 active
-                                  ? "bg-[#042713]/70 border-[#f5e6b0]/60 text-[#f5e6b0]"
-                                  : "bg-[#042713]/30 border-emerald-900/70 text-emerald-50/90 hover:bg-emerald-900/20",
+                                  ? "bg-[color:color-mix(in_srgb,var(--ciaga-ground)_70%,transparent)] border-[color:color-mix(in_srgb,var(--sec-accent)_60%,transparent)] text-[color:var(--sec-accent)]"
+                                  : "bg-[color:color-mix(in_srgb,var(--ciaga-ground)_30%,transparent)] border-[color:var(--sec-hair)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]",
                               ].join(" ")}
                             >
                               {d}d
@@ -884,7 +884,7 @@ export default function MilestonesPage() {
 
         <div className="flex-1 overflow-y-auto overscroll-y-contain pb-[env(safe-area-inset-bottom)]">
           {loading ? (
-            <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">
+            <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4 text-sm text-[color:var(--sec-muted)]">
               Loading…
             </div>
           ) : err ? (
@@ -893,7 +893,7 @@ export default function MilestonesPage() {
               <div className="mt-3">
                 <Button
                   variant="outline"
-                  className="border-emerald-900/70 bg-[#0b3b21]/40 text-emerald-50 hover:bg-emerald-900/20"
+                  className="border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
                   onClick={() => window.location.reload()}
                 >
                   Retry
@@ -901,44 +901,44 @@ export default function MilestonesPage() {
               </div>
             </div>
           ) : !roundsAggDesc.length ? (
-            <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-6 space-y-2">
-              <div className="text-sm font-semibold text-emerald-50">No milestone data found</div>
-              <p className="text-[12px] text-emerald-100/70">Try a different time preset or clear course/tee filters.</p>
+            <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-6 space-y-2">
+              <div className="text-sm font-semibold text-[color:var(--sec-text)]">No milestone data found</div>
+              <p className="text-[12px] text-[color:var(--sec-muted)]">Try a different time preset or clear course/tee filters.</p>
             </div>
           ) : (
             <div className="space-y-4">
               {/* Summary */}
               {summary ? (
-                <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
-                  <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">Summary</div>
+                <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4">
+                  <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] font-bold">Summary</div>
 
                   <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <div>
-                      <div className="text-[11px] text-emerald-100/70 font-bold">Rounds</div>
-                      <div className="text-lg font-extrabold tabular-nums text-emerald-50">{summary.rounds}</div>
-                      <div className="text-[11px] text-emerald-100/60 font-semibold">
+                      <div className="text-[11px] text-[color:var(--sec-muted)] font-bold">Rounds</div>
+                      <div className="text-lg font-extrabold tabular-nums text-[color:var(--sec-text)]">{summary.rounds}</div>
+                      <div className="text-[11px] text-[color:var(--sec-muted)] font-semibold">
                         {summary.rounds18}×18 · {summary.rounds9}×9
                       </div>
                     </div>
 
                     <div>
-                      <div className="text-[11px] text-emerald-100/70 font-bold">Avg to par (18-eq)</div>
-                      <div className="text-[12px] text-emerald-100/70 font-semibold">
+                      <div className="text-[11px] text-[color:var(--sec-muted)] font-bold">Avg to par (18-eq)</div>
+                      <div className="text-[12px] text-[color:var(--sec-muted)] font-semibold">
                         Gross: {summary.grossAvg == null ? "—" : fmtSigned(summary.grossAvg)}
                       </div>
-                      <div className="text-[12px] text-emerald-100/70 font-semibold">
+                      <div className="text-[12px] text-[color:var(--sec-muted)] font-semibold">
                         Net: {summary.netAvg == null ? "—" : fmtSigned(summary.netAvg)}
                       </div>
                     </div>
 
                     <div>
                       <div className="flex items-center gap-2">
-                        <div className="text-[11px] text-emerald-100/70 font-bold">Consistency</div>
+                        <div className="text-[11px] text-[color:var(--sec-muted)] font-bold">Consistency</div>
 
                         <button
                           type="button"
                           onClick={() => setShowConsistencyHelp(true)}
-                          className="inline-flex items-center justify-center w-5 h-5 rounded-full border border-emerald-900/70 bg-[#042713]/40 text-emerald-50/90 text-[12px] font-extrabold hover:bg-emerald-900/20"
+                          className="inline-flex items-center justify-center w-5 h-5 rounded-full border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_40%,transparent)] text-[color:var(--sec-text)] text-[12px] font-extrabold hover:bg-[color:var(--sec-surface-2)]"
                           title="What does this mean?"
                           aria-label="What does consistency mean?"
                         >
@@ -946,31 +946,31 @@ export default function MilestonesPage() {
                         </button>
                       </div>
 
-                      <div className="text-lg font-extrabold tabular-nums text-[#f5e6b0]">
+                      <div className="text-lg font-extrabold tabular-nums text-[color:var(--sec-accent)]">
                         {consistency == null ? "—" : consistency}
                       </div>
 
-                      <div className="text-[11px] text-emerald-100/60 font-semibold">
+                      <div className="text-[11px] text-[color:var(--sec-muted)] font-semibold">
                         Gross SD: {summary.grossSd == null ? "—" : round1(summary.grossSd)} · Net SD:{" "}
                         {summary.netSd == null ? "—" : round1(summary.netSd)}
                       </div>
                     </div>
 
                     <div>
-                      <div className="text-[11px] text-emerald-100/70 font-bold">Totals (gross)</div>
-                      <div className="text-[12px] text-emerald-100/70 font-semibold">
-                        Birdies: <span className="text-emerald-50 font-extrabold tabular-nums">{summary.totalBirdies}</span>
+                      <div className="text-[11px] text-[color:var(--sec-muted)] font-bold">Totals (gross)</div>
+                      <div className="text-[12px] text-[color:var(--sec-muted)] font-semibold">
+                        Birdies: <span className="text-[color:var(--sec-text)] font-extrabold tabular-nums">{summary.totalBirdies}</span>
                       </div>
-                      <div className="text-[12px] text-emerald-100/70 font-semibold">
-                        Eagles: <span className="text-emerald-50 font-extrabold tabular-nums">{summary.totalEagles}</span>
+                      <div className="text-[12px] text-[color:var(--sec-muted)] font-semibold">
+                        Eagles: <span className="text-[color:var(--sec-text)] font-extrabold tabular-nums">{summary.totalEagles}</span>
                       </div>
-                      <div className="text-[12px] text-emerald-100/70 font-semibold">
+                      <div className="text-[12px] text-[color:var(--sec-muted)] font-semibold">
                         Albatrosses:{" "}
-                        <span className="text-emerald-50 font-extrabold tabular-nums">{summary.totalAlbatrosses}</span>
+                        <span className="text-[color:var(--sec-text)] font-extrabold tabular-nums">{summary.totalAlbatrosses}</span>
                       </div>
-                      <div className="text-[12px] text-emerald-100/70 font-semibold">
+                      <div className="text-[12px] text-[color:var(--sec-muted)] font-semibold">
                         Hole-in-ones:{" "}
-                        <span className="text-emerald-50 font-extrabold tabular-nums">{summary.totalHIO}</span>
+                        <span className="text-[color:var(--sec-text)] font-extrabold tabular-nums">{summary.totalHIO}</span>
                       </div>
                     </div>
                   </div>
@@ -978,11 +978,11 @@ export default function MilestonesPage() {
               ) : null}
 
               {/* Streaks */}
-              <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
-                <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">Streaks</div>
-                <div className="mt-1 text-[12px] text-emerald-100/70 font-semibold">
+              <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4">
+                <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] font-bold">Streaks</div>
+                <div className="mt-1 text-[12px] text-[color:var(--sec-muted)] font-semibold">
                   A streak continues if the next round is within{" "}
-                  <span className="font-extrabold text-emerald-50">{streakGapDays}</span> days.
+                  <span className="font-extrabold text-[color:var(--sec-text)]">{streakGapDays}</span> days.
                 </div>
 
                 <div className="mt-3 space-y-2">
@@ -992,15 +992,15 @@ export default function MilestonesPage() {
               </div>
 
               {/* Best & worst (raw; separate 9/18) */}
-              <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
-                <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">Best & worst</div>
-                <div className="mt-1 text-[12px] text-emerald-100/70 font-semibold">
+              <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4">
+                <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] font-bold">Best & worst</div>
+                <div className="mt-1 text-[12px] text-[color:var(--sec-muted)] font-semibold">
                   Best/worst shown on raw to-par (not 18-eq). 9-hole and 18-hole are separate.
                 </div>
 
                 <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-2">
-                    <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/60 font-bold">18 holes</div>
+                    <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] font-bold">18 holes</div>
                     <MilestoneRow
                       title="Best gross (18)"
                       subtitle={bestWorst.best18Gross ? `${bestWorst.best18Gross.course_name ?? "Course"} · ${bestWorst.best18Gross.tee_base}` : "—"}
@@ -1033,7 +1033,7 @@ export default function MilestonesPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/60 font-bold">9 holes</div>
+                    <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] font-bold">9 holes</div>
                     <MilestoneRow
                       title="Best gross (9)"
                       subtitle={bestWorst.best9Gross ? `${bestWorst.best9Gross.course_name ?? "Course"} · ${bestWorst.best9Gross.tee_base}` : "—"}
@@ -1068,15 +1068,15 @@ export default function MilestonesPage() {
               </div>
 
               {/* Best stretches (18-eq comparisons) */}
-              <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
-                <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">Best stretches</div>
-                <div className="mt-1 text-[12px] text-emerald-100/70 font-semibold">
+              <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4">
+                <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] font-bold">Best stretches</div>
+                <div className="mt-1 text-[12px] text-[color:var(--sec-muted)] font-semibold">
                   These use 18-equivalent to-par so 9-hole rounds compare fairly.
                 </div>
 
                 <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-2">
-                    <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/60 font-bold">Gross</div>
+                    <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] font-bold">Gross</div>
                     <MilestoneRow
                       title="Best 3-round stretch"
                       subtitle={
@@ -1102,7 +1102,7 @@ export default function MilestonesPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/60 font-bold">Net</div>
+                    <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] font-bold">Net</div>
                     <MilestoneRow
                       title="Best 3-round stretch"
                       subtitle={
@@ -1130,9 +1130,9 @@ export default function MilestonesPage() {
               </div>
 
               {/* Firsts */}
-              <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
-                <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">Firsts</div>
-                <div className="mt-1 text-[12px] text-emerald-100/70 font-semibold">
+              <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4">
+                <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] font-bold">Firsts</div>
+                <div className="mt-1 text-[12px] text-[color:var(--sec-muted)] font-semibold">
                   A few “first time” highlights (gross events).
                 </div>
 
@@ -1168,7 +1168,7 @@ export default function MilestonesPage() {
                     onClick={() => goRound(router, firsts.firstHioRound?.round_id)}
                   />
 
-                  <div className="pt-2 text-[11px] uppercase tracking-[0.14em] text-emerald-100/60 font-bold">
+                  <div className="pt-2 text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] font-bold">
                     Round milestones
                   </div>
 
@@ -1183,7 +1183,7 @@ export default function MilestonesPage() {
                     onClick={() => goRound(router, firsts.first5Birdies?.round_id)}
                   />
 
-                  <div className="pt-2 text-[11px] uppercase tracking-[0.14em] text-emerald-100/60 font-bold">
+                  <div className="pt-2 text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] font-bold">
                     Career totals milestones
                   </div>
 
@@ -1203,58 +1203,58 @@ export default function MilestonesPage() {
               </div>
 
               {/* Goals (gross) */}
-              <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
-                <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">Goals</div>
-                <div className="mt-1 text-[12px] text-emerald-100/70 font-semibold">
+              <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4">
+                <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] font-bold">Goals</div>
+                <div className="mt-1 text-[12px] text-[color:var(--sec-muted)] font-semibold">
                   Counts in this range (gross).
                 </div>
 
                 <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/40 p-3">
-                    <div className="text-[11px] text-emerald-100/70 font-bold">Rounds</div>
-                    <div className="text-lg font-extrabold tabular-nums text-emerald-50">{goals.rounds}</div>
+                  <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_40%,transparent)] p-3">
+                    <div className="text-[11px] text-[color:var(--sec-muted)] font-bold">Rounds</div>
+                    <div className="text-lg font-extrabold tabular-nums text-[color:var(--sec-text)]">{goals.rounds}</div>
                   </div>
 
-                  <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/40 p-3">
-                    <div className="text-[11px] text-emerald-100/70 font-bold">Par or better</div>
-                    <div className="text-lg font-extrabold tabular-nums text-[#f5e6b0]">{goals.parOrBetter18eq}</div>
-                    <div className="text-[11px] text-emerald-100/60 font-semibold">18-eq</div>
+                  <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_40%,transparent)] p-3">
+                    <div className="text-[11px] text-[color:var(--sec-muted)] font-bold">Par or better</div>
+                    <div className="text-lg font-extrabold tabular-nums text-[color:var(--sec-accent)]">{goals.parOrBetter18eq}</div>
+                    <div className="text-[11px] text-[color:var(--sec-muted)] font-semibold">18-eq</div>
                   </div>
 
-                  <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/40 p-3">
-                    <div className="text-[11px] text-emerald-100/70 font-bold">Break 100</div>
-                    <div className="text-lg font-extrabold tabular-nums text-emerald-50">{goals.break100}</div>
-                    <div className="text-[11px] text-emerald-100/60 font-semibold">18 holes</div>
+                  <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_40%,transparent)] p-3">
+                    <div className="text-[11px] text-[color:var(--sec-muted)] font-bold">Break 100</div>
+                    <div className="text-lg font-extrabold tabular-nums text-[color:var(--sec-text)]">{goals.break100}</div>
+                    <div className="text-[11px] text-[color:var(--sec-muted)] font-semibold">18 holes</div>
                   </div>
 
-                  <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/40 p-3">
-                    <div className="text-[11px] text-emerald-100/70 font-bold">Break 90</div>
-                    <div className="text-lg font-extrabold tabular-nums text-emerald-50">{goals.break90}</div>
-                    <div className="text-[11px] text-emerald-100/60 font-semibold">18 holes</div>
+                  <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_40%,transparent)] p-3">
+                    <div className="text-[11px] text-[color:var(--sec-muted)] font-bold">Break 90</div>
+                    <div className="text-lg font-extrabold tabular-nums text-[color:var(--sec-text)]">{goals.break90}</div>
+                    <div className="text-[11px] text-[color:var(--sec-muted)] font-semibold">18 holes</div>
                   </div>
 
-                  <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/40 p-3">
-                    <div className="text-[11px] text-emerald-100/70 font-bold">Break 80</div>
-                    <div className="text-lg font-extrabold tabular-nums text-emerald-50">{goals.break80}</div>
-                    <div className="text-[11px] text-emerald-100/60 font-semibold">18 holes</div>
+                  <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_40%,transparent)] p-3">
+                    <div className="text-[11px] text-[color:var(--sec-muted)] font-bold">Break 80</div>
+                    <div className="text-lg font-extrabold tabular-nums text-[color:var(--sec-text)]">{goals.break80}</div>
+                    <div className="text-[11px] text-[color:var(--sec-muted)] font-semibold">18 holes</div>
                   </div>
 
-                  <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/40 p-3">
-                    <div className="text-[11px] text-emerald-100/70 font-bold">Birdie rounds</div>
-                    <div className="text-lg font-extrabold tabular-nums text-emerald-50">{goals.birdieRounds}</div>
-                    <div className="text-[11px] text-emerald-100/60 font-semibold">1+ birdies</div>
+                  <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_40%,transparent)] p-3">
+                    <div className="text-[11px] text-[color:var(--sec-muted)] font-bold">Birdie rounds</div>
+                    <div className="text-lg font-extrabold tabular-nums text-[color:var(--sec-text)]">{goals.birdieRounds}</div>
+                    <div className="text-[11px] text-[color:var(--sec-muted)] font-semibold">1+ birdies</div>
                   </div>
 
-                  <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/40 p-3">
-                    <div className="text-[11px] text-emerald-100/70 font-bold">Eagle rounds</div>
-                    <div className="text-lg font-extrabold tabular-nums text-emerald-50">{goals.eagleRounds}</div>
-                    <div className="text-[11px] text-emerald-100/60 font-semibold">1+ eagles</div>
+                  <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_40%,transparent)] p-3">
+                    <div className="text-[11px] text-[color:var(--sec-muted)] font-bold">Eagle rounds</div>
+                    <div className="text-lg font-extrabold tabular-nums text-[color:var(--sec-text)]">{goals.eagleRounds}</div>
+                    <div className="text-[11px] text-[color:var(--sec-muted)] font-semibold">1+ eagles</div>
                   </div>
 
-                  <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/40 p-3">
-                    <div className="text-[11px] text-emerald-100/70 font-bold">HOI rounds</div>
-                    <div className="text-lg font-extrabold tabular-nums text-emerald-50">{goals.hioRounds}</div>
-                    <div className="text-[11px] text-emerald-100/60 font-semibold">1+ HOI</div>
+                  <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_40%,transparent)] p-3">
+                    <div className="text-[11px] text-[color:var(--sec-muted)] font-bold">HOI rounds</div>
+                    <div className="text-lg font-extrabold tabular-nums text-[color:var(--sec-text)]">{goals.hioRounds}</div>
+                    <div className="text-[11px] text-[color:var(--sec-muted)] font-semibold">1+ HOI</div>
                   </div>
                 </div>
               </div>
@@ -1275,13 +1275,13 @@ export default function MilestonesPage() {
             <div className="absolute inset-0 bg-black/60" />
 
             <div
-              className="relative w-full max-w-sm rounded-2xl border border-emerald-900/70 bg-[#0b3b21] p-4 shadow-xl"
+              className="relative w-full max-w-sm rounded-2xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] p-4 shadow-xl"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-sm font-extrabold text-emerald-50">Consistency guide</div>
-                  <div className="mt-1 text-[12px] text-emerald-100/70 font-semibold">
+                  <div className="text-sm font-extrabold text-[color:var(--sec-text)]">Consistency guide</div>
+                  <div className="mt-1 text-[12px] text-[color:var(--sec-muted)] font-semibold">
                     Lower = steadier round-to-round scores.
                   </div>
                 </div>
@@ -1289,28 +1289,28 @@ export default function MilestonesPage() {
                 <button
                   type="button"
                   onClick={() => setShowConsistencyHelp(false)}
-                  className="rounded-xl border border-emerald-900/70 bg-[#042713]/40 px-3 py-1 text-[12px] font-extrabold text-emerald-50 hover:bg-emerald-900/20"
+                  className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_40%,transparent)] px-3 py-1 text-[12px] font-extrabold text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
                   aria-label="Close"
                 >
                   ✕
                 </button>
               </div>
 
-              <div className="mt-3 space-y-2 text-[13px] font-semibold text-emerald-50">
+              <div className="mt-3 space-y-2 text-[13px] font-semibold text-[color:var(--sec-text)]">
                 <div>
-                  <span className="text-[#f5e6b0] font-extrabold">0–2</span>: extremely steady (rare)
+                  <span className="text-[color:var(--sec-accent)] font-extrabold">0–2</span>: extremely steady (rare)
                 </div>
                 <div>
-                  <span className="text-[#f5e6b0] font-extrabold">2–4</span>: very consistent
+                  <span className="text-[color:var(--sec-accent)] font-extrabold">2–4</span>: very consistent
                 </div>
                 <div>
-                  <span className="text-[#f5e6b0] font-extrabold">4–6</span>: pretty normal / solid consistency
+                  <span className="text-[color:var(--sec-accent)] font-extrabold">4–6</span>: pretty normal / solid consistency
                 </div>
                 <div>
-                  <span className="text-[#f5e6b0] font-extrabold">6–8</span>: variable (good days + blowups)
+                  <span className="text-[color:var(--sec-accent)] font-extrabold">6–8</span>: variable (good days + blowups)
                 </div>
                 <div>
-                  <span className="text-[#f5e6b0] font-extrabold">8+</span>: very streaky / high volatility
+                  <span className="text-[color:var(--sec-accent)] font-extrabold">8+</span>: very streaky / high volatility
                 </div>
               </div>
 
@@ -1318,7 +1318,7 @@ export default function MilestonesPage() {
                 <button
                   type="button"
                   onClick={() => setShowConsistencyHelp(false)}
-                  className="w-full rounded-2xl border border-[#f5e6b0]/60 bg-[#042713]/70 px-3 py-2 text-[13px] font-extrabold text-[#f5e6b0] hover:bg-emerald-900/20"
+                  className="w-full rounded-2xl border border-[color:color-mix(in_srgb,var(--sec-accent)_60%,transparent)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_70%,transparent)] px-3 py-2 text-[13px] font-extrabold text-[color:var(--sec-accent)] hover:bg-[color:var(--sec-surface-2)]"
                 >
                   Got it
                 </button>

@@ -38,9 +38,9 @@ function BadgeWrap({ type, children }: { type: BadgeType; children: React.ReactN
   if (!type) return <>{children}</>;
   const cls =
     type === "eagle"
-      ? "inline-flex items-center justify-center min-w-[20px] h-5 rounded-full bg-[#f5e6b0] text-[#042713] px-0.5"
+      ? "inline-flex items-center justify-center min-w-[20px] h-5 rounded-full bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] px-0.5"
       : type === "birdie"
-      ? "inline-flex items-center justify-center min-w-[20px] h-5 rounded-full ring-1 ring-[#f5e6b0] px-0.5"
+      ? "inline-flex items-center justify-center min-w-[20px] h-5 rounded-full ring-1 ring-[color:var(--sec-accent)] px-0.5"
       : type === "bogey"
       ? "inline-flex items-center justify-center min-w-[20px] h-5 ring-1 ring-white/50 px-0.5"
       : "inline-flex items-center justify-center min-w-[20px] h-5 bg-white/50 px-0.5";
@@ -59,10 +59,10 @@ function StrokeDots({ count }: { count: number }) {
       {Array.from({ length: shown }).map((_, i) => (
         <span
           key={i}
-          className="inline-block h-1.5 w-1.5 rounded-full bg-[#f5e6b0] border border-emerald-900/60"
+          className="inline-block h-1.5 w-1.5 rounded-full bg-[color:var(--sec-accent)] border border-[color:var(--sec-hair)]"
         />
       ))}
-      {extra > 0 ? <span className="text-[10px] text-emerald-100/70">+{extra}</span> : null}
+      {extra > 0 ? <span className="text-[10px] text-[color:var(--sec-muted)]">+{extra}</span> : null}
     </span>
   );
 }
@@ -75,9 +75,9 @@ function PlusIndicator({ count }: { count: number }) {
   return (
     <span className="inline-flex items-center gap-0.5">
       {Array.from({ length: shown }).map((_, i) => (
-        <span key={i} className="text-[9px] font-bold text-[#f5e6b0]/60 leading-none">+</span>
+        <span key={i} className="text-[9px] font-bold text-[color:color-mix(in_srgb,var(--sec-accent)_60%,transparent)] leading-none">+</span>
       ))}
-      {extra > 0 ? <span className="text-[9px] text-emerald-100/50">+{extra}</span> : null}
+      {extra > 0 ? <span className="text-[9px] text-[color:var(--sec-muted)]">+{extra}</span> : null}
     </span>
   );
 }
@@ -174,20 +174,20 @@ export default function ScorecardPortrait(props: {
   const formatIsBadgeable = isFormatView(scoreView) && formatDisplay != null && !formatDisplay.higherIsBetter && !formatDisplay.summaries.some(s => typeof s.total === "string");
 
   return (
-    <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 overflow-hidden">
+    <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] overflow-hidden">
       <div className="w-full">
         <div className="w-full" style={{ display: "grid", gridTemplateColumns: portraitCols }}>
           {/* Header row (portrait: compact) */}
-          <div className="h-7 flex items-center justify-center text-emerald-100/80 border-b border-r border-emerald-900/60 bg-[#0b3b21]/60">
+          <div className="h-7 flex items-center justify-center text-[color:var(--sec-muted)] border-b border-r border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)]">
             {portraitTag("#")}
           </div>
-          <div className="h-7 flex items-center justify-center text-emerald-100/80 border-b border-r border-emerald-900/60 bg-[#0b3b21]/60">
+          <div className="h-7 flex items-center justify-center text-[color:var(--sec-muted)] border-b border-r border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)]">
             {portraitTag("Par")}
           </div>
-          <div className="h-7 flex items-center justify-center text-emerald-100/80 border-b border-r border-emerald-900/60 bg-[#0b3b21]/60">
+          <div className="h-7 flex items-center justify-center text-[color:var(--sec-muted)] border-b border-r border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)]">
             {portraitTag("Yds")}
           </div>
-          <div className="h-7 flex items-center justify-center text-emerald-100/80 border-b border-r border-emerald-900/60 bg-[#0b3b21]/60">
+          <div className="h-7 flex items-center justify-center text-[color:var(--sec-muted)] border-b border-r border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)]">
             {portraitTag("SI")}
           </div>
 
@@ -219,7 +219,7 @@ export default function ScorecardPortrait(props: {
               return (
                 <div
                   key={`ph-${p.id}`}
-                  className="min-h-[28px] py-1 px-1 flex items-center justify-center border-b border-r border-emerald-900/60 bg-[#0b3b21]/60 min-w-0"
+                  className="min-h-[28px] py-1 px-1 flex items-center justify-center border-b border-r border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] min-w-0"
                   title={title}
                 >
                   <div className="flex flex-col items-center gap-0.5">
@@ -227,21 +227,21 @@ export default function ScorecardPortrait(props: {
                       {avatarList.slice(0, 4).map((a, i) => (
                         <div key={i} className={i === 0 ? "" : "-ml-1.5"}>
                           {a.url ? (
-                            <img src={a.url} alt="" className="h-5 w-5 rounded-full border border-emerald-200/60 object-cover" loading="lazy" decoding="async" />
+                            <img src={a.url} alt="" className="h-5 w-5 rounded-full border border-[color:var(--sec-line)] object-cover" loading="lazy" decoding="async" />
                           ) : (
-                            <div className="h-5 w-5 rounded-full border border-emerald-200/60 bg-[#0b3b21]/60 flex items-center justify-center text-[8px] font-semibold text-emerald-50">
+                            <div className="h-5 w-5 rounded-full border border-[color:var(--sec-line)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] flex items-center justify-center text-[8px] font-semibold text-[color:var(--sec-text)]">
                               {initialsFrom(a.name)}
                             </div>
                           )}
                         </div>
                       ))}
                       {avatarList.length > 4 && (
-                        <div className="-ml-1.5 h-5 w-5 rounded-full bg-emerald-950/20 border border-emerald-900/60 flex items-center justify-center text-[8px] font-bold text-emerald-50">
+                        <div className="-ml-1.5 h-5 w-5 rounded-full bg-[color:var(--sec-surface)] border border-[color:var(--sec-hair)] flex items-center justify-center text-[8px] font-bold text-[color:var(--sec-text)]">
                           +{avatarList.length - 4}
                         </div>
                       )}
                     </div>
-                    {ph ? <div className="text-[9px] text-emerald-100/60 leading-none">PH {ph}</div> : null}
+                    {ph ? <div className="text-[9px] text-[color:var(--sec-muted)] leading-none">PH {ph}</div> : null}
                   </div>
                 </div>
               );
@@ -250,32 +250,32 @@ export default function ScorecardPortrait(props: {
             return (
               <div
                 key={`ph-${p.id}`}
-                className="h-7 px-1 flex items-center justify-center border-b border-r border-emerald-900/60 bg-[#0b3b21]/60 min-w-0"
+                className="h-7 px-1 flex items-center justify-center border-b border-r border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] min-w-0"
                 title={title}
               >
                 {compactPlayers ? (
                   <div className="flex flex-col items-center leading-none">
-                    <div className="text-[10px] font-semibold text-emerald-50">{initialsFrom(name)}</div>
-                    {teeLabel ? <div className="text-[8px] text-emerald-100/55 mt-0.5">{teeLabel}</div> : null}
+                    <div className="text-[10px] font-semibold text-[color:var(--sec-text)]">{initialsFrom(name)}</div>
+                    {teeLabel ? <div className="text-[8px] text-[color:var(--sec-muted)] mt-0.5">{teeLabel}</div> : null}
                   </div>
                 ) : avatarOnlyPlayers ? (
                   <div className="flex flex-col items-center gap-0.5">
-                    <Avatar className="h-5 w-5 border border-emerald-200/70 shrink-0">
+                    <Avatar className="h-5 w-5 border border-[color:var(--sec-line)] shrink-0">
                       {avatarUrl ? <AvatarImage src={avatarUrl} /> : null}
                       <AvatarFallback className="text-[8px]">{initialsFrom(name)}</AvatarFallback>
                     </Avatar>
-                    {teeLabel ? <div className="text-[8px] text-emerald-100/55 leading-none">{teeLabel}</div> : null}
+                    {teeLabel ? <div className="text-[8px] text-[color:var(--sec-muted)] leading-none">{teeLabel}</div> : null}
                   </div>
                 ) : (
                   <div className="flex items-center gap-1 min-w-0">
-                    <Avatar className="h-4.5 w-4.5 border border-emerald-200/70 shrink-0">
+                    <Avatar className="h-4.5 w-4.5 border border-[color:var(--sec-line)] shrink-0">
                       {avatarUrl ? <AvatarImage src={avatarUrl} /> : null}
                       <AvatarFallback className="text-[8px]">{initialsFrom(name)}</AvatarFallback>
                     </Avatar>
                     <div className="flex flex-col items-start min-w-0">
-                      <div className="text-[10px] text-emerald-50 truncate min-w-0 leading-none">{name}</div>
+                      <div className="text-[10px] text-[color:var(--sec-text)] truncate min-w-0 leading-none">{name}</div>
                       {hcpLabel || teeLabel ? (
-                        <div className="text-[9px] text-emerald-100/60 leading-none">
+                        <div className="text-[9px] text-[color:var(--sec-muted)] leading-none">
                           {[teeLabel, hcpLabel].filter(Boolean).join(" · ")}
                         </div>
                       ) : null}
@@ -294,8 +294,8 @@ export default function ScorecardPortrait(props: {
             const metaCell = (v: any, key: string) => (
               <div
                 key={key}
-                className={`h-9 flex items-center justify-center text-[11px] border-b border-r border-emerald-900/60 ${
-                  isActive ? "bg-[#042713] text-[#f5e6b0]" : "bg-[#0b3b21]/25 text-emerald-100/80"
+                className={`h-9 flex items-center justify-center text-[11px] border-b border-r border-[color:var(--sec-hair)] ${
+                  isActive ? "bg-[color:var(--ciaga-ground)] text-[color:var(--sec-accent)]" : "bg-[color:color-mix(in_srgb,var(--sec-surface)_25%,transparent)] text-[color:var(--sec-muted)]"
                 }`}
               >
                 {v ?? "–"}
@@ -307,14 +307,14 @@ export default function ScorecardPortrait(props: {
             nodes.push(
               <div
                 key={`h-${h.hole_number}-n`}
-                className={`relative h-9 flex items-center justify-center text-[11px] border-b border-r border-emerald-900/60 ${
-                  isActive ? "bg-[#042713] text-[#f5e6b0]" : "bg-[#0b3b21]/25 text-emerald-100/80"
+                className={`relative h-9 flex items-center justify-center text-[11px] border-b border-r border-[color:var(--sec-hair)] ${
+                  isActive ? "bg-[color:var(--ciaga-ground)] text-[color:var(--sec-accent)]" : "bg-[color:color-mix(in_srgb,var(--sec-surface)_25%,transparent)] text-[color:var(--sec-muted)]"
                 }`}
                 title={isStartingHole ? `Round started on hole ${startingHole}` : undefined}
               >
                 {h.hole_number}
                 {isStartingHole && (
-                  <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-[#f5e6b0]" />
+                  <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-[color:var(--sec-accent)]" />
                 )}
               </div>,
               metaCell(h.par, `h-${h.hole_number}-p`),
@@ -352,9 +352,9 @@ export default function ScorecardPortrait(props: {
               const fmtColor =
                 fmtHint === "positive" ? "text-green-300" :
                 fmtHint === "won" ? "text-green-300" :
-                fmtHint === "negative" ? "text-emerald-100/50" :
-                fmtHint === "lost" ? "text-red-300/80" :
-                fmtHint === "halved" ? "text-emerald-100/70" :
+                fmtHint === "negative" ? "text-[color:var(--sec-muted)]" :
+                fmtHint === "lost" ? "text-[color:var(--sec-bad)]" :
+                fmtHint === "halved" ? "text-[color:var(--sec-muted)]" :
                 "";
 
               const badge = savingKey !== key ? scoreBadgeType(s, hp.par, scoreView, formatIsBadgeable) : null;
@@ -364,10 +364,10 @@ export default function ScorecardPortrait(props: {
             nodes.push(
                 <button
                   key={`sc-${key}`}
-                  className={`relative h-9 border-b border-r border-emerald-900/60 flex flex-col items-center justify-center font-semibold tabular-nums
+                  className={`relative h-9 border-b border-r border-[color:var(--sec-hair)] flex flex-col items-center justify-center font-semibold tabular-nums
                     ${compactPlayers ? "text-[12px]" : "text-[13px]"}
-                    ${isActive ? "bg-[#042713] text-[#f5e6b0]" : "bg-[#0b3b21]/15 text-emerald-50"}
-                    ${disabled ? "opacity-80 cursor-default" : "hover:bg-emerald-900/20"}
+                    ${isActive ? "bg-[color:var(--ciaga-ground)] text-[color:var(--sec-accent)]" : "bg-[color:color-mix(in_srgb,var(--sec-surface)_15%,transparent)] text-[color:var(--sec-text)]"}
+                    ${disabled ? "opacity-80 cursor-default" : "hover:bg-[color:var(--sec-surface-2)]"}
                     ${fmtColor}
                   `}
                   onClick={() => onOpenEntry(p.id, h.hole_number)}
@@ -382,7 +382,7 @@ export default function ScorecardPortrait(props: {
                     <span className="leading-none">{savingKey === key ? "…" : (s ?? "–")}</span>
                   </BadgeWrap>
                   {puLabel ? (
-                    <div className="mt-0.5 text-[9px] font-semibold text-emerald-100/60 leading-none">{puLabel}</div>
+                    <div className="mt-0.5 text-[9px] font-semibold text-[color:var(--sec-muted)] leading-none">{puLabel}</div>
                   ) : recv > 0 ? (
                     <div className="mt-1 leading-none">
                       <StrokeDots count={recv} />
@@ -405,23 +405,23 @@ export default function ScorecardPortrait(props: {
               nodes.push(
                 <div
                   key="out-mid-label"
-                  className="h-9 flex items-center justify-center text-[10px] font-semibold border-b border-r border-emerald-900/60 bg-[#0b3b21]/60 text-emerald-100/80"
+                  className="h-9 flex items-center justify-center text-[10px] font-semibold border-b border-r border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] text-[color:var(--sec-muted)]"
                 >
                   OUT
                 </div>,
                 <div
                   key="out-mid-par"
-                  className="h-9 flex items-center justify-center text-[11px] border-b border-r border-emerald-900/60 bg-[#0b3b21]/60 text-emerald-100/80"
+                  className="h-9 flex items-center justify-center text-[11px] border-b border-r border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] text-[color:var(--sec-muted)]"
                 >
                   {parOut ?? "–"}
                 </div>,
                 <div
                   key="out-mid-yds"
-                  className="h-9 flex items-center justify-center text-[11px] border-b border-r border-emerald-900/60 bg-[#0b3b21]/60 text-emerald-100/80"
+                  className="h-9 flex items-center justify-center text-[11px] border-b border-r border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] text-[color:var(--sec-muted)]"
                 >
                   {ydsOut ?? "–"}
                 </div>,
-                <div key="out-mid-si" className="h-9 border-b border-r border-emerald-900/60 bg-[#0b3b21]/60" />
+                <div key="out-mid-si" className="h-9 border-b border-r border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)]" />
               );
 
               participants.forEach((p) => {
@@ -431,10 +431,10 @@ export default function ScorecardPortrait(props: {
                 nodes.push(
                   <div
                     key={`out-mid-${p.id}`}
-                    className="h-9 border-b border-r border-emerald-900/60 flex flex-col items-center justify-center font-bold tabular-nums text-[12px] bg-[#0b3b21]/35 text-emerald-50"
+                    className="h-9 border-b border-r border-[color:var(--sec-hair)] flex flex-col items-center justify-center font-bold tabular-nums text-[12px] bg-[color:color-mix(in_srgb,var(--sec-surface)_35%,transparent)] text-[color:var(--sec-text)]"
                   >
                     <div className="leading-none">{val}</div>
-                    <div className="text-[10px] font-semibold text-emerald-100/70 leading-none">
+                    <div className="text-[10px] font-semibold text-[color:var(--sec-muted)] leading-none">
                       {toPar != null ? formatToPar(toPar) : ""}
                     </div>
                   </div>
@@ -456,23 +456,23 @@ export default function ScorecardPortrait(props: {
             nodes.push(
               <div
                 key={`lbl-${label}`}
-                className="h-9 flex items-center justify-center text-[10px] font-semibold border-b border-r border-emerald-900/60 bg-[#0b3b21]/60 text-emerald-100/80"
+                className="h-9 flex items-center justify-center text-[10px] font-semibold border-b border-r border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] text-[color:var(--sec-muted)]"
               >
                 {label}
               </div>,
               <div
                 key={`par-${label}`}
-                className="h-9 flex items-center justify-center text-[11px] border-b border-r border-emerald-900/60 bg-[#0b3b21]/60 text-emerald-100/80"
+                className="h-9 flex items-center justify-center text-[11px] border-b border-r border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] text-[color:var(--sec-muted)]"
               >
                 {par ?? "–"}
               </div>,
               <div
                 key={`yds-${label}`}
-                className="h-9 flex items-center justify-center text-[11px] border-b border-r border-emerald-900/60 bg-[#0b3b21]/60 text-emerald-100/80"
+                className="h-9 flex items-center justify-center text-[11px] border-b border-r border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] text-[color:var(--sec-muted)]"
               >
                 {yds ?? "–"}
               </div>,
-              <div key={`si-${label}`} className="h-9 border-b border-r border-emerald-900/60 bg-[#0b3b21]/60" />
+              <div key={`si-${label}`} className="h-9 border-b border-r border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)]" />
             );
 
             participants.forEach((p) => {
@@ -484,14 +484,14 @@ export default function ScorecardPortrait(props: {
               nodes.push(
                 <div
                   key={`tot-${label}-${p.id}`}
-                  className={`h-9 border-b border-r border-emerald-900/60 flex flex-col items-center justify-center font-bold tabular-nums ${
+                  className={`h-9 border-b border-r border-[color:var(--sec-hair)] flex flex-col items-center justify-center font-bold tabular-nums ${
                     compactPlayers ? "text-[12px]" : "text-[13px]"
-                  } ${isTot ? "bg-[#f5e6b0] text-[#042713]" : "bg-[#0b3b21]/40 text-emerald-50"}`}
+                  } ${isTot ? "bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)]" : "bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-text)]"}`}
                 >
                   <div className="leading-none">{val}</div>
                   <div
                     className={`text-[10px] font-semibold leading-none ${
-                      isTot ? "text-[#042713]/70" : "text-emerald-100/70"
+                      isTot ? "text-[color:color-mix(in_srgb,var(--ciaga-ground)_70%,transparent)]" : "text-[color:var(--sec-muted)]"
                     }`}
                   >
                     {toPar != null ? formatToPar(toPar) : ""}

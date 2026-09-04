@@ -242,7 +242,7 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore, scoringMode
 
   if (loading) {
     return (
-      <div className="min-h-[100dvh] flex items-center justify-center text-emerald-100/60 text-sm">
+      <div className="min-h-[100dvh] flex items-center justify-center text-[color:var(--sec-muted)] text-sm">
         Loading playoff…
       </div>
     );
@@ -261,21 +261,21 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore, scoringMode
   return (
     <div className="min-h-[100dvh] pb-10 pt-12 px-4 max-w-md mx-auto space-y-4">
       <div className="text-center space-y-1">
-        <p className="text-[10px] uppercase tracking-widest text-emerald-100/50">
+        <p className="text-[10px] uppercase tracking-widest text-[color:var(--sec-muted)]">
           {isComplete ? "Playoff Complete" : "Sudden-Death Playoff"}
         </p>
-        <h1 className="text-lg font-bold text-[#f5e6b0]">Playoff Scorecard</h1>
+        <h1 className="text-lg font-bold text-[color:var(--sec-accent)]">Playoff Scorecard</h1>
       </div>
 
       {/* Gross / Play-off tabs */}
-      <div className="rounded-xl border border-emerald-900/70 bg-[#0b3b21]/50 p-1 flex items-center w-max mx-auto">
+      <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_50%,transparent)] p-1 flex items-center w-max mx-auto">
         {(["gross", "playoff"] as ScoreView[]).map((v) => (
           <button
             key={v}
             type="button"
             onClick={() => setScoreView(v)}
             className={`px-3 py-1 text-[11px] font-semibold rounded-lg ${
-              scoreView === v ? "bg-[#f5e6b0] text-[#042713]" : "text-emerald-100/80 hover:bg-emerald-900/20"
+              scoreView === v ? "bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)]" : "text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]"
             }`}
           >
             {v === "gross" ? "Gross" : "Play-off"}
@@ -285,16 +285,16 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore, scoringMode
 
       {/* Portrait scorecard */}
       {holes.length > 0 && (
-        <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/30 overflow-hidden">
+        <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_30%,transparent)] overflow-hidden">
           {/* Header */}
           <div className="grid" style={{ gridTemplateColumns: gridCols }}>
-            <div className="h-9 flex items-center justify-center text-[10px] text-emerald-100/60 border-b border-r border-emerald-900/60 bg-[#0b3b21]/60">#</div>
-            <div className="h-9 flex items-center justify-center text-[10px] text-emerald-100/60 border-b border-r border-emerald-900/60 bg-[#0b3b21]/60">Par</div>
-            <div className="h-9 flex items-center justify-center text-[10px] text-emerald-100/60 border-b border-r border-emerald-900/60 bg-[#0b3b21]/60">SI</div>
+            <div className="h-9 flex items-center justify-center text-[10px] text-[color:var(--sec-muted)] border-b border-r border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)]">#</div>
+            <div className="h-9 flex items-center justify-center text-[10px] text-[color:var(--sec-muted)] border-b border-r border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)]">Par</div>
+            <div className="h-9 flex items-center justify-center text-[10px] text-[color:var(--sec-muted)] border-b border-r border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)]">SI</div>
             {players.map((pid) => (
-              <div key={pid} className="h-9 flex items-center justify-center gap-1 px-1 border-b border-r border-emerald-900/60 bg-[#0b3b21]/60 min-w-0">
+              <div key={pid} className="h-9 flex items-center justify-center gap-1 px-1 border-b border-r border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] min-w-0">
                 <PlayerAvatar profile={profiles[pid]} />
-                <span className="text-[10px] font-semibold text-emerald-50 truncate">
+                <span className="text-[10px] font-semibold text-[color:var(--sec-text)] truncate">
                   {(profiles[pid]?.name ?? "?").split(" ")[0]}
                 </span>
               </div>
@@ -309,20 +309,20 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore, scoringMode
             return (
               <Fragment key={hole.id}>
               {showBanner && (
-                <div className="px-3 py-1.5 bg-[#0b3b21]/70 border-b border-emerald-900/60 flex items-center gap-1.5">
+                <div className="px-3 py-1.5 bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] border-b border-[color:var(--sec-hair)] flex items-center gap-1.5">
                   <span className="text-[11px]">⛳</span>
-                  <span className="text-[10px] font-semibold text-emerald-100/80 truncate">
+                  <span className="text-[10px] font-semibold text-[color:var(--sec-muted)] truncate">
                     {courseNames[hole.course_id] || "Course"}
                     {teeNames[hole.tee_box_id] ? ` · ${teeNames[hole.tee_box_id]}` : ""}
                   </span>
                 </div>
               )}
               <div className="grid" style={{ gridTemplateColumns: gridCols }}>
-                <div className={`h-11 flex items-center justify-center text-[12px] font-extrabold border-b border-r border-emerald-900/60 ${isCurrent ? "bg-[#042713] text-[#f5e6b0]" : "bg-[#0b3b21]/40 text-emerald-100/80"}`}>
+                <div className={`h-11 flex items-center justify-center text-[12px] font-extrabold border-b border-r border-[color:var(--sec-hair)] ${isCurrent ? "bg-[color:var(--ciaga-ground)] text-[color:var(--sec-accent)]" : "bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-muted)]"}`}>
                   {hole.hole_number}
                 </div>
-                <div className="h-11 flex items-center justify-center text-[11px] text-emerald-100/70 border-b border-r border-emerald-900/60 bg-[#0b3b21]/20">{hole.par}</div>
-                <div className="h-11 flex items-center justify-center text-[11px] text-emerald-100/70 border-b border-r border-emerald-900/60 bg-[#0b3b21]/20">{hole.stroke_index}</div>
+                <div className="h-11 flex items-center justify-center text-[11px] text-[color:var(--sec-muted)] border-b border-r border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_20%,transparent)]">{hole.par}</div>
+                <div className="h-11 flex items-center justify-center text-[11px] text-[color:var(--sec-muted)] border-b border-r border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_20%,transparent)]">{hole.stroke_index}</div>
                 {players.map((pid) => {
                   const isRemaining = hole.remaining_profile_ids.includes(pid);
                   const { display, recv } = cellValue(hole, pid);
@@ -338,12 +338,12 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore, scoringMode
                       type="button"
                       disabled={!tappable}
                       onClick={() => { if (tappable) { setEntryMode("quick"); setEntryPid(pid); } }}
-                      className={`h-11 flex flex-col items-center justify-center gap-0.5 border-b border-r border-emerald-900/60 font-semibold tabular-nums ${
-                        isCurrent ? "bg-[#042713]/40 text-[#f5e6b0]" : "bg-[#0b3b21]/10 text-emerald-50"
-                      } ${tappable ? "hover:bg-emerald-900/30" : "cursor-default"} ${!isRemaining ? "opacity-40" : ""}`}
+                      className={`h-11 flex flex-col items-center justify-center gap-0.5 border-b border-r border-[color:var(--sec-hair)] font-semibold tabular-nums ${
+                        isCurrent ? "bg-[color:color-mix(in_srgb,var(--ciaga-ground)_40%,transparent)] text-[color:var(--sec-accent)]" : "bg-[color:color-mix(in_srgb,var(--sec-surface)_10%,transparent)] text-[color:var(--sec-text)]"
+                      } ${tappable ? "hover:bg-[color:var(--sec-surface-2)]" : "cursor-default"} ${!isRemaining ? "opacity-40" : ""}`}
                     >
                       {!isRemaining ? (
-                        <span className="text-red-400/70 text-sm">✕</span>
+                        <span className="text-[color:var(--sec-bad)] text-sm">✕</span>
                       ) : (
                         <>
                           <BadgeWrap type={badge}>
@@ -370,7 +370,7 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore, scoringMode
           <button
             type="button"
             onClick={() => setTeeOpen(true)}
-            className="w-full py-2 rounded-xl border border-emerald-600/40 text-emerald-200/80 text-xs font-semibold hover:border-emerald-500/60 hover:text-emerald-100"
+            className="w-full py-2 rounded-xl border border-[color:var(--sec-line)] text-[color:var(--sec-muted)] text-xs font-semibold hover:border-[color:var(--sec-accent)] hover:text-[color:var(--sec-text)]"
           >
             ⛳ Change course / tee
           </button>
@@ -382,7 +382,7 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore, scoringMode
               type="button"
               disabled={advancing}
               onClick={() => handleAdvance(currentHole.id)}
-              className="w-full py-2.5 rounded-full bg-emerald-700 text-white text-sm font-semibold disabled:opacity-50"
+              className="w-full py-2.5 rounded-full bg-[color:var(--sec-primary)] text-white text-sm font-semibold disabled:opacity-50"
             >
               {advancing ? "Calculating…" : "Determine Result"}
             </button>
@@ -401,7 +401,7 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore, scoringMode
                 type="button"
                 onClick={() => setNextHole(h)}
                 className={`rounded-xl py-1.5 text-xs font-bold transition-colors ${
-                  nextHole === h ? "bg-[#f5e6b0] text-[#042713]" : "border border-amber-700/30 text-amber-200"
+                  nextHole === h ? "bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)]" : "border border-amber-700/30 text-amber-200"
                 }`}
               >
                 {h}
@@ -412,7 +412,7 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore, scoringMode
             type="button"
             disabled={!nextHole || addingHole}
             onClick={handleAddHole}
-            className="w-full py-2 rounded-xl bg-[#f5e6b0] text-[#042713] text-sm font-semibold disabled:opacity-40"
+            className="w-full py-2 rounded-xl bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] text-sm font-semibold disabled:opacity-40"
           >
             {addingHole ? "Adding…" : "Continue Playoff"}
           </button>
@@ -425,7 +425,7 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore, scoringMode
           type="button"
           onClick={handleDecideCountback}
           disabled={cbLoading}
-          className="w-full py-2 rounded-xl border border-[#f5e6b0]/40 text-[#f5e6b0] text-xs font-semibold disabled:opacity-50"
+          className="w-full py-2 rounded-xl border border-[color:color-mix(in_srgb,var(--sec-accent)_40%,transparent)] text-[color:var(--sec-accent)] text-xs font-semibold disabled:opacity-50"
         >
           {cbLoading ? "Calculating countback…" : "Decide by countback instead"}
         </button>
@@ -433,15 +433,15 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore, scoringMode
 
       {/* Complete */}
       {isComplete && (
-        <div className="rounded-2xl border border-emerald-600/50 bg-emerald-900/20 px-4 py-4 text-center space-y-1">
-          <p className="text-base font-bold text-[#f5e6b0]">🏆 Playoff Complete</p>
-          <p className="text-[11px] text-emerald-300/70">
+        <div className="rounded-2xl border border-[color:var(--sec-line)] bg-[color:var(--sec-surface)] px-4 py-4 text-center space-y-1">
+          <p className="text-base font-bold text-[color:var(--sec-accent)]">🏆 Playoff Complete</p>
+          <p className="text-[11px] text-[color:var(--sec-muted)]">
             Winner: {profiles[playoffState.winner_profile_id ?? ""]?.name ?? "Unknown"}
           </p>
         </div>
       )}
 
-      {error && <p className="text-xs text-red-400 text-center">{error}</p>}
+      {error && <p className="text-xs text-[color:var(--sec-bad)] text-center">{error}</p>}
 
       {/* Score entry — the normal sheet, restricted to the current hole */}
       {entryPid && currentHole && (
@@ -501,7 +501,7 @@ function PlayerAvatar({ profile }: { profile: Profile | undefined }) {
     return <img src={profile.avatar_url} alt="" className="h-5 w-5 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />;
   }
   return (
-    <div className="h-5 w-5 rounded-full bg-emerald-900/60 grid place-items-center text-[8px] font-bold text-emerald-200 shrink-0">
+    <div className="h-5 w-5 rounded-full bg-[color:var(--sec-surface)] grid place-items-center text-[8px] font-bold text-[color:var(--sec-text-2)] shrink-0">
       {profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
     </div>
   );
@@ -545,23 +545,23 @@ function ChangeTeeSheet({
   return (
     <div className="fixed inset-0 z-[60] flex items-end bg-black/60" onClick={onClose}>
       <div
-        className="w-full max-w-md mx-auto rounded-t-3xl bg-[#071f13] border-t border-emerald-900/70 px-4 pt-5 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] space-y-4 max-h-[85vh] overflow-y-auto"
+        className="w-full max-w-md mx-auto rounded-t-3xl bg-[color:var(--ciaga-ground)] border-t border-[color:var(--sec-hair)] px-4 pt-5 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] space-y-4 max-h-[85vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <p className="text-center text-sm font-semibold text-emerald-50">Change course / tee</p>
+        <p className="text-center text-sm font-semibold text-[color:var(--sec-text)]">Change course / tee</p>
 
         <button
           type="button"
           onClick={() => setPickerOpen(true)}
-          className="w-full py-2.5 rounded-xl border border-emerald-600/40 text-emerald-100 text-sm font-semibold"
+          className="w-full py-2.5 rounded-xl border border-[color:var(--sec-line)] text-[color:var(--sec-text)] text-sm font-semibold"
         >
           Choose a different course
         </button>
 
         <div>
-          <p className="text-[10px] uppercase tracking-wide text-emerald-100/50 mb-1">Tee box</p>
+          <p className="text-[10px] uppercase tracking-wide text-[color:var(--sec-muted)] mb-1">Tee box</p>
           {loadingTees ? (
-            <p className="text-xs text-emerald-100/50">Loading tees…</p>
+            <p className="text-xs text-[color:var(--sec-muted)]">Loading tees…</p>
           ) : (
             <div className="space-y-1.5">
               {teeBoxes.map((t) => (
@@ -570,7 +570,7 @@ function ChangeTeeSheet({
                   type="button"
                   onClick={() => setTeeBoxId(t.id)}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border text-sm ${
-                    teeBoxId === t.id ? "border-[#f5e6b0] text-[#f5e6b0]" : "border-emerald-800/50 text-emerald-100/80"
+                    teeBoxId === t.id ? "border-[color:var(--sec-accent)] text-[color:var(--sec-accent)]" : "border-[color:var(--sec-hair)] text-[color:var(--sec-muted)]"
                   }`}
                 >
                   <span>{t.name ?? "Tee"}</span>
@@ -582,7 +582,7 @@ function ChangeTeeSheet({
         </div>
 
         <div>
-          <p className="text-[10px] uppercase tracking-wide text-emerald-100/50 mb-1">Hole</p>
+          <p className="text-[10px] uppercase tracking-wide text-[color:var(--sec-muted)] mb-1">Hole</p>
           <div className="grid grid-cols-6 gap-1.5">
             {Array.from({ length: 18 }, (_, i) => i + 1).map((h) => (
               <button
@@ -590,7 +590,7 @@ function ChangeTeeSheet({
                 type="button"
                 onClick={() => setHoleNumber(h)}
                 className={`rounded-lg py-1.5 text-xs font-bold ${
-                  holeNumber === h ? "bg-[#f5e6b0] text-[#042713]" : "border border-emerald-800/50 text-emerald-100/80"
+                  holeNumber === h ? "bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)]" : "border border-[color:var(--sec-hair)] text-[color:var(--sec-muted)]"
                 }`}
               >
                 {h}
@@ -603,11 +603,11 @@ function ChangeTeeSheet({
           type="button"
           disabled={applying || !teeBoxId}
           onClick={async () => { setApplying(true); try { await onApply(courseId, teeBoxId, holeNumber); } finally { setApplying(false); } }}
-          className="w-full py-2.5 rounded-full bg-[#f5e6b0] text-[#042713] text-sm font-semibold disabled:opacity-50"
+          className="w-full py-2.5 rounded-full bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] text-sm font-semibold disabled:opacity-50"
         >
           {applying ? "Applying…" : "Apply"}
         </button>
-        <button type="button" onClick={onClose} className="w-full py-1 text-emerald-200/50 text-xs">Cancel</button>
+        <button type="button" onClick={onClose} className="w-full py-1 text-[color:var(--sec-muted)] text-xs">Cancel</button>
 
         <CoursePickerModal
           open={pickerOpen}
@@ -637,14 +637,14 @@ function CountbackConfirm({
   return (
     <div className="fixed inset-0 z-[60] flex items-end bg-black/60" onClick={onCancel}>
       <div
-        className="w-full max-w-md mx-auto rounded-t-3xl bg-[#071f13] border-t border-emerald-900/70 px-4 pt-5 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] space-y-4 max-h-[85vh] overflow-y-auto"
+        className="w-full max-w-md mx-auto rounded-t-3xl bg-[color:var(--ciaga-ground)] border-t border-[color:var(--sec-hair)] px-4 pt-5 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] space-y-4 max-h-[85vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <p className="text-center text-sm font-semibold text-emerald-50">Decide by countback</p>
+        <p className="text-center text-sm font-semibold text-[color:var(--sec-text)]">Decide by countback</p>
         {result.winner_profile_id ? (
-          <p className="text-center text-[13px] text-emerald-100/80">
-            Winner: <span className="font-bold text-[#f5e6b0]">{winnerName}</span>
-            {result.step_resolved && <span className="text-emerald-100/50"> (on {result.step_resolved})</span>}
+          <p className="text-center text-[13px] text-[color:var(--sec-muted)]">
+            Winner: <span className="font-bold text-[color:var(--sec-accent)]">{winnerName}</span>
+            {result.step_resolved && <span className="text-[color:var(--sec-muted)]"> (on {result.step_resolved})</span>}
           </p>
         ) : (
           <p className="text-center text-[13px] text-amber-300">Countback could not separate the players.</p>
@@ -654,18 +654,18 @@ function CountbackConfirm({
           {result.breakdown.map((b) => (
             <div
               key={b.step}
-              className={`rounded-lg border px-3 py-2 ${b.resolvedAt ? "border-[#f5e6b0]/50 bg-[#f5e6b0]/5" : "border-emerald-900/50"}`}
+              className={`rounded-lg border px-3 py-2 ${b.resolvedAt ? "border-[color:color-mix(in_srgb,var(--sec-accent)_50%,transparent)] bg-[color:color-mix(in_srgb,var(--sec-accent)_5%,transparent)]" : "border-[color:var(--sec-hair)]"}`}
             >
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold text-emerald-100/80">
-                  {b.step} <span className="text-emerald-100/40">({b.holeRange})</span>
+                <span className="text-[11px] font-semibold text-[color:var(--sec-muted)]">
+                  {b.step} <span className="text-[color:var(--sec-muted)]">({b.holeRange})</span>
                 </span>
-                {b.resolvedAt && <span className="text-[#f5e6b0] text-xs">✓</span>}
+                {b.resolvedAt && <span className="text-[color:var(--sec-accent)] text-xs">✓</span>}
               </div>
               <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
                 {Object.entries(b.scores).map(([pid, v]) => (
-                  <span key={pid} className="text-[10px] text-emerald-100/60">
-                    {(profiles[pid]?.name ?? "?").split(" ")[0]}: <span className="text-emerald-50 font-semibold">{v ?? "–"}</span>
+                  <span key={pid} className="text-[10px] text-[color:var(--sec-muted)]">
+                    {(profiles[pid]?.name ?? "?").split(" ")[0]}: <span className="text-[color:var(--sec-text)] font-semibold">{v ?? "–"}</span>
                   </span>
                 ))}
               </div>
@@ -677,11 +677,11 @@ function CountbackConfirm({
           type="button"
           disabled={confirming || !result.winner_profile_id}
           onClick={onConfirm}
-          className="w-full py-2.5 rounded-full bg-[#f5e6b0] text-[#042713] text-sm font-semibold disabled:opacity-50"
+          className="w-full py-2.5 rounded-full bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] text-sm font-semibold disabled:opacity-50"
         >
           {confirming ? "Applying…" : "Confirm & apply result"}
         </button>
-        <button type="button" onClick={onCancel} className="w-full py-1 text-emerald-200/50 text-xs">Cancel</button>
+        <button type="button" onClick={onCancel} className="w-full py-1 text-[color:var(--sec-muted)] text-xs">Cancel</button>
       </div>
     </div>
   );

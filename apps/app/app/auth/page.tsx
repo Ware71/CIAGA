@@ -269,7 +269,7 @@ function AuthPageContent() {
   }
 
   return (
-    <div className="min-h-screen bg-[#042713] text-slate-100 px-4 flex justify-center pt-[20vh] pb-[env(safe-area-inset-bottom)]">
+    <div className="min-h-screen bg-[color:var(--ciaga-ground)] text-slate-100 px-4 flex justify-center pt-[20vh] pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto w-full max-w-sm space-y-4 h-fit">
         <div className="flex flex-col items-center gap-3">
           <Image
@@ -280,22 +280,22 @@ function AuthPageContent() {
             className="rounded-2xl"
             priority
           />
-          <h1 className="text-xl font-semibold text-[#f5e6b0]">
+          <h1 className="text-xl font-semibold text-[color:var(--sec-accent)]">
             {mode === 'reset' ? 'Reset your password' : 'Welcome to CIAGA'}
           </h1>
         </div>
 
         {/* Mode toggle - hidden during reset/forgot */}
         {mode !== 'reset' && mode !== 'forgot' && (
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-2 flex gap-2">
+          <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-2 flex gap-2">
             <button
               type="button"
               onClick={() => switchMode('sign-in')}
               className={[
                 'flex-1 rounded-xl px-3 py-2 text-sm font-medium transition-colors',
                 mode === 'sign-in'
-                  ? 'bg-emerald-900/40 border border-emerald-200/30'
-                  : 'hover:bg-emerald-900/20',
+                  ? 'bg-[color:var(--sec-surface)] border border-[color:var(--sec-line)]'
+                  : 'hover:bg-[color:var(--sec-surface-2)]',
               ].join(' ')}
             >
               Sign in
@@ -306,8 +306,8 @@ function AuthPageContent() {
               className={[
                 'flex-1 rounded-xl px-3 py-2 text-sm font-medium transition-colors',
                 mode === 'sign-up'
-                  ? 'bg-emerald-900/40 border border-emerald-200/30'
-                  : 'hover:bg-emerald-900/20',
+                  ? 'bg-[color:var(--sec-surface)] border border-[color:var(--sec-line)]'
+                  : 'hover:bg-[color:var(--sec-surface-2)]',
               ].join(' ')}
             >
               Sign up
@@ -322,7 +322,7 @@ function AuthPageContent() {
               'rounded-2xl border p-3 text-sm',
               msg.isError
                 ? 'border-red-900/40 bg-red-950/20 text-red-200'
-                : 'border-emerald-900/70 bg-[#0b3b21]/70 text-emerald-100/90',
+                : 'border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] text-[color:var(--sec-muted)]',
             ].join(' ')}
           >
             {msg.text}
@@ -331,8 +331,8 @@ function AuthPageContent() {
 
         {/* Form */}
         <form onSubmit={handleSubmit}>
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 space-y-3">
-            <div className="text-sm text-emerald-100/80">
+          <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4 space-y-3">
+            <div className="text-sm text-[color:var(--sec-muted)]">
               {mode === 'sign-in'
                 ? 'Sign in with your email and password.'
                 : mode === 'sign-up'
@@ -350,7 +350,7 @@ function AuthPageContent() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="Email"
                 autoComplete="email"
-                className="w-full rounded-xl border border-emerald-900/70 bg-[#08341b] px-3 py-2 text-base outline-none placeholder:text-emerald-200/40"
+                className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-3 py-2 text-base outline-none placeholder:text-[color:var(--sec-muted)]"
               />
             )}
 
@@ -362,7 +362,7 @@ function AuthPageContent() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder={mode === 'reset' ? 'New password' : 'Password'}
                 autoComplete={mode === 'sign-in' ? 'current-password' : 'new-password'}
-                className="w-full rounded-xl border border-emerald-900/70 bg-[#08341b] px-3 py-2 text-base outline-none placeholder:text-emerald-200/40"
+                className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-3 py-2 text-base outline-none placeholder:text-[color:var(--sec-muted)]"
               />
             )}
 
@@ -374,13 +374,13 @@ function AuthPageContent() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Confirm password"
                 autoComplete="new-password"
-                className="w-full rounded-xl border border-emerald-900/70 bg-[#08341b] px-3 py-2 text-base outline-none placeholder:text-emerald-200/40"
+                className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-3 py-2 text-base outline-none placeholder:text-[color:var(--sec-muted)]"
               />
             )}
 
             {/* Terms acceptance - sign-up only (clickwrap) */}
             {mode === 'sign-up' && (
-              <label className="flex items-start gap-2 text-xs text-emerald-100/80">
+              <label className="flex items-start gap-2 text-xs text-[color:var(--sec-muted)]">
                 <input
                   type="checkbox"
                   checked={agreed}
@@ -393,7 +393,7 @@ function AuthPageContent() {
                     href={LEGAL_LINKS.terms}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="underline text-[#f5e6b0]"
+                    className="underline text-[color:var(--sec-accent)]"
                   >
                     Terms
                   </a>{' '}
@@ -402,7 +402,7 @@ function AuthPageContent() {
                     href={LEGAL_LINKS.privacy}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="underline text-[#f5e6b0]"
+                    className="underline text-[color:var(--sec-accent)]"
                   >
                     Privacy Policy
                   </a>
@@ -414,7 +414,7 @@ function AuthPageContent() {
             <button
               type="submit"
               disabled={working}
-              className="w-full rounded-xl bg-emerald-700/80 hover:bg-emerald-700 px-4 py-2 text-sm font-medium disabled:opacity-50 transition-colors"
+              className="w-full rounded-xl bg-[color:var(--sec-primary)] hover:bg-[color:var(--sec-primary-hover)] px-4 py-2 text-sm font-medium disabled:opacity-50 transition-colors"
             >
               {working
                 ? 'Working...'
@@ -431,7 +431,7 @@ function AuthPageContent() {
               <button
                 type="button"
                 onClick={() => switchMode('forgot')}
-                className="w-full text-xs text-emerald-200/60 hover:text-emerald-200/80 transition-colors"
+                className="w-full text-xs text-[color:var(--sec-muted)] hover:text-[color:var(--sec-muted)] transition-colors"
               >
                 Forgot password?
               </button>
@@ -441,7 +441,7 @@ function AuthPageContent() {
               <button
                 type="button"
                 onClick={() => switchMode('sign-in')}
-                className="w-full text-xs text-emerald-200/60 hover:text-emerald-200/80 transition-colors"
+                className="w-full text-xs text-[color:var(--sec-muted)] hover:text-[color:var(--sec-muted)] transition-colors"
               >
                 Back to sign in
               </button>

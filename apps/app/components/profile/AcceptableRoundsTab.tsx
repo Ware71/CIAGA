@@ -70,7 +70,7 @@ export default function AcceptableRoundsTab({
 
   if (loading) {
     return (
-      <div className="mt-2 rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">
+      <div className="mt-2 rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4 text-sm text-[color:var(--sec-muted)]">
         Loading history...
       </div>
     );
@@ -87,7 +87,7 @@ export default function AcceptableRoundsTab({
   return (
     <div>
       {window20.length >= 3 && usedCount > 0 && (
-        <div className="px-1 mb-1 text-[10px] text-emerald-100/60">
+        <div className="px-1 mb-1 text-[10px] text-[color:var(--sec-muted)]">
           {usedCount} of {window20.length} counting
         </div>
       )}

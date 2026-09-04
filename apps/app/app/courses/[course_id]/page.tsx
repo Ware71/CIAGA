@@ -63,7 +63,7 @@ function fmtNum(n: number | null | undefined, digits = 1) {
 
 function chip(text: string) {
   return (
-    <span className="rounded-full border border-emerald-200/30 bg-[#0a341c]/50 px-2.5 py-1 text-[10px] uppercase tracking-wide text-emerald-100/80">
+    <span className="rounded-full border border-[color:var(--sec-line)] bg-[color:color-mix(in_srgb,var(--sec-surface)_50%,transparent)] px-2.5 py-1 text-[10px] uppercase tracking-wide text-[color:var(--sec-muted)]">
       {text}
     </span>
   );
@@ -446,7 +446,7 @@ export default function CourseDetailPage() {
   const visibleTees = editMode ? filteredDraftTees : filteredTees;
 
   return (
-    <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
+    <div className="min-h-screen bg-[color:var(--ciaga-ground)] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto w-full max-w-sm space-y-4">
         {/* Header */}
         <header className="flex items-center justify-between">
@@ -456,10 +456,10 @@ export default function CourseDetailPage() {
           />
 
           <div className="text-center flex-1 min-w-0">
-            <div className="text-lg font-semibold tracking-wide text-[#f5e6b0] truncate">
+            <div className="text-lg font-semibold tracking-wide text-[color:var(--sec-accent)] truncate">
               {course?.name ?? "Course"}
             </div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--sec-muted)]">
               Tee Boxes
             </div>
           </div>
@@ -468,7 +468,7 @@ export default function CourseDetailPage() {
           <Button
             variant="ghost"
             size="sm"
-            className="px-2 text-emerald-100 hover:bg-emerald-900/30"
+            className="px-2 text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
             onClick={() => {
               if (!course) return;
               if (!editMode) enterEditMode();
@@ -481,7 +481,7 @@ export default function CourseDetailPage() {
         </header>
 
         {loading && (
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">
+          <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4 text-sm text-[color:var(--sec-muted)]">
             Loading course…
           </div>
         )}
@@ -501,16 +501,16 @@ export default function CourseDetailPage() {
         {!loading && !error && course && (
           <>
             {/* Course card */}
-            <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
+            <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4">
               {!editMode ? (
-                <div className="text-sm font-semibold text-emerald-50">{course.name}</div>
+                <div className="text-sm font-semibold text-[color:var(--sec-text)]">{course.name}</div>
               ) : (
                 <div className="space-y-2">
-                  <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--sec-muted)]">
                     Course name
                   </div>
                   <input
-                    className="w-full rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm text-emerald-50 outline-none focus:border-emerald-200/40"
+                    className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-3 py-2 text-sm text-[color:var(--sec-text)] outline-none focus:border-[color:var(--sec-line)]"
                     value={draftCourseName}
                     onChange={(e) => setDraftCourseName(e.target.value)}
                     placeholder="Course name"
@@ -518,7 +518,7 @@ export default function CourseDetailPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="px-2 text-emerald-100 hover:bg-emerald-900/30"
+                    className="px-2 text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
                     onClick={exitEditModeDiscard}
                     disabled={saving || addingTee}
                   >
@@ -528,23 +528,23 @@ export default function CourseDetailPage() {
               )}
 
               {courseSubtitle ? (
-                <div className="mt-1 text-[11px] text-emerald-200/70">{courseSubtitle}</div>
+                <div className="mt-1 text-[11px] text-[color:var(--sec-muted)]">{courseSubtitle}</div>
               ) : null}
 
-              <div className="mt-2 text-[10px] text-emerald-100/50 truncate">
+              <div className="mt-2 text-[10px] text-[color:var(--sec-muted)] truncate">
                 Source: {course.osm_id}
               </div>
             </div>
 
             {/* Add tee box (only in edit mode) */}
             {editMode ? (
-              <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-3">
+              <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-3">
                 <div className="flex items-center justify-between gap-3">
-                  <div className="text-sm font-medium text-emerald-50">Add tee box</div>
+                  <div className="text-sm font-medium text-[color:var(--sec-text)]">Add tee box</div>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="text-emerald-100 hover:bg-emerald-900/30"
+                    className="text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
                     onClick={() => {
                       setAddErr(null);
                       setShowAddTee((v) => !v);
@@ -564,7 +564,7 @@ export default function CourseDetailPage() {
                     ) : null}
 
                     <input
-                      className="w-full rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm text-emerald-50 outline-none focus:border-emerald-200/40"
+                      className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-3 py-2 text-sm text-[color:var(--sec-text)] outline-none focus:border-[color:var(--sec-line)]"
                       placeholder="Tee name (e.g. Blue)"
                       value={newTee.name}
                       onChange={(e) => setNewTee((p) => ({ ...p, name: e.target.value }))}
@@ -572,7 +572,7 @@ export default function CourseDetailPage() {
 
                     <div className="grid grid-cols-2 gap-2">
                       <select
-                        className="rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm text-emerald-50 outline-none focus:border-emerald-200/40"
+                        className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-3 py-2 text-sm text-[color:var(--sec-text)] outline-none focus:border-[color:var(--sec-line)]"
                         value={newTee.gender}
                         onChange={(e) => setNewTee((p) => ({ ...p, gender: e.target.value as any }))}
                       >
@@ -582,7 +582,7 @@ export default function CourseDetailPage() {
                       </select>
 
                       <input
-                        className="rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm text-emerald-50 outline-none focus:border-emerald-200/40"
+                        className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-3 py-2 text-sm text-[color:var(--sec-text)] outline-none focus:border-[color:var(--sec-line)]"
                         placeholder="Par"
                         inputMode="numeric"
                         value={newTee.par}
@@ -590,7 +590,7 @@ export default function CourseDetailPage() {
                       />
 
                       <input
-                        className="rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm text-emerald-50 outline-none focus:border-emerald-200/40"
+                        className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-3 py-2 text-sm text-[color:var(--sec-text)] outline-none focus:border-[color:var(--sec-line)]"
                         placeholder="Yards"
                         inputMode="numeric"
                         value={newTee.yards}
@@ -598,7 +598,7 @@ export default function CourseDetailPage() {
                       />
 
                       <input
-                        className="rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm text-emerald-50 outline-none focus:border-emerald-200/40"
+                        className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-3 py-2 text-sm text-[color:var(--sec-text)] outline-none focus:border-[color:var(--sec-line)]"
                         placeholder="Rating"
                         inputMode="decimal"
                         value={newTee.rating}
@@ -606,7 +606,7 @@ export default function CourseDetailPage() {
                       />
 
                       <input
-                        className="rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm text-emerald-50 outline-none focus:border-emerald-200/40"
+                        className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-3 py-2 text-sm text-[color:var(--sec-text)] outline-none focus:border-[color:var(--sec-line)]"
                         placeholder="Slope"
                         inputMode="numeric"
                         value={newTee.slope}
@@ -614,7 +614,7 @@ export default function CourseDetailPage() {
                       />
 
                       <Button
-                        className="col-span-2 bg-emerald-700 hover:bg-emerald-600 text-emerald-50"
+                        className="col-span-2 bg-[color:var(--sec-primary)] hover:bg-[color:var(--sec-primary-hover)] text-[color:var(--sec-text)]"
                         disabled={addingTee || !newTee.name.trim()}
                         onClick={addTeeBox}
                       >
@@ -627,15 +627,15 @@ export default function CourseDetailPage() {
             ) : null}
 
             {/* Gender toggle */}
-            <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-2 flex gap-2">
+            <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-2 flex gap-2">
               <button
                 type="button"
                 onClick={() => setGenderFilter("all")}
                 className={[
                   "flex-1 rounded-xl px-3 py-2 text-xs font-medium",
                   genderFilter === "all"
-                    ? "bg-emerald-900/40 border border-emerald-200/30"
-                    : "hover:bg-emerald-900/20",
+                    ? "bg-[color:var(--sec-surface)] border border-[color:var(--sec-line)]"
+                    : "hover:bg-[color:var(--sec-surface-2)]",
                 ].join(" ")}
               >
                 All
@@ -646,8 +646,8 @@ export default function CourseDetailPage() {
                 className={[
                   "flex-1 rounded-xl px-3 py-2 text-xs font-medium",
                   genderFilter === "male"
-                    ? "bg-emerald-900/40 border border-emerald-200/30"
-                    : "hover:bg-emerald-900/20",
+                    ? "bg-[color:var(--sec-surface)] border border-[color:var(--sec-line)]"
+                    : "hover:bg-[color:var(--sec-surface-2)]",
                 ].join(" ")}
               >
                 Men
@@ -658,8 +658,8 @@ export default function CourseDetailPage() {
                 className={[
                   "flex-1 rounded-xl px-3 py-2 text-xs font-medium",
                   genderFilter === "female"
-                    ? "bg-emerald-900/40 border border-emerald-200/30"
-                    : "hover:bg-emerald-900/20",
+                    ? "bg-[color:var(--sec-surface)] border border-[color:var(--sec-line)]"
+                    : "hover:bg-[color:var(--sec-surface-2)]",
                 ].join(" ")}
               >
                 Women
@@ -667,15 +667,15 @@ export default function CourseDetailPage() {
             </div>
 
             {/* Holes toggle (NEW) */}
-            <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-2 flex gap-2">
+            <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-2 flex gap-2">
               <button
                 type="button"
                 onClick={() => setHolesFilter("all")}
                 className={[
                   "flex-1 rounded-xl px-3 py-2 text-xs font-medium",
                   holesFilter === "all"
-                    ? "bg-emerald-900/40 border border-emerald-200/30"
-                    : "hover:bg-emerald-900/20",
+                    ? "bg-[color:var(--sec-surface)] border border-[color:var(--sec-line)]"
+                    : "hover:bg-[color:var(--sec-surface-2)]",
                 ].join(" ")}
               >
                 All
@@ -686,8 +686,8 @@ export default function CourseDetailPage() {
                 className={[
                   "flex-1 rounded-xl px-3 py-2 text-xs font-medium",
                   holesFilter === "18"
-                    ? "bg-emerald-900/40 border border-emerald-200/30"
-                    : "hover:bg-emerald-900/20",
+                    ? "bg-[color:var(--sec-surface)] border border-[color:var(--sec-line)]"
+                    : "hover:bg-[color:var(--sec-surface-2)]",
                 ].join(" ")}
               >
                 18 holes
@@ -698,8 +698,8 @@ export default function CourseDetailPage() {
                 className={[
                   "flex-1 rounded-xl px-3 py-2 text-xs font-medium",
                   holesFilter === "9"
-                    ? "bg-emerald-900/40 border border-emerald-200/30"
-                    : "hover:bg-emerald-900/20",
+                    ? "bg-[color:var(--sec-surface)] border border-[color:var(--sec-line)]"
+                    : "hover:bg-[color:var(--sec-surface-2)]",
                 ].join(" ")}
               >
                 9 holes
@@ -708,7 +708,7 @@ export default function CourseDetailPage() {
 
             {/* Tee list */}
             {visibleTees.length === 0 ? (
-              <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">
+              <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4 text-sm text-[color:var(--sec-muted)]">
                 No tee boxes match this filter.
               </div>
             ) : (
@@ -723,22 +723,22 @@ export default function CourseDetailPage() {
                   return (
                     <li
                       key={t.id}
-                      className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 overflow-hidden"
+                      className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_80%,transparent)] overflow-hidden"
                     >
                       {/* Tee header */}
                       <button
                         type="button"
-                        className="w-full text-left p-4 hover:bg-emerald-900/20 transition-colors"
+                        className="w-full text-left p-4 hover:bg-[color:var(--sec-surface-2)] transition-colors"
                         onClick={() => setOpenTeeId((prev) => (prev === t.id ? null : t.id))}
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0 w-full">
                             {!editMode ? (
                               <>
-                                <div className="font-medium text-emerald-50 truncate">
+                                <div className="font-medium text-[color:var(--sec-text)] truncate">
                                   {t.name}
                                   {g ? (
-                                    <span className="text-emerald-200/70">{` · ${g}`}</span>
+                                    <span className="text-[color:var(--sec-muted)]">{` · ${g}`}</span>
                                   ) : null}
                                 </div>
                                 <div className="mt-2 flex flex-wrap gap-2">
@@ -753,7 +753,7 @@ export default function CourseDetailPage() {
                               <>
                                 <div className="grid grid-cols-2 gap-2">
                                   <input
-                                    className="col-span-2 rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm text-emerald-50 outline-none focus:border-emerald-200/40"
+                                    className="col-span-2 rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-3 py-2 text-sm text-[color:var(--sec-text)] outline-none focus:border-[color:var(--sec-line)]"
                                     value={t.name ?? ""}
                                     onChange={(e) => updateDraftTee(t.id, { name: e.target.value })}
                                     placeholder="Tee name"
@@ -761,7 +761,7 @@ export default function CourseDetailPage() {
                                   />
 
                                   <select
-                                    className="rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm text-emerald-50 outline-none focus:border-emerald-200/40"
+                                    className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-3 py-2 text-sm text-[color:var(--sec-text)] outline-none focus:border-[color:var(--sec-line)]"
                                     value={t.gender ?? "unisex"}
                                     onChange={(e) => updateDraftTee(t.id, { gender: e.target.value })}
                                     onClick={(e) => e.stopPropagation()}
@@ -772,7 +772,7 @@ export default function CourseDetailPage() {
                                   </select>
 
                                   <NumberField
-                                    className="rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm text-emerald-50 outline-none focus:border-emerald-200/40"
+                                    className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-3 py-2 text-sm text-[color:var(--sec-text)] outline-none focus:border-[color:var(--sec-line)]"
                                     value={t.par}
                                     onValueChange={(v) => updateDraftTee(t.id, { par: v })}
                                     placeholder="Par"
@@ -780,7 +780,7 @@ export default function CourseDetailPage() {
                                   />
 
                                   <NumberField
-                                    className="rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm text-emerald-50 outline-none focus:border-emerald-200/40"
+                                    className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-3 py-2 text-sm text-[color:var(--sec-text)] outline-none focus:border-[color:var(--sec-line)]"
                                     value={t.yards}
                                     onValueChange={(v) => updateDraftTee(t.id, { yards: v })}
                                     placeholder="Yards"
@@ -788,7 +788,7 @@ export default function CourseDetailPage() {
                                   />
 
                                   <NumberField
-                                    className="rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm text-emerald-50 outline-none focus:border-emerald-200/40"
+                                    className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-3 py-2 text-sm text-[color:var(--sec-text)] outline-none focus:border-[color:var(--sec-line)]"
                                     value={t.rating}
                                     onValueChange={(v) => updateDraftTee(t.id, { rating: v })}
                                     placeholder="Rating"
@@ -797,7 +797,7 @@ export default function CourseDetailPage() {
                                   />
 
                                   <NumberField
-                                    className="rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm text-emerald-50 outline-none focus:border-emerald-200/40"
+                                    className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-3 py-2 text-sm text-[color:var(--sec-text)] outline-none focus:border-[color:var(--sec-line)]"
                                     value={t.slope}
                                     onValueChange={(v) => updateDraftTee(t.id, { slope: v })}
                                     placeholder="Slope"
@@ -806,7 +806,7 @@ export default function CourseDetailPage() {
                                 </div>
 
                                 <div className="mt-2 flex items-center justify-between">
-                                  <div className="text-[10px] text-emerald-100/50">
+                                  <div className="text-[10px] text-[color:var(--sec-muted)]">
                                     Tap to expand and edit holes.
                                   </div>
 
@@ -827,7 +827,7 @@ export default function CourseDetailPage() {
                             )}
                           </div>
 
-                          <div className="shrink-0 text-emerald-100/70 text-sm pt-1">
+                          <div className="shrink-0 text-[color:var(--sec-muted)] text-sm pt-1">
                             {isOpen ? "▾" : "▸"}
                           </div>
                         </div>
@@ -835,15 +835,15 @@ export default function CourseDetailPage() {
 
                       {/* Expanded holes */}
                       {isOpen ? (
-                        <div className="border-t border-emerald-900/60 px-4 pb-4">
+                        <div className="border-t border-[color:var(--sec-hair)] px-4 pb-4">
                           {!editMode ? (
                             holesCount === 0 ? (
-                              <div className="pt-3 text-sm text-emerald-100/70">
+                              <div className="pt-3 text-sm text-[color:var(--sec-muted)]">
                                 No hole-by-hole data saved for this tee yet.
                               </div>
                             ) : (
                               <div className="pt-3">
-                                <div className="grid grid-cols-4 gap-2 text-[10px] uppercase tracking-[0.18em] text-emerald-200/70 px-1">
+                                <div className="grid grid-cols-4 gap-2 text-[10px] uppercase tracking-[0.18em] text-[color:var(--sec-muted)] px-1">
                                   <div>Hole</div>
                                   <div className="text-center">Par</div>
                                   <div className="text-center">Yds</div>
@@ -857,14 +857,14 @@ export default function CourseDetailPage() {
                                     .map((h) => (
                                       <div
                                         key={h.id ?? `${t.id}-${h.hole_number}`}
-                                        className="grid grid-cols-4 gap-2 items-center rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm"
+                                        className="grid grid-cols-4 gap-2 items-center rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-3 py-2 text-sm"
                                       >
-                                        <div className="font-medium text-emerald-50">{h.hole_number}</div>
-                                        <div className="text-center text-emerald-100/80">{h.par ?? "—"}</div>
-                                        <div className="text-center text-emerald-100/80">
+                                        <div className="font-medium text-[color:var(--sec-text)]">{h.hole_number}</div>
+                                        <div className="text-center text-[color:var(--sec-muted)]">{h.par ?? "—"}</div>
+                                        <div className="text-center text-[color:var(--sec-muted)]">
                                           {h.yardage ?? "—"}
                                         </div>
-                                        <div className="text-center text-emerald-100/80">
+                                        <div className="text-center text-[color:var(--sec-muted)]">
                                           {h.handicap ?? "—"}
                                         </div>
                                       </div>
@@ -874,7 +874,7 @@ export default function CourseDetailPage() {
                             )
                           ) : (
                             <div className="pt-3">
-                              <div className="grid grid-cols-4 gap-2 text-[10px] uppercase tracking-[0.18em] text-emerald-200/70 px-1">
+                              <div className="grid grid-cols-4 gap-2 text-[10px] uppercase tracking-[0.18em] text-[color:var(--sec-muted)] px-1">
                                 <div>Hole</div>
                                 <div className="text-center">Par</div>
                                 <div className="text-center">Yds</div>
@@ -888,12 +888,12 @@ export default function CourseDetailPage() {
                                   .map((h) => (
                                     <div
                                       key={h.id ?? `${t.id}-${h.hole_number}`}
-                                      className="grid grid-cols-4 gap-2 items-center rounded-xl border border-emerald-900/60 bg-[#0a341c]/40 px-3 py-2 text-sm"
+                                      className="grid grid-cols-4 gap-2 items-center rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-3 py-2 text-sm"
                                     >
-                                      <div className="font-medium text-emerald-50">{h.hole_number}</div>
+                                      <div className="font-medium text-[color:var(--sec-text)]">{h.hole_number}</div>
 
                                       <NumberField
-                                        className="rounded-lg border border-emerald-900/60 bg-[#082b16]/40 px-2 py-1 text-center text-emerald-50 outline-none focus:border-emerald-200/40"
+                                        className="rounded-lg border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-2 py-1 text-center text-[color:var(--sec-text)] outline-none focus:border-[color:var(--sec-line)]"
                                         value={h.par}
                                         placeholder="—"
                                         onValueChange={(v) =>
@@ -902,7 +902,7 @@ export default function CourseDetailPage() {
                                       />
 
                                       <NumberField
-                                        className="rounded-lg border border-emerald-900/60 bg-[#082b16]/40 px-2 py-1 text-center text-emerald-50 outline-none focus:border-emerald-200/40"
+                                        className="rounded-lg border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-2 py-1 text-center text-[color:var(--sec-text)] outline-none focus:border-[color:var(--sec-line)]"
                                         value={h.yardage}
                                         placeholder="—"
                                         onValueChange={(v) =>
@@ -911,7 +911,7 @@ export default function CourseDetailPage() {
                                       />
 
                                       <NumberField
-                                        className="rounded-lg border border-emerald-900/60 bg-[#082b16]/40 px-2 py-1 text-center text-emerald-50 outline-none focus:border-emerald-200/40"
+                                        className="rounded-lg border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-2 py-1 text-center text-[color:var(--sec-text)] outline-none focus:border-[color:var(--sec-line)]"
                                         value={h.handicap}
                                         placeholder="—"
                                         onValueChange={(v) =>
@@ -922,7 +922,7 @@ export default function CourseDetailPage() {
                                   ))}
                               </div>
 
-                              <div className="mt-3 text-[10px] text-emerald-100/50">
+                              <div className="mt-3 text-[10px] text-[color:var(--sec-muted)]">
                                 Tip: leaving a hole blank will not create/update it.
                               </div>
                             </div>
@@ -935,7 +935,7 @@ export default function CourseDetailPage() {
               </ul>
             )}
 
-            <div className="pt-2 text-center text-[10px] text-emerald-100/50">
+            <div className="pt-2 text-center text-[10px] text-[color:var(--sec-muted)]">
               Tee data is cached in Supabase after first view.
             </div>
           </>

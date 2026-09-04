@@ -23,10 +23,10 @@ function HandicapLine({ figures }: { figures?: HandicapFigures }) {
   const { hi, ch, ph } = figures;
   if (hi == null && ch == null && ph == null) return null;
   return (
-    <div className="mt-0.5 flex items-center gap-2.5 text-[9px] tabular-nums text-emerald-100/55">
-      {hi != null && <span><span className="text-emerald-200/45">HI</span> {formatHI(hi)}</span>}
-      {ch != null && <span><span className="text-emerald-200/45">CH</span> {ch}</span>}
-      {ph != null && <span><span className="text-emerald-200/45">PH</span> {ph}</span>}
+    <div className="mt-0.5 flex items-center gap-2.5 text-[9px] tabular-nums text-[color:var(--sec-muted)]">
+      {hi != null && <span><span className="text-[color:var(--sec-muted)]">HI</span> {formatHI(hi)}</span>}
+      {ch != null && <span><span className="text-[color:var(--sec-muted)]">CH</span> {ch}</span>}
+      {ph != null && <span><span className="text-[color:var(--sec-muted)]">PH</span> {ph}</span>}
     </div>
   );
 }
@@ -64,28 +64,28 @@ export default function FinalResultsPanel(props: {
   const showOutIn = !isStringTotal;
 
   return (
-    <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 overflow-hidden">
-      <div className="p-4 border-b border-emerald-900/60">
-        <div className="text-sm font-semibold text-[#f5e6b0]">Final results</div>
-        <div className="text-[11px] text-emerald-100/70 mt-1">
+    <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] overflow-hidden">
+      <div className="p-4 border-b border-[color:var(--sec-hair)]">
+        <div className="text-sm font-semibold text-[color:var(--sec-accent)]">Final results</div>
+        <div className="text-[11px] text-[color:var(--sec-muted)] mt-1">
           Scores are locked. This is the final scorecard.
         </div>
       </div>
 
       <div className="p-3">
-        <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/60 p-3 flex items-center justify-between gap-3">
+        <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_60%,transparent)] p-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="rounded-full border border-emerald-900/70 bg-[#0b3b21]/50 px-2.5 py-1 text-[10px] font-bold text-emerald-100/90">
+            <div className="rounded-full border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_50%,transparent)] px-2.5 py-1 text-[10px] font-bold text-[color:var(--sec-muted)]">
               WINNER
             </div>
-            <Avatar className="h-9 w-9 border border-emerald-200/70 shrink-0">
+            <Avatar className="h-9 w-9 border border-[color:var(--sec-line)] shrink-0">
               {winner.avatarUrl ? <AvatarImage src={winner.avatarUrl} /> : null}
               <AvatarFallback className="text-[10px]">{initialsFrom(winner.name)}</AvatarFallback>
             </Avatar>
             <div className="min-w-0">
-              <div className="text-[13px] font-semibold text-emerald-50 truncate">{winner.name}</div>
+              <div className="text-[13px] font-semibold text-[color:var(--sec-text)] truncate">{winner.name}</div>
               {showOutIn && (
-                <div className="text-[11px] text-emerald-100/70">
+                <div className="text-[11px] text-[color:var(--sec-muted)]">
                   OUT {winner.out} · IN {winner.in}
                 </div>
               )}
@@ -97,11 +97,11 @@ export default function FinalResultsPanel(props: {
           </div>
 
           <div className="shrink-0 text-right">
-            <div className="text-[10px] uppercase tracking-[0.14em] text-emerald-100/70">{scoreLabel}</div>
-            <div className="text-2xl font-extrabold tabular-nums text-[#f5e6b0]">
+            <div className="text-[10px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)]">{scoreLabel}</div>
+            <div className="text-2xl font-extrabold tabular-nums text-[color:var(--sec-accent)]">
               {winner.total}{" "}
               {!isStringTotal && (
-                <span className="text-[12px] font-bold text-emerald-100/80 ml-1">
+                <span className="text-[12px] font-bold text-[color:var(--sec-muted)] ml-1">
                   {winner.toPar != null ? `(${formatToPar(winner.toPar)})` : ""}
                 </span>
               )}
@@ -110,7 +110,7 @@ export default function FinalResultsPanel(props: {
         </div>
       </div>
 
-      <div className="divide-y divide-emerald-900/60">
+      <div className="divide-y divide-[color:var(--sec-hair)]">
         {finalRows.map((r, idx) => {
           const prev = finalRows[idx - 1];
           const rank = idx === 0 ? 1 : prev && prev.total === r.total ? null : idx + 1;
@@ -118,19 +118,19 @@ export default function FinalResultsPanel(props: {
           return (
             <div key={r.participantId} className="p-3 flex items-center justify-between gap-3">
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-7 text-center text-[12px] font-bold text-emerald-100/90">
+                <div className="w-7 text-center text-[12px] font-bold text-[color:var(--sec-muted)]">
                   {rank ?? "•"}
                 </div>
 
-                <Avatar className="h-8 w-8 border border-emerald-200/70 shrink-0">
+                <Avatar className="h-8 w-8 border border-[color:var(--sec-line)] shrink-0">
                   {r.avatarUrl ? <AvatarImage src={r.avatarUrl} /> : null}
                   <AvatarFallback className="text-[10px]">{initialsFrom(r.name)}</AvatarFallback>
                 </Avatar>
 
                 <div className="min-w-0">
-                  <div className="text-[13px] font-semibold text-emerald-50 truncate">{r.name}</div>
+                  <div className="text-[13px] font-semibold text-[color:var(--sec-text)] truncate">{r.name}</div>
                   {showOutIn && (
-                    <div className="text-[11px] text-emerald-100/70">
+                    <div className="text-[11px] text-[color:var(--sec-muted)]">
                       OUT {r.out} · IN {r.in}
                     </div>
                   )}
@@ -142,11 +142,11 @@ export default function FinalResultsPanel(props: {
               </div>
 
               <div className="shrink-0 text-right">
-                <div className="text-[10px] uppercase tracking-[0.14em] text-emerald-100/70">{scoreLabel}</div>
-                <div className="text-xl font-extrabold tabular-nums text-[#f5e6b0]">
+                <div className="text-[10px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)]">{scoreLabel}</div>
+                <div className="text-xl font-extrabold tabular-nums text-[color:var(--sec-accent)]">
                   {r.total}{" "}
                   {!isStringTotal && (
-                    <span className="text-[12px] font-bold text-emerald-100/80 ml-1">
+                    <span className="text-[12px] font-bold text-[color:var(--sec-muted)] ml-1">
                       {r.toPar != null ? `(${formatToPar(r.toPar)})` : ""}
                     </span>
                   )}

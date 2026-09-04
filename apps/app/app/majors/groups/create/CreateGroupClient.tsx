@@ -205,27 +205,27 @@ export default function CreateGroupClient() {
     /* Step 0: Name, Description, Type */
     <div key="step0" className="space-y-5">
       <div className="space-y-2">
-        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Group Name *</label>
+        <label className="text-[11px] uppercase tracking-wider text-[color:var(--sec-muted)]">Group Name *</label>
         <input
           type="text"
           value={form.name}
           onChange={(e) => update("name", e.target.value)}
           placeholder="e.g. Friday Fourball League"
-          className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-3 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
+          className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-4 py-3 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none focus:border-[color:var(--sec-line)]"
         />
       </div>
       <div className="space-y-2">
-        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Description</label>
+        <label className="text-[11px] uppercase tracking-wider text-[color:var(--sec-muted)]">Description</label>
         <textarea
           value={form.description}
           onChange={(e) => update("description", e.target.value)}
           rows={3}
           placeholder="What is this group about?"
-          className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-3 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600 resize-none"
+          className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-4 py-3 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none focus:border-[color:var(--sec-line)] resize-none"
         />
       </div>
       <div className="space-y-2">
-        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Group Type</label>
+        <label className="text-[11px] uppercase tracking-wider text-[color:var(--sec-muted)]">Group Type</label>
         <div className="space-y-2">
           {GROUP_TYPES.map((t) => (
             <button
@@ -234,12 +234,12 @@ export default function CreateGroupClient() {
               onClick={() => setGroupType(t.value)}
               className={`w-full rounded-xl border px-4 py-3 text-left transition-colors ${
                 form.type === t.value
-                  ? "border-emerald-500 bg-emerald-900/50"
-                  : "border-emerald-900/50 bg-[#0b3b21]/40 hover:border-emerald-700/50"
+                  ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)]"
+                  : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] hover:border-[color:var(--sec-line)]"
               }`}
             >
-              <div className="text-sm font-semibold text-emerald-50">{t.label}</div>
-              <div className="text-[11px] text-emerald-200/55">{t.desc}</div>
+              <div className="text-sm font-semibold text-[color:var(--sec-text)]">{t.label}</div>
+              <div className="text-[11px] text-[color:var(--sec-muted)]">{t.desc}</div>
             </button>
           ))}
         </div>
@@ -249,7 +249,7 @@ export default function CreateGroupClient() {
     /* Step 1: Access & Max members */
     <div key="step1" className="space-y-5">
       <div className="space-y-2">
-        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Access</label>
+        <label className="text-[11px] uppercase tracking-wider text-[color:var(--sec-muted)]">Access</label>
         <div className="space-y-2">
           {ACCESS_OPTIONS.map((a) => (
             <button
@@ -258,25 +258,25 @@ export default function CreateGroupClient() {
               onClick={() => setAccess(a)}
               className={`w-full rounded-xl border px-4 py-3 text-left transition-colors ${
                 activeAccess.value === a.value
-                  ? "border-emerald-500 bg-emerald-900/50"
-                  : "border-emerald-900/50 bg-[#0b3b21]/40 hover:border-emerald-700/50"
+                  ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)]"
+                  : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] hover:border-[color:var(--sec-line)]"
               }`}
             >
-              <div className="text-sm font-semibold text-emerald-50">{a.label}</div>
-              <div className="text-[11px] text-emerald-200/55">{a.desc}</div>
+              <div className="text-sm font-semibold text-[color:var(--sec-text)]">{a.label}</div>
+              <div className="text-[11px] text-[color:var(--sec-muted)]">{a.desc}</div>
             </button>
           ))}
         </div>
       </div>
       <div className="space-y-2">
-        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Max Members (optional)</label>
+        <label className="text-[11px] uppercase tracking-wider text-[color:var(--sec-muted)]">Max Members (optional)</label>
         <input
           type="number"
           value={form.max_members}
           onChange={(e) => update("max_members", e.target.value)}
           placeholder="Leave blank for unlimited"
           min={2}
-          className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-3 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
+          className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-4 py-3 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none focus:border-[color:var(--sec-line)]"
         />
       </div>
     </div>,
@@ -284,14 +284,14 @@ export default function CreateGroupClient() {
     /* Step 2: Competition Defaults */
     <div key="step2" className="space-y-5">
       <div>
-        <div className="text-sm font-semibold text-emerald-50 mb-1">Competition Defaults</div>
-        <div className="text-[11px] text-emerald-200/55">
+        <div className="text-sm font-semibold text-[color:var(--sec-text)] mb-1">Competition Defaults</div>
+        <div className="text-[11px] text-[color:var(--sec-muted)]">
           Pre-fill settings when creating competitions in this group. All optional — override per competition anytime.
         </div>
       </div>
 
       <div className="space-y-2">
-        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Default Format</label>
+        <label className="text-[11px] uppercase tracking-wider text-[color:var(--sec-muted)]">Default Format</label>
         <div className="grid grid-cols-2 gap-2">
           {availableFormats.map((t) => (
             <button
@@ -305,8 +305,8 @@ export default function CreateGroupClient() {
               }}
               className={`rounded-xl border px-3 py-2 text-left text-[11px] transition-colors ${
                 defaultCompType === t.value
-                  ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                  : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
+                  ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]"
+                  : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-muted)]"
               }`}
             >
               {t.label}
@@ -317,14 +317,14 @@ export default function CreateGroupClient() {
 
       {defaultCompType && !FORMAT_ALLOWS_SCORING_CHOICE(defaultCompType as any) ? (
         <div className="space-y-2">
-          <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Default Scoring</label>
-          <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 px-3 py-2 text-[11px] text-emerald-200/55">
+          <label className="text-[11px] uppercase tracking-wider text-[color:var(--sec-muted)]">Default Scoring</label>
+          <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-3 py-2 text-[11px] text-[color:var(--sec-muted)]">
             {defaultScoringModel === "stableford_points" ? "Stableford Points" : "Match Result"} — determined by format
           </div>
         </div>
       ) : (
         <div className="space-y-2">
-          <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Default Scoring</label>
+          <label className="text-[11px] uppercase tracking-wider text-[color:var(--sec-muted)]">Default Scoring</label>
           <div className="grid grid-cols-2 gap-2">
             {SCORING_MODELS.filter((s) => s.value === "net" || s.value === "gross").map((s) => (
               <button
@@ -333,8 +333,8 @@ export default function CreateGroupClient() {
                 onClick={() => setDefaultScoringModel(defaultScoringModel === s.value ? null : s.value)}
                 className={`rounded-xl border px-3 py-2 text-[11px] text-left transition-colors ${
                   defaultScoringModel === s.value
-                    ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                    : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
+                    ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]"
+                    : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-muted)]"
                 }`}
               >
                 {s.shortLabel}
@@ -345,14 +345,14 @@ export default function CreateGroupClient() {
       )}
 
       {defaultScoringModel && defaultScoringModel !== "gross" && (
-        <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 p-3 space-y-2">
-          <div className="text-[10px] uppercase tracking-wider text-emerald-200/55 font-semibold">Default Handicap Rules</div>
+        <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] p-3 space-y-2">
+          <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)] font-semibold">Default Handicap Rules</div>
           <HandicapRulesEditor value={defaultHandicap} onChange={setDefaultHandicap} />
         </div>
       )}
 
       <div className="space-y-2">
-        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Default Points Model</label>
+        <label className="text-[11px] uppercase tracking-wider text-[color:var(--sec-muted)]">Default Points Model</label>
         <div className="space-y-2">
           {POINTS_MODELS.map((p) => (
             <button
@@ -361,36 +361,36 @@ export default function CreateGroupClient() {
               onClick={() => setDefaultPointsModel(defaultPointsModel === p.value ? null : p.value)}
               className={`w-full rounded-xl border px-4 py-3 text-left transition-colors ${
                 defaultPointsModel === p.value
-                  ? "border-emerald-500 bg-emerald-900/50"
-                  : "border-emerald-900/50 bg-[#0b3b21]/40 hover:border-emerald-700/50"
+                  ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)]"
+                  : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] hover:border-[color:var(--sec-line)]"
               }`}
             >
-              <div className="text-sm font-semibold text-emerald-50">{p.label}</div>
-              {p.desc && <div className="text-[11px] text-emerald-200/55 mt-0.5">{p.desc}</div>}
+              <div className="text-sm font-semibold text-[color:var(--sec-text)]">{p.label}</div>
+              {p.desc && <div className="text-[11px] text-[color:var(--sec-muted)] mt-0.5">{p.desc}</div>}
 
               {/* Points preview — shown when this model is selected */}
               {defaultPointsModel === p.value && (
-                <div className="mt-3 pt-3 border-t border-emerald-700/40">
+                <div className="mt-3 pt-3 border-t border-[color:var(--sec-line)]">
                   {p.value === "fedex_style" && (
                     <>
                       <div className="grid grid-cols-5 gap-x-2 gap-y-1">
                         {FEDEX_POINTS.map((pts, i) => (
-                          <div key={i} className="text-[10px] text-emerald-200/70">
-                            <span className="text-emerald-200/45">{ordinal(i + 1)}</span>{" "}
-                            <span className="font-semibold text-emerald-100">{pts}</span>
+                          <div key={i} className="text-[10px] text-[color:var(--sec-muted)]">
+                            <span className="text-[color:var(--sec-muted)]">{ordinal(i + 1)}</span>{" "}
+                            <span className="font-semibold text-[color:var(--sec-text)]">{pts}</span>
                           </div>
                         ))}
                       </div>
-                      <div className="mt-1.5 text-[10px] text-emerald-200/40">21st onwards — 0 pts</div>
+                      <div className="mt-1.5 text-[10px] text-[color:var(--sec-muted)]">21st onwards — 0 pts</div>
                     </>
                   )}
                   {p.value === "position_based" && (
-                    <div className="text-[10px] text-emerald-200/55">
+                    <div className="text-[10px] text-[color:var(--sec-muted)]">
                       Fixed point values per finishing position. Set when creating each competition.
                     </div>
                   )}
                   {p.value === "custom_table" && (
-                    <div className="text-[10px] text-emerald-200/55">
+                    <div className="text-[10px] text-[color:var(--sec-muted)]">
                       Fully custom — you define the points for each position when creating each competition.
                     </div>
                   )}
@@ -405,15 +405,15 @@ export default function CreateGroupClient() {
     /* Step 3: Seasons */
     <div key="step3" className="space-y-4">
       <div>
-        <div className="text-sm font-semibold text-emerald-50 mb-1">Seasons</div>
-        <div className="text-[11px] text-emerald-200/55">
+        <div className="text-sm font-semibold text-[color:var(--sec-text)] mb-1">Seasons</div>
+        <div className="text-[11px] text-[color:var(--sec-muted)]">
           Define the season windows for this group. Add future seasons now or later.
         </div>
       </div>
 
       <div className="space-y-3">
         {seasons.map((s, i) => (
-          <div key={i} className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 p-3 space-y-3">
+          <div key={i} className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] p-3 space-y-3">
             {/* Name + remove */}
             <div className="flex items-center justify-between">
               <input
@@ -421,13 +421,13 @@ export default function CreateGroupClient() {
                 value={s.name}
                 onChange={(e) => updateSeason(i, "name", e.target.value)}
                 placeholder="Season name"
-                className="flex-1 bg-transparent text-sm font-semibold text-emerald-50 placeholder:text-emerald-100/30 focus:outline-none"
+                className="flex-1 bg-transparent text-sm font-semibold text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none"
               />
               {seasons.length > 1 && (
                 <button
                   type="button"
                   onClick={() => removeSeason(i)}
-                  className="ml-2 text-[11px] text-emerald-400/60 hover:text-red-400 transition-colors"
+                  className="ml-2 text-[11px] text-[color:var(--sec-good)] hover:text-[color:var(--sec-bad)] transition-colors"
                 >
                   Remove
                 </button>
@@ -443,8 +443,8 @@ export default function CreateGroupClient() {
                   onClick={() => updateSeason(i, "mode", m)}
                   className={`rounded-lg border px-3 py-1 text-[10px] uppercase tracking-wider transition-colors ${
                     s.mode === m
-                      ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                      : "border-emerald-900/50 bg-transparent text-emerald-200/50"
+                      ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]"
+                      : "border-[color:var(--sec-hair)] bg-transparent text-[color:var(--sec-muted)]"
                   }`}
                 >
                   {m === "annual" ? "Annual" : "Custom dates"}
@@ -455,7 +455,7 @@ export default function CreateGroupClient() {
             {/* Date inputs */}
             {s.mode === "annual" ? (
               <div className="space-y-1">
-                <div className="text-[10px] uppercase tracking-wider text-emerald-200/50">Year</div>
+                <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Year</div>
                 <input
                   type="number"
                   min={2000}
@@ -466,27 +466,27 @@ export default function CreateGroupClient() {
                     updateSeason(i, "start_date", `${y}-01-01`);
                     updateSeason(i, "end_date", `${y}-12-31`);
                   }}
-                  className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
+                  className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-4 py-2.5 text-sm text-[color:var(--sec-text)] focus:outline-none focus:border-[color:var(--sec-line)]"
                 />
               </div>
             ) : (
               <div className="space-y-2">
                 <div className="space-y-1">
-                  <div className="text-[10px] uppercase tracking-wider text-emerald-200/50">Start date</div>
+                  <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Start date</div>
                   <input
                     type="date"
                     value={s.start_date}
                     onChange={(e) => updateSeason(i, "start_date", e.target.value)}
-                    className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
+                    className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-4 py-2.5 text-sm text-[color:var(--sec-text)] focus:outline-none focus:border-[color:var(--sec-line)]"
                   />
                 </div>
                 <div className="space-y-1">
-                  <div className="text-[10px] uppercase tracking-wider text-emerald-200/50">End date</div>
+                  <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">End date</div>
                   <input
                     type="date"
                     value={s.end_date}
                     onChange={(e) => updateSeason(i, "end_date", e.target.value)}
-                    className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-2.5 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
+                    className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-4 py-2.5 text-sm text-[color:var(--sec-text)] focus:outline-none focus:border-[color:var(--sec-line)]"
                   />
                 </div>
               </div>
@@ -498,7 +498,7 @@ export default function CreateGroupClient() {
       <button
         type="button"
         onClick={() => setSeasons((prev) => [...prev, addNextSeason(prev)])}
-        className="text-[11px] text-emerald-400 hover:text-emerald-300 transition-colors"
+        className="text-[11px] text-[color:var(--sec-good)] hover:text-[color:var(--sec-good)] transition-colors"
       >
         + Add season
       </button>
@@ -506,8 +506,8 @@ export default function CreateGroupClient() {
 
     /* Step 4: Confirm */
     <div key="step4" className="space-y-4">
-      <div className="text-sm font-semibold text-emerald-50">Confirm Group Details</div>
-      <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4 space-y-2">
+      <div className="text-sm font-semibold text-[color:var(--sec-text)]">Confirm Group Details</div>
+      <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_80%,transparent)] p-4 space-y-2">
         {[
           { label: "Name", value: form.name },
           { label: "Type", value: friendlyLabel("type", form.type) },
@@ -519,29 +519,29 @@ export default function CreateGroupClient() {
           .filter(Boolean)
           .map((item) => (
             <div key={item!.label} className="flex justify-between text-sm">
-              <span className="text-emerald-200/55">{item!.label}</span>
-              <span className="text-emerald-50">{item!.value}</span>
+              <span className="text-[color:var(--sec-muted)]">{item!.label}</span>
+              <span className="text-[color:var(--sec-text)]">{item!.value}</span>
             </div>
           ))}
 
         {/* Seasons summary */}
-        <div className="pt-2 mt-1 border-t border-emerald-800/40 space-y-1">
-          <div className="text-[10px] uppercase tracking-wider text-emerald-200/45 mb-1">Seasons</div>
+        <div className="pt-2 mt-1 border-t border-[color:var(--sec-hair)] space-y-1">
+          <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)] mb-1">Seasons</div>
           {seasons.map((s, i) => (
             <div key={i} className="flex justify-between text-sm">
-              <span className="text-emerald-200/55">{s.name}</span>
-              <span className="text-emerald-50 text-[11px]">{s.start_date} – {s.end_date}</span>
+              <span className="text-[color:var(--sec-muted)]">{s.name}</span>
+              <span className="text-[color:var(--sec-text)] text-[11px]">{s.start_date} – {s.end_date}</span>
             </div>
           ))}
         </div>
       </div>
-      {error && <div className="text-sm text-red-400">{error}</div>}
+      {error && <div className="text-sm text-[color:var(--sec-bad)]">{error}</div>}
     </div>,
 
     /* Step 5: Invite Members */
     <div key="step5" className="space-y-4">
-      <div className="text-sm font-semibold text-emerald-50">Group Created! Invite Members</div>
-      <p className="text-[12px] text-emerald-200/55">Search for players to invite. They&apos;ll see a notification on their Majors Hub.</p>
+      <div className="text-sm font-semibold text-[color:var(--sec-text)]">Group Created! Invite Members</div>
+      <p className="text-[12px] text-[color:var(--sec-muted)]">Search for players to invite. They&apos;ll see a notification on their Majors Hub.</p>
 
       {createdGroupId && (
         <InvitePlayerSheet
@@ -560,12 +560,12 @@ export default function CreateGroupClient() {
         <button
           type="button"
           onClick={() => step === 0 ? router.back() : step === totalSteps - 1 && createdGroupId ? router.push(`/majors/groups/${createdGroupId}`) : setStep((s) => s - 1)}
-          className="text-[11px] text-emerald-100/70 hover:text-emerald-50"
+          className="text-[11px] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
         >
           ← {step === 0 ? "Back" : "Previous"}
         </button>
-        <h1 className="text-base font-semibold text-[#f5e6b0]">Create Group</h1>
-        <div className="text-[11px] text-emerald-200/55">
+        <h1 className="text-base font-semibold text-[color:var(--sec-accent)]">Create Group</h1>
+        <div className="text-[11px] text-[color:var(--sec-muted)]">
           {step + 1}/{totalSteps}
         </div>
       </div>
@@ -576,7 +576,7 @@ export default function CreateGroupClient() {
           <div
             key={i}
             className={`h-1 flex-1 rounded-full transition-colors ${
-              i <= step ? "bg-emerald-600" : "bg-emerald-900/50"
+              i <= step ? "bg-[color:var(--sec-primary)]" : "bg-[color:var(--sec-surface)]"
             }`}
           />
         ))}
@@ -604,7 +604,7 @@ export default function CreateGroupClient() {
           <button
             type="button"
             onClick={() => createdGroupId && router.push(`/majors/groups/${createdGroupId}`)}
-            className="w-full py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600"
+            className="w-full py-3 rounded-full bg-[color:var(--sec-primary)] text-sm font-semibold text-white hover:bg-[color:var(--sec-primary-hover)]"
           >
             {invitedMembers.length > 0 ? "Done" : "Skip & Go to Group"}
           </button>
@@ -614,7 +614,7 @@ export default function CreateGroupClient() {
             type="button"
             onClick={handleSubmit}
             disabled={submitting}
-            className="w-full py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
+            className="w-full py-3 rounded-full bg-[color:var(--sec-primary)] text-sm font-semibold text-white hover:bg-[color:var(--sec-primary-hover)] disabled:opacity-50"
           >
             {submitting ? "Creating…" : "Create Group"}
           </button>
@@ -624,7 +624,7 @@ export default function CreateGroupClient() {
             type="button"
             onClick={() => setStep((s) => s + 1)}
             disabled={!canNext()}
-            className="w-full py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-40"
+            className="w-full py-3 rounded-full bg-[color:var(--sec-primary)] text-sm font-semibold text-white hover:bg-[color:var(--sec-primary-hover)] disabled:opacity-40"
           >
             Next
           </button>

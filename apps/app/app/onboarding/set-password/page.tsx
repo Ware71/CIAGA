@@ -200,8 +200,8 @@ function SetPasswordPageContent() {
   // Loading state
   if (invite.status === "loading") {
     return (
-      <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8">
-        <div className="mx-auto w-full max-w-sm rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">
+      <div className="min-h-screen bg-[color:var(--ciaga-ground)] text-slate-100 px-4 pt-8">
+        <div className="mx-auto w-full max-w-sm rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4 text-sm text-[color:var(--sec-muted)]">
           Preparing your account...
         </div>
       </div>
@@ -213,48 +213,48 @@ function SetPasswordPageContent() {
     const preview = invite.profile_preview;
 
     return (
-      <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8">
+      <div className="min-h-screen bg-[color:var(--ciaga-ground)] text-slate-100 px-4 pt-8">
         <div className="mx-auto w-full max-w-sm space-y-4">
-          <h1 className="text-xl font-semibold text-[#f5e6b0]">
+          <h1 className="text-xl font-semibold text-[color:var(--sec-accent)]">
             Welcome! You have an invitation
           </h1>
 
           {msg && (
-            <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-3 text-sm text-emerald-100/90">
+            <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-3 text-sm text-[color:var(--sec-muted)]">
               {msg}
             </div>
           )}
 
           {/* Invited profile preview */}
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 space-y-2">
-            <div className="text-xs uppercase tracking-wide text-emerald-200/70">
+          <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4 space-y-2">
+            <div className="text-xs uppercase tracking-wide text-[color:var(--sec-muted)]">
               Invited profile
             </div>
             {preview.name && (
-              <div className="text-sm text-emerald-50">{preview.name}</div>
+              <div className="text-sm text-[color:var(--sec-text)]">{preview.name}</div>
             )}
             {preview.email && (
-              <div className="text-xs text-emerald-200/60">{preview.email}</div>
+              <div className="text-xs text-[color:var(--sec-muted)]">{preview.email}</div>
             )}
             {preview.created_by_name && (
-              <div className="text-xs text-emerald-200/60">
+              <div className="text-xs text-[color:var(--sec-muted)]">
                 Created by {preview.created_by_name}
               </div>
             )}
             {preview.created_at && (
-              <div className="text-xs text-emerald-200/40">
+              <div className="text-xs text-[color:var(--sec-muted)]">
                 Created{" "}
                 {new Date(preview.created_at).toLocaleDateString()}
               </div>
             )}
-            <div className="text-xs text-emerald-200/40 font-mono">
+            <div className="text-xs text-[color:var(--sec-muted)] font-mono">
               ID: {invite.profile_id}
             </div>
           </div>
 
           {/* Password field */}
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 space-y-3">
-            <div className="text-sm text-emerald-100/80">
+          <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4 space-y-3">
+            <div className="text-sm text-[color:var(--sec-muted)]">
               {passwordAlreadySet
                 ? "Your password was just reset. Continue to claim your invite, or enter a new password to change it now."
                 : "Set a password (required) so you can sign in normally next time."}
@@ -269,7 +269,7 @@ function SetPasswordPageContent() {
                   ? "New password (optional, min 8 chars)"
                   : "New password (min 8 characters)"
               }
-              className="w-full rounded-xl border border-emerald-900/70 bg-[#08341b] px-3 py-2 text-base outline-none placeholder:text-emerald-200/40"
+              className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-3 py-2 text-base outline-none placeholder:text-[color:var(--sec-muted)]"
             />
 
             <input
@@ -279,7 +279,7 @@ function SetPasswordPageContent() {
               placeholder={
                 passwordAlreadySet ? "Confirm new password (if changing)" : "Confirm new password"
               }
-              className="w-full rounded-xl border border-emerald-900/70 bg-[#08341b] px-3 py-2 text-base outline-none placeholder:text-emerald-200/40"
+              className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-3 py-2 text-base outline-none placeholder:text-[color:var(--sec-muted)]"
             />
           </div>
 
@@ -288,7 +288,7 @@ function SetPasswordPageContent() {
             <button
               onClick={handleClaim}
               disabled={working}
-              className="w-full rounded-xl bg-emerald-700/80 hover:bg-emerald-700 px-4 py-3 text-sm font-medium disabled:opacity-50"
+              className="w-full rounded-xl bg-[color:var(--sec-primary)] hover:bg-[color:var(--sec-primary-hover)] px-4 py-3 text-sm font-medium disabled:opacity-50"
             >
               {working ? "Working..." : "Claim invited profile"}
             </button>
@@ -296,7 +296,7 @@ function SetPasswordPageContent() {
             <button
               onClick={handleCreate}
               disabled={working}
-              className="w-full rounded-xl border border-emerald-900/70 bg-[#0b3b21]/70 hover:bg-[#0b3b21] px-4 py-3 text-sm font-medium text-emerald-100/80 disabled:opacity-50"
+              className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] hover:bg-[color:var(--sec-surface)] px-4 py-3 text-sm font-medium text-[color:var(--sec-muted)] disabled:opacity-50"
             >
               {working ? "Working..." : "Create a new profile instead"}
             </button>
@@ -308,18 +308,18 @@ function SetPasswordPageContent() {
 
   // No invite — standard set-password flow
   return (
-    <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8">
+    <div className="min-h-screen bg-[color:var(--ciaga-ground)] text-slate-100 px-4 pt-8">
       <div className="mx-auto w-full max-w-sm space-y-4">
-        <h1 className="text-xl font-semibold text-[#f5e6b0]">Set your password</h1>
+        <h1 className="text-xl font-semibold text-[color:var(--sec-accent)]">Set your password</h1>
 
         {msg && (
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-3 text-sm text-emerald-100/90">
+          <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-3 text-sm text-[color:var(--sec-muted)]">
             {msg}
           </div>
         )}
 
-        <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 space-y-3">
-          <div className="text-sm text-emerald-100/80">
+        <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4 space-y-3">
+          <div className="text-sm text-[color:var(--sec-muted)]">
             Create a password so you can sign in normally next time.
           </div>
 
@@ -328,7 +328,7 @@ function SetPasswordPageContent() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="New password"
-            className="w-full rounded-xl border border-emerald-900/70 bg-[#08341b] px-3 py-2 text-base outline-none placeholder:text-emerald-200/40"
+            className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-3 py-2 text-base outline-none placeholder:text-[color:var(--sec-muted)]"
           />
 
           <input
@@ -336,13 +336,13 @@ function SetPasswordPageContent() {
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             placeholder="Confirm new password"
-            className="w-full rounded-xl border border-emerald-900/70 bg-[#08341b] px-3 py-2 text-base outline-none placeholder:text-emerald-200/40"
+            className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-3 py-2 text-base outline-none placeholder:text-[color:var(--sec-muted)]"
           />
 
           <button
             onClick={savePassword}
             disabled={working}
-            className="w-full rounded-xl bg-emerald-700/80 hover:bg-emerald-700 px-4 py-2 text-sm font-medium disabled:opacity-50"
+            className="w-full rounded-xl bg-[color:var(--sec-primary)] hover:bg-[color:var(--sec-primary-hover)] px-4 py-2 text-sm font-medium disabled:opacity-50"
           >
             {working ? "Saving..." : "Save password & continue"}
           </button>

@@ -52,8 +52,8 @@ const CHART_FUTURE_DAYS = HORIZON_DAYS;
 
 const CONFIDENCE_STYLE: Record<Confidence["level"], string> = {
   low: "border-red-900/60 text-red-200/80",
-  medium: "border-emerald-900/70 text-emerald-100/70",
-  high: "border-[#f5e6b0]/40 text-[#f5e6b0]",
+  medium: "border-[color:var(--sec-hair)] text-[color:var(--sec-muted)]",
+  high: "border-[color:color-mix(in_srgb,var(--sec-accent)_40%,transparent)] text-[color:var(--sec-accent)]",
 };
 
 type PlayerData = { name: string; history: HiPoint[]; stream: DiffPoint[] };
@@ -367,40 +367,40 @@ export default function ProjectionsPage() {
   );
 
   const Card = ({ children }: { children: React.ReactNode }) => (
-    <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/45 p-4 space-y-3">{children}</div>
+    <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_45%,transparent)] p-4 space-y-3">{children}</div>
   );
 
   const byDate = clampToHorizon(projDateISO, today);
 
   return (
-    <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
+    <div className="min-h-screen bg-[color:var(--ciaga-ground)] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto w-full max-w-sm space-y-6">
         <header className="relative flex items-center justify-center">
           <BackButton className="absolute left-0 font-semibold" onClick={() => router.back()} />
           <div className="text-center">
-            <div className="text-lg font-extrabold tracking-wide text-[#f5e6b0]">Stats</div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70 font-semibold">
+            <div className="text-lg font-extrabold tracking-wide text-[color:var(--sec-accent)]">Stats</div>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--sec-muted)] font-semibold">
               Projections
             </div>
           </div>
         </header>
 
         {loading ? (
-          <div className="h-[300px] flex items-center justify-center text-sm font-semibold text-emerald-100/70 rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70">
+          <div className="h-[300px] flex items-center justify-center text-sm font-semibold text-[color:var(--sec-muted)] rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)]">
             Loading…
           </div>
         ) : err ? (
-          <div className="p-6 text-center text-sm font-semibold text-red-300 rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70">
+          <div className="p-6 text-center text-sm font-semibold text-[color:var(--sec-bad)] rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)]">
             {err}
           </div>
         ) : (
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-5 space-y-5">
+          <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-5 space-y-5">
             {/* Current index + status */}
             <div className="space-y-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-[11px] text-emerald-100/70 font-semibold">Your index</div>
-                  <div className="mt-0.5 text-2xl font-extrabold text-emerald-50 tabular-nums">
+                  <div className="text-[11px] text-[color:var(--sec-muted)] font-semibold">Your index</div>
+                  <div className="mt-0.5 text-2xl font-extrabold text-[color:var(--sec-text)] tabular-nums">
                     {hiValue(aProjection.currentHi)}
                   </div>
                 </div>
@@ -410,10 +410,10 @@ export default function ProjectionsPage() {
                     <span
                       className={`text-[11px] font-extrabold ${
                         directionOf(aProjection) === "Improving"
-                          ? "text-emerald-300"
+                          ? "text-[color:var(--sec-good)]"
                           : directionOf(aProjection) === "Slipping"
-                          ? "text-red-300"
-                          : "text-emerald-100/60"
+                          ? "text-[color:var(--sec-bad)]"
+                          : "text-[color:var(--sec-muted)]"
                       }`}
                     >
                       {directionOf(aProjection)}
@@ -424,16 +424,16 @@ export default function ProjectionsPage() {
               </div>
 
               {aReady.detail ? (
-                <div className="rounded-xl border border-emerald-900/50 bg-[#042713]/40 px-3 py-2.5">
+                <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_40%,transparent)] px-3 py-2.5">
                   {aReady.headline ? (
-                    <div className="text-[11px] font-extrabold text-emerald-50">{aReady.headline}</div>
+                    <div className="text-[11px] font-extrabold text-[color:var(--sec-text)]">{aReady.headline}</div>
                   ) : null}
-                  <div className="mt-0.5 text-[11px] font-semibold text-emerald-100/65 leading-snug">
+                  <div className="mt-0.5 text-[11px] font-semibold text-[color:var(--sec-muted)] leading-snug">
                     {aReady.detail}
                   </div>
                 </div>
               ) : (
-                <div className="text-[11px] font-semibold text-emerald-100/55 leading-snug">
+                <div className="text-[11px] font-semibold text-[color:var(--sec-muted)] leading-snug">
                   {aConfidence.reason}
                 </div>
               )}
@@ -441,11 +441,11 @@ export default function ProjectionsPage() {
 
             {/* Comparison */}
             <div className="flex items-center gap-3">
-              <div className="text-xs text-emerald-100/70 w-[70px] font-semibold">Compare</div>
+              <div className="text-xs text-[color:var(--sec-muted)] w-[70px] font-semibold">Compare</div>
               <select
                 value={compareBId}
                 onChange={(e) => setCompareBId(e.target.value)}
-                className="h-10 flex-1 rounded-xl border border-emerald-900/70 bg-[#042713] px-3 text-sm font-semibold text-emerald-50 outline-none focus:border-[#f5e6b0]/70"
+                className="h-10 flex-1 rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] px-3 text-sm font-semibold text-[color:var(--sec-text)] outline-none focus:border-[color:color-mix(in_srgb,var(--sec-accent)_70%,transparent)]"
               >
                 <option value="">None</option>
                 {followList.map((p) => (
@@ -455,34 +455,34 @@ export default function ProjectionsPage() {
                 ))}
               </select>
               {bLoading ? (
-                <div className="text-[11px] text-emerald-100/60 font-semibold">Loading…</div>
+                <div className="text-[11px] text-[color:var(--sec-muted)] font-semibold">Loading…</div>
               ) : null}
             </div>
 
             {/* Trajectory */}
             <div className="space-y-3">
               <div>
-                <div className="text-sm font-extrabold text-emerald-50">Trajectory</div>
-                <div className="text-[11px] text-emerald-100/55 font-semibold">
+                <div className="text-sm font-extrabold text-[color:var(--sec-text)]">Trajectory</div>
+                <div className="text-[11px] text-[color:var(--sec-muted)] font-semibold">
                   {chart.rangeLabel}
                 </div>
               </div>
 
               {chart.history.length < 2 ? (
-                <div className="h-[220px] flex items-center justify-center px-6 text-center text-sm font-semibold text-emerald-100/70 rounded-2xl border border-emerald-900/70 bg-[#042713]/55">
+                <div className="h-[220px] flex items-center justify-center px-6 text-center text-sm font-semibold text-[color:var(--sec-muted)] rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_55%,transparent)]">
                   {aReady.detail ?? "Not enough history yet"}
                 </div>
               ) : (
                 <>
                   <div className="flex items-center justify-between text-[11px] font-bold">
                     <div className="flex items-center gap-2">
-                      <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-200" />
-                      <span className="text-emerald-50">You</span>
+                      <span className="inline-block h-2.5 w-2.5 rounded-full bg-[color:var(--sec-surface-2)]" />
+                      <span className="text-[color:var(--sec-text)]">You</span>
                     </div>
                     {compareActive ? (
                       <div className="flex items-center gap-2">
-                        <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#f5e6b0]" />
-                        <span className="text-emerald-50">{data.get(compareBId)?.name}</span>
+                        <span className="inline-block h-2.5 w-2.5 rounded-full bg-[color:var(--sec-accent)]" />
+                        <span className="text-[color:var(--sec-text)]">{data.get(compareBId)?.name}</span>
                       </div>
                     ) : null}
                   </div>
@@ -498,7 +498,7 @@ export default function ProjectionsPage() {
                   />
 
                   {aReady.canProject ? (
-                    <div className="text-[10px] text-emerald-100/45 font-semibold leading-snug">
+                    <div className="text-[10px] text-[color:var(--sec-muted)] font-semibold leading-snug">
                       Dashed line is the median of {aProjection.diagnostics.sims.toLocaleString()}{" "}
                       simulated futures; the shaded band covers the middle 80%. Assumes about{" "}
                       {Math.round(aProjection.diagnostics.roundsPerYear)} rounds a year.
@@ -514,15 +514,15 @@ export default function ProjectionsPage() {
                 {milestones.map((m) => (
                   <div
                     key={m.days}
-                    className="rounded-xl border border-emerald-900/60 bg-[#042713]/55 px-2 py-1.5 text-center"
+                    className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_55%,transparent)] px-2 py-1.5 text-center"
                   >
-                    <div className="text-[9px] font-extrabold uppercase tracking-wider text-emerald-100/45">
+                    <div className="text-[9px] font-extrabold uppercase tracking-wider text-[color:var(--sec-muted)]">
                       {m.label}
                     </div>
-                    <div className="text-base font-extrabold tabular-nums text-emerald-50">
+                    <div className="text-base font-extrabold tabular-nums text-[color:var(--sec-text)]">
                       {hiValue(m.v.p50)}
                     </div>
-                    <div className="text-[9px] font-semibold tabular-nums text-emerald-100/45">
+                    <div className="text-[9px] font-semibold tabular-nums text-[color:var(--sec-muted)]">
                       {hiValue(m.v.p10)}–{hiValue(m.v.p90)}
                     </div>
                   </div>
@@ -534,10 +534,10 @@ export default function ProjectionsPage() {
             {compareActive && bProjection ? (
               <Card>
                 <div>
-                  <div className="text-sm font-extrabold text-emerald-50">
+                  <div className="text-sm font-extrabold text-[color:var(--sec-text)]">
                     You vs {data.get(compareBId)?.name}
                   </div>
-                  <div className="text-[11px] text-emerald-100/55 font-semibold">
+                  <div className="text-[11px] text-[color:var(--sec-muted)] font-semibold">
                     Chance your index is the lower one
                   </div>
                 </div>
@@ -563,7 +563,7 @@ export default function ProjectionsPage() {
                   return (
                     <>
                       {now !== null ? (
-                        <div className="text-[11px] font-semibold text-emerald-100/65 leading-snug">
+                        <div className="text-[11px] font-semibold text-[color:var(--sec-muted)] leading-snug">
                           {now === 0
                             ? "Level right now."
                             : now < 0
@@ -575,16 +575,16 @@ export default function ProjectionsPage() {
                       <div className="space-y-2">
                         {rows.map((r) => (
                           <div key={r.days} className="flex items-center gap-3">
-                            <div className="w-[72px] shrink-0 text-[11px] font-semibold text-emerald-100/65">
+                            <div className="w-[72px] shrink-0 text-[11px] font-semibold text-[color:var(--sec-muted)]">
                               {r.label}
                             </div>
-                            <div className="h-2 flex-1 rounded-full bg-[#042713] overflow-hidden border border-emerald-900/60">
+                            <div className="h-2 flex-1 rounded-full bg-[color:var(--ciaga-ground)] overflow-hidden border border-[color:var(--sec-hair)]">
                               <div
-                                className="h-full rounded-full bg-[#f5e6b0]/70"
+                                className="h-full rounded-full bg-[color:color-mix(in_srgb,var(--sec-accent)_70%,transparent)]"
                                 style={{ width: `${Math.round((r.p ?? 0) * 100)}%` }}
                               />
                             </div>
-                            <div className="w-[44px] shrink-0 text-right text-sm font-extrabold text-emerald-50 tabular-nums">
+                            <div className="w-[44px] shrink-0 text-right text-sm font-extrabold text-[color:var(--sec-text)] tabular-nums">
                               {percentLabel(r.p)}
                             </div>
                           </div>
@@ -600,8 +600,8 @@ export default function ProjectionsPage() {
             {nextRound ? (
               <Card>
                 <div>
-                  <div className="text-sm font-extrabold text-emerald-50">Your next round</div>
-                  <div className="text-[11px] text-emerald-100/55 font-semibold">
+                  <div className="text-sm font-extrabold text-[color:var(--sec-text)]">Your next round</div>
+                  <div className="text-[11px] text-[color:var(--sec-muted)] font-semibold">
                     Exact — not a forecast
                   </div>
                 </div>
@@ -613,22 +613,22 @@ export default function ProjectionsPage() {
                     .map((pt) => (
                       <div
                         key={pt.differential}
-                        className="rounded-xl border border-emerald-900/60 bg-[#042713]/55 px-2 py-1.5 text-center"
+                        className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_55%,transparent)] px-2 py-1.5 text-center"
                       >
-                        <div className="text-[10px] font-bold text-emerald-100/60 tabular-nums">
+                        <div className="text-[10px] font-bold text-[color:var(--sec-muted)] tabular-nums">
                           {pt.differential.toFixed(1)}
                         </div>
-                        <div className="text-[12px] font-extrabold text-emerald-50 tabular-nums">
+                        <div className="text-[12px] font-extrabold text-[color:var(--sec-text)] tabular-nums">
                           {hiValue(pt.handicapIndex)}
                         </div>
                         {pt.delta !== null ? (
                           <div
                             className={`text-[9px] font-bold tabular-nums ${
                               pt.delta < 0
-                                ? "text-emerald-300"
+                                ? "text-[color:var(--sec-good)]"
                                 : pt.delta > 0
-                                ? "text-red-300"
-                                : "text-emerald-100/40"
+                                ? "text-[color:var(--sec-bad)]"
+                                : "text-[color:var(--sec-muted)]"
                             }`}
                           >
                             {pt.delta === 0 ? "—" : `${pt.delta > 0 ? "+" : "−"}${Math.abs(pt.delta).toFixed(1)}`}
@@ -638,12 +638,12 @@ export default function ProjectionsPage() {
                     ))}
                 </div>
 
-                <div className="text-[11px] font-semibold text-emerald-100/65 leading-snug">
+                <div className="text-[11px] font-semibold text-[color:var(--sec-muted)] leading-snug">
                   {nextRound.neededForMinusOne !== null ? (
                     <>
                       To reach {hiLabel(Math.round((nextRound.currentHi - 1) * 10) / 10)} next time
                       you need a differential of{" "}
-                      <span className="font-extrabold text-[#f5e6b0]">
+                      <span className="font-extrabold text-[color:var(--sec-accent)]">
                         {nextRound.neededForMinusOne.toFixed(1)}
                       </span>{" "}
                       or better.
@@ -659,14 +659,14 @@ export default function ProjectionsPage() {
             <Card>
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-sm font-extrabold text-emerald-50">Goal</div>
-                  <div className="text-[11px] text-emerald-100/55 font-semibold">
+                  <div className="text-sm font-extrabold text-[color:var(--sec-text)]">Goal</div>
+                  <div className="text-[11px] text-[color:var(--sec-muted)] font-semibold">
                     Chance of reaching a target
                   </div>
                 </div>
                 <Button
                   size="sm"
-                  className="h-9 px-3 bg-transparent border border-emerald-900/70 text-emerald-100 hover:bg-emerald-900/30 font-semibold"
+                  className="h-9 px-3 bg-transparent border border-[color:var(--sec-hair)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)] font-semibold"
                   onClick={async () => {
                     setGoalCompareOpen(true);
                     await runSweep();
@@ -677,23 +677,23 @@ export default function ProjectionsPage() {
               </div>
 
               <div className="flex items-center gap-3">
-                <div className="text-xs text-emerald-100/70 w-[70px] font-semibold">Target</div>
+                <div className="text-xs text-[color:var(--sec-muted)] w-[70px] font-semibold">Target</div>
                 <button
                   type="button"
                   onClick={() => setGoalWheelOpen(true)}
-                  className="h-10 flex-1 rounded-xl border border-emerald-900/70 bg-[#042713] px-3 text-left text-sm font-extrabold text-emerald-50 outline-none focus:border-[#f5e6b0]/70"
+                  className="h-10 flex-1 rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] px-3 text-left text-sm font-extrabold text-[color:var(--sec-text)] outline-none focus:border-[color:color-mix(in_srgb,var(--sec-accent)_70%,transparent)]"
                 >
                   {hiLabel(target)}
                 </button>
               </div>
 
               <div className="flex items-center gap-3">
-                <div className="text-xs text-emerald-100/70 w-[70px] font-semibold">By</div>
+                <div className="text-xs text-[color:var(--sec-muted)] w-[70px] font-semibold">By</div>
                 <input
                   type="date"
                   value={byDate}
                   onChange={(e) => setProjDateISO(e.target.value)}
-                  className="h-10 flex-1 rounded-xl border border-emerald-900/70 bg-[#042713] px-3 text-sm font-semibold text-emerald-50 outline-none focus:border-[#f5e6b0]/70"
+                  className="h-10 flex-1 rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] px-3 text-sm font-semibold text-[color:var(--sec-text)] outline-none focus:border-[color:color-mix(in_srgb,var(--sec-accent)_70%,transparent)]"
                 />
               </div>
 
@@ -703,28 +703,28 @@ export default function ProjectionsPage() {
                   return (
                     <div
                       key={id}
-                      className="rounded-2xl border border-emerald-900/70 bg-[#042713]/55 p-3"
+                      className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_55%,transparent)] p-3"
                     >
                       {compareActive ? (
-                        <div className="text-[11px] text-emerald-100/70 font-bold">{name}</div>
+                        <div className="text-[11px] text-[color:var(--sec-muted)] font-bold">{name}</div>
                       ) : null}
                       {g.probability !== null ? (
-                        <div className="mt-1 text-2xl font-extrabold text-emerald-50 tabular-nums">
+                        <div className="mt-1 text-2xl font-extrabold text-[color:var(--sec-text)] tabular-nums">
                           {percentLabel(g.probability)}
                         </div>
                       ) : null}
                       {g.medianDateISO ? (
-                        <div className="mt-1 text-[11px] font-semibold text-emerald-100/70 leading-snug">
+                        <div className="mt-1 text-[11px] font-semibold text-[color:var(--sec-muted)] leading-snug">
                           Typically {horizonLabel(g.medianDays)} ({g.medianDateISO})
                           {g.earliestISO && g.latestISO ? (
-                            <span className="block text-emerald-100/45">
+                            <span className="block text-[color:var(--sec-muted)]">
                               80% between {g.earliestISO} and {g.latestISO}
                             </span>
                           ) : null}
                         </div>
                       ) : null}
                       {g.note ? (
-                        <div className="mt-1 text-[10px] text-emerald-100/55 font-semibold leading-snug">
+                        <div className="mt-1 text-[10px] text-[color:var(--sec-muted)] font-semibold leading-snug">
                           {g.note}
                         </div>
                       ) : null}
@@ -738,36 +738,36 @@ export default function ProjectionsPage() {
             {goalLadder.length ? (
               <Card>
                 <div>
-                  <div className="text-sm font-extrabold text-emerald-50">How far can you get?</div>
-                  <div className="text-[11px] text-emerald-100/55 font-semibold">
-                    Within {Math.round(HORIZON_DAYS / 365)} years. <b className="text-emerald-100/75">Reach</b> = touch it at
-                    least once; <b className="text-emerald-100/75">hold</b> = still there at the end.
+                  <div className="text-sm font-extrabold text-[color:var(--sec-text)]">How far can you get?</div>
+                  <div className="text-[11px] text-[color:var(--sec-muted)] font-semibold">
+                    Within {Math.round(HORIZON_DAYS / 365)} years. <b className="text-[color:var(--sec-muted)]">Reach</b> = touch it at
+                    least once; <b className="text-[color:var(--sec-muted)]">hold</b> = still there at the end.
                   </div>
                 </div>
 
                 <div className="space-y-1.5">
                   {goalLadder.map((g) => (
                     <div key={g.target} className="flex items-center gap-2">
-                      <div className="w-[42px] shrink-0 text-right text-[12px] font-extrabold tabular-nums text-emerald-50">
+                      <div className="w-[42px] shrink-0 text-right text-[12px] font-extrabold tabular-nums text-[color:var(--sec-text)]">
                         {hiValue(g.target)}
                       </div>
-                      <div className="h-2 flex-1 overflow-hidden rounded-full border border-emerald-900/60 bg-[#042713]">
+                      <div className="h-2 flex-1 overflow-hidden rounded-full border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)]">
                         <div
                           className="h-full rounded-full bg-[#c2810c]"
                           style={{ width: `${Math.round((g.reach ?? 0) * 100)}%` }}
                         />
                       </div>
-                      <div className="w-[38px] shrink-0 text-right text-[11px] font-extrabold tabular-nums text-emerald-50">
+                      <div className="w-[38px] shrink-0 text-right text-[11px] font-extrabold tabular-nums text-[color:var(--sec-text)]">
                         {percentLabel(g.reach)}
                       </div>
-                      <div className="w-[34px] shrink-0 text-right text-[10px] font-semibold tabular-nums text-emerald-100/45">
+                      <div className="w-[34px] shrink-0 text-right text-[10px] font-semibold tabular-nums text-[color:var(--sec-muted)]">
                         {percentLabel(g.hold)}
                       </div>
                     </div>
                   ))}
                 </div>
 
-                <div className="flex items-center justify-end gap-2 text-[9px] font-bold uppercase tracking-wider text-emerald-100/35">
+                <div className="flex items-center justify-end gap-2 text-[9px] font-bold uppercase tracking-wider text-[color:var(--sec-muted)]">
                   <span className="w-[38px] text-right">Reach</span>
                   <span className="w-[34px] text-right">Hold</span>
                 </div>
@@ -777,8 +777,8 @@ export default function ProjectionsPage() {
             {/* Projected index */}
             <Card>
               <div>
-                <div className="text-sm font-extrabold text-emerald-50">Projected index</div>
-                <div className="text-[11px] text-emerald-100/55 font-semibold">On {byDate}</div>
+                <div className="text-sm font-extrabold text-[color:var(--sec-text)]">Projected index</div>
+                <div className="text-[11px] text-[color:var(--sec-muted)] font-semibold">On {byDate}</div>
               </div>
 
               <div className={compareActive ? "grid grid-cols-2 gap-3" : ""}>
@@ -787,22 +787,22 @@ export default function ProjectionsPage() {
                   return (
                     <div
                       key={id}
-                      className="rounded-2xl border border-emerald-900/70 bg-[#042713]/55 p-3"
+                      className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_55%,transparent)] p-3"
                     >
                       {compareActive ? (
-                        <div className="text-[11px] text-emerald-100/70 font-bold">{name}</div>
+                        <div className="text-[11px] text-[color:var(--sec-muted)] font-bold">{name}</div>
                       ) : null}
                       {v.p50 !== null ? (
                         <>
-                          <div className="mt-1 text-xl font-extrabold text-emerald-50 tabular-nums">
+                          <div className="mt-1 text-xl font-extrabold text-[color:var(--sec-text)] tabular-nums">
                             {hiValue(v.p50)}
                           </div>
-                          <div className="text-[10px] font-semibold text-emerald-100/50 tabular-nums">
+                          <div className="text-[10px] font-semibold text-[color:var(--sec-muted)] tabular-nums">
                             likely {hiValue(v.p10)} – {hiValue(v.p90)}
                           </div>
                         </>
                       ) : (
-                        <div className="text-[10px] text-emerald-100/55 font-semibold leading-snug">
+                        <div className="text-[10px] text-[color:var(--sec-muted)] font-semibold leading-snug">
                           {v.note}
                         </div>
                       )}
@@ -815,8 +815,8 @@ export default function ProjectionsPage() {
             {/* Realistic floor */}
             <Card>
               <div>
-                <div className="text-sm font-extrabold text-emerald-50">Realistic floor</div>
-                <div className="text-[11px] text-emerald-100/55 font-semibold">
+                <div className="text-sm font-extrabold text-[color:var(--sec-text)]">Realistic floor</div>
+                <div className="text-[11px] text-[color:var(--sec-muted)] font-semibold">
                   Where the best-8-of-20 formula settles at your current standard
                 </div>
               </div>
@@ -827,22 +827,22 @@ export default function ProjectionsPage() {
                   return (
                     <div
                       key={id}
-                      className="rounded-2xl border border-emerald-900/70 bg-[#042713]/55 p-3"
+                      className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_55%,transparent)] p-3"
                     >
                       {compareActive ? (
-                        <div className="text-[11px] text-emerald-100/70 font-bold">{name}</div>
+                        <div className="text-[11px] text-[color:var(--sec-muted)] font-bold">{name}</div>
                       ) : null}
                       {f.p50 !== null ? (
                         <>
-                          <div className="mt-1 text-xl font-extrabold text-emerald-50 tabular-nums">
+                          <div className="mt-1 text-xl font-extrabold text-[color:var(--sec-text)] tabular-nums">
                             {hiValue(f.p50)}
                           </div>
-                          <div className="text-[10px] font-semibold text-emerald-100/50 tabular-nums">
+                          <div className="text-[10px] font-semibold text-[color:var(--sec-muted)] tabular-nums">
                             likely {hiValue(f.p10)} – {hiValue(f.p90)}
                           </div>
                         </>
                       ) : (
-                        <div className="text-[10px] text-emerald-100/55 font-semibold leading-snug">
+                        <div className="text-[10px] text-[color:var(--sec-muted)] font-semibold leading-snug">
                           {f.note}
                         </div>
                       )}
@@ -856,8 +856,8 @@ export default function ProjectionsPage() {
             {window20.length ? (
               <Card>
                 <div>
-                  <div className="text-sm font-extrabold text-emerald-50">Counting scores</div>
-                  <div className="text-[11px] text-emerald-100/55 font-semibold">
+                  <div className="text-sm font-extrabold text-[color:var(--sec-text)]">Counting scores</div>
+                  <div className="text-[11px] text-[color:var(--sec-muted)] font-semibold">
                     {window20.filter((e) => e.counting).length} of your last {window20.length} set your index
                   </div>
                 </div>
@@ -869,7 +869,7 @@ export default function ProjectionsPage() {
                       className={`rounded-lg border px-1 py-1 text-center ${
                         e.counting
                           ? "border-[#c2810c]/55 bg-[#c2810c]/15"
-                          : "border-emerald-900/60 bg-[#042713]/45"
+                          : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_45%,transparent)]"
                       }`}
                       title={`${isoFromDayIndex(e.dayIndex)} · drops out after ${e.roundsUntilDropOut} more round${
                         e.roundsUntilDropOut === 1 ? "" : "s"
@@ -877,7 +877,7 @@ export default function ProjectionsPage() {
                     >
                       <div
                         className={`text-[12px] font-extrabold tabular-nums ${
-                          e.counting ? "text-[#e0a63a]" : "text-emerald-100/55"
+                          e.counting ? "text-[#e0a63a]" : "text-[color:var(--sec-muted)]"
                         }`}
                       >
                         {e.differential.toFixed(1)}
@@ -887,7 +887,7 @@ export default function ProjectionsPage() {
                 </div>
 
                 {worstCounting ? (
-                  <div className="text-[11px] font-semibold leading-snug text-emerald-100/65">
+                  <div className="text-[11px] font-semibold leading-snug text-[color:var(--sec-muted)]">
                     Worst counting score is{" "}
                     <span className="font-extrabold text-[#e0a63a]">
                       {worstCounting.differential.toFixed(1)}
@@ -902,14 +902,14 @@ export default function ProjectionsPage() {
           </div>
         )}
 
-        <div className="pt-1 text-[10px] text-emerald-100/50 text-center font-semibold">
+        <div className="pt-1 text-[10px] text-[color:var(--sec-muted)] text-center font-semibold">
           CIAGA · Projections (WHS simulation)
         </div>
       </div>
 
       {/* Target wheel */}
       <Modal title="Select target HI" open={goalWheelOpen} onClose={() => setGoalWheelOpen(false)}>
-        <div className="text-[11px] text-emerald-100/60 font-semibold mb-3">
+        <div className="text-[11px] text-[color:var(--sec-muted)] font-semibold mb-3">
           Swipe the wheel to pick a handicap index.
         </div>
         <Wheel values={targetValues} value={target} onChange={setTarget} />
@@ -923,7 +923,7 @@ export default function ProjectionsPage() {
         onClose={() => setGoalCompareOpen(false)}
       >
         {sweepLoading ? (
-          <div className="text-sm font-semibold text-emerald-100/70">Simulating…</div>
+          <div className="text-sm font-semibold text-[color:var(--sec-muted)]">Simulating…</div>
         ) : (
           <div
             className="space-y-2 max-h-[60vh] overflow-y-auto overscroll-y-contain pr-1"
@@ -932,33 +932,33 @@ export default function ProjectionsPage() {
             {sweepRows.map((r) => (
               <div
                 key={r.id}
-                className="rounded-2xl border border-emerald-900/70 bg-[#042713]/55 p-3"
+                className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_55%,transparent)] p-3"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <div className="text-sm font-extrabold text-emerald-50">{r.name}</div>
+                  <div className="text-sm font-extrabold text-[color:var(--sec-text)]">{r.name}</div>
                   <div className="flex items-center gap-2">
                     <ConfidencePill c={r.confidence} />
-                    <div className="text-[11px] font-bold text-emerald-100/70 tabular-nums">
+                    <div className="text-[11px] font-bold text-[color:var(--sec-muted)] tabular-nums">
                       {hiLabel(r.hiNow)}
                     </div>
                   </div>
                 </div>
                 <div className="mt-2 flex items-center justify-between">
-                  <div className="text-[11px] text-emerald-100/65 font-semibold">Chance</div>
-                  <div className="text-[11px] font-extrabold text-emerald-50 tabular-nums">
+                  <div className="text-[11px] text-[color:var(--sec-muted)] font-semibold">Chance</div>
+                  <div className="text-[11px] font-extrabold text-[color:var(--sec-text)] tabular-nums">
                     {percentLabel(r.probability)}
                   </div>
                 </div>
                 {r.medianDateISO ? (
                   <div className="mt-1 flex items-center justify-between">
-                    <div className="text-[11px] text-emerald-100/65 font-semibold">Typically by</div>
-                    <div className="text-[11px] font-extrabold text-emerald-50 tabular-nums">
+                    <div className="text-[11px] text-[color:var(--sec-muted)] font-semibold">Typically by</div>
+                    <div className="text-[11px] font-extrabold text-[color:var(--sec-text)] tabular-nums">
                       {r.medianDateISO}
                     </div>
                   </div>
                 ) : null}
                 {r.note ? (
-                  <div className="mt-1 text-[10px] text-emerald-100/55 font-semibold leading-snug">
+                  <div className="mt-1 text-[10px] text-[color:var(--sec-muted)] font-semibold leading-snug">
                     {r.note}
                   </div>
                 ) : null}

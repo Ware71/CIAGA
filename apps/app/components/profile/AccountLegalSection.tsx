@@ -87,30 +87,30 @@ export function AccountLegalSection() {
   return (
     <div className="mx-auto w-full max-w-sm space-y-4 pt-2 pb-6">
       {/* Legal & privacy */}
-      <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
-        <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">
+      <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4">
+        <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--sec-muted)]">
           Legal &amp; privacy
         </div>
-        <div className="mt-3 divide-y divide-emerald-900/50">
+        <div className="mt-3 divide-y divide-[color:var(--sec-hair)]">
           {legalItems.map((l) => (
             <a
               key={l.href}
               href={l.href}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center justify-between py-2.5 text-sm text-emerald-50 hover:text-[#f5e6b0]"
+              className="flex items-center justify-between py-2.5 text-sm text-[color:var(--sec-text)] hover:text-[color:var(--sec-accent)]"
             >
               <span>{l.label}</span>
-              <span className="text-emerald-200/50">↗</span>
+              <span className="text-[color:var(--sec-muted)]">↗</span>
             </a>
           ))}
           <button
             type="button"
             onClick={openCookiePreferences}
-            className="flex w-full items-center justify-between py-2.5 text-left text-sm text-emerald-50 hover:text-[#f5e6b0]"
+            className="flex w-full items-center justify-between py-2.5 text-left text-sm text-[color:var(--sec-text)] hover:text-[color:var(--sec-accent)]"
           >
             <span>Cookie preferences</span>
-            <span className="text-emerald-200/50">⚙</span>
+            <span className="text-[color:var(--sec-muted)]">⚙</span>
           </button>
         </div>
       </div>
@@ -125,7 +125,7 @@ export function AccountLegalSection() {
           type="button"
           onClick={handleExport}
           disabled={busy !== null}
-          className="mt-3 w-full rounded-xl border border-emerald-900/70 bg-[#0b3b21]/70 px-4 py-2.5 text-sm font-medium text-emerald-50 hover:bg-[#0b3b21] disabled:opacity-50 transition-colors"
+          className="mt-3 w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] px-4 py-2.5 text-sm font-medium text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface)] disabled:opacity-50 transition-colors"
         >
           {busy === 'export' ? 'Preparing…' : 'Download my data'}
         </button>
@@ -143,7 +143,7 @@ export function AccountLegalSection() {
           Delete my account
         </button>
 
-        {error && <div className="mt-3 text-xs text-red-300">{error}</div>}
+        {error && <div className="mt-3 text-xs text-[color:var(--sec-bad)]">{error}</div>}
       </div>
 
       {/* Delete confirmation modal */}
@@ -153,15 +153,15 @@ export function AccountLegalSection() {
             className="absolute inset-0 bg-black/70"
             onClick={() => busy === null && setConfirmOpen(false)}
           />
-          <div className="relative w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl border-t sm:border border-red-900/50 bg-[#071c10] p-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)]">
+          <div className="relative w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl border-t sm:border border-red-900/50 bg-[color:var(--ciaga-ground)] p-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)]">
             <h2 className="text-lg font-semibold text-red-200">Delete your account?</h2>
-            <p className="mt-2 text-sm text-emerald-100/85">
+            <p className="mt-2 text-sm text-[color:var(--sec-muted)]">
               This permanently deletes your login, email, photo and private data.
               Your shared records — rounds, scores, group history and your posts —
               are kept, but your name is shortened (e.g. “J.Ware”) so shared cards
               and competitions stay intact. This cannot be undone.
             </p>
-            <p className="mt-3 text-xs text-emerald-200/70">
+            <p className="mt-3 text-xs text-[color:var(--sec-muted)]">
               Type <strong className="text-red-200">DELETE</strong> to confirm.
             </p>
             <input
@@ -169,14 +169,14 @@ export function AccountLegalSection() {
               onChange={(e) => setConfirmText(e.target.value)}
               placeholder="DELETE"
               autoCapitalize="characters"
-              className="mt-2 w-full rounded-xl border border-red-900/60 bg-[#08341b] px-3 py-2 text-base outline-none placeholder:text-emerald-200/30"
+              className="mt-2 w-full rounded-xl border border-red-900/60 bg-[color:var(--sec-surface)] px-3 py-2 text-base outline-none placeholder:text-[color:var(--sec-muted)]"
             />
             <div className="mt-4 flex gap-2">
               <button
                 type="button"
                 onClick={() => setConfirmOpen(false)}
                 disabled={busy === 'delete'}
-                className="flex-1 rounded-xl border border-emerald-900/70 bg-[#0b3b21]/70 px-4 py-2.5 text-sm font-medium hover:bg-[#0b3b21] disabled:opacity-50 transition-colors"
+                className="flex-1 rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] px-4 py-2.5 text-sm font-medium hover:bg-[color:var(--sec-surface)] disabled:opacity-50 transition-colors"
               >
                 Cancel
               </button>

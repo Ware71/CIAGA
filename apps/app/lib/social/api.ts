@@ -1,5 +1,6 @@
 // lib/social/api.ts
 import { supabase } from "@/lib/supabaseClient";
+import type { FeedMedia } from "@/lib/feed/types";
 
 export type FeedFetchResponse = {
   items: any[];
@@ -7,7 +8,11 @@ export type FeedFetchResponse = {
   live_items?: any[];
 };
 
-async function authedFetch(input: RequestInfo, init?: RequestInit) {
+/**
+ * Exported so the report and moderation clients can reuse one auth path rather
+ * than each growing their own copy of the bearer-token dance.
+ */
+export async function authedFetch(input: RequestInfo, init?: RequestInit) {
   const { data, error } = await supabase.auth.getSession();
   if (error) throw error;
 
@@ -193,7 +198,8 @@ export async function fetchComments(
 export async function createPost(params: {
   audience: "followers" | "public";
   text: string;
-  image_urls: string[] | null;
+  media?: FeedMedia[] | null;
+  image_urls?: string[] | null;
   tagged_profiles?: Array<{ profile_id: string; name: string }> | null;
 }) {
   const res = await authedFetch(`/api/feed/post`, {
@@ -201,7 +207,8 @@ export async function createPost(params: {
     body: JSON.stringify({
       audience: params.audience,
       text: params.text,
-      image_urls: params.image_urls,
+      media: params.media ?? null,
+      image_urls: params.image_urls ?? null,
       tagged_profiles:
         params.tagged_profiles && params.tagged_profiles.length > 0
           ? params.tagged_profiles
@@ -224,6 +231,65 @@ export async function toggleCommentLike(commentId: string) {
   });
   if (!res.ok) await throwReadableError(res);
   return (await res.json()) as { liked: boolean; count: number };
+}
+
+/** Soft-delete your own post. Author-only, enforced server-side. */
+export async function deleteMyPost(feedItemId: string) {
+  const res = await authedFetch(`/api/feed/${encodeURIComponent(feedItemId)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) await throwReadableError(res);
+  return (await res.json()) as { ok: true };
+}
+
+export type Reactor = {
+  profile_id: string;
+  display_name: string;
+  avatar_url: string | null;
+  emoji: string;
+  is_me: boolean;
+};
+
+export type ReactorsResponse = {
+  people: Reactor[];
+  by_emoji: Record<string, number>;
+  total: number;
+  next_cursor: string | null;
+};
+
+/** Who reacted to a post, optionally filtered to one emoji. */
+export async function fetchReactors(
+  feedItemId: string,
+  opts?: { emoji?: string | null; cursor?: string | null; limit?: number },
+) {
+  const qs = new URLSearchParams();
+  qs.set("limit", String(getLimitFromMaybeOptions(opts?.limit, 30)));
+  if (opts?.emoji) qs.set("emoji", opts.emoji);
+  const cursorStr = getCursorString(opts?.cursor);
+  if (cursorStr) qs.set("cursor", cursorStr);
+
+  const res = await authedFetch(
+    `/api/feed/${encodeURIComponent(feedItemId)}/reactions?${qs.toString()}`,
+  );
+  if (!res.ok) await throwReadableError(res);
+  return (await res.json()) as ReactorsResponse;
+}
+
+/** Who liked a comment. */
+export async function fetchCommentLikers(
+  commentId: string,
+  opts?: { cursor?: string | null; limit?: number },
+) {
+  const qs = new URLSearchParams();
+  qs.set("limit", String(getLimitFromMaybeOptions(opts?.limit, 30)));
+  const cursorStr = getCursorString(opts?.cursor);
+  if (cursorStr) qs.set("cursor", cursorStr);
+
+  const res = await authedFetch(
+    `/api/feed/comments/${encodeURIComponent(commentId)}/likes?${qs.toString()}`,
+  );
+  if (!res.ok) await throwReadableError(res);
+  return (await res.json()) as ReactorsResponse;
 }
 
 /**

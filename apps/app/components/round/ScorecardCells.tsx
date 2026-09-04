@@ -29,9 +29,9 @@ export function BadgeWrap({ type, children }: { type: BadgeType; children: React
   if (!type) return <>{children}</>;
   const cls =
     type === "eagle"
-      ? "inline-flex items-center justify-center min-w-[20px] h-5 rounded-full bg-[#f5e6b0] text-[#042713] px-0.5"
+      ? "inline-flex items-center justify-center min-w-[20px] h-5 rounded-full bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] px-0.5"
       : type === "birdie"
-      ? "inline-flex items-center justify-center min-w-[20px] h-5 rounded-full ring-1 ring-[#f5e6b0] px-0.5"
+      ? "inline-flex items-center justify-center min-w-[20px] h-5 rounded-full ring-1 ring-[color:var(--sec-accent)] px-0.5"
       : type === "bogey"
       ? "inline-flex items-center justify-center min-w-[20px] h-5 ring-1 ring-white/50 px-0.5"
       : "inline-flex items-center justify-center min-w-[20px] h-5 bg-white/50 px-0.5";
@@ -50,10 +50,10 @@ export function StrokeDots({ count }: { count: number }) {
       {Array.from({ length: shown }).map((_, i) => (
         <span
           key={i}
-          className="inline-block h-1.5 w-1.5 rounded-full bg-[#f5e6b0] border border-emerald-900/60"
+          className="inline-block h-1.5 w-1.5 rounded-full bg-[color:var(--sec-accent)] border border-[color:var(--sec-hair)]"
         />
       ))}
-      {extra > 0 ? <span className="text-[10px] text-emerald-100/70">+{extra}</span> : null}
+      {extra > 0 ? <span className="text-[10px] text-[color:var(--sec-muted)]">+{extra}</span> : null}
     </span>
   );
 }
@@ -66,9 +66,9 @@ export function PlusIndicator({ count }: { count: number }) {
   return (
     <span className="inline-flex items-center gap-0.5">
       {Array.from({ length: shown }).map((_, i) => (
-        <span key={i} className="text-[9px] font-bold text-[#f5e6b0]/60 leading-none">+</span>
+        <span key={i} className="text-[9px] font-bold text-[color:color-mix(in_srgb,var(--sec-accent)_60%,transparent)] leading-none">+</span>
       ))}
-      {extra > 0 ? <span className="text-[9px] text-emerald-100/50">+{extra}</span> : null}
+      {extra > 0 ? <span className="text-[9px] text-[color:var(--sec-muted)]">+{extra}</span> : null}
     </span>
   );
 }

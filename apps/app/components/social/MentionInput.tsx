@@ -130,7 +130,7 @@ export default function MentionInput({
       {open && (
         <div
           className={[
-            "absolute left-0 right-0 z-50 max-h-48 overflow-y-auto rounded-xl border border-emerald-900/70 bg-[#071c10] shadow-lg",
+            "absolute left-0 right-0 z-50 max-h-48 overflow-y-auto rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] shadow-lg",
             dropdownDirection === "up" ? "bottom-full mb-1" : "mt-1",
           ].join(" ")}
         >
@@ -140,18 +140,20 @@ export default function MentionInput({
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => applyMention(r)}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-emerald-900/40"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-[color:var(--sec-surface-2)]"
             >
               {r.avatar_url ? (
                 <img
                   src={r.avatar_url}
                   alt=""
-                  className="h-6 w-6 rounded-full object-cover border border-emerald-900/60"
+                  loading="lazy"
+                  decoding="async"
+                  className="h-6 w-6 rounded-full object-cover border border-[color:var(--sec-hair)]"
                 />
               ) : (
-                <div className="h-6 w-6 rounded-full border border-emerald-900/60 bg-emerald-950/40" />
+                <div className="h-6 w-6 rounded-full border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)]" />
               )}
-              <span className="text-sm font-semibold text-emerald-50">{r.name ?? "Player"}</span>
+              <span className="text-sm font-semibold text-[color:var(--sec-text)]">{r.name ?? "Player"}</span>
             </button>
           ))}
         </div>

@@ -150,32 +150,32 @@ export default function CreateCompetitionClient() {
     /* Step 0: Basic Info */
     <div key="step0" className="space-y-5">
       <div className="space-y-2">
-        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Competition Name *</label>
+        <label className="text-[11px] uppercase tracking-wider text-[color:var(--sec-muted)]">Competition Name *</label>
         <input
           type="text"
           value={form.name}
           onChange={(e) => update("name", e.target.value)}
           placeholder="e.g. The Club Masters"
-          className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-3 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
+          className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-4 py-3 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none focus:border-[color:var(--sec-line)]"
           autoFocus
         />
       </div>
       <div className="space-y-2">
-        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Description</label>
+        <label className="text-[11px] uppercase tracking-wider text-[color:var(--sec-muted)]">Description</label>
         <textarea
           value={form.description}
           onChange={(e) => update("description", e.target.value)}
           rows={3}
           placeholder="Brief description of this recurring competition"
-          className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-3 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600 resize-none"
+          className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-4 py-3 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none focus:border-[color:var(--sec-line)] resize-none"
         />
       </div>
       <div className="space-y-2">
-        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Typical Month (optional)</label>
+        <label className="text-[11px] uppercase tracking-wider text-[color:var(--sec-muted)]">Typical Month (optional)</label>
         <select
           value={form.typical_month}
           onChange={(e) => update("typical_month", e.target.value)}
-          className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-3 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
+          className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-4 py-3 text-sm text-[color:var(--sec-text)] focus:outline-none focus:border-[color:var(--sec-line)] [color-scheme:dark]"
         >
           <option value="">— No fixed month —</option>
           {MONTH_NAMES.map((m, i) => (
@@ -183,15 +183,15 @@ export default function CreateCompetitionClient() {
           ))}
         </select>
       </div>
-      <div className="flex items-center justify-between rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 px-4 py-3">
+      <div className="flex items-center justify-between rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-4 py-3">
         <div>
-          <div className="text-sm font-semibold text-emerald-50">Recur annually</div>
-          <div className="text-[11px] text-emerald-200/55">Create a new season each year</div>
+          <div className="text-sm font-semibold text-[color:var(--sec-text)]">Recur annually</div>
+          <div className="text-[11px] text-[color:var(--sec-muted)]">Create a new season each year</div>
         </div>
         <button
           type="button"
           onClick={() => update("recur_annually", !form.recur_annually)}
-          className={`relative h-6 w-11 rounded-full transition-colors ${form.recur_annually ? "bg-emerald-600" : "bg-emerald-900/60"}`}
+          className={`relative h-6 w-11 rounded-full transition-colors ${form.recur_annually ? "bg-[color:var(--sec-primary)]" : "bg-[color:var(--sec-surface)]"}`}
         >
           <span
             className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
@@ -205,7 +205,7 @@ export default function CreateCompetitionClient() {
     /* Step 1: Format & Scoring */
     <div key="step1" className="space-y-5">
       <div className="space-y-2">
-        <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Format</label>
+        <label className="text-[11px] uppercase tracking-wider text-[color:var(--sec-muted)]">Format</label>
         <div className="grid grid-cols-2 gap-2">
           {COMPETITION_FORMATS.map((t) => (
             <button
@@ -214,8 +214,8 @@ export default function CreateCompetitionClient() {
               onClick={() => setEventType(t.value as EventTypeV2)}
               className={`rounded-xl border px-3 py-2.5 text-left text-[11px] transition-colors ${
                 eventType === t.value
-                  ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                  : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
+                  ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]"
+                  : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-muted)]"
               }`}
             >
               {t.label}
@@ -226,14 +226,14 @@ export default function CreateCompetitionClient() {
 
       {!allowsScoringChoice ? (
         <div className="space-y-2">
-          <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Scoring</label>
-          <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 px-3 py-2 text-[11px] text-emerald-200/55">
+          <label className="text-[11px] uppercase tracking-wider text-[color:var(--sec-muted)]">Scoring</label>
+          <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-3 py-2 text-[11px] text-[color:var(--sec-muted)]">
             {scoringModel === "stableford_points" ? "Stableford Points" : "Match Result"} — determined by format
           </div>
         </div>
       ) : (
         <div className="space-y-2">
-          <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Scoring</label>
+          <label className="text-[11px] uppercase tracking-wider text-[color:var(--sec-muted)]">Scoring</label>
           <div className="grid grid-cols-2 gap-2">
             {SCORING_MODELS.filter((s) => s.value === "net" || s.value === "gross").map((s) => (
               <button
@@ -242,8 +242,8 @@ export default function CreateCompetitionClient() {
                 onClick={() => setScoringModel(s.value)}
                 className={`rounded-xl border px-3 py-2.5 text-[11px] text-left transition-colors ${
                   scoringModel === s.value
-                    ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                    : "border-emerald-900/50 bg-[#0b3b21]/40 text-emerald-200/60"
+                    ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]"
+                    : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-muted)]"
                 }`}
               >
                 {s.shortLabel}
@@ -255,21 +255,21 @@ export default function CreateCompetitionClient() {
 
       {showRounds && (
         <div className="space-y-2">
-          <label className="text-[11px] uppercase tracking-wider text-emerald-200/65">Number of Rounds</label>
+          <label className="text-[11px] uppercase tracking-wider text-[color:var(--sec-muted)]">Number of Rounds</label>
           <input
             type="number"
             min={1}
             max={10}
             value={numRounds}
             onChange={(e) => setNumRounds(e.target.value)}
-            className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-4 py-3 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
+            className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-4 py-3 text-sm text-[color:var(--sec-text)] focus:outline-none focus:border-[color:var(--sec-line)]"
           />
         </div>
       )}
 
       {showHandicap && (
-        <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 p-3 space-y-2">
-          <div className="text-[10px] uppercase tracking-wider text-emerald-200/55 font-semibold">Handicap Rules</div>
+        <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] p-3 space-y-2">
+          <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)] font-semibold">Handicap Rules</div>
           <HandicapRulesEditor value={handicap} onChange={setHandicap} />
         </div>
       )}
@@ -278,8 +278,8 @@ export default function CreateCompetitionClient() {
     /* Step 2: Points */
     <div key="step2" className="space-y-5">
       <div>
-        <div className="text-sm font-semibold text-emerald-50 mb-1">Points Model</div>
-        <div className="text-[11px] text-emerald-200/55">
+        <div className="text-sm font-semibold text-[color:var(--sec-text)] mb-1">Points Model</div>
+        <div className="text-[11px] text-[color:var(--sec-muted)]">
           How points are awarded to the season standings table.
         </div>
       </div>
@@ -291,35 +291,35 @@ export default function CreateCompetitionClient() {
             onClick={() => setPointsModel(p.value)}
             className={`w-full rounded-xl border px-4 py-3 text-left transition-colors ${
               pointsModel === p.value
-                ? "border-emerald-500 bg-emerald-900/50"
-                : "border-emerald-900/50 bg-[#0b3b21]/40 hover:border-emerald-700/50"
+                ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)]"
+                : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] hover:border-[color:var(--sec-line)]"
             }`}
           >
-            <div className="text-sm font-semibold text-emerald-50">{p.label}</div>
-            {p.desc && <div className="text-[11px] text-emerald-200/55 mt-0.5">{p.desc}</div>}
+            <div className="text-sm font-semibold text-[color:var(--sec-text)]">{p.label}</div>
+            {p.desc && <div className="text-[11px] text-[color:var(--sec-muted)] mt-0.5">{p.desc}</div>}
 
             {pointsModel === p.value && (
-              <div className="mt-3 pt-3 border-t border-emerald-700/40">
+              <div className="mt-3 pt-3 border-t border-[color:var(--sec-line)]">
                 {p.value === "fedex_style" && (
                   <>
                     <div className="grid grid-cols-5 gap-x-2 gap-y-1">
                       {FEDEX_POINTS.map((pts, i) => (
-                        <div key={i} className="text-[10px] text-emerald-200/70">
-                          <span className="text-emerald-200/45">{ordinal(i + 1)}</span>{" "}
-                          <span className="font-semibold text-emerald-100">{pts}</span>
+                        <div key={i} className="text-[10px] text-[color:var(--sec-muted)]">
+                          <span className="text-[color:var(--sec-muted)]">{ordinal(i + 1)}</span>{" "}
+                          <span className="font-semibold text-[color:var(--sec-text)]">{pts}</span>
                         </div>
                       ))}
                     </div>
-                    <div className="mt-1.5 text-[10px] text-emerald-200/40">21st onwards — 0 pts</div>
+                    <div className="mt-1.5 text-[10px] text-[color:var(--sec-muted)]">21st onwards — 0 pts</div>
                   </>
                 )}
                 {p.value === "position_based" && (
-                  <div className="text-[10px] text-emerald-200/55">
+                  <div className="text-[10px] text-[color:var(--sec-muted)]">
                     Fixed point values per finishing position. Configure per season when you set it up.
                   </div>
                 )}
                 {p.value === "custom_table" && (
-                  <div className="text-[10px] text-emerald-200/55">
+                  <div className="text-[10px] text-[color:var(--sec-muted)]">
                     Fully custom — define the points for each position when setting up each season.
                   </div>
                 )}
@@ -332,42 +332,42 @@ export default function CreateCompetitionClient() {
 
     /* Step 3: Prize Pot Defaults */
     <div key="step3" className="space-y-5">
-      <div className="text-sm font-semibold text-emerald-50">Prize Pot</div>
-      <p className="text-[12px] text-emerald-200/55">Define a default prize pot for each event in this competition. It will pre-fill when you create a new event instance.</p>
+      <div className="text-sm font-semibold text-[color:var(--sec-text)]">Prize Pot</div>
+      <p className="text-[12px] text-[color:var(--sec-muted)]">Define a default prize pot for each event in this competition. It will pre-fill when you create a new event instance.</p>
 
       {/* Toggle */}
-      <div className="flex items-center justify-between rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 px-4 py-3">
+      <div className="flex items-center justify-between rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-4 py-3">
         <div>
-          <div className="text-sm text-emerald-50">Add event prize pot</div>
-          <div className="text-[10px] text-emerald-200/50 mt-0.5">Pre-populate a pot for each event</div>
+          <div className="text-sm text-[color:var(--sec-text)]">Add event prize pot</div>
+          <div className="text-[10px] text-[color:var(--sec-muted)] mt-0.5">Pre-populate a pot for each event</div>
         </div>
         <button
           type="button"
           onClick={() => setHasPrizePot((v) => !v)}
-          className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${hasPrizePot ? "bg-emerald-600" : "bg-emerald-900/60"}`}
+          className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${hasPrizePot ? "bg-[color:var(--sec-primary)]" : "bg-[color:var(--sec-surface)]"}`}
         >
           <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${hasPrizePot ? "translate-x-5" : ""}`} />
         </button>
       </div>
 
       {hasPrizePot && (
-        <div className="space-y-3 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 px-4 py-4">
+        <div className="space-y-3 rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-4 py-4">
           <div className="space-y-1.5">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/55">Pot Name</label>
+            <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Pot Name</label>
             <input
               type="text"
               placeholder={`${form.name || "Event"} Prize`}
               value={potDefault.name}
               onChange={(e) => setPotDefault((p) => ({ ...p, name: e.target.value }))}
-              className="w-full rounded-xl border border-emerald-900/60 bg-[#042713] px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/30 focus:outline-none focus:border-emerald-600"
+              className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] px-3 py-2 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none focus:border-[color:var(--sec-line)]"
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/55">Distribution</label>
+            <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Distribution</label>
             <select
               value={potDefault.distribution_type}
               onChange={(e) => setPotDefault((p) => ({ ...p, distribution_type: e.target.value }))}
-              className="w-full rounded-xl border border-emerald-900/60 bg-[#042713] px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
+              className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] px-3 py-2 text-sm text-[color:var(--sec-text)] focus:outline-none focus:border-[color:var(--sec-line)]"
             >
               <option value="winner_takes_all">Winner takes all</option>
               <option value="position_based">By finishing position (custom splits)</option>
@@ -377,7 +377,7 @@ export default function CreateCompetitionClient() {
             </select>
           </div>
           <div className="space-y-1.5">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/55">Entry Fee per Player (£)</label>
+            <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Entry Fee per Player (£)</label>
             <input
               type="number"
               min="0"
@@ -385,18 +385,18 @@ export default function CreateCompetitionClient() {
               placeholder="e.g. 10"
               value={potDefault.entry_fee_amount}
               onChange={(e) => setPotDefault((p) => ({ ...p, entry_fee_amount: e.target.value }))}
-              className="w-full rounded-xl border border-emerald-900/60 bg-[#042713] px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/30 focus:outline-none focus:border-emerald-600"
+              className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] px-3 py-2 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none focus:border-[color:var(--sec-line)]"
             />
           </div>
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm text-emerald-50">Mandatory</div>
-              <div className="text-[10px] text-emerald-200/50 mt-0.5">Auto-enroll players on event join</div>
+              <div className="text-sm text-[color:var(--sec-text)]">Mandatory</div>
+              <div className="text-[10px] text-[color:var(--sec-muted)] mt-0.5">Auto-enroll players on event join</div>
             </div>
             <button
               type="button"
               onClick={() => setPotDefault((p) => ({ ...p, is_mandatory: !p.is_mandatory }))}
-              className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${potDefault.is_mandatory ? "bg-emerald-600" : "bg-emerald-900/60"}`}
+              className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${potDefault.is_mandatory ? "bg-[color:var(--sec-primary)]" : "bg-[color:var(--sec-surface)]"}`}
             >
               <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${potDefault.is_mandatory ? "translate-x-5" : ""}`} />
             </button>
@@ -407,8 +407,8 @@ export default function CreateCompetitionClient() {
 
     /* Step 4: Confirm */
     <div key="step4" className="space-y-4">
-      <div className="text-sm font-semibold text-emerald-50">Confirm Competition Details</div>
-      <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4 space-y-2">
+      <div className="text-sm font-semibold text-[color:var(--sec-text)]">Confirm Competition Details</div>
+      <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_80%,transparent)] p-4 space-y-2">
         {[
           { label: "Name", value: form.name },
           form.description ? { label: "Description", value: form.description } : null,
@@ -424,14 +424,14 @@ export default function CreateCompetitionClient() {
           .filter(Boolean)
           .map((item) => (
             <div key={item!.label} className="flex justify-between text-sm">
-              <span className="text-emerald-200/55">{item!.label}</span>
-              <span className="text-emerald-50">{item!.value}</span>
+              <span className="text-[color:var(--sec-muted)]">{item!.label}</span>
+              <span className="text-[color:var(--sec-text)]">{item!.value}</span>
             </div>
           ))}
 
         {showHandicap && (
-          <div className="pt-2 mt-1 border-t border-emerald-800/40 space-y-1">
-            <div className="text-[10px] uppercase tracking-wider text-emerald-200/45 mb-1">Handicap Rules</div>
+          <div className="pt-2 mt-1 border-t border-[color:var(--sec-hair)] space-y-1">
+            <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)] mb-1">Handicap Rules</div>
             {[
               {
                 label: "Mode",
@@ -448,14 +448,14 @@ export default function CreateCompetitionClient() {
               .filter(Boolean)
               .map((item) => (
                 <div key={item!.label} className="flex justify-between text-sm">
-                  <span className="text-emerald-200/55">{item!.label}</span>
-                  <span className="text-emerald-50">{item!.value}</span>
+                  <span className="text-[color:var(--sec-muted)]">{item!.label}</span>
+                  <span className="text-[color:var(--sec-text)]">{item!.value}</span>
                 </div>
               ))}
           </div>
         )}
       </div>
-      {error && <div className="text-sm text-red-400">{error}</div>}
+      {error && <div className="text-sm text-[color:var(--sec-bad)]">{error}</div>}
     </div>,
   ];
 
@@ -466,12 +466,12 @@ export default function CreateCompetitionClient() {
         <button
           type="button"
           onClick={() => (step === 0 ? router.back() : setStep((s) => s - 1))}
-          className="text-[11px] text-emerald-100/70 hover:text-emerald-50"
+          className="text-[11px] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
         >
           ← {step === 0 ? "Back" : "Previous"}
         </button>
-        <h1 className="text-base font-semibold text-[#f5e6b0]">Create Competition</h1>
-        <div className="text-[11px] text-emerald-200/55">
+        <h1 className="text-base font-semibold text-[color:var(--sec-accent)]">Create Competition</h1>
+        <div className="text-[11px] text-[color:var(--sec-muted)]">
           {step + 1}/{totalSteps}
         </div>
       </div>
@@ -482,7 +482,7 @@ export default function CreateCompetitionClient() {
           <div
             key={i}
             className={`h-1 flex-1 rounded-full transition-colors ${
-              i <= step ? "bg-emerald-600" : "bg-emerald-900/50"
+              i <= step ? "bg-[color:var(--sec-primary)]" : "bg-[color:var(--sec-surface)]"
             }`}
           />
         ))}
@@ -510,7 +510,7 @@ export default function CreateCompetitionClient() {
             type="button"
             onClick={() => setStep((s) => s + 1)}
             disabled={!canNext()}
-            className="w-full py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-40"
+            className="w-full py-3 rounded-full bg-[color:var(--sec-primary)] text-sm font-semibold text-white hover:bg-[color:var(--sec-primary-hover)] disabled:opacity-40"
           >
             Next
           </button>
@@ -519,7 +519,7 @@ export default function CreateCompetitionClient() {
             type="button"
             onClick={handleSubmit}
             disabled={submitting}
-            className="w-full py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
+            className="w-full py-3 rounded-full bg-[color:var(--sec-primary)] text-sm font-semibold text-white hover:bg-[color:var(--sec-primary-hover)] disabled:opacity-50"
           >
             {submitting ? "Creating…" : "Create Competition"}
           </button>

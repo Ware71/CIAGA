@@ -21,7 +21,14 @@ type User = {
 
 type MenuPos = { top: number; right: number; width: number };
 
-export function AuthUser() {
+/**
+ * The signed-in avatar and its menu.
+ *
+ * `size` is a prop rather than a transform because the header used to scale it
+ * by 1.4 — which also scaled the border and blurred the image. 38px is the
+ * header's size; the default stays 32 for anywhere else it appears.
+ */
+export function AuthUser({ size = 32 }: { size?: number } = {}) {
   const router = useRouter();
 
   const buttonRef = useRef<HTMLButtonElement | null>(null);
@@ -250,7 +257,12 @@ export function AuthUser() {
   };
 
   if (loading) {
-    return <div className="w-8 h-8 rounded-full bg-muted animate-pulse" />;
+    return (
+      <div
+        className="rounded-full bg-[color:var(--sec-surface)] animate-pulse"
+        style={{ width: size, height: size }}
+      />
+    );
   }
 
   if (!user) {
@@ -270,23 +282,23 @@ export function AuthUser() {
       ? createPortal(
           <div
             ref={menuRef}
-            className="fixed rounded-xl border bg-[#0a341c] text-xs shadow-xl z-[2147483647] pointer-events-auto"
+            className="fixed rounded-xl border bg-[color:var(--sec-surface)] text-xs shadow-xl z-[2147483647] pointer-events-auto"
             style={{
               top: pos.top,
               right: pos.right,
               width: pos.width,
             }}
           >
-            <div className="px-3 py-2 border-b border-emerald-900/60">
-              <div className="text-[10px] uppercase tracking-wide text-emerald-200/70">
+            <div className="px-3 py-2 border-b border-[color:var(--sec-hair)]">
+              <div className="text-[10px] uppercase tracking-wide text-[color:var(--sec-muted)]">
                 Account
               </div>
-              <div className="text-[11px] text-emerald-50 truncate">{name}</div>
+              <div className="text-[11px] text-[color:var(--sec-text)] truncate">{name}</div>
             </div>
 
             <button
               type="button"
-              className="w-full text-left px-3 py-2 hover:bg-emerald-900/60"
+              className="w-full text-left px-3 py-2 hover:bg-[color:var(--sec-surface-2)]"
               onClick={() => {
                 setMenuOpen(false);
                 router.push('/profile');
@@ -298,7 +310,7 @@ export function AuthUser() {
             {adminLoaded && isAdmin && (
               <button
                 type="button"
-                className="w-full text-left px-3 py-2 hover:bg-emerald-900/60"
+                className="w-full text-left px-3 py-2 hover:bg-[color:var(--sec-surface-2)]"
                 onClick={() => {
                   setMenuOpen(false);
                   router.push('/admin');
@@ -312,7 +324,7 @@ export function AuthUser() {
               href={LEGAL_LINKS.legal}
               target="_blank"
               rel="noopener noreferrer"
-              className="block w-full text-left px-3 py-2 hover:bg-emerald-900/60"
+              className="block w-full text-left px-3 py-2 hover:bg-[color:var(--sec-surface-2)]"
               onClick={() => setMenuOpen(false)}
             >
               Privacy &amp; terms
@@ -320,7 +332,7 @@ export function AuthUser() {
 
             <button
               type="button"
-              className="w-full text-left px-3 py-2 hover:bg-emerald-900/60 text-red-200"
+              className="w-full text-left px-3 py-2 hover:bg-[color:var(--sec-surface-2)] text-red-200"
               onClick={handleSignOut}
             >
               Sign out
@@ -343,7 +355,10 @@ export function AuthUser() {
           <span className="text-xs font-medium max-w-[140px] truncate">{name}</span>
         </div>
 
-        <Avatar className="h-8 w-8 border border-emerald-200/70">
+        <Avatar
+          className="border border-[color:var(--sec-line-strong)]"
+          style={{ width: size, height: size }}
+        >
           <AvatarImage src={user.user_metadata?.avatar_url || ''} />
           <AvatarFallback>{initials}</AvatarFallback>
         </Avatar>

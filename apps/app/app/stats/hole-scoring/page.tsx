@@ -498,30 +498,30 @@ export default function HoleScoringPage() {
     const { title, attempts, avgStrokes, avgToPar, blow, birdieOrBetter, parRate, bogey } = props;
 
     return (
-      <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/45 p-3">
+      <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_45%,transparent)] p-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="text-sm font-extrabold text-emerald-50 truncate">{title}</div>
+            <div className="text-sm font-extrabold text-[color:var(--sec-text)] truncate">{title}</div>
           </div>
-          <div className="text-[11px] text-emerald-100/70 font-semibold shrink-0">attempts: {attempts}</div>
+          <div className="text-[11px] text-[color:var(--sec-muted)] font-semibold shrink-0">attempts: {attempts}</div>
         </div>
 
         <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div>
-            <div className="text-[11px] text-emerald-100/70 font-bold">Avg strokes</div>
-            <div className="text-base sm:text-sm font-extrabold tabular-nums text-emerald-50">{round1(avgStrokes)}</div>
+            <div className="text-[11px] text-[color:var(--sec-muted)] font-bold">Avg strokes</div>
+            <div className="text-base sm:text-sm font-extrabold tabular-nums text-[color:var(--sec-text)]">{round1(avgStrokes)}</div>
           </div>
           <div>
-            <div className="text-[11px] text-emerald-100/70 font-bold">Avg to par</div>
-            <div className="text-base sm:text-sm font-extrabold tabular-nums text-[#f5e6b0]">{round1(avgToPar)}</div>
+            <div className="text-[11px] text-[color:var(--sec-muted)] font-bold">Avg to par</div>
+            <div className="text-base sm:text-sm font-extrabold tabular-nums text-[color:var(--sec-accent)]">{round1(avgToPar)}</div>
           </div>
           <div>
-            <div className="text-[11px] text-emerald-100/70 font-bold">{blowupMode === "double" ? "Double+" : "Triple+"}</div>
-            <div className="text-base sm:text-sm font-extrabold tabular-nums text-emerald-50">{pct(blow)}</div>
+            <div className="text-[11px] text-[color:var(--sec-muted)] font-bold">{blowupMode === "double" ? "Double+" : "Triple+"}</div>
+            <div className="text-base sm:text-sm font-extrabold tabular-nums text-[color:var(--sec-text)]">{pct(blow)}</div>
           </div>
           <div>
-            <div className="text-[11px] text-emerald-100/70 font-bold">Birdie+ / Par / Bogey</div>
-            <div className="text-[12px] sm:text-[11px] font-extrabold tabular-nums text-emerald-50 whitespace-nowrap">
+            <div className="text-[11px] text-[color:var(--sec-muted)] font-bold">Birdie+ / Par / Bogey</div>
+            <div className="text-[12px] sm:text-[11px] font-extrabold tabular-nums text-[color:var(--sec-text)] whitespace-nowrap">
               {pct(birdieOrBetter)} / {pct(parRate)} / {pct(bogey)}
             </div>
           </div>
@@ -534,17 +534,17 @@ export default function HoleScoringPage() {
   // UI
   // -----------------------------
   return (
-    <div className="h-screen bg-[#042713] text-slate-100 px-1.5 sm:px-2 pt-4">
+    <div className="h-[calc(100dvh-var(--ciaga-nav-h))] bg-[color:var(--ciaga-ground)] text-slate-100 px-1.5 sm:px-2 pt-4">
       <div className="mx-auto w-full max-w-3xl h-full flex flex-col">
-        <header className="sticky top-0 z-20 bg-[#042713] pb-3">
+        <header className="sticky top-0 z-20 bg-[color:var(--ciaga-ground)] pb-3">
           <div className="flex items-center justify-between gap-2 px-1">
             <BackButton onClick={() => router.back()} />
 
             <div className="text-center flex-1 min-w-0 px-2">
-              <div className="text-[15px] sm:text-base font-semibold tracking-wide text-[#f5e6b0] truncate">
+              <div className="text-[15px] sm:text-base font-semibold tracking-wide text-[color:var(--sec-accent)] truncate">
                 Hole scoring
               </div>
-              <div className="text-[11px] sm:text-[10px] uppercase tracking-[0.14em] text-emerald-200/70 truncate">
+              <div className="text-[11px] sm:text-[10px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] truncate">
                 {presetLabel(preset)} · {scoreMode === "gross" ? "Gross" : "Net"} · By par · length · SI · blow-ups
               </div>
             </div>
@@ -562,7 +562,7 @@ export default function HoleScoringPage() {
                 if (e.key === "Enter" || e.key === " ") setFiltersOpen((v) => !v);
               }}
               className={[
-                "rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70",
+                "rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)]",
                 "p-2 select-none cursor-pointer",
               ].join(" ")}
               aria-expanded={filtersOpen}
@@ -571,10 +571,10 @@ export default function HoleScoringPage() {
               {/* Collapsed summary row */}
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">
+                  <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] font-bold">
                     Filters
                   </div>
-                  <div className="mt-1 text-[12px] text-emerald-50/90 font-extrabold leading-tight">
+                  <div className="mt-1 text-[12px] text-[color:var(--sec-text)] font-extrabold leading-tight">
                     {presetLabel(preset)}
                     {" · "}
                     {courseId ? courseOptions.find((c) => c.id === courseId)?.name ?? "Course" : "All courses"}
@@ -583,7 +583,7 @@ export default function HoleScoringPage() {
                   </div>
                 </div>
 
-                <div className="shrink-0 text-[12px] font-extrabold text-[#f5e6b0] pt-[2px]">
+                <div className="shrink-0 text-[12px] font-extrabold text-[color:var(--sec-accent)] pt-[2px]">
                   {filtersOpen ? "▲" : "▼"}
                 </div>
               </div>
@@ -591,8 +591,8 @@ export default function HoleScoringPage() {
               {filtersOpen ? (
                 <div className="mt-3 space-y-2">
                   {/* Time range as 3 rows */}
-                  <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/40 p-2">
-                    <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold mb-2">
+                  <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_40%,transparent)] p-2">
+                    <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] font-bold mb-2">
                       Time range
                     </div>
 
@@ -607,8 +607,8 @@ export default function HoleScoringPage() {
                         className={[
                           "rounded-2xl px-3 py-2 text-[13px] font-extrabold border w-full",
                           preset === "all"
-                            ? "bg-[#042713]/70 border-[#f5e6b0]/60 text-[#f5e6b0]"
-                            : "bg-[#042713]/30 border-emerald-900/70 text-emerald-50/90 hover:bg-emerald-900/20",
+                            ? "bg-[color:color-mix(in_srgb,var(--ciaga-ground)_70%,transparent)] border-[color:color-mix(in_srgb,var(--sec-accent)_60%,transparent)] text-[color:var(--sec-accent)]"
+                            : "bg-[color:color-mix(in_srgb,var(--ciaga-ground)_30%,transparent)] border-[color:var(--sec-hair)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]",
                         ].join(" ")}
                       >
                         All time
@@ -634,8 +634,8 @@ export default function HoleScoringPage() {
                             className={[
                               "rounded-2xl px-3 py-2 text-[13px] font-extrabold border leading-tight",
                               active
-                                ? "bg-[#042713]/70 border-[#f5e6b0]/60 text-[#f5e6b0]"
-                                : "bg-[#042713]/30 border-emerald-900/70 text-emerald-50/90 hover:bg-emerald-900/20",
+                                ? "bg-[color:color-mix(in_srgb,var(--ciaga-ground)_70%,transparent)] border-[color:color-mix(in_srgb,var(--sec-accent)_60%,transparent)] text-[color:var(--sec-accent)]"
+                                : "bg-[color:color-mix(in_srgb,var(--ciaga-ground)_30%,transparent)] border-[color:var(--sec-hair)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]",
                             ].join(" ")}
                           >
                             {label}
@@ -664,8 +664,8 @@ export default function HoleScoringPage() {
                             className={[
                               "rounded-2xl px-3 py-2 text-[13px] font-extrabold border leading-tight",
                               active
-                                ? "bg-[#042713]/70 border-[#f5e6b0]/60 text-[#f5e6b0]"
-                                : "bg-[#042713]/30 border-emerald-900/70 text-emerald-50/90 hover:bg-emerald-900/20",
+                                ? "bg-[color:color-mix(in_srgb,var(--ciaga-ground)_70%,transparent)] border-[color:color-mix(in_srgb,var(--sec-accent)_60%,transparent)] text-[color:var(--sec-accent)]"
+                                : "bg-[color:color-mix(in_srgb,var(--ciaga-ground)_30%,transparent)] border-[color:var(--sec-hair)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]",
                             ].join(" ")}
                           >
                             {label}
@@ -677,13 +677,13 @@ export default function HoleScoringPage() {
 
                   {/* Course + tee + scoring */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/40 p-2 col-span-2">
-                      <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">Course</div>
+                    <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_40%,transparent)] p-2 col-span-2">
+                      <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] font-bold">Course</div>
                       <select
                         value={courseId}
                         onChange={(e) => setCourseId(e.target.value)}
                         onClick={(e) => e.stopPropagation()}
-                        className="mt-1 w-full rounded-xl bg-[#042713]/70 border border-emerald-900/70 px-2 py-2 text-[13px] text-emerald-50"
+                        className="mt-1 w-full rounded-xl bg-[color:color-mix(in_srgb,var(--ciaga-ground)_70%,transparent)] border border-[color:var(--sec-hair)] px-2 py-2 text-[13px] text-[color:var(--sec-text)]"
                       >
                         <option value="">All</option>
                         {courseOptions.map((c) => (
@@ -694,13 +694,13 @@ export default function HoleScoringPage() {
                       </select>
                     </div>
 
-                    <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/40 p-2 col-span-2 sm:col-span-1">
-                      <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">Tee</div>
+                    <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_40%,transparent)] p-2 col-span-2 sm:col-span-1">
+                      <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] font-bold">Tee</div>
                       <select
                         value={teeBoxId}
                         onChange={(e) => setTeeBoxId(e.target.value)}
                         onClick={(e) => e.stopPropagation()}
-                        className="mt-1 w-full rounded-xl bg-[#042713]/70 border border-emerald-900/70 px-2 py-2 text-[13px] text-emerald-50"
+                        className="mt-1 w-full rounded-xl bg-[color:color-mix(in_srgb,var(--ciaga-ground)_70%,transparent)] border border-[color:var(--sec-hair)] px-2 py-2 text-[13px] text-[color:var(--sec-text)]"
                       >
                         <option value="">All tees</option>
                         {teeOptions.map((t) => (
@@ -711,8 +711,8 @@ export default function HoleScoringPage() {
                       </select>
                     </div>
 
-                    <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/40 p-2 col-span-2 sm:col-span-1">
-                      <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">
+                    <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_40%,transparent)] p-2 col-span-2 sm:col-span-1">
+                      <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] font-bold">
                         Scoring
                       </div>
 
@@ -728,8 +728,8 @@ export default function HoleScoringPage() {
                           className={[
                             "flex-1 rounded-xl border px-3 py-2 text-[13px] font-extrabold",
                             scoreMode === "gross"
-                              ? "bg-[#042713]/70 border-[#f5e6b0]/30 text-emerald-50"
-                              : "bg-[#042713]/70 border-[#f5e6b0]/60 text-[#f5e6b0]",
+                              ? "bg-[color:color-mix(in_srgb,var(--ciaga-ground)_70%,transparent)] border-[color:color-mix(in_srgb,var(--sec-accent)_30%,transparent)] text-[color:var(--sec-text)]"
+                              : "bg-[color:color-mix(in_srgb,var(--ciaga-ground)_70%,transparent)] border-[color:color-mix(in_srgb,var(--sec-accent)_60%,transparent)] text-[color:var(--sec-accent)]",
                           ].join(" ")}
                           title="Toggle gross vs net"
                         >
@@ -744,10 +744,10 @@ export default function HoleScoringPage() {
                           }}
                           className={[
                             "flex-1 rounded-xl border px-3 py-2 text-[13px] font-extrabold",
-                            "bg-[#042713]/70",
+                            "bg-[color:color-mix(in_srgb,var(--ciaga-ground)_70%,transparent)]",
                             blowupMode === "double"
-                              ? "border-[#f5e6b0]/30 text-emerald-50"
-                              : "border-[#f5e6b0]/60 text-[#f5e6b0]",
+                              ? "border-[color:color-mix(in_srgb,var(--sec-accent)_30%,transparent)] text-[color:var(--sec-text)]"
+                              : "border-[color:color-mix(in_srgb,var(--sec-accent)_60%,transparent)] text-[color:var(--sec-accent)]",
                           ].join(" ")}
                           title="Toggle blow-up threshold"
                         >
@@ -755,8 +755,8 @@ export default function HoleScoringPage() {
                         </button>
                       </div>
 
-                      <div className="mt-2 text-[12px] font-semibold text-emerald-100/80 leading-snug">
-                        <span className="font-extrabold text-emerald-50">
+                      <div className="mt-2 text-[12px] font-semibold text-[color:var(--sec-muted)] leading-snug">
+                        <span className="font-extrabold text-[color:var(--sec-text)]">
                           {scoreMode === "gross" ? "Gross scoring" : "Net scoring"}
                         </span>
                         {" · "}
@@ -778,7 +778,7 @@ export default function HoleScoringPage() {
 
         <div className="flex-1 overflow-y-auto overscroll-y-contain pb-[env(safe-area-inset-bottom)]">
           {loading ? (
-            <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">
+            <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4 text-sm text-[color:var(--sec-muted)]">
               Loading…
             </div>
           ) : err ? (
@@ -787,7 +787,7 @@ export default function HoleScoringPage() {
               <div className="mt-3">
                 <Button
                   variant="outline"
-                  className="border-emerald-900/70 bg-[#0b3b21]/40 text-emerald-50 hover:bg-emerald-900/20"
+                  className="border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
                   onClick={() => window.location.reload()}
                 >
                   Retry
@@ -795,48 +795,48 @@ export default function HoleScoringPage() {
               </div>
             </div>
           ) : !filtered.length ? (
-            <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-6 space-y-2">
-              <div className="text-sm font-semibold text-emerald-50">No hole data found</div>
-              <p className="text-[12px] text-emerald-100/70">Try a different time preset or clear course/tee filters.</p>
+            <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-6 space-y-2">
+              <div className="text-sm font-semibold text-[color:var(--sec-text)]">No hole data found</div>
+              <p className="text-[12px] text-[color:var(--sec-muted)]">Try a different time preset or clear course/tee filters.</p>
             </div>
           ) : (
             <div className="space-y-4">
               {/* Summary */}
               {summary ? (
-                <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
-                  <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">Summary</div>
+                <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4">
+                  <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] font-bold">Summary</div>
                   <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-3">
                     <div>
-                      <div className="text-[11px] text-emerald-100/70 font-bold">Holes</div>
-                      <div className="text-lg font-extrabold tabular-nums text-emerald-50">{summary.holes}</div>
+                      <div className="text-[11px] text-[color:var(--sec-muted)] font-bold">Holes</div>
+                      <div className="text-lg font-extrabold tabular-nums text-[color:var(--sec-text)]">{summary.holes}</div>
                     </div>
                     <div>
-                      <div className="text-[11px] text-emerald-100/70 font-bold">Avg to par</div>
-                      <div className="text-lg font-extrabold tabular-nums text-[#f5e6b0]">{round1(summary.avgToPar)}</div>
+                      <div className="text-[11px] text-[color:var(--sec-muted)] font-bold">Avg to par</div>
+                      <div className="text-lg font-extrabold tabular-nums text-[color:var(--sec-accent)]">{round1(summary.avgToPar)}</div>
                     </div>
                     <div className="sm:block hidden">
-                      <div className="text-[11px] text-emerald-100/70 font-bold">
+                      <div className="text-[11px] text-[color:var(--sec-muted)] font-bold">
                         {blowupMode === "double" ? "Double+" : "Triple+"} rate
                       </div>
-                      <div className="text-lg font-extrabold tabular-nums text-emerald-50">{pct(summary.blowupRate)}</div>
+                      <div className="text-lg font-extrabold tabular-nums text-[color:var(--sec-text)]">{pct(summary.blowupRate)}</div>
                     </div>
                   </div>
 
                   <div className="mt-2 sm:hidden">
-                    <div className="text-[11px] text-emerald-100/70 font-bold">
+                    <div className="text-[11px] text-[color:var(--sec-muted)] font-bold">
                       {blowupMode === "double" ? "Double+" : "Triple+"} rate
                     </div>
-                    <div className="text-lg font-extrabold tabular-nums text-emerald-50">{pct(summary.blowupRate)}</div>
+                    <div className="text-lg font-extrabold tabular-nums text-[color:var(--sec-text)]">{pct(summary.blowupRate)}</div>
                   </div>
                 </div>
               ) : null}
 
               {/* By Par */}
-              <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
-                <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">
+              <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4">
+                <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] font-bold">
                   Avg scoring by Par
                 </div>
-                <div className="mt-1 text-[12px] text-emerald-100/70 font-semibold">
+                <div className="mt-1 text-[12px] text-[color:var(--sec-muted)] font-semibold">
                   {scoreMode === "gross" ? "Gross scoring" : "Net scoring"}
                 </div>
 
@@ -858,11 +858,11 @@ export default function HoleScoringPage() {
               </div>
 
               {/* By Length */}
-              <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
-                <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">
+              <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4">
+                <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] font-bold">
                   Avg scoring by Length (by par)
                 </div>
-                <div className="mt-1 text-[12px] text-emerald-100/70 font-semibold">
+                <div className="mt-1 text-[12px] text-[color:var(--sec-muted)] font-semibold">
                   {scoreMode === "gross" ? "Gross scoring" : "Net scoring"}
                 </div>
 
@@ -884,11 +884,11 @@ export default function HoleScoringPage() {
               </div>
 
               {/* By SI */}
-              <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
-                <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">
+              <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4">
+                <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] font-bold">
                   Avg scoring by SI (stroke index)
                 </div>
-                <div className="mt-1 text-[12px] text-emerald-100/70 font-semibold">
+                <div className="mt-1 text-[12px] text-[color:var(--sec-muted)] font-semibold">
                   {scoreMode === "gross" ? "Gross scoring" : "Net scoring"}
                 </div>
 
@@ -910,11 +910,11 @@ export default function HoleScoringPage() {
               </div>
 
               {/* Blow-up patterns */}
-              <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
-                <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">
+              <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4">
+                <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] font-bold">
                   Blow-up patterns
                 </div>
-                <div className="text-[12px] text-emerald-100/70 font-semibold mt-1 leading-snug">
+                <div className="text-[12px] text-[color:var(--sec-muted)] font-semibold mt-1 leading-snug">
                   {blowupMode === "double" ? "Double+" : "Triple+"} rate on the next hole, grouped by the previous result
                   {" · "}
                   {scoreMode === "gross" ? "Gross" : "Net"}
@@ -922,14 +922,14 @@ export default function HoleScoringPage() {
 
                 <div className="mt-3 space-y-2">
                   {blowupAfterPrev.map((r) => (
-                    <div key={r.context} className="rounded-2xl border border-emerald-900/70 bg-[#042713]/45 p-3">
+                    <div key={r.context} className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_45%,transparent)] p-3">
                       <div className="flex items-center justify-between gap-3">
-                        <div className="text-sm font-extrabold text-emerald-50">{prettyCtx(r.context)}</div>
-                        <div className="text-[11px] text-emerald-100/70 font-semibold">attempts: {r.attempts}</div>
+                        <div className="text-sm font-extrabold text-[color:var(--sec-text)]">{prettyCtx(r.context)}</div>
+                        <div className="text-[11px] text-[color:var(--sec-muted)] font-semibold">attempts: {r.attempts}</div>
                       </div>
                       <div className="mt-2">
-                        <div className="text-[11px] text-emerald-100/70 font-bold">Rate</div>
-                        <div className="text-base font-extrabold tabular-nums text-[#f5e6b0]">{pct(r.rate)}</div>
+                        <div className="text-[11px] text-[color:var(--sec-muted)] font-bold">Rate</div>
+                        <div className="text-base font-extrabold tabular-nums text-[color:var(--sec-accent)]">{pct(r.rate)}</div>
                       </div>
                     </div>
                   ))}
@@ -937,26 +937,26 @@ export default function HoleScoringPage() {
               </div>
 
               {/* Worst holes */}
-              <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
-                <div className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/70 font-bold">
+              <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4">
+                <div className="text-[11px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)] font-bold">
                   Worst holes
                 </div>
-                <div className="text-[12px] text-emerald-100/70 font-semibold leading-snug">
-                  Ranked by sustained damage: <span className="font-extrabold text-emerald-50">avg to-par × √attempts</span>
+                <div className="text-[12px] text-[color:var(--sec-muted)] font-semibold leading-snug">
+                  Ranked by sustained damage: <span className="font-extrabold text-[color:var(--sec-text)]">avg to-par × √attempts</span>
                   {" · "}
                   {scoreMode === "gross" ? "Gross" : "Net"}
                 </div>
 
                 <div className="mt-3 space-y-2">
                   {worstHoles.map((h) => (
-                    <div key={h.key} className="rounded-2xl border border-emerald-900/70 bg-[#042713]/45 p-3">
+                    <div key={h.key} className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_45%,transparent)] p-3">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <div className="text-[14px] font-extrabold text-emerald-50 leading-tight break-words">
+                          <div className="text-[14px] font-extrabold text-[color:var(--sec-text)] leading-tight break-words">
                             {h.course} · {h.tee} · Hole {h.hole}
                           </div>
 
-                          <div className="mt-1 text-[12px] text-emerald-100/75 font-semibold leading-snug break-words">
+                          <div className="mt-1 text-[12px] text-[color:var(--sec-muted)] font-semibold leading-snug break-words">
                             <span className="whitespace-nowrap">Par {h.par}</span>
                             {" · "}
                             <span className="whitespace-nowrap">{h.yardage != null ? `${h.yardage}y` : "—"}</span>
@@ -968,11 +968,11 @@ export default function HoleScoringPage() {
                         </div>
 
                         <div className="text-right shrink-0">
-                          <div className="text-[11px] text-emerald-100/70 font-bold">Avg to par</div>
-                          <div className="text-lg font-extrabold tabular-nums text-[#f5e6b0]">{round1(h.avgToPar)}</div>
-                          <div className="text-[11px] text-emerald-100/70 font-bold">Weighted</div>
-                          <div className="text-[13px] font-extrabold tabular-nums text-emerald-50">{round1(h.severity)}</div>
-                          <div className="mt-1 text-[11px] text-emerald-100/70 font-bold">
+                          <div className="text-[11px] text-[color:var(--sec-muted)] font-bold">Avg to par</div>
+                          <div className="text-lg font-extrabold tabular-nums text-[color:var(--sec-accent)]">{round1(h.avgToPar)}</div>
+                          <div className="text-[11px] text-[color:var(--sec-muted)] font-bold">Weighted</div>
+                          <div className="text-[13px] font-extrabold tabular-nums text-[color:var(--sec-text)]">{round1(h.severity)}</div>
+                          <div className="mt-1 text-[11px] text-[color:var(--sec-muted)] font-bold">
                             {blowupMode === "double" ? "Double+" : "Triple+"}: {pct(h.blow)}
                           </div>
                         </div>
@@ -982,7 +982,7 @@ export default function HoleScoringPage() {
                 </div>
               </div>
 
-              <div className="pt-1 text-[10px] text-emerald-100/40 text-center font-semibold">CIAGA · Hole scoring</div>
+              <div className="pt-1 text-[10px] text-[color:var(--sec-muted)] text-center font-semibold">CIAGA · Hole scoring</div>
             </div>
           )}
         </div>

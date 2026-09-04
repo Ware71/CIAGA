@@ -44,29 +44,29 @@ export default function CommentBar({ feedItemId }: { feedItemId: string }) {
 
   return (
     <>
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-emerald-900/70 bg-[#04220f]/95 px-4 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur">
+      <div className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+var(--ciaga-nav-h))] z-30 border-t border-[color:var(--sec-hair)] bg-[#04220f]/95 px-4 py-2 backdrop-blur">
         <button type="button" onClick={() => setOpen(true)} className="mx-auto block w-full max-w-sm text-left">
           <div className="flex items-center justify-between">
-            <div className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-emerald-100/55">
+            <div className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-[color:var(--sec-muted)]">
               Comments{count ? ` · ${count}` : ""}
             </div>
-            <span className="text-[11px] font-semibold text-emerald-100/40">Tap to open ›</span>
+            <span className="text-[11px] font-semibold text-[color:var(--sec-muted)]">Tap to open ›</span>
           </div>
 
           <div className="mt-1 max-h-[11vh] space-y-1 overflow-hidden">
             {comments.length ? (
               comments.map((c) => (
-                <div key={c.id} className="truncate text-[12px] text-emerald-50/90">
+                <div key={c.id} className="truncate text-[12px] text-[color:var(--sec-text)]">
                   <span className="font-extrabold">{c.author?.display_name ?? c.author?.name ?? "Player"}</span>{" "}
-                  <span className="text-emerald-100/80">{renderWithMentions(c.body, c.mentions)}</span>
+                  <span className="text-[color:var(--sec-muted)]">{renderWithMentions(c.body, c.mentions)}</span>
                 </div>
               ))
             ) : (
-              <div className="text-[12px] font-semibold text-emerald-100/50">No comments yet — say something.</div>
+              <div className="text-[12px] font-semibold text-[color:var(--sec-muted)]">No comments yet — say something.</div>
             )}
           </div>
 
-          <div className="mt-1.5 rounded-full border border-emerald-900/60 bg-emerald-950/30 px-3 py-2 text-[12px] font-semibold text-emerald-100/45">
+          <div className="mt-1.5 rounded-full border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-3 py-2 text-[12px] font-semibold text-[color:var(--sec-muted)]">
             Add a comment…
           </div>
         </button>

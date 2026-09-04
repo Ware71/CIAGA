@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, Filter, Loader2 } from "lucide-react";
 import { BackButton } from "@/components/ui/BackButton";
@@ -82,6 +82,12 @@ function enumerateDays(start: Date, end: Date): Date[] {
 
 export function CalendarClient() {
   const router = useRouter();
+  // Play's "Find a round" links straight into the looking-for-a-round view, so
+  // the opening scope can be set by the URL. Only the initial value — the scope
+  // picker owns it from then on, and the param is not kept in sync.
+  const searchParams = useSearchParams();
+  const initialScope: Scope =
+    searchParams.get("scope") === "looking" ? { kind: "looking" } : { kind: "me" };
 
   const [selfId, setSelfId] = useState<string | null>(null);
   const [anchor, setAnchor] = useState<Date>(() => new Date());
@@ -91,7 +97,7 @@ export function CalendarClient() {
   const [threeHourRule, setThreeHourRule] = useState(true);
   const [filter, setFilter] = useState<AvailabilityFilter>("all");
 
-  const [scope, setScope] = useState<Scope>({ kind: "me" });
+  const [scope, setScope] = useState<Scope>(initialScope);
   const [circles, setCircles] = useState<Circle[]>([]);
   const [nameById, setNameById] = useState<Map<string, ProfileLite>>(new Map());
 
@@ -377,58 +383,58 @@ export function CalendarClient() {
   };
 
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden bg-gradient-to-b from-[#042713] via-[#04240f] to-[#031a0c] px-3 pt-6 pb-[env(safe-area-inset-bottom)] text-slate-100">
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-gradient-to-b from-[color:var(--ciaga-ground)] via-[color:var(--ciaga-ground)] to-[#031a0c] px-3 pt-6 pb-[env(safe-area-inset-bottom)] text-slate-100">
       <div className="mx-auto flex w-full min-h-0 max-w-md flex-1 flex-col gap-2.5 landscape:max-w-5xl">
         {/* Centered title; funnel opens the settings sheet (scope + view + filter) */}
         <header className="relative flex shrink-0 items-center">
-          <BackButton href="/round" />
+          <BackButton href="/play" />
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-            <div className="text-base font-semibold tracking-wide text-[#f5e6b0]">Calendar</div>
-            <div className="max-w-[60%] truncate text-[10px] text-emerald-200/60">{scopeLabel}</div>
+            <div className="text-base font-semibold tracking-wide text-[color:var(--sec-accent)]">Calendar</div>
+            <div className="max-w-[60%] truncate text-[10px] text-[color:var(--sec-muted)]">{scopeLabel}</div>
           </div>
           <button
             onClick={() => setScopePickerOpen(true)}
             aria-label="Calendar settings"
-            className="ml-auto rounded-full border border-emerald-900/60 bg-[#0b3b21]/60 p-2 text-emerald-100/80 hover:bg-emerald-900/30"
+            className="ml-auto rounded-full border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] p-2 text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]"
           >
             <Filter size={18} />
           </button>
         </header>
 
         {/* Month / week navigation (agenda is a rolling "upcoming" list) */}
-        <div className="flex shrink-0 items-center justify-between rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/30 px-2 py-1.5">
+        <div className="flex shrink-0 items-center justify-between rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_30%,transparent)] px-2 py-1.5">
           {isAgenda && !isLooking ? (
-            <div className="w-full py-0.5 text-center text-sm font-semibold text-emerald-50">
+            <div className="w-full py-0.5 text-center text-sm font-semibold text-[color:var(--sec-text)]">
               Upcoming
             </div>
           ) : (
             <>
               <button
                 onClick={() => shift(-1)}
-                className="rounded-full p-1.5 text-emerald-100/70 hover:bg-emerald-900/40"
+                className="rounded-full p-1.5 text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]"
               >
                 <ChevronLeft size={18} />
               </button>
               <button onClick={() => setAnchor(new Date())} className="text-center">
                 <div className="flex items-center justify-center gap-1.5">
-                  <span className="text-sm font-semibold text-emerald-50">
+                  <span className="text-sm font-semibold text-[color:var(--sec-text)]">
                     {isLooking ? "Looking for a round" : formatMonthLabel(anchor)}
                   </span>
                   {!isLooking ? (
-                    <span className="rounded-full bg-[#f5e6b0]/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#f5e6b0]">
+                    <span className="rounded-full bg-[color:color-mix(in_srgb,var(--sec-accent)_15%,transparent)] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[color:var(--sec-accent)]">
                       {ZOOM_LABELS[zoom]}
                     </span>
                   ) : null}
                 </div>
                 {headerSubtitle ? (
-                  <div className="text-[10px] uppercase tracking-[0.16em] text-emerald-200/60">
+                  <div className="text-[10px] uppercase tracking-[0.16em] text-[color:var(--sec-muted)]">
                     {headerSubtitle}
                   </div>
                 ) : null}
               </button>
               <button
                 onClick={() => shift(1)}
-                className="rounded-full p-1.5 text-emerald-100/70 hover:bg-emerald-900/40"
+                className="rounded-full p-1.5 text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]"
               >
                 <ChevronRight size={18} />
               </button>
@@ -461,7 +467,7 @@ export function CalendarClient() {
               transition={{ duration: 0.14 }}
             >
               {loading ? (
-                <div className="flex h-full items-center justify-center gap-2 text-emerald-100/60">
+                <div className="flex h-full items-center justify-center gap-2 text-[color:var(--sec-muted)]">
                   <Loader2 className="animate-spin" size={18} /> Loading…
                 </div>
               ) : isLooking ? (
@@ -578,11 +584,11 @@ export function CalendarClient() {
             aria-label="Close"
           />
           <div className="absolute left-0 right-0 bottom-0 px-3 pb-[env(safe-area-inset-bottom)]">
-            <div className="mx-auto w-full max-w-[520px] rounded-t-3xl border border-emerald-900/70 bg-[#061f12] p-4 shadow-2xl">
-              <div className="text-sm font-semibold text-emerald-50">
+            <div className="mx-auto w-full max-w-[520px] rounded-t-3xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] p-4 shadow-2xl">
+              <div className="text-sm font-semibold text-[color:var(--sec-text)]">
                 Delete {deleteTarget.kind === "available" ? "availability" : "unavailability"}?
               </div>
-              <div className="text-[11px] text-emerald-100/70 mt-1">
+              <div className="text-[11px] text-[color:var(--sec-muted)] mt-1">
                 {deleteTarget.recurring
                   ? "This removes the whole recurring series."
                   : "This removes the event from your calendar."}
@@ -590,7 +596,7 @@ export function CalendarClient() {
               <div className="mt-4 flex gap-2">
                 <Button
                   variant="ghost"
-                  className="flex-1 rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/40 text-emerald-50 hover:bg-emerald-900/20"
+                  className="flex-1 rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
                   onClick={() => setDeleteTarget(null)}
                 >
                   Cancel

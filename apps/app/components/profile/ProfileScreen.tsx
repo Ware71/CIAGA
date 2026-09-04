@@ -17,6 +17,7 @@ import ProfileFeedTab from "@/components/profile/ProfileFeedTab";
 import AcceptableRoundsTab from "@/components/profile/AcceptableRoundsTab";
 import NonAcceptableRoundsTab from "@/components/profile/NonAcceptableRoundsTab";
 import { AccountLegalSection } from "@/components/profile/AccountLegalSection";
+import { compressAvatar, ImageCompressionError, outputExtension } from "@/lib/media/compressImage";
 
 type User = {
   id: string; // auth.users.id
@@ -101,6 +102,7 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
   // -------- Self-only: avatar upload --------
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
 
   // -------- Followers/Following modal state --------
   const [listOpen, setListOpen] = useState(false);
@@ -590,19 +592,31 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
       if (!isMe) return;
       const file = e.target.files?.[0];
       if (!file) return;
-      if (!file.type.startsWith("image/")) return;
-
+      // No `file.type.startsWith("image/")` guard here: compressAvatar does that
+      // check itself and, unlike a bare early return, it also recognises a HEIC
+      // by filename. Browsers hand back an empty type for HEIC often enough that
+      // the guard used to swallow exactly the case with the most useful error.
       setUploading(true);
+      setAvatarError(null);
 
-      const ext = file.name.split(".").pop() || "jpg";
       const folder = authUser?.id;
       if (!folder) throw new Error("Not logged in");
-      const path = `${folder}/${Date.now()}.${ext}`;
 
-      const { error: uploadError } = await supabase.storage.from(AVATAR_BUCKET).upload(path, file, {
-        cacheControl: "3600",
+      // Re-encode before upload. The picker hands us the camera original — 3-5 MB
+      // from a phone — and this is rendered at 16-96px across ~45 sites, so the
+      // raw file was costing gigabytes of CDN egress a month. Also strips EXIF,
+      // including the GPS coordinates iPhones attach, on the way into a public
+      // bucket. See lib/media/compressImage.ts.
+      const avatar = await compressAvatar(file);
+      const path = `${folder}/${Date.now()}.${outputExtension()}`;
+
+      const { error: uploadError } = await supabase.storage.from(AVATAR_BUCKET).upload(path, avatar.blob, {
+        // A year, not an hour. The path carries a timestamp, so the bytes behind
+        // a given URL can never change; an hourly revalidation only bought us a
+        // repeat download of every avatar on screen.
+        cacheControl: "31536000",
         upsert: true,
-        contentType: file.type,
+        contentType: avatar.type,
       });
       if (uploadError) throw uploadError;
 
@@ -639,6 +653,13 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
       setProfile((prev) => (prev ? { ...prev, avatar_url: publicUrl } : prev));
     } catch (err) {
       console.error("Avatar upload failed:", err);
+      // ImageCompressionError messages are written to be shown verbatim — the
+      // HEIC one in particular tells iPhone users exactly which setting to change.
+      setAvatarError(
+        err instanceof ImageCompressionError
+          ? err.message
+          : "Couldn't update your profile picture. Try again.",
+      );
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -1012,20 +1033,20 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
+      <div className="min-h-screen bg-[color:var(--ciaga-ground)] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
         <div className="mx-auto w-full max-w-sm space-y-4">
           <header className="flex items-center justify-between">
-            <Button variant="ghost" size="sm" className="px-2 text-emerald-100 hover:bg-emerald-900/30" onClick={() => router.back()}>
+            <Button variant="ghost" size="sm" className="px-2 text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]" onClick={() => router.back()}>
               ← Back
             </Button>
             <div className="text-center flex-1">
-              <div className="text-lg font-semibold tracking-wide text-[#f5e6b0]">{isMe ? "Profile" : "Player"}</div>
-              <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">{isMe ? "Account" : "Profile"}</div>
+              <div className="text-lg font-semibold tracking-wide text-[color:var(--sec-accent)]">{isMe ? "Profile" : "Player"}</div>
+              <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--sec-muted)]">{isMe ? "Account" : "Profile"}</div>
             </div>
             <div className="w-[60px]" />
           </header>
 
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">Loading…</div>
+          <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4 text-sm text-[color:var(--sec-muted)]">Loading…</div>
         </div>
       </div>
     );
@@ -1033,56 +1054,56 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
 
   if (!profile) {
     return (
-      <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
+      <div className="min-h-screen bg-[color:var(--ciaga-ground)] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
         <div className="mx-auto w-full max-w-sm space-y-4">
           <header className="flex items-center justify-between">
-            <Button variant="ghost" size="sm" className="px-2 text-emerald-100 hover:bg-emerald-900/30" onClick={() => router.back()}>
+            <Button variant="ghost" size="sm" className="px-2 text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]" onClick={() => router.back()}>
               ← Back
             </Button>
             <div className="text-center flex-1">
-              <div className="text-lg font-semibold tracking-wide text-[#f5e6b0]">{isMe ? "Profile" : "Player"}</div>
-              <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">{isMe ? "Account" : "Profile"}</div>
+              <div className="text-lg font-semibold tracking-wide text-[color:var(--sec-accent)]">{isMe ? "Profile" : "Player"}</div>
+              <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--sec-muted)]">{isMe ? "Account" : "Profile"}</div>
             </div>
             <div className="w-[60px]" />
           </header>
 
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">Player not found.</div>
+          <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4 text-sm text-[color:var(--sec-muted)]">Player not found.</div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
+    <div className="min-h-screen bg-[color:var(--ciaga-ground)] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto w-full max-w-sm space-y-4">
         {/* Header */}
         <header className="flex items-center justify-between">
-          <Button variant="ghost" size="sm" className="px-2 text-emerald-100 hover:bg-emerald-900/30" onClick={() => router.back()}>
+          <Button variant="ghost" size="sm" className="px-2 text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]" onClick={() => router.back()}>
             ← Back
           </Button>
           <div className="text-center flex-1">
-            <div className="text-lg font-semibold tracking-wide text-[#f5e6b0]">{isMe ? "Profile" : "Player"}</div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">{isMe ? "Account" : "Profile"}</div>
+            <div className="text-lg font-semibold tracking-wide text-[color:var(--sec-accent)]">{isMe ? "Profile" : "Player"}</div>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--sec-muted)]">{isMe ? "Account" : "Profile"}</div>
           </div>
           <div className="w-[60px]" />
         </header>
 
         {/* Profile content */}
         <div className="mt-4 flex flex-col items-center">
-          <Avatar className="h-24 w-24 border border-emerald-200/70 shadow-lg">
+          <Avatar className="h-24 w-24 border border-[color:var(--sec-line)] shadow-lg">
             <AvatarImage src={avatarUrl} />
             <AvatarFallback className="text-lg">{initials}</AvatarFallback>
           </Avatar>
 
           {/* NAME: self -> editable, public -> static */}
           {!isMe ? (
-            <div className="mt-4 text-base font-semibold text-[#f5e6b0] max-w-[280px] truncate text-center">{titleName}</div>
+            <div className="mt-4 text-base font-semibold text-[color:var(--sec-accent)] max-w-[280px] truncate text-center">{titleName}</div>
           ) : !editingName ? (
             <div className="mt-4 flex items-center justify-center gap-2 max-w-[280px]">
-              <div className="text-base font-semibold text-[#f5e6b0] truncate text-center">{profile?.name || titleName}</div>
+              <div className="text-base font-semibold text-[color:var(--sec-accent)] truncate text-center">{profile?.name || titleName}</div>
               <button
                 type="button"
-                className="text-emerald-300 hover:text-emerald-200 text-sm"
+                className="text-[color:var(--sec-good)] hover:text-[color:var(--sec-text-2)] text-sm"
                 onClick={() => setEditingName(true)}
                 title="Edit display name"
                 aria-label="Edit display name"
@@ -1092,21 +1113,21 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
             </div>
           ) : (
             <div className="mt-3 w-full max-w-sm">
-              <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-3">
-                <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">Display name</div>
+              <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_80%,transparent)] p-3">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--sec-muted)]">Display name</div>
                 <input
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   placeholder="Set your display name"
                   maxLength={30}
                   autoFocus
-                  className="mt-2 w-full rounded-xl border border-emerald-900/70 bg-[#08341b] px-3 py-2 text-sm outline-none placeholder:text-emerald-200/40"
+                  className="mt-2 w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-3 py-2 text-sm outline-none placeholder:text-[color:var(--sec-muted)]"
                 />
                 <div className="mt-2 flex justify-end gap-2">
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="h-8 px-3 text-emerald-100 hover:bg-emerald-900/30"
+                    className="h-8 px-3 text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
                     onClick={() => {
                       setDisplayName(profile?.name || "");
                       setEditingName(false);
@@ -1122,7 +1143,7 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
                       setEditingName(false);
                     }}
                     disabled={savingName || !displayName.trim()}
-                    className="h-8 rounded-xl bg-emerald-700/80 hover:bg-emerald-700"
+                    className="h-8 rounded-xl bg-[color:var(--sec-primary)] hover:bg-[color:var(--sec-primary-hover)]"
                   >
                     {savingName ? "Saving…" : "Save"}
                   </Button>
@@ -1134,7 +1155,7 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
           {/* Gender toggle (self only) */}
           {isMe && (
             <div className="mt-3 flex items-center gap-2">
-              <span className="text-[10px] uppercase tracking-wider text-emerald-200/50">Gender</span>
+              <span className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Gender</span>
               {(["male", "female"] as const).map((g) => (
                 <button
                   key={g}
@@ -1143,8 +1164,8 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
                   onClick={() => { if (gender !== g) saveGender(g); }}
                   className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                     gender === g
-                      ? "bg-emerald-700 text-white"
-                      : "border border-emerald-900/60 text-emerald-200/60 hover:border-emerald-700/60"
+                      ? "bg-[color:var(--sec-primary)] text-white"
+                      : "border border-[color:var(--sec-hair)] text-[color:var(--sec-muted)] hover:border-[color:var(--sec-line)]"
                   }`}
                 >
                   {g === "male" ? "Male" : "Female"}
@@ -1161,7 +1182,7 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
               className={
                 isFollowing
                   ? "mt-4 rounded-xl border border-red-900 text-red-200 bg-transparent hover:bg-red-950/60"
-                  : "mt-4 rounded-xl bg-emerald-700/80 hover:bg-emerald-700"
+                  : "mt-4 rounded-xl bg-[color:var(--sec-primary)] hover:bg-[color:var(--sec-primary-hover)]"
               }
               variant={isFollowing ? "outline" : "default"}
             >
@@ -1171,12 +1192,12 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
 
           {/* Manage panel: unclaimed profile (public view) */}
           {!isMe && manageInfo && !manageInfo.claimed && (
-            <div className="mt-4 w-full rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4 space-y-3">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">
+            <div className="mt-4 w-full rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_80%,transparent)] p-4 space-y-3">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--sec-muted)]">
                 Hasn’t joined yet
               </div>
               {manageInfo.created_by_name && (
-                <div className="text-xs text-emerald-100/60">
+                <div className="text-xs text-[color:var(--sec-muted)]">
                   Added by {manageInfo.created_by_name}
                 </div>
               )}
@@ -1187,7 +1208,7 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
                     "rounded-xl border p-2 text-xs",
                     manageMsg.isError
                       ? "border-red-900/40 bg-red-950/20 text-red-200"
-                      : "border-emerald-900/70 bg-[#0b3b21]/70 text-emerald-100/90",
+                      : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] text-[color:var(--sec-muted)]",
                   ].join(" ")}
                 >
                   {manageMsg.text}
@@ -1203,13 +1224,13 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
                     placeholder="Email address"
                     type="email"
                     autoComplete="off"
-                    className="w-full rounded-xl border border-emerald-900/70 bg-[#08341b] px-3 py-2 text-sm outline-none placeholder:text-emerald-200/40"
+                    className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-3 py-2 text-sm outline-none placeholder:text-[color:var(--sec-muted)]"
                   />
                   <div className="flex justify-end gap-2">
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-8 px-3 text-emerald-100 hover:bg-emerald-900/30"
+                      className="h-8 px-3 text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
                       onClick={() => setEditingEmail(false)}
                     >
                       Cancel
@@ -1218,7 +1239,7 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
                       size="sm"
                       disabled={manageWorking || !emailDraft.trim()}
                       onClick={saveProfileEmail}
-                      className="h-8 rounded-xl bg-emerald-700/80 hover:bg-emerald-700"
+                      className="h-8 rounded-xl bg-[color:var(--sec-primary)] hover:bg-[color:var(--sec-primary-hover)]"
                     >
                       {manageWorking ? "Saving…" : "Save email"}
                     </Button>
@@ -1227,8 +1248,8 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
               ) : (
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0">
-                    <div className="text-[11px] uppercase tracking-wide text-emerald-200/50">Email</div>
-                    <div className="text-sm text-emerald-50 truncate">
+                    <div className="text-[11px] uppercase tracking-wide text-[color:var(--sec-muted)]">Email</div>
+                    <div className="text-sm text-[color:var(--sec-text)] truncate">
                       {manageInfo.email || "No email set"}
                     </div>
                   </div>
@@ -1236,7 +1257,7 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
                     <Button
                       size="sm"
                       variant="outline"
-                      className="h-8 rounded-xl border-emerald-900/70 bg-transparent text-emerald-100 hover:bg-emerald-900/30"
+                      className="h-8 rounded-xl border-[color:var(--sec-hair)] bg-transparent text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
                       onClick={() => {
                         setEmailDraft(manageInfo.email || "");
                         setManageMsg(null);
@@ -1255,7 +1276,7 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
                   type="button"
                   disabled={manageWorking}
                   onClick={sendProfileInvite}
-                  className="w-full h-10 rounded-xl bg-emerald-700/80 hover:bg-emerald-700 disabled:opacity-50"
+                  className="w-full h-10 rounded-xl bg-[color:var(--sec-primary)] hover:bg-[color:var(--sec-primary-hover)] disabled:opacity-50"
                 >
                   {manageWorking
                     ? "Sending…"
@@ -1271,52 +1292,57 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
           {isMe && (
             <>
               <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFileChange} />
-              <Button onClick={onPickFile} disabled={uploading} className="mt-4 rounded-xl bg-emerald-700/80 hover:bg-emerald-700">
+              <Button onClick={onPickFile} disabled={uploading} className="mt-4 rounded-xl bg-[color:var(--sec-primary)] hover:bg-[color:var(--sec-primary-hover)]">
                 {uploading ? "Uploading…" : "Change profile picture"}
               </Button>
+              {avatarError ? (
+                <div className="mt-2 max-w-xs text-center text-[length:var(--t-sec)] font-normal text-[color:var(--sec-bad)]">
+                  {avatarError}
+                </div>
+              ) : null}
             </>
           )}
 
           {/* CLICKABLE COUNTERS */}
-          <div className="mt-6 w-full rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4">
-            <div className="grid grid-cols-2 divide-x divide-emerald-900/70 text-center">
-              <button type="button" className="px-2 hover:bg-emerald-900/30 rounded-xl py-2" onClick={() => openList("followers")}>
-                <div className="text-lg font-semibold text-emerald-50">{followersCount}</div>
-                <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">Followers</div>
+          <div className="mt-6 w-full rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_80%,transparent)] p-4">
+            <div className="grid grid-cols-2 divide-x divide-[color:var(--sec-hair)] text-center">
+              <button type="button" className="px-2 hover:bg-[color:var(--sec-surface-2)] rounded-xl py-2" onClick={() => openList("followers")}>
+                <div className="text-lg font-semibold text-[color:var(--sec-text)]">{followersCount}</div>
+                <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--sec-muted)]">Followers</div>
               </button>
 
-              <button type="button" className="px-2 hover:bg-emerald-900/30 rounded-xl py-2" onClick={() => openList("following")}>
-                <div className="text-lg font-semibold text-emerald-50">{followingCount}</div>
-                <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">Following</div>
+              <button type="button" className="px-2 hover:bg-[color:var(--sec-surface-2)] rounded-xl py-2" onClick={() => openList("following")}>
+                <div className="text-lg font-semibold text-[color:var(--sec-text)]">{followingCount}</div>
+                <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--sec-muted)]">Following</div>
               </button>
             </div>
           </div>
 
-          <div className="mt-4 w-full rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4 text-center">
-            <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">Handicap Index</div>
-            <div className="mt-1 text-2xl font-semibold text-emerald-50">{hiText}</div>
-            {hiSub && <div className="mt-1 text-xs text-emerald-100/60">{hiSub}</div>}
+          <div className="mt-4 w-full rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_80%,transparent)] p-4 text-center">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--sec-muted)]">Handicap Index</div>
+            <div className="mt-1 text-2xl font-semibold text-[color:var(--sec-text)]">{hiText}</div>
+            {hiSub && <div className="mt-1 text-xs text-[color:var(--sec-muted)]">{hiSub}</div>}
           </div>
         </div>
 
         {/* Tabbed content: Feed / Acceptable / Non-Acceptable */}
         <Tabs defaultValue="feed" className="mt-4">
-          <TabsList className="w-full bg-emerald-900/30 border border-emerald-900/70 rounded-xl p-1">
+          <TabsList className="w-full bg-[color:var(--sec-surface)] border border-[color:var(--sec-hair)] rounded-xl p-1">
             <TabsTrigger
               value="feed"
-              className="flex-1 text-[11px] font-semibold rounded-lg data-[state=active]:bg-[#f5e6b0] data-[state=active]:text-[#042713] text-emerald-100/80 data-[state=active]:shadow-none border-none"
+              className="flex-1 text-[11px] font-semibold rounded-lg data-[state=active]:bg-[color:var(--sec-accent)] data-[state=active]:text-[color:var(--ciaga-ground)] text-[color:var(--sec-muted)] data-[state=active]:shadow-none border-none"
             >
               Feed
             </TabsTrigger>
             <TabsTrigger
               value="acceptable"
-              className="flex-1 text-[11px] font-semibold rounded-lg data-[state=active]:bg-[#f5e6b0] data-[state=active]:text-[#042713] text-emerald-100/80 data-[state=active]:shadow-none border-none"
+              className="flex-1 text-[11px] font-semibold rounded-lg data-[state=active]:bg-[color:var(--sec-accent)] data-[state=active]:text-[color:var(--ciaga-ground)] text-[color:var(--sec-muted)] data-[state=active]:shadow-none border-none"
             >
               Acceptable
             </TabsTrigger>
             <TabsTrigger
               value="non-acceptable"
-              className="flex-1 text-[11px] font-semibold rounded-lg data-[state=active]:bg-[#f5e6b0] data-[state=active]:text-[#042713] text-emerald-100/80 data-[state=active]:shadow-none border-none"
+              className="flex-1 text-[11px] font-semibold rounded-lg data-[state=active]:bg-[color:var(--sec-accent)] data-[state=active]:text-[color:var(--ciaga-ground)] text-[color:var(--sec-muted)] data-[state=active]:shadow-none border-none"
             >
               Non-Acceptable
             </TabsTrigger>
@@ -1362,11 +1388,11 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
       {/* FOLLOWERS / FOLLOWING LIST MODAL */}
       {listOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 px-4 py-6">
-          <div className="mx-auto w-full max-w-sm h-[85vh] rounded-2xl border border-emerald-900/70 bg-[#0b3b21] shadow-xl overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-emerald-900/70">
+          <div className="mx-auto w-full max-w-sm h-[85vh] rounded-2xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] shadow-xl overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[color:var(--sec-hair)]">
               <div>
-                <div className="text-sm font-semibold text-[#f5e6b0]">{listMode === "followers" ? "Followers" : "Following"}</div>
-                <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">
+                <div className="text-sm font-semibold text-[color:var(--sec-accent)]">{listMode === "followers" ? "Followers" : "Following"}</div>
+                <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--sec-muted)]">
                   {listMode === "followers"
                     ? isMe
                       ? "People following you"
@@ -1382,7 +1408,7 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
                 {isMe && listMode === "following" && (
                   <Button
                     size="sm"
-                    className="h-8 px-2 rounded-xl bg-emerald-700/80 hover:bg-emerald-700"
+                    className="h-8 px-2 rounded-xl bg-[color:var(--sec-primary)] hover:bg-[color:var(--sec-primary-hover)]"
                     onClick={() => {
                       setSearch("");
                       setSearchResults([]);
@@ -1394,7 +1420,7 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
                   </Button>
                 )}
 
-                <Button variant="ghost" size="sm" className="h-8 px-2 text-emerald-100 hover:bg-emerald-900/30" onClick={closeList}>
+                <Button variant="ghost" size="sm" className="h-8 px-2 text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]" onClick={closeList}>
                   Close
                 </Button>
               </div>
@@ -1402,10 +1428,10 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
 
             {/* Invite friends to join (self + following view) */}
             {isMe && listMode === "following" && (
-              <div className="px-4 py-3 border-b border-emerald-900/70">
+              <div className="px-4 py-3 border-b border-[color:var(--sec-hair)]">
                 <Button
                   type="button"
-                  className="w-full h-11 rounded-xl bg-emerald-700/80 hover:bg-emerald-700"
+                  className="w-full h-11 rounded-xl bg-[color:var(--sec-primary)] hover:bg-[color:var(--sec-primary-hover)]"
                   onClick={() => {
                     setInviteName("");
                     setInviteEmail("");
@@ -1420,11 +1446,11 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
 
             <div className="flex-1 overflow-y-auto">
               {listLoading ? (
-                <div className="p-4 text-sm text-emerald-100/70">Loading…</div>
+                <div className="p-4 text-sm text-[color:var(--sec-muted)]">Loading…</div>
               ) : listRows.length === 0 ? (
-                <div className="p-4 text-sm text-emerald-100/70">No users yet.</div>
+                <div className="p-4 text-sm text-[color:var(--sec-muted)]">No users yet.</div>
               ) : (
-                <div className="divide-y divide-emerald-900/70">
+                <div className="divide-y divide-[color:var(--sec-hair)]">
                   {listRows.map((p) => {
                     const nm = p.name || p.email || "Player";
                     const targetPid = p.id;
@@ -1434,21 +1460,21 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
                     const canAct = !!myProfileId && myProfileId !== targetPid;
 
                     return (
-                      <div key={p.id} className="flex items-center gap-3 p-4 hover:bg-emerald-900/20">
+                      <div key={p.id} className="flex items-center gap-3 p-4 hover:bg-[color:var(--sec-surface-2)]">
                         {/* LEFT: clickable area only (prevents row stealing button taps on mobile) */}
                         <button
                           type="button"
                           className="flex flex-1 items-center gap-3 min-w-0 text-left touch-manipulation"
                           onClick={() => router.push(`/player/${p.id}`)}
                         >
-                          <Avatar className="h-10 w-10 border border-emerald-200/70 shrink-0">
+                          <Avatar className="h-10 w-10 border border-[color:var(--sec-line)] shrink-0">
                             <AvatarImage src={p.avatar_url || ""} />
                             <AvatarFallback>{initialsFor(p)}</AvatarFallback>
                           </Avatar>
 
                           <div className="min-w-0 flex-1">
-                            <div className="text-sm font-semibold text-emerald-50 truncate">{nm}</div>
-                            <div className="text-xs text-emerald-100/60 truncate">{p.email}</div>
+                            <div className="text-sm font-semibold text-[color:var(--sec-text)] truncate">{nm}</div>
+                            <div className="text-xs text-[color:var(--sec-muted)] truncate">{p.email}</div>
                           </div>
                         </button>
 
@@ -1473,7 +1499,7 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
                               <Button
                                 type="button"
                                 disabled={busyRow}
-                                className="h-11 min-w-[108px] rounded-xl bg-emerald-700/80 px-4 hover:bg-emerald-700"
+                                className="h-11 min-w-[108px] rounded-xl bg-[color:var(--sec-primary)] px-4 hover:bg-[color:var(--sec-primary-hover)]"
                                 onClick={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
@@ -1484,7 +1510,7 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
                               </Button>
                             )
                           ) : (
-                            <div className="text-[11px] text-emerald-100/60">{following ? "Following" : ""}</div>
+                            <div className="text-[11px] text-[color:var(--sec-muted)]">{following ? "Following" : ""}</div>
                           )}
                         </div>
                       </div>
@@ -1501,18 +1527,18 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
           {/* INVITE A FRIEND MODAL (self-only) */}
           {isMe && inviteOpen && (
             <div className="fixed inset-0 z-[60] bg-black/70 px-4 py-6">
-              <div className="mx-auto w-full max-w-sm rounded-2xl border border-emerald-900/70 bg-[#0b3b21] shadow-xl overflow-hidden flex flex-col">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-emerald-900/70">
+              <div className="mx-auto w-full max-w-sm rounded-2xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] shadow-xl overflow-hidden flex flex-col">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-[color:var(--sec-hair)]">
                   <div>
-                    <div className="text-sm font-semibold text-[#f5e6b0]">Invite a friend</div>
-                    <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">
+                    <div className="text-sm font-semibold text-[color:var(--sec-accent)]">Invite a friend</div>
+                    <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--sec-muted)]">
                       They’ll join and follow you
                     </div>
                   </div>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-8 px-2 text-emerald-100 hover:bg-emerald-900/30"
+                    className="h-8 px-2 text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
                     onClick={() => setInviteOpen(false)}
                   >
                     Close
@@ -1526,7 +1552,7 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
                         "rounded-xl border p-3 text-sm",
                         inviteMsg.isError
                           ? "border-red-900/40 bg-red-950/20 text-red-200"
-                          : "border-emerald-900/70 bg-[#0b3b21]/70 text-emerald-100/90",
+                          : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] text-[color:var(--sec-muted)]",
                       ].join(" ")}
                     >
                       {inviteMsg.text}
@@ -1538,7 +1564,7 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
                     onChange={(e) => setInviteName(e.target.value)}
                     placeholder="Friend’s name"
                     maxLength={30}
-                    className="w-full rounded-xl border border-emerald-900/70 bg-[#08341b] px-3 py-2 text-base outline-none placeholder:text-emerald-200/40"
+                    className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-3 py-2 text-base outline-none placeholder:text-[color:var(--sec-muted)]"
                   />
                   <input
                     value={inviteEmail}
@@ -1546,19 +1572,19 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
                     placeholder="Friend’s email"
                     type="email"
                     autoComplete="off"
-                    className="w-full rounded-xl border border-emerald-900/70 bg-[#08341b] px-3 py-2 text-base outline-none placeholder:text-emerald-200/40"
+                    className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-3 py-2 text-base outline-none placeholder:text-[color:var(--sec-muted)]"
                   />
 
                   <Button
                     type="button"
                     disabled={inviteWorking}
                     onClick={sendFriendInvite}
-                    className="w-full h-11 rounded-xl bg-emerald-700/80 hover:bg-emerald-700 disabled:opacity-50"
+                    className="w-full h-11 rounded-xl bg-[color:var(--sec-primary)] hover:bg-[color:var(--sec-primary-hover)] disabled:opacity-50"
                   >
                     {inviteWorking ? "Sending…" : "Send invite"}
                   </Button>
 
-                  <div className="text-xs text-emerald-200/50">
+                  <div className="text-xs text-[color:var(--sec-muted)]">
                     We’ll create their profile and send an invite to set up their account. You’ll
                     automatically follow each other.
                   </div>
@@ -1570,27 +1596,27 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
           {/* SEARCH MODAL (self-only) */}
           {isMe && searchOpen && (
             <div className="fixed inset-0 z-[60] bg-black/70 px-4 py-6">
-              <div className="mx-auto w-full max-w-sm h-[85vh] rounded-2xl border border-emerald-900/70 bg-[#0b3b21] shadow-xl overflow-hidden flex flex-col">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-emerald-900/70">
+              <div className="mx-auto w-full max-w-sm h-[85vh] rounded-2xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] shadow-xl overflow-hidden flex flex-col">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-[color:var(--sec-hair)]">
                   <div>
-                    <div className="text-sm font-semibold text-[#f5e6b0]">Find users</div>
-                    <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">Search & follow</div>
+                    <div className="text-sm font-semibold text-[color:var(--sec-accent)]">Find users</div>
+                    <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--sec-muted)]">Search & follow</div>
                   </div>
 
-                  <Button variant="ghost" size="sm" className="h-8 px-2 text-emerald-100 hover:bg-emerald-900/30" onClick={() => setSearchOpen(false)}>
+                  <Button variant="ghost" size="sm" className="h-8 px-2 text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]" onClick={() => setSearchOpen(false)}>
                     Close
                   </Button>
                 </div>
 
-                <div className="p-3 border-b border-emerald-900/70">
+                <div className="p-3 border-b border-[color:var(--sec-hair)]">
                   <div className="flex gap-2">
                     <input
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
                       placeholder="Search by name or email…"
-                      className="flex-1 rounded-xl border border-emerald-900/70 bg-[#08341b] px-3 py-2 text-sm outline-none placeholder:text-emerald-200/40"
+                      className="flex-1 rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-3 py-2 text-sm outline-none placeholder:text-[color:var(--sec-muted)]"
                     />
-                    <Button size="sm" className="rounded-xl bg-emerald-700/80 hover:bg-emerald-700" onClick={runSearch} disabled={searchLoading}>
+                    <Button size="sm" className="rounded-xl bg-[color:var(--sec-primary)] hover:bg-[color:var(--sec-primary-hover)]" onClick={runSearch} disabled={searchLoading}>
                       {searchLoading ? "…" : "Search"}
                     </Button>
                   </div>
@@ -1598,11 +1624,11 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
 
                 <div className="flex-1 overflow-y-auto">
                   {searchLoading ? (
-                    <div className="p-4 text-sm text-emerald-100/70">Searching…</div>
+                    <div className="p-4 text-sm text-[color:var(--sec-muted)]">Searching…</div>
                   ) : searchResults.length === 0 ? (
-                    <div className="p-4 text-sm text-emerald-100/70">Type a name/email and press Search.</div>
+                    <div className="p-4 text-sm text-[color:var(--sec-muted)]">Type a name/email and press Search.</div>
                   ) : (
-                    <div className="divide-y divide-emerald-900/70">
+                    <div className="divide-y divide-[color:var(--sec-hair)]">
                       {searchResults.map((p) => {
                         const nm = p.name || p.email || "Player";
                         const targetPid = p.id;
@@ -1610,21 +1636,21 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
                         const busyRow = busyUserId === targetPid;
 
                         return (
-                          <div key={p.id} className="flex items-center gap-3 p-4 hover:bg-emerald-900/20">
+                          <div key={p.id} className="flex items-center gap-3 p-4 hover:bg-[color:var(--sec-surface-2)]">
                             {/* LEFT clickable */}
                             <button
                               type="button"
                               className="flex flex-1 items-center gap-3 min-w-0 text-left touch-manipulation"
                               onClick={() => router.push(`/player/${p.id}`)}
                             >
-                              <Avatar className="h-10 w-10 border border-emerald-200/70 shrink-0">
+                              <Avatar className="h-10 w-10 border border-[color:var(--sec-line)] shrink-0">
                                 <AvatarImage src={p.avatar_url || ""} />
                                 <AvatarFallback>{initialsFor(p)}</AvatarFallback>
                               </Avatar>
 
                               <div className="min-w-0 flex-1">
-                                <div className="text-sm font-semibold text-emerald-50 truncate">{nm}</div>
-                                <div className="text-xs text-emerald-100/60 truncate">{p.email}</div>
+                                <div className="text-sm font-semibold text-[color:var(--sec-text)] truncate">{nm}</div>
+                                <div className="text-xs text-[color:var(--sec-muted)] truncate">{p.email}</div>
                               </div>
                             </button>
 
@@ -1648,7 +1674,7 @@ export default function ProfileScreen({ mode, profileId, initialProfile }: Props
                                 <Button
                                   type="button"
                                   disabled={busyRow}
-                                  className="h-11 min-w-[108px] rounded-xl bg-emerald-700/80 px-4 hover:bg-emerald-700"
+                                  className="h-11 min-w-[108px] rounded-xl bg-[color:var(--sec-primary)] px-4 hover:bg-[color:var(--sec-primary-hover)]"
                                   onClick={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();

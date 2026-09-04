@@ -37,16 +37,7 @@ import {
   type NotificationActor,
   type UserNotification,
 } from "@/lib/notifications/render";
-import { NOTIFICATION_CATEGORIES } from "@/lib/notifications/preferences";
-import { useNotificationPreferences } from "@/lib/notifications/useNotificationPreferences";
-import {
-  getPushDeliveryState,
-  isIOS,
-  isStandalone,
-  notificationPermission,
-  registerPush,
-  unregisterPush,
-} from "@/lib/push/clientPush";
+import { NotificationSettings } from "@/components/notifications/NotificationSettings";
 
 type Props = {
   open: boolean;
@@ -122,8 +113,8 @@ function NotificationCard({
     <div
       className={`rounded-2xl border px-3 py-3 transition-colors ${
         n.read
-          ? "border-emerald-900/50 bg-emerald-950/30"
-          : "border-emerald-500/40 bg-emerald-900/30"
+          ? "border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)]"
+          : "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)]"
       }`}
     >
       <div className="flex items-start gap-3">
@@ -132,7 +123,7 @@ function NotificationCard({
         )}
         <div
           className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ${
-            n.read ? "bg-emerald-900/50 text-emerald-200/70" : "bg-emerald-400/20 text-emerald-200"
+            n.read ? "bg-[color:var(--sec-surface)] text-[color:var(--sec-muted)]" : "bg-emerald-400/20 text-[color:var(--sec-text-2)]"
           }`}
         >
           <Icon size={18} />
@@ -144,19 +135,19 @@ function NotificationCard({
           className="min-w-0 flex-1 text-left"
         >
           <div className="flex items-center justify-between gap-2">
-            <div className="truncate text-sm font-extrabold text-emerald-50">{rendered.title}</div>
-            <div className="shrink-0 text-[10px] font-semibold text-emerald-200/50">
+            <div className="truncate text-sm font-extrabold text-[color:var(--sec-text)]">{rendered.title}</div>
+            <div className="shrink-0 text-[10px] font-semibold text-[color:var(--sec-muted)]">
               {relativeTime(n.updated_at ?? n.created_at)}
             </div>
           </div>
-          <div className="mt-0.5 text-xs font-medium text-emerald-100/80">{rendered.body}</div>
+          <div className="mt-0.5 text-xs font-medium text-[color:var(--sec-muted)]">{rendered.body}</div>
         </button>
 
         {groupable && (
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
-            className="shrink-0 rounded-full p-1 text-emerald-200/60 hover:bg-emerald-900/40 hover:text-emerald-100"
+            className="shrink-0 rounded-full p-1 text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)] hover:text-[color:var(--sec-text)]"
             aria-label={expanded ? "Collapse" : "Expand"}
           >
             <ChevronDown
@@ -168,10 +159,10 @@ function NotificationCard({
       </div>
 
       {groupable && expanded && (
-        <div className="mt-2 space-y-1 border-t border-emerald-900/50 pl-12 pt-2">
+        <div className="mt-2 space-y-1 border-t border-[color:var(--sec-hair)] pl-12 pt-2">
           {actors.map((a) => (
-            <div key={a.profile_id} className="flex items-center gap-2 text-xs text-emerald-100/80">
-              <Users size={12} className="text-emerald-300/60" />
+            <div key={a.profile_id} className="flex items-center gap-2 text-xs text-[color:var(--sec-muted)]">
+              <Users size={12} className="text-[color:var(--sec-muted)]" />
               <span className="font-semibold">{a.name}</span>
               {a.course_record && (
                 <span className="text-amber-300">
@@ -183,7 +174,7 @@ function NotificationCard({
           {/* Payloads cap stored actors, so a busy group holds more people than
               it lists. Say so rather than silently showing a partial list. */}
           {hiddenActorCount > 0 && (
-            <div className="pl-5 text-xs italic text-emerald-100/50">
+            <div className="pl-5 text-xs italic text-[color:var(--sec-muted)]">
               and {hiddenActorCount} more
             </div>
           )}
@@ -194,196 +185,6 @@ function NotificationCard({
 }
 
 /** Small pill switch — on = notifications delivered, off = muted. */
-function Toggle({
-  on,
-  disabled,
-  onChange,
-  label,
-}: {
-  on: boolean;
-  disabled?: boolean;
-  onChange: () => void;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      aria-label={label}
-      disabled={disabled}
-      onClick={onChange}
-      className={`relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-40 ${
-        on ? "bg-emerald-400" : "bg-emerald-900/70"
-      }`}
-    >
-      {/* left-0 is required: without an explicit inset the knob is positioned
-          from its STATIC position, and a button's default text-align:center
-          (which Tailwind preflight does not reset) pushed it off-centre. */}
-      <span
-        className={`absolute left-0 top-0.5 h-5 w-5 rounded-full bg-[#071c10] transition-transform ${
-          on ? "translate-x-[22px]" : "translate-x-0.5"
-        }`}
-      />
-    </button>
-  );
-}
-
-/**
- * Per-category push settings. Muting silences the device only — the
- * notification still lands in the list above and still counts as unread.
- */
-function NotificationSettings({ profileId }: { profileId: string | null }) {
-  const { muted, loading, toggle } = useNotificationPreferences(profileId);
-
-  // Permission is device-local, but it is NOT proof of delivery: it stays
-  // "granted" after the server prunes a dead subscription. Delivery state is
-  // checked separately so the toggle can't claim push works when it doesn't.
-  const [permission, setPermission] = useState<NotificationPermission | "unsupported">(
-    "default"
-  );
-  const [delivery, setDelivery] = useState<"delivering" | "not_registered" | "unknown">(
-    "unknown"
-  );
-  const [needsInstall, setNeedsInstall] = useState(false);
-  const [working, setWorking] = useState(false);
-  const [stepLabel, setStepLabel] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const perm = notificationPermission();
-    setPermission(perm);
-    setNeedsInstall(isIOS() && !isStandalone());
-    if (perm !== "granted") return;
-    let cancelled = false;
-    void getPushDeliveryState().then((s) => {
-      if (!cancelled) setDelivery(s);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const pushOn = permission === "granted";
-  // Permission granted but the server can't reach this device — the case that
-  // silently swallowed pushes while the pane insisted they were on.
-  const needsRepair = pushOn && delivery === "not_registered";
-
-  async function togglePush() {
-    setError(null);
-    setWorking(true);
-    if (pushOn && !needsRepair) {
-      await unregisterPush();
-      // Permission itself can only be revoked in browser settings; dropping the
-      // subscription is what actually stops delivery.
-      setPermission(notificationPermission());
-      setDelivery("not_registered");
-      setWorking(false);
-      return;
-    }
-    const r = await registerPush({ onStep: setStepLabel });
-    setWorking(false);
-    setStepLabel(null);
-    if (r.status === "subscribed") {
-      setPermission("granted");
-      setDelivery("delivering");
-    } else if (r.status === "denied") setPermission("denied");
-    else if (r.status === "needs_install") setNeedsInstall(true);
-    else if (r.status === "misconfigured") {
-      setError(
-        "Push isn’t set up on this deployment (the server is missing its VAPID key). This needs fixing in the app’s environment settings — it isn’t something you can turn on here."
-      );
-      setDelivery("not_registered");
-    } else if (r.status === "error") setError(r.error || "Couldn’t enable notifications.");
-    else if (r.status === "unsupported") setPermission("unsupported");
-  }
-
-  return (
-    <div className="flex-1 space-y-2 overflow-y-auto overscroll-contain">
-      {/* Master push control */}
-      <div className="rounded-2xl border border-emerald-900/50 bg-emerald-950/40 px-3 py-3">
-        {needsInstall ? (
-          <div className="flex items-start gap-3">
-            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-amber-400/20 text-amber-200">
-              <Smartphone size={18} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-extrabold text-amber-100">Add CIAGA to your Home Screen</div>
-              <div className="mt-0.5 text-xs font-medium text-amber-100/70">
-                On iPhone, push needs the app installed. Tap <b>Share</b> → <b>Add to Home
-                Screen</b>, then open CIAGA from there.
-              </div>
-            </div>
-          </div>
-        ) : permission === "unsupported" ? (
-          <div className="text-xs font-medium text-emerald-100/60">
-            This browser doesn’t support push notifications.
-          </div>
-        ) : permission === "denied" ? (
-          <div className="text-xs font-medium text-emerald-100/70">
-            Notifications are blocked for this site. Enable them for CIAGA in your browser’s
-            site settings, then reopen the app.
-          </div>
-        ) : (
-          <div className="flex items-center gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-extrabold text-emerald-50">Push notifications</div>
-              <div
-                className={`mt-0.5 text-xs font-medium ${needsRepair && !working ? "text-amber-200/80" : "text-emerald-100/60"}`}
-              >
-                {working
-                  ? stepLabel ?? "Working…"
-                  : needsRepair
-                    ? "Not registered on this device — turn on to start receiving alerts again"
-                    : pushOn
-                      ? "Alerts are delivered to this device"
-                      : "Turn on to get alerts on this device"}
-              </div>
-            </div>
-            <Toggle
-              on={pushOn && !needsRepair}
-              disabled={working}
-              onChange={() => void togglePush()}
-              label="Push notifications"
-            />
-          </div>
-        )}
-        {error && (
-          <div className="mt-2 text-xs font-medium text-red-300/80">{error}</div>
-        )}
-      </div>
-
-      {/* Per-category toggles */}
-      {NOTIFICATION_CATEGORIES.map((c) => {
-        const on = !muted.has(c.key);
-        return (
-          <div
-            key={c.key}
-            className="flex items-center gap-3 rounded-2xl border border-emerald-900/50 bg-emerald-950/30 px-3 py-3"
-          >
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-extrabold text-emerald-50">{c.label}</div>
-              <div className="mt-0.5 text-xs font-medium text-emerald-100/60">
-                {c.description}
-              </div>
-            </div>
-            <Toggle
-              on={on}
-              disabled={loading || !profileId}
-              onChange={() => void toggle(c.key)}
-              label={c.label}
-            />
-          </div>
-        );
-      })}
-
-      <div className="px-1 pb-2 pt-1 text-[11px] font-medium leading-relaxed text-emerald-200/40">
-        Muted alerts still appear here in your notifications — you just won’t get a push.
-      </div>
-    </div>
-  );
-}
-
 export default function NotificationCenter({
   open,
   onClose,
@@ -435,14 +236,14 @@ export default function NotificationCenter({
         >
           <div className="absolute inset-0 bg-black/60" />
           <motion.div
-            className="relative flex max-h-[82vh] w-full flex-col rounded-t-3xl border-t border-emerald-900/60 bg-[#071c10] px-4 pb-8 pt-4"
+            className="relative flex max-h-[82vh] w-full flex-col rounded-t-3xl border-t border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] px-4 pb-8 pt-4"
             initial={{ y: "100%" }}
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
             transition={{ type: "spring", damping: 30, stiffness: 320 }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-emerald-800/60" />
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-[color:var(--sec-surface-2)]" />
 
             <div className="mb-3 flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2">
@@ -450,13 +251,13 @@ export default function NotificationCenter({
                   <button
                     type="button"
                     onClick={() => setPane("list")}
-                    className="-ml-1 shrink-0 rounded-full p-1 text-emerald-200/70 hover:bg-emerald-900/40 hover:text-emerald-100"
+                    className="-ml-1 shrink-0 rounded-full p-1 text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)] hover:text-[color:var(--sec-text)]"
                     aria-label="Back to notifications"
                   >
                     <ChevronLeft size={18} />
                   </button>
                 )}
-                <div className="truncate text-base font-extrabold text-[#f5e6b0]">
+                <div className="truncate text-base font-extrabold text-[color:var(--sec-accent)]">
                   {pane === "settings" ? "Notification settings" : "Notifications"}
                 </div>
               </div>
@@ -466,7 +267,7 @@ export default function NotificationCenter({
                   <button
                     type="button"
                     onClick={() => void markAllRead()}
-                    className="text-[11px] font-semibold text-emerald-300/80 hover:text-emerald-200"
+                    className="text-[11px] font-semibold text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text-2)]"
                   >
                     Mark all read
                   </button>
@@ -475,7 +276,7 @@ export default function NotificationCenter({
                   <button
                     type="button"
                     onClick={() => setPane("settings")}
-                    className="rounded-full p-1.5 text-emerald-200/70 hover:bg-emerald-900/40 hover:text-emerald-100"
+                    className="rounded-full p-1.5 text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)] hover:text-[color:var(--sec-text)]"
                     aria-label="Notification settings"
                     title="Notification settings"
                   >
@@ -490,12 +291,12 @@ export default function NotificationCenter({
             ) : (
               <>
                 {/* All / Unread toggle */}
-                <div className="mb-3 inline-flex gap-1 rounded-full bg-emerald-950/50 p-1 text-xs font-semibold">
+                <div className="mb-3 inline-flex gap-1 rounded-full bg-[color:var(--sec-surface)] p-1 text-xs font-semibold">
                   <button
                     type="button"
                     onClick={() => setTab("all")}
                     className={`rounded-full px-3 py-1 ${
-                      tab === "all" ? "bg-emerald-400 text-emerald-950" : "text-emerald-200/70"
+                      tab === "all" ? "bg-emerald-400 text-[color:var(--ciaga-ground)]" : "text-[color:var(--sec-muted)]"
                     }`}
                   >
                     All
@@ -504,7 +305,7 @@ export default function NotificationCenter({
                     type="button"
                     onClick={() => setTab("unread")}
                     className={`rounded-full px-3 py-1 ${
-                      tab === "unread" ? "bg-emerald-400 text-emerald-950" : "text-emerald-200/70"
+                      tab === "unread" ? "bg-emerald-400 text-[color:var(--ciaga-ground)]" : "text-[color:var(--sec-muted)]"
                     }`}
                   >
                     Unread{unreadCount > 0 ? ` (${unreadCount})` : ""}
@@ -534,11 +335,11 @@ export default function NotificationCenter({
                   )}
 
                   {loading && visible.length === 0 ? (
-                    <div className="py-10 text-center text-sm font-semibold text-emerald-100/60">
+                    <div className="py-10 text-center text-sm font-semibold text-[color:var(--sec-muted)]">
                       Loading…
                     </div>
                   ) : visible.length === 0 ? (
-                    <div className="py-10 text-center text-sm font-semibold text-emerald-100/60">
+                    <div className="py-10 text-center text-sm font-semibold text-[color:var(--sec-muted)]">
                       {tab === "unread" ? "No unread notifications" : "No notifications yet"}
                     </div>
                   ) : (

@@ -31,10 +31,10 @@ type SettledStatus = "won" | "lost" | "void" | "cashed_out";
 type AnyStatus = "open" | SettledStatus;
 
 const STATUS_STYLES: Record<AnyStatus, { label: string; cls: string }> = {
-  open: { label: "Open", cls: "text-emerald-300 border-emerald-700/50" },
-  won: { label: "Won", cls: "text-[#f5e6b0] border-[#f5e6b0]/40" },
-  lost: { label: "Lost", cls: "text-red-300/80 border-red-900/50" },
-  void: { label: "Void", cls: "text-emerald-200/50 border-emerald-900/50" },
+  open: { label: "Open", cls: "text-[color:var(--sec-good)] border-[color:var(--sec-line)]" },
+  won: { label: "Won", cls: "text-[color:var(--sec-accent)] border-[color:color-mix(in_srgb,var(--sec-accent)_40%,transparent)]" },
+  lost: { label: "Lost", cls: "text-[color:var(--sec-bad)] border-red-900/50" },
+  void: { label: "Void", cls: "text-[color:var(--sec-muted)] border-[color:var(--sec-hair)]" },
   cashed_out: { label: "Cashed out", cls: "text-amber-300/80 border-amber-800/40" },
 };
 
@@ -88,7 +88,7 @@ type SeasonPick = {
 };
 
 const LEG_DOT: Record<ParlayLeg["status"], string> = {
-  open: "bg-emerald-200/30",
+  open: "bg-[color:var(--sec-surface-2)]",
   won: "bg-emerald-400",
   lost: "bg-red-400",
   void: "bg-amber-300/60",
@@ -299,7 +299,7 @@ export default function MyPicksClient() {
   const renderSingle = (p: Pick) => (
     <div
       key={`pick-${p.id}`}
-      className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/70 px-3 py-2.5"
+      className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] px-3 py-2.5"
     >
       <button
         type="button"
@@ -307,19 +307,19 @@ export default function MyPicksClient() {
         className="w-full text-left"
       >
         <div className="flex items-center justify-between mb-0.5">
-          <div className="text-[13px] font-semibold text-emerald-50 truncate pr-2">
+          <div className="text-[13px] font-semibold text-[color:var(--sec-text)] truncate pr-2">
             {p.selection_label}
           </div>
           <StatusBadge status={p.status} />
         </div>
-        <div className="text-[10px] text-emerald-200/50 truncate">
+        <div className="text-[10px] text-[color:var(--sec-muted)] truncate">
           {p.market_label} · {p.event_name}{p.group_name ? ` · ${p.group_name}` : ""}
         </div>
         <div className="flex items-center justify-between mt-1.5">
-          <span className="text-[11px] text-emerald-200/60">
+          <span className="text-[11px] text-[color:var(--sec-muted)]">
             {p.stake} pts @ <OddsValue odds={Number(p.decimal_odds)} />
           </span>
-          <span className="text-[11px] font-bold text-[#f5e6b0]">
+          <span className="text-[11px] font-bold text-[color:var(--sec-accent)]">
             {outcomeLine(p.status, p.potential_return, p.cashout_value, p.stake)}
           </span>
         </div>
@@ -343,16 +343,16 @@ export default function MyPicksClient() {
   const renderAcca = (parlay: Parlay) => (
     <div
       key={`acca-${parlay.id}`}
-      className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/70 px-3 py-2.5"
+      className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] px-3 py-2.5"
     >
       <div className="flex items-center justify-between mb-0.5">
-        <div className="text-[13px] font-semibold text-emerald-50">
+        <div className="text-[13px] font-semibold text-[color:var(--sec-text)]">
           {parlay.legs.length}-leg {COMBO_BET.short}
         </div>
         <StatusBadge status={parlay.status} />
       </div>
       {parlay.group_name && (
-        <div className="text-[10px] text-emerald-200/50 truncate mb-1.5">{parlay.group_name}</div>
+        <div className="text-[10px] text-[color:var(--sec-muted)] truncate mb-1.5">{parlay.group_name}</div>
       )}
       <div className="space-y-1 mb-1.5">
         {parlay.legs.map((leg) => (
@@ -363,21 +363,21 @@ export default function MyPicksClient() {
             className="w-full flex items-center gap-2 text-left"
           >
             <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${LEG_DOT[leg.status]}`} />
-            <span className="min-w-0 flex-1 truncate text-[11px] text-emerald-100/85">
+            <span className="min-w-0 flex-1 truncate text-[11px] text-[color:var(--sec-muted)]">
               {leg.selection_label}
-              <span className="text-emerald-200/50"> · {leg.market_label}</span>
+              <span className="text-[color:var(--sec-muted)]"> · {leg.market_label}</span>
             </span>
-            <span className="shrink-0 text-[10px] text-emerald-200/60">
+            <span className="shrink-0 text-[10px] text-[color:var(--sec-muted)]">
               <OddsValue odds={leg.decimal_odds} />
             </span>
           </button>
         ))}
       </div>
       <div className="flex items-center justify-between">
-        <span className="text-[11px] text-emerald-200/60">
+        <span className="text-[11px] text-[color:var(--sec-muted)]">
           {parlay.stake} pts @ <OddsValue odds={parlay.combined_decimal_odds} />
         </span>
-        <span className="text-[11px] font-bold text-[#f5e6b0]">
+        <span className="text-[11px] font-bold text-[color:var(--sec-accent)]">
           {outcomeLine(parlay.status, parlay.potential_return, parlay.cashout_value, parlay.stake)}
         </span>
       </div>
@@ -400,7 +400,7 @@ export default function MyPicksClient() {
   const renderSeason = (s: SeasonPick) => (
     <div
       key={`season-${s.id}`}
-      className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/70 px-3 py-2.5"
+      className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] px-3 py-2.5"
     >
       <button
         type="button"
@@ -408,19 +408,19 @@ export default function MyPicksClient() {
         className="w-full text-left"
       >
         <div className="flex items-center justify-between mb-0.5">
-          <div className="text-[13px] font-semibold text-emerald-50 truncate pr-2">
+          <div className="text-[13px] font-semibold text-[color:var(--sec-text)] truncate pr-2">
             {s.selection_label}
           </div>
           <StatusBadge status={s.status} />
         </div>
-        <div className="text-[10px] text-emerald-200/50 truncate">
+        <div className="text-[10px] text-[color:var(--sec-muted)] truncate">
           {s.market_label} · {s.season_name}{s.group_name ? ` · ${s.group_name}` : ""}
         </div>
         <div className="flex items-center justify-between mt-1.5">
-          <span className="text-[11px] text-emerald-200/60">
+          <span className="text-[11px] text-[color:var(--sec-muted)]">
             {s.stake} pts @ <OddsValue odds={Number(s.decimal_odds)} />
           </span>
-          <span className="text-[11px] font-bold text-[#f5e6b0]">
+          <span className="text-[11px] font-bold text-[color:var(--sec-accent)]">
             {outcomeLine(s.status, s.potential_return, s.cashout_value, s.stake)}
           </span>
         </div>
@@ -447,11 +447,11 @@ export default function MyPicksClient() {
         <button
           type="button"
           onClick={() => router.push("/majors/fantasy")}
-          className="text-[11px] text-emerald-100/70 hover:text-emerald-50"
+          className="text-[11px] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
         >
           ← Fantasy
         </button>
-        <h1 className="text-lg font-bold tracking-wide text-[#f5e6b0]">My Picks</h1>
+        <h1 className="text-lg font-bold tracking-wide text-[color:var(--sec-accent)]">My Picks</h1>
         <div className="w-12" />
       </div>
 
@@ -462,7 +462,7 @@ export default function MyPicksClient() {
             type="button"
             onClick={() => setTab(t)}
             className={`flex-1 py-1.5 rounded-full text-xs font-semibold transition-colors ${
-              tab === t ? "bg-emerald-700 text-white" : "border border-emerald-900/60 text-emerald-200/70"
+              tab === t ? "bg-[color:var(--sec-primary)] text-white" : "border border-[color:var(--sec-hair)] text-[color:var(--sec-muted)]"
             }`}
           >
             {t === "open" ? `Open (${openItems.length})` : `Settled (${settledItems.length})`}
@@ -471,10 +471,10 @@ export default function MyPicksClient() {
       </div>
 
       {loading ? (
-        <div className="text-sm text-emerald-100/60 text-center py-20">Loading…</div>
+        <div className="text-sm text-[color:var(--sec-muted)] text-center py-20">Loading…</div>
       ) : shown.length === 0 ? (
         <div className="px-4">
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 px-4 py-6 text-center text-sm text-emerald-100/70">
+          <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_80%,transparent)] px-4 py-6 text-center text-sm text-[color:var(--sec-muted)]">
             {tab === "open" ? "No open picks — find an event and back someone." : "No settled picks yet."}
           </div>
         </div>
@@ -500,47 +500,47 @@ export default function MyPicksClient() {
               onClick={closeCashout}
               className="absolute inset-0 bg-black/60"
             />
-            <div className="relative w-full max-w-sm mx-auto rounded-t-3xl border border-emerald-900/70 bg-[#07301a] px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+20px)]">
-              <div className="text-sm font-bold text-[#f5e6b0] mb-0.5 truncate">
+            <div className="relative w-full max-w-sm mx-auto rounded-t-3xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+20px)]">
+              <div className="text-sm font-bold text-[color:var(--sec-accent)] mb-0.5 truncate">
                 {cashoutTarget.title}
               </div>
-              <div className="text-[11px] text-emerald-200/60 mb-4 truncate">
+              <div className="text-[11px] text-[color:var(--sec-muted)] mb-4 truncate">
                 {cashoutTarget.subtitle}
               </div>
 
               {cashoutSuccess != null ? (
                 <div className="text-center space-y-3 py-2">
-                  <div className="text-lg font-bold text-emerald-300">
+                  <div className="text-lg font-bold text-[color:var(--sec-good)]">
                     Cashed out for {cashoutSuccess} pts
                   </div>
                   <button
                     type="button"
                     onClick={closeCashout}
-                    className="w-full py-2.5 rounded-full bg-emerald-700 text-sm font-semibold text-white"
+                    className="w-full py-2.5 rounded-full bg-[color:var(--sec-primary)] text-sm font-semibold text-white"
                   >
                     Done
                   </button>
                 </div>
               ) : quoting ? (
-                <div className="text-sm text-emerald-100/60 text-center py-6">
+                <div className="text-sm text-[color:var(--sec-muted)] text-center py-6">
                   Pricing your cash-out…
                 </div>
               ) : offer && secondsLeft > 0 ? (
                 <div className="space-y-3">
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-[#f5e6b0]">{offer.offer_value} pts</div>
-                    <div className="text-[10px] text-emerald-200/50 mt-1">
+                    <div className="text-3xl font-bold text-[color:var(--sec-accent)]">{offer.offer_value} pts</div>
+                    <div className="text-[10px] text-[color:var(--sec-muted)] mt-1">
                       Offer expires in {secondsLeft}s
                     </div>
                   </div>
-                  <div className="h-1 rounded-full bg-emerald-900/50 overflow-hidden">
+                  <div className="h-1 rounded-full bg-[color:var(--sec-surface)] overflow-hidden">
                     <div
                       className="h-full bg-amber-400/80 transition-all duration-200"
                       style={{ width: `${Math.min(100, (secondsLeft / 15) * 100)}%` }}
                     />
                   </div>
                   {cashoutError && (
-                    <div className="text-[11px] text-red-300 text-center">{cashoutError}</div>
+                    <div className="text-[11px] text-[color:var(--sec-bad)] text-center">{cashoutError}</div>
                   )}
                   <button
                     type="button"
@@ -553,7 +553,7 @@ export default function MyPicksClient() {
                   <button
                     type="button"
                     onClick={closeCashout}
-                    className="w-full py-2 rounded-full border border-emerald-900/60 text-[12px] text-emerald-200/70"
+                    className="w-full py-2 rounded-full border border-[color:var(--sec-hair)] text-[12px] text-[color:var(--sec-muted)]"
                   >
                     {cashoutTarget.kind === "acca" ? `Keep my ${COMBO_BET.short}` : "Keep my pick"}
                   </button>
@@ -561,23 +561,23 @@ export default function MyPicksClient() {
               ) : (
                 <div className="space-y-3">
                   {cashoutError ? (
-                    <div className="text-[12px] text-red-300 text-center py-2">{cashoutError}</div>
+                    <div className="text-[12px] text-[color:var(--sec-bad)] text-center py-2">{cashoutError}</div>
                   ) : (
-                    <div className="text-[12px] text-emerald-200/60 text-center py-2">
+                    <div className="text-[12px] text-[color:var(--sec-muted)] text-center py-2">
                       {offer ? "Offer expired." : "No offer available."}
                     </div>
                   )}
                   <button
                     type="button"
                     onClick={() => requestQuote(cashoutTarget)}
-                    className="w-full py-2.5 rounded-full bg-emerald-700 text-sm font-semibold text-white"
+                    className="w-full py-2.5 rounded-full bg-[color:var(--sec-primary)] text-sm font-semibold text-white"
                   >
                     {offer ? "Get a new offer" : "Try again"}
                   </button>
                   <button
                     type="button"
                     onClick={closeCashout}
-                    className="w-full py-2 rounded-full border border-emerald-900/60 text-[12px] text-emerald-200/70"
+                    className="w-full py-2 rounded-full border border-[color:var(--sec-hair)] text-[12px] text-[color:var(--sec-muted)]"
                   >
                     Close
                   </button>

@@ -546,7 +546,7 @@ export default function CourseRecordsPage() {
   // UI
   // -----------------------------
   return (
-    <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
+    <div className="min-h-screen bg-[color:var(--ciaga-ground)] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto w-full max-w-sm space-y-6">
         <header className="relative flex items-center justify-center">
           <BackButton
@@ -555,30 +555,30 @@ export default function CourseRecordsPage() {
           />
 
           <div className="text-center">
-            <div className="text-lg font-extrabold tracking-wide text-[#f5e6b0]">Stats</div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70 font-semibold">Course records</div>
+            <div className="text-lg font-extrabold tracking-wide text-[color:var(--sec-accent)]">Stats</div>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--sec-muted)] font-semibold">Course records</div>
           </div>
         </header>
 
         {loading ? (
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/55 p-4 text-sm font-semibold text-emerald-100/70">Loading…</div>
+          <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_55%,transparent)] p-4 text-sm font-semibold text-[color:var(--sec-muted)]">Loading…</div>
         ) : err ? (
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/55 p-4 text-sm font-semibold text-red-300">{err}</div>
+          <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_55%,transparent)] p-4 text-sm font-semibold text-[color:var(--sec-bad)]">{err}</div>
         ) : (
           <>
             {/* Selector */}
-            <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-5 space-y-3">
+            <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-5 space-y-3">
               <div>
-                <div className="text-sm font-extrabold text-emerald-50">Select course</div>
-                <div className="text-[11px] text-emerald-100/55 font-semibold">Choose a course + tee</div>
+                <div className="text-sm font-extrabold text-[color:var(--sec-text)]">Select course</div>
+                <div className="text-[11px] text-[color:var(--sec-muted)] font-semibold">Choose a course + tee</div>
               </div>
 
               <div className="flex items-center gap-3">
-                <div className="text-xs text-emerald-100/70 w-[70px] font-semibold">Course</div>
+                <div className="text-xs text-[color:var(--sec-muted)] w-[70px] font-semibold">Course</div>
                 <select
                   value={selectedCourseId}
                   onChange={(e) => setSelectedCourseId(e.target.value)}
-                  className="h-10 flex-1 rounded-xl border border-emerald-900/70 bg-[#042713] px-3 text-sm font-semibold text-emerald-50 outline-none focus:border-[#f5e6b0]/70"
+                  className="h-10 flex-1 rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] px-3 text-sm font-semibold text-[color:var(--sec-text)] outline-none focus:border-[color:color-mix(in_srgb,var(--sec-accent)_70%,transparent)]"
                 >
                   {courses.map((c) => (
                     <option key={c.courseId} value={c.courseId}>
@@ -589,11 +589,11 @@ export default function CourseRecordsPage() {
               </div>
 
               <div className="flex items-center gap-3">
-                <div className="text-xs text-emerald-100/70 w-[70px] font-semibold">Tee</div>
+                <div className="text-xs text-[color:var(--sec-muted)] w-[70px] font-semibold">Tee</div>
                 <select
                   value={selectedTeeId}
                   onChange={(e) => setSelectedTeeId(e.target.value)}
-                  className="h-10 flex-1 rounded-xl border border-emerald-900/70 bg-[#042713] px-3 text-sm font-semibold text-emerald-50 outline-none focus:border-[#f5e6b0]/70"
+                  className="h-10 flex-1 rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] px-3 text-sm font-semibold text-[color:var(--sec-text)] outline-none focus:border-[color:color-mix(in_srgb,var(--sec-accent)_70%,transparent)]"
                 >
                   {teeOptionsForCourse.length ? (
                     teeOptionsForCourse.map((t) => (
@@ -609,77 +609,77 @@ export default function CourseRecordsPage() {
             </div>
 
             {/* Selected summary */}
-            <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-5 space-y-4">
+            <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-5 space-y-4">
               <div>
-                <div className="text-sm font-extrabold text-emerald-50">{selected?.courseName ?? "—"}</div>
-                <div className="text-[11px] text-emerald-100/55 font-semibold">
+                <div className="text-sm font-extrabold text-[color:var(--sec-text)]">{selected?.courseName ?? "—"}</div>
+                <div className="text-[11px] text-[color:var(--sec-muted)] font-semibold">
                   Tee: {selected?.teeName ?? "—"} · Par {selected?.parTotal ?? "—"} · {selected?.rounds ?? 0} rounds
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/55 p-3">
-                  <div className="text-[11px] text-emerald-100/70 font-bold">Best gross (complete only)</div>
-                  <div className="mt-1 text-xl font-extrabold text-emerald-50 tabular-nums">{selected?.bestGross ? `${selected.bestGross.score}` : "—"}</div>
-                  <div className="mt-1 text-[10px] text-emerald-100/55 font-semibold">{selected?.bestGross?.date ? fmtDate(selected.bestGross.date) : "—"}</div>
+                <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_55%,transparent)] p-3">
+                  <div className="text-[11px] text-[color:var(--sec-muted)] font-bold">Best gross (complete only)</div>
+                  <div className="mt-1 text-xl font-extrabold text-[color:var(--sec-text)] tabular-nums">{selected?.bestGross ? `${selected.bestGross.score}` : "—"}</div>
+                  <div className="mt-1 text-[10px] text-[color:var(--sec-muted)] font-semibold">{selected?.bestGross?.date ? fmtDate(selected.bestGross.date) : "—"}</div>
                 </div>
 
-                <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/55 p-3">
-                  <div className="text-[11px] text-emerald-100/70 font-bold">Best net (AGS−CH)</div>
-                  <div className="mt-1 text-xl font-extrabold text-emerald-50 tabular-nums">{selected?.bestNet ? `${selected.bestNet.score}` : "—"}</div>
-                  <div className="mt-1 text-[10px] text-emerald-100/55 font-semibold">{selected?.bestNet?.date ? fmtDate(selected.bestNet.date) : "—"}</div>
+                <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_55%,transparent)] p-3">
+                  <div className="text-[11px] text-[color:var(--sec-muted)] font-bold">Best net (AGS−CH)</div>
+                  <div className="mt-1 text-xl font-extrabold text-[color:var(--sec-text)] tabular-nums">{selected?.bestNet ? `${selected.bestNet.score}` : "—"}</div>
+                  <div className="mt-1 text-[10px] text-[color:var(--sec-muted)] font-semibold">{selected?.bestNet?.date ? fmtDate(selected.bestNet.date) : "—"}</div>
                 </div>
               </div>
             </div>
 
             {/* Eclectic */}
-            <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-5 space-y-4">
+            <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-5 space-y-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-sm font-extrabold text-emerald-50">Eclectic scoring</div>
-                  <div className="text-[11px] text-emerald-100/55 font-semibold">
+                  <div className="text-sm font-extrabold text-[color:var(--sec-text)]">Eclectic scoring</div>
+                  <div className="text-[11px] text-[color:var(--sec-muted)] font-semibold">
                     Best hole scores combined across your rounds on this course + tee (front/back 9 mapped by tee name tags)
                   </div>
                 </div>
-                {ecLoading ? <div className="text-[11px] font-bold text-emerald-100/70">Loading…</div> : null}
+                {ecLoading ? <div className="text-[11px] font-bold text-[color:var(--sec-muted)]">Loading…</div> : null}
               </div>
 
               {ecErr ? (
-                <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/55 p-3 text-sm font-semibold text-red-300">{ecErr}</div>
+                <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_55%,transparent)] p-3 text-sm font-semibold text-[color:var(--sec-bad)]">{ecErr}</div>
               ) : eclectic ? (
                 <>
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/55 p-3">
-                      <div className="text-[11px] text-emerald-100/70 font-bold">Eclectic total</div>
-                      <div className="mt-1 text-xl font-extrabold text-emerald-50 tabular-nums">{eclectic.total !== null ? `${eclectic.total}` : "—"}</div>
-                      <div className="mt-1 text-[10px] text-emerald-100/55 font-semibold">{eclectic.complete ? "Complete" : `Missing ${eclectic.missing.length} hole(s)`}</div>
+                    <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_55%,transparent)] p-3">
+                      <div className="text-[11px] text-[color:var(--sec-muted)] font-bold">Eclectic total</div>
+                      <div className="mt-1 text-xl font-extrabold text-[color:var(--sec-text)] tabular-nums">{eclectic.total !== null ? `${eclectic.total}` : "—"}</div>
+                      <div className="mt-1 text-[10px] text-[color:var(--sec-muted)] font-semibold">{eclectic.complete ? "Complete" : `Missing ${eclectic.missing.length} hole(s)`}</div>
                     </div>
 
-                    <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/55 p-3">
-                      <div className="text-[11px] text-emerald-100/70 font-bold">Coverage</div>
-                      <div className="mt-1 text-xl font-extrabold text-emerald-50 tabular-nums">
+                    <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_55%,transparent)] p-3">
+                      <div className="text-[11px] text-[color:var(--sec-muted)] font-bold">Coverage</div>
+                      <div className="mt-1 text-xl font-extrabold text-[color:var(--sec-text)] tabular-nums">
                         {eclectic.have}/{eclectic.holes}
                       </div>
-                      <div className="mt-1 text-[10px] text-emerald-100/55 font-semibold">{eclectic.complete ? "All holes found" : "Play more rounds here to complete"}</div>
+                      <div className="mt-1 text-[10px] text-[color:var(--sec-muted)] font-semibold">{eclectic.complete ? "All holes found" : "Play more rounds here to complete"}</div>
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/45 p-3 max-h-[55vh] overflow-y-auto overscroll-y-contain pr-1" style={{ WebkitOverflowScrolling: "touch" }}>
+                  <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_45%,transparent)] p-3 max-h-[55vh] overflow-y-auto overscroll-y-contain pr-1" style={{ WebkitOverflowScrolling: "touch" }}>
                     <div className="grid grid-cols-3 gap-2">
                       {ecHoleNos.map((hole) => {
                         const b = ecBestByHole[hole];
                         const has = Boolean(b);
                         const par = ecParByHole[hole];
                         return (
-                          <div key={hole} className="rounded-2xl border border-emerald-900/70 bg-[#042713]/55 p-3">
+                          <div key={hole} className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_55%,transparent)] p-3">
                             <div className="flex items-center justify-between">
-                              <div className="text-[11px] text-emerald-100/70 font-bold">Hole {hole}</div>
-                              {typeof par === "number" ? <div className="text-[10px] font-extrabold text-emerald-100/70">Par {par}</div> : null}
+                              <div className="text-[11px] text-[color:var(--sec-muted)] font-bold">Hole {hole}</div>
+                              {typeof par === "number" ? <div className="text-[10px] font-extrabold text-[color:var(--sec-muted)]">Par {par}</div> : null}
                             </div>
                             <div className="mt-2 text-base font-extrabold tabular-nums">
-                              {has ? <span className="text-emerald-50">{b!.strokes}</span> : <span className="text-emerald-100/35">—</span>}
+                              {has ? <span className="text-[color:var(--sec-text)]">{b!.strokes}</span> : <span className="text-[color:var(--sec-muted)]">—</span>}
                             </div>
-                            <div className="mt-1 text-[10px] text-emerald-100/55 font-semibold">{has ? fmtDate(b!.date) : "No data"}</div>
+                            <div className="mt-1 text-[10px] text-[color:var(--sec-muted)] font-semibold">{has ? fmtDate(b!.date) : "No data"}</div>
                           </div>
                         );
                       })}
@@ -687,16 +687,16 @@ export default function CourseRecordsPage() {
                   </div>
                 </>
               ) : (
-                <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/55 p-4 text-sm font-semibold text-emerald-100/70">No hole-by-hole data yet for this selection.</div>
+                <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_55%,transparent)] p-4 text-sm font-semibold text-[color:var(--sec-muted)]">No hole-by-hole data yet for this selection.</div>
               )}
             </div>
 
             {/* All records */}
-            <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-5 space-y-3">
+            <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-5 space-y-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-sm font-extrabold text-emerald-50">All records</div>
-                  <div className="text-[11px] text-emerald-100/55 font-semibold">Sorted by score-to-par (lower is better)</div>
+                  <div className="text-sm font-extrabold text-[color:var(--sec-text)]">All records</div>
+                  <div className="text-[11px] text-[color:var(--sec-muted)] font-semibold">Sorted by score-to-par (lower is better)</div>
                 </div>
 
                 <div className="flex flex-col items-end gap-2">
@@ -705,7 +705,7 @@ export default function CourseRecordsPage() {
                       type="button"
                       onClick={() => setSortMetric("gross")}
                       className={`px-3 py-1 rounded-xl border text-[11px] font-extrabold ${
-                        sortMetric === "gross" ? "bg-[#f5e6b0] text-[#042713] border-[#f5e6b0]" : "bg-[#042713]/40 text-emerald-100/80 border-emerald-900/70"
+                        sortMetric === "gross" ? "bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] border-[color:var(--sec-accent)]" : "bg-[color:color-mix(in_srgb,var(--ciaga-ground)_40%,transparent)] text-[color:var(--sec-muted)] border-[color:var(--sec-hair)]"
                       }`}
                     >
                       Gross
@@ -714,7 +714,7 @@ export default function CourseRecordsPage() {
                       type="button"
                       onClick={() => setSortMetric("net")}
                       className={`px-3 py-1 rounded-xl border text-[11px] font-extrabold ${
-                        sortMetric === "net" ? "bg-[#f5e6b0] text-[#042713] border-[#f5e6b0]" : "bg-[#042713]/40 text-emerald-100/80 border-emerald-900/70"
+                        sortMetric === "net" ? "bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] border-[color:var(--sec-accent)]" : "bg-[color:color-mix(in_srgb,var(--ciaga-ground)_40%,transparent)] text-[color:var(--sec-muted)] border-[color:var(--sec-hair)]"
                       }`}
                     >
                       Net
@@ -726,7 +726,7 @@ export default function CourseRecordsPage() {
                       type="button"
                       onClick={() => setSortDir("asc")}
                       className={`px-3 py-1 rounded-xl border text-[11px] font-extrabold ${
-                        sortDir === "asc" ? "bg-[#f5e6b0] text-[#042713] border-[#f5e6b0]" : "bg-[#042713]/40 text-emerald-100/80 border-emerald-900/70"
+                        sortDir === "asc" ? "bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] border-[color:var(--sec-accent)]" : "bg-[color:color-mix(in_srgb,var(--ciaga-ground)_40%,transparent)] text-[color:var(--sec-muted)] border-[color:var(--sec-hair)]"
                       }`}
                     >
                       Best → Worst
@@ -735,7 +735,7 @@ export default function CourseRecordsPage() {
                       type="button"
                       onClick={() => setSortDir("desc")}
                       className={`px-3 py-1 rounded-xl border text-[11px] font-extrabold ${
-                        sortDir === "desc" ? "bg-[#f5e6b0] text-[#042713] border-[#f5e6b0]" : "bg-[#042713]/40 text-emerald-100/80 border-emerald-900/70"
+                        sortDir === "desc" ? "bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] border-[color:var(--sec-accent)]" : "bg-[color:color-mix(in_srgb,var(--ciaga-ground)_40%,transparent)] text-[color:var(--sec-muted)] border-[color:var(--sec-hair)]"
                       }`}
                     >
                       Worst → Best
@@ -754,36 +754,36 @@ export default function CourseRecordsPage() {
                         setSelectedCourseId(r.key.courseId);
                         setSelectedTeeId(r.key.teeId);
                       }}
-                      className="w-full text-left rounded-2xl border border-emerald-900/70 bg-[#042713]/45 p-3 hover:bg-[#042713]/55 transition"
+                      className="w-full text-left rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_45%,transparent)] p-3 hover:bg-[color:color-mix(in_srgb,var(--ciaga-ground)_55%,transparent)] transition"
                     >
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
-                          <div className="text-sm font-extrabold text-emerald-50 truncate">{r.courseName}</div>
-                          <div className="text-[11px] text-emerald-100/60 font-semibold truncate">
+                          <div className="text-sm font-extrabold text-[color:var(--sec-text)] truncate">{r.courseName}</div>
+                          <div className="text-[11px] text-[color:var(--sec-muted)] font-semibold truncate">
                             {r.teeName} · Par {r.parTotal ?? "—"} · {r.rounds} rounds
                           </div>
                         </div>
 
                         <div className="flex items-center gap-3 text-right">
                           <div>
-                            <div className="text-[10px] text-emerald-100/55 font-bold">Gross</div>
-                            <div className="text-sm font-extrabold text-emerald-50 tabular-nums">{r.bestGross ? r.bestGross.score : "—"}</div>
+                            <div className="text-[10px] text-[color:var(--sec-muted)] font-bold">Gross</div>
+                            <div className="text-sm font-extrabold text-[color:var(--sec-text)] tabular-nums">{r.bestGross ? r.bestGross.score : "—"}</div>
                           </div>
                           <div>
-                            <div className="text-[10px] text-emerald-100/55 font-bold">Net</div>
-                            <div className="text-sm font-extrabold text-emerald-50 tabular-nums">{r.bestNet ? r.bestNet.score : "—"}</div>
+                            <div className="text-[10px] text-[color:var(--sec-muted)] font-bold">Net</div>
+                            <div className="text-sm font-extrabold text-[color:var(--sec-text)] tabular-nums">{r.bestNet ? r.bestNet.score : "—"}</div>
                           </div>
                         </div>
                       </div>
                     </button>
                   ))
                 ) : (
-                  <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/55 p-4 text-sm font-semibold text-emerald-100/70">No results found yet.</div>
+                  <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_55%,transparent)] p-4 text-sm font-semibold text-[color:var(--sec-muted)]">No results found yet.</div>
                 )}
               </div>
             </div>
 
-            <div className="pt-1 text-[10px] text-emerald-100/50 text-center font-semibold">CIAGA · Course records</div>
+            <div className="pt-1 text-[10px] text-[color:var(--sec-muted)] text-center font-semibold">CIAGA · Course records</div>
           </>
         )}
       </div>

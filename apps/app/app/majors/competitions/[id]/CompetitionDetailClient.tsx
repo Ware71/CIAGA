@@ -127,47 +127,47 @@ function CompetitionEditModal({
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 pb-[env(safe-area-inset-bottom)]" onClick={onClose}>
       <div
-        className="w-full max-w-sm rounded-t-2xl bg-[#0a2e18] border-t border-x border-emerald-800/60 max-h-[88vh] flex flex-col overflow-hidden"
+        className="w-full max-w-sm rounded-t-2xl bg-[#0a2e18] border-t border-x border-[color:var(--sec-hair)] max-h-[88vh] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="shrink-0 px-5 pt-5 pb-3">
-          <div className="text-sm font-semibold text-emerald-50">Edit Competition Settings</div>
+          <div className="text-sm font-semibold text-[color:var(--sec-text)]">Edit Competition Settings</div>
         </div>
         <div className="flex-1 overflow-y-auto px-5 pb-2 space-y-4">
         <div className="space-y-3">
           <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Competition Name *</label>
+            <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Competition Name *</label>
             <input
-              className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none"
+              className="w-full rounded-xl bg-[color:var(--sec-surface)] border border-[color:var(--sec-hair)] px-3 py-2 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
           </div>
           <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Description</label>
+            <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Description</label>
             <textarea
-              className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none resize-none"
+              className="w-full rounded-xl bg-[color:var(--sec-surface)] border border-[color:var(--sec-hair)] px-3 py-2 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none resize-none"
               rows={2}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
           </div>
 
-          <div className="flex items-center justify-between rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 px-3 py-2">
-            <span className="text-sm text-emerald-50">Recurs annually</span>
+          <div className="flex items-center justify-between rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-3 py-2">
+            <span className="text-sm text-[color:var(--sec-text)]">Recurs annually</span>
             <button
               type="button"
               onClick={() => setRecurAnnually((v) => !v)}
-              className={`relative h-6 w-11 rounded-full transition-colors ${recurAnnually ? "bg-emerald-600" : "bg-emerald-900/60"}`}
+              className={`relative h-6 w-11 rounded-full transition-colors ${recurAnnually ? "bg-[color:var(--sec-primary)]" : "bg-[color:var(--sec-surface)]"}`}
             >
               <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${recurAnnually ? "translate-x-5" : "translate-x-0"}`} />
             </button>
           </div>
 
           <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Typical Month</label>
+            <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Typical Month</label>
             <select
-              className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 focus:outline-none"
+              className="w-full rounded-xl bg-[color:var(--sec-surface)] border border-[color:var(--sec-hair)] px-3 py-2 text-sm text-[color:var(--sec-text)] focus:outline-none"
               value={typicalMonth}
               onChange={(e) => setTypicalMonth(e.target.value)}
             >
@@ -177,11 +177,11 @@ function CompetitionEditModal({
           </div>
 
           <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Default Category</label>
+            <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Default Category</label>
             <div className="grid grid-cols-3 gap-1.5">
               {CATEGORIES.map((c) => (
                 <button key={c.value} type="button" onClick={() => setCompCategory(c.value)}
-                  className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${compCategory === c.value ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
+                  className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${compCategory === c.value ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]" : "border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] text-[color:var(--sec-muted)]"}`}>
                   {c.label}
                 </button>
               ))}
@@ -189,12 +189,12 @@ function CompetitionEditModal({
           </div>
 
           <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Default Format</label>
+            <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Default Format</label>
             <div className="grid grid-cols-2 gap-1.5">
               {EVENT_TYPES.map((t) => (
                 <button key={t.value} type="button"
                   onClick={() => { setCompType(t.value); setScoringModel(FORMAT_DEFAULT_SCORING[t.value] ?? "net"); }}
-                  className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${compType === t.value ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
+                  className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${compType === t.value ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]" : "border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] text-[color:var(--sec-muted)]"}`}>
                   {t.label}
                 </button>
               ))}
@@ -202,16 +202,16 @@ function CompetitionEditModal({
           </div>
 
           <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Default Scoring</label>
+            <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Default Scoring</label>
             {!FORMAT_ALLOWS_SCORING_CHOICE(compType) ? (
-              <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/40 px-3 py-2 text-[11px] text-emerald-200/55">
+              <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-3 py-2 text-[11px] text-[color:var(--sec-muted)]">
                 {scoringModel === "stableford_points" ? "Stableford Points" : "Match Result"} — determined by format
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-1.5">
                 {SCORING_MODELS.filter((s) => s.value === "net" || s.value === "gross").map((s) => (
                   <button key={s.value} type="button" onClick={() => setScoringModel(s.value)}
-                    className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${scoringModel === s.value ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
+                    className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${scoringModel === s.value ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]" : "border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] text-[color:var(--sec-muted)]"}`}>
                     {s.label}
                   </button>
                 ))}
@@ -220,18 +220,18 @@ function CompetitionEditModal({
           </div>
 
           {scoringModel !== "gross" && (
-            <div className="rounded-xl border border-emerald-900/40 bg-emerald-950/30 p-3 space-y-2">
-              <div className="text-[10px] uppercase tracking-wider text-emerald-200/50 font-semibold">Default Handicap Rules</div>
+            <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] p-3 space-y-2">
+              <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)] font-semibold">Default Handicap Rules</div>
               <HandicapRulesEditor compact value={handicapRules} onChange={setHandicapRules} />
             </div>
           )}
 
           <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Default Points Model</label>
+            <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Default Points Model</label>
             <div className="grid grid-cols-2 gap-1.5">
               {POINTS_MODELS.map((p) => (
                 <button key={p.value} type="button" onClick={() => setPointsModel(p.value)}
-                  className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${pointsModel === p.value ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
+                  className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${pointsModel === p.value ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]" : "border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] text-[color:var(--sec-muted)]"}`}>
                   {p.label}
                 </button>
               ))}
@@ -240,17 +240,17 @@ function CompetitionEditModal({
 
           {compCategory === "round_based" && (
             <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Default Rounds</label>
+              <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Default Rounds</label>
               <input type="number" min={1} max={10} value={numRounds}
                 onChange={(e) => setNumRounds(e.target.value)}
-                className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 focus:outline-none" />
+                className="w-full rounded-xl bg-[color:var(--sec-surface)] border border-[color:var(--sec-hair)] px-3 py-2 text-sm text-[color:var(--sec-text)] focus:outline-none" />
             </div>
           )}
 
           <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Default Rules</label>
+            <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Default Rules</label>
             <textarea
-              className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none resize-none"
+              className="w-full rounded-xl bg-[color:var(--sec-surface)] border border-[color:var(--sec-hair)] px-3 py-2 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none resize-none"
               rows={3}
               placeholder="Rules that apply to all events in this competition…"
               value={rulesText}
@@ -259,16 +259,16 @@ function CompetitionEditModal({
           </div>
         </div>
 
-        {error && <div className="text-xs text-red-400">{error}</div>}
+        {error && <div className="text-xs text-[color:var(--sec-bad)]">{error}</div>}
         </div>
-        <div className="shrink-0 px-5 py-4 border-t border-emerald-900/50">
+        <div className="shrink-0 px-5 py-4 border-t border-[color:var(--sec-hair)]">
           <div className="flex gap-2">
             <button type="button" onClick={onClose}
-              className="flex-1 py-2 rounded-full border border-emerald-700/50 text-sm text-emerald-200 hover:bg-emerald-900/30">
+              className="flex-1 py-2 rounded-full border border-[color:var(--sec-line)] text-sm text-[color:var(--sec-text-2)] hover:bg-[color:var(--sec-surface-2)]">
               Cancel
             </button>
             <button type="button" onClick={handleSave} disabled={!name.trim() || saving}
-              className="flex-1 py-2 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-40">
+              className="flex-1 py-2 rounded-full bg-[color:var(--sec-primary)] text-sm font-semibold text-white hover:bg-[color:var(--sec-primary-hover)] disabled:opacity-40">
               {saving ? "Saving…" : "Save"}
             </button>
           </div>
@@ -338,43 +338,43 @@ export default function CompetitionDetailClient({ competitionId }: { competition
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#071c0f] flex items-center justify-center">
-        <div className="w-5 h-5 border-2 border-emerald-500/40 border-t-emerald-400 rounded-full animate-spin" />
+      <div className="min-h-screen bg-[color:var(--ciaga-ground)] flex items-center justify-center">
+        <div className="w-5 h-5 border-2 border-[color:var(--sec-accent)] border-t-emerald-400 rounded-full animate-spin" />
       </div>
     );
   }
 
   if (!competition) {
     return (
-      <div className="min-h-screen bg-[#071c0f] flex items-center justify-center text-emerald-200/50 text-sm">
+      <div className="min-h-screen bg-[color:var(--ciaga-ground)] flex items-center justify-center text-[color:var(--sec-muted)] text-sm">
         Competition not found.
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#071c0f] text-emerald-50">
+    <div className="min-h-screen bg-[color:var(--ciaga-ground)] text-[color:var(--sec-text)]">
       {/* Header */}
       <div className="px-4 pt-10 pb-6 max-w-lg mx-auto">
         {competition.group_id && (
           <button
             type="button"
             onClick={() => router.push(`/majors/groups/${competition.group_id}`)}
-            className="text-[11px] text-emerald-300/60 hover:text-emerald-300 mb-3 flex items-center gap-1"
+            className="text-[11px] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-good)] mb-3 flex items-center gap-1"
           >
             ← Group
           </button>
         )}
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-xl font-bold text-emerald-50">{competition.name}</h1>
+            <h1 className="text-xl font-bold text-[color:var(--sec-text)]">{competition.name}</h1>
             {competition.description && (
-              <p className="text-sm text-emerald-100/55 mt-1">{competition.description}</p>
+              <p className="text-sm text-[color:var(--sec-muted)] mt-1">{competition.description}</p>
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {competition.recur_annually && (
-              <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full border border-emerald-700/50 bg-emerald-900/30 text-emerald-300">
+              <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full border border-[color:var(--sec-line)] bg-[color:var(--sec-surface)] text-[color:var(--sec-good)]">
                 Annual
               </span>
             )}
@@ -382,7 +382,7 @@ export default function CompetitionDetailClient({ competitionId }: { competition
               <button
                 type="button"
                 onClick={() => setShowEditCompetition(true)}
-                className="text-[11px] text-emerald-300/70 hover:text-emerald-200 border border-emerald-800/50 rounded-full px-2.5 py-1"
+                className="text-[11px] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text-2)] border border-[color:var(--sec-hair)] rounded-full px-2.5 py-1"
               >
                 Edit Settings
               </button>
@@ -400,8 +400,8 @@ export default function CompetitionDetailClient({ competitionId }: { competition
             onClick={() => setActiveTab(t)}
             className={`shrink-0 px-4 py-1.5 rounded-full text-xs font-semibold transition-colors ${
               activeTab === t
-                ? "bg-emerald-700 text-white"
-                : "text-emerald-200/60 hover:text-emerald-100"
+                ? "bg-[color:var(--sec-primary)] text-white"
+                : "text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
             }`}
           >
             {t === "upcoming" ? "Upcoming" : "History"}
@@ -423,13 +423,13 @@ export default function CompetitionDetailClient({ competitionId }: { competition
                 <button
                   type="button"
                   onClick={() => router.push(`/majors/events/create?group_id=${competition.group_id}&competition_id=${competitionId}`)}
-                  className="w-full py-2.5 rounded-full border border-emerald-700/60 text-sm font-semibold text-emerald-200 hover:bg-emerald-900/30"
+                  className="w-full py-2.5 rounded-full border border-[color:var(--sec-line)] text-sm font-semibold text-[color:var(--sec-text-2)] hover:bg-[color:var(--sec-surface-2)]"
                 >
                   + New Event
                 </button>
               )}
               {upcomingEvents.length === 0 ? (
-                <div className="rounded-2xl border border-emerald-900/40 bg-[#0b3b21]/40 p-6 text-sm text-emerald-100/40 text-center">
+                <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] p-6 text-sm text-[color:var(--sec-muted)] text-center">
                   No upcoming events.
                 </div>
               ) : (
@@ -439,15 +439,15 @@ export default function CompetitionDetailClient({ competitionId }: { competition
                       key={event.id}
                       type="button"
                       onClick={() => router.push(`/majors/events/${event.id}`)}
-                      className="w-full text-left rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/60 px-4 py-3 hover:bg-emerald-900/30 transition-colors"
+                      className="w-full text-left rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-4 py-3 hover:bg-[color:var(--sec-surface-2)] transition-colors"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <div className="text-sm font-semibold text-emerald-50 truncate">
+                          <div className="text-sm font-semibold text-[color:var(--sec-text)] truncate">
                             {event_template?.name ?? event.name}
                           </div>
                           {event.event_date && (
-                            <div className="text-[11px] text-emerald-200/50 mt-0.5">
+                            <div className="text-[11px] text-[color:var(--sec-muted)] mt-0.5">
                               {new Date(event.event_date).toLocaleDateString("en-GB", {
                                 day: "numeric", month: "short", year: "numeric",
                               })}
@@ -481,8 +481,8 @@ export default function CompetitionDetailClient({ competitionId }: { competition
             <>
               {/* My Competition Record */}
               {viewerStats && viewerStats.appearances > 0 && (
-                <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4">
-                  <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/65 mb-3 font-semibold">
+                <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_80%,transparent)] p-4">
+                  <div className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--sec-muted)] mb-3 font-semibold">
                     My Competition Record
                   </div>
                   <div className="grid grid-cols-4 gap-2 text-center">
@@ -499,8 +499,8 @@ export default function CompetitionDetailClient({ competitionId }: { competition
                       },
                     ].map((stat) => (
                       <div key={stat.label}>
-                        <div className="text-base font-extrabold text-[#f5e6b0]">{stat.value}</div>
-                        <div className="text-[10px] text-emerald-200/60">{stat.label}</div>
+                        <div className="text-base font-extrabold text-[color:var(--sec-accent)]">{stat.value}</div>
+                        <div className="text-[10px] text-[color:var(--sec-muted)]">{stat.label}</div>
                       </div>
                     ))}
                   </div>
@@ -509,13 +509,13 @@ export default function CompetitionDetailClient({ competitionId }: { competition
 
               {/* Year group history cards */}
               {completedYearGroups.length === 0 ? (
-                <div className="rounded-2xl border border-emerald-900/40 bg-[#0b3b21]/40 p-6 text-sm text-emerald-100/40 text-center">
+                <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] p-6 text-sm text-[color:var(--sec-muted)] text-center">
                   No history yet.
                 </div>
               ) : (
                 completedYearGroups.map((yearGroup) => (
-                  <div key={yearGroup.year} className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/60 p-4 space-y-3">
-                    <div className="text-sm font-bold text-emerald-200">{yearGroup.year}</div>
+                  <div key={yearGroup.year} className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] p-4 space-y-3">
+                    <div className="text-sm font-bold text-[color:var(--sec-text-2)]">{yearGroup.year}</div>
                     <div className="space-y-2">
                       {yearGroup.events.map(({ event, event_template, winner, viewer_entry }) => {
                         const grossToPar =
@@ -527,15 +527,15 @@ export default function CompetitionDetailClient({ competitionId }: { competition
                             key={event.id}
                             type="button"
                             onClick={() => router.push(`/majors/events/${event.id}`)}
-                            className="w-full text-left rounded-xl border border-emerald-900/40 bg-emerald-950/30 px-3 py-2.5 hover:bg-emerald-900/30 transition-colors"
+                            className="w-full text-left rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-3 py-2.5 hover:bg-[color:var(--sec-surface-2)] transition-colors"
                           >
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
-                                <div className="text-sm font-medium text-emerald-50 truncate">
+                                <div className="text-sm font-medium text-[color:var(--sec-text)] truncate">
                                   {event_template?.name ?? event.name}
                                 </div>
                                 {event.event_date && (
-                                  <div className="text-[11px] text-emerald-200/45 mt-0.5">
+                                  <div className="text-[11px] text-[color:var(--sec-muted)] mt-0.5">
                                     {new Date(event.event_date).toLocaleDateString("en-GB", {
                                       day: "numeric", month: "short",
                                     })}
@@ -543,16 +543,16 @@ export default function CompetitionDetailClient({ competitionId }: { competition
                                 )}
                               </div>
                               {winner && (
-                                <div className="text-right shrink-0 text-[11px] text-emerald-200/55">
+                                <div className="text-right shrink-0 text-[11px] text-[color:var(--sec-muted)]">
                                   {winner.name ?? "—"}
                                   {winner.net_score != null && (
-                                    <span className="text-emerald-300/60"> · {winner.net_score}</span>
+                                    <span className="text-[color:var(--sec-muted)]"> · {winner.net_score}</span>
                                   )}
                                 </div>
                               )}
                             </div>
                             {viewer_entry && (
-                              <div className="grid grid-cols-4 gap-1 pt-1.5 border-t border-emerald-900/30 mt-1.5 text-center">
+                              <div className="grid grid-cols-4 gap-1 pt-1.5 border-t border-[color:var(--sec-hair)] mt-1.5 text-center">
                                 {[
                                   { label: "Gross", value: viewer_entry.gross_score ?? "—" },
                                   { label: "G+/-", value: fmtPar(grossToPar) },
@@ -560,8 +560,8 @@ export default function CompetitionDetailClient({ competitionId }: { competition
                                   { label: "N+/-", value: fmtPar(viewer_entry.to_par) },
                                 ].map((s) => (
                                   <div key={s.label}>
-                                    <div className="text-[12px] font-semibold text-emerald-100">{s.value}</div>
-                                    <div className="text-[9px] text-emerald-200/45">{s.label}</div>
+                                    <div className="text-[12px] font-semibold text-[color:var(--sec-text)]">{s.value}</div>
+                                    <div className="text-[9px] text-[color:var(--sec-muted)]">{s.label}</div>
                                   </div>
                                 ))}
                               </div>
@@ -599,8 +599,8 @@ export default function CompetitionDetailClient({ competitionId }: { competition
 function StatusPill({ status }: { status: string }) {
   const map: Record<string, string> = {
     upcoming: "bg-sky-900/40 text-sky-300 border-sky-700/40",
-    live: "bg-emerald-800/50 text-emerald-300 border-emerald-600/50",
-    completed: "bg-emerald-900/30 text-emerald-400/70 border-emerald-800/40",
+    live: "bg-[color:var(--sec-surface-2)] text-[color:var(--sec-good)] border-[color:var(--sec-line)]",
+    completed: "bg-[color:var(--sec-surface)] text-[color:var(--sec-good)] border-[color:var(--sec-hair)]",
     cancelled: "bg-rose-900/30 text-rose-400 border-rose-700/30",
   };
   return (

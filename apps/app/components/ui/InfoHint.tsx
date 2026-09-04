@@ -56,14 +56,14 @@ export function InfoHint({
           e.stopPropagation();
           setOpen((o) => !o);
         }}
-        className="inline-flex items-center justify-center rounded-full text-emerald-100/50 hover:text-emerald-100/90 transition-colors"
+        className="inline-flex items-center justify-center rounded-full text-[color:var(--sec-muted)] hover:text-[color:var(--sec-muted)] transition-colors"
       >
         <Info style={{ width: size, height: size }} />
       </button>
       {open && (
         <span
           role="tooltip"
-          className={`absolute top-full z-30 mt-1.5 w-56 rounded-lg border border-emerald-900/70 bg-[#042713] p-3 text-[11px] font-normal leading-snug text-emerald-100/90 shadow-xl ${
+          className={`absolute top-full z-30 mt-1.5 w-56 rounded-lg border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] p-3 text-[11px] font-normal leading-snug text-[color:var(--sec-muted)] shadow-xl ${
             align === "right" ? "right-0" : "left-0"
           }`}
         >

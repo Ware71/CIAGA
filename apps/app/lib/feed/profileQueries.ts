@@ -4,10 +4,7 @@ import type { FeedItemVM, FeedPageResponse } from "@/lib/feed/types";
 import {
   normalizeActor,
   buildReactionSummary,
-  getReactionCounts,
-  getCommentCounts,
-  getMyReactions,
-  getTopComments,
+  getFeedAggregates,
 } from "@/lib/feed/queries";
 
 export type ProfileFeedSort = "newest" | "oldest" | "most_interacted";
@@ -47,7 +44,9 @@ export async function getProfileFeedPage(params: {
     `
     )
     .eq("feed_item_subjects.subject_profile_id", subjectProfileId)
-    .neq("visibility", "removed")
+    // Matches the main feed: hidden items leave the listings, and stay
+    // reachable only by direct link.
+    .eq("visibility", "visible")
     .order("occurred_at", { ascending })
     .order("id", { ascending })
     .limit(fetchLimit + 1);
@@ -139,21 +138,14 @@ export async function getProfileFeedPage(params: {
     }
   }
 
-  // Aggregates
+  // Aggregates — one round trip, same RPC the main feed uses.
   const feedItemIds = trimmed.map((i: any) => i.id);
-
-  const [reactionAgg, commentAgg, myReactions] = await Promise.all([
-    getReactionCounts(feedItemIds),
-    getCommentCounts(feedItemIds),
-    getMyReactions(feedItemIds, viewerProfileId),
-  ]);
-
-  const feedItemIdsWithComments = feedItemIds.filter((id) => (commentAgg.get(id) ?? 0) > 0);
-  const topComments = await getTopComments(feedItemIdsWithComments);
+  const aggregates = await getFeedAggregates(feedItemIds, viewerProfileId);
 
   let items: FeedItemVM[] = trimmed.map((i: any) => {
     const actor = i.actor_profile_id ? normalizeActor(actorMap.get(i.actor_profile_id)) : null;
-    const reaction_counts = reactionAgg.get(i.id) ?? {};
+    const agg = aggregates.get(i.id);
+    const reaction_counts = agg?.reaction_counts ?? {};
     const reaction_summary = buildReactionSummary(reaction_counts, 3);
 
     return {
@@ -180,9 +172,9 @@ export async function getProfileFeedPage(params: {
       aggregates: {
         reaction_counts,
         reaction_summary,
-        comment_count: commentAgg.get(i.id) ?? 0,
-        my_reaction: myReactions.get(i.id) ?? null,
-        top_comment: topComments.get(i.id) ?? null,
+        comment_count: agg?.comment_count ?? 0,
+        my_reaction: agg?.my_reaction ?? null,
+        top_comment: agg?.top_comment ?? null,
       },
     } as FeedItemVM;
   });

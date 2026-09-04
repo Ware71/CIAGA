@@ -1,17 +1,27 @@
 "use client";
 
 import type { ReactNode } from "react";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Wallet, Ticket, Trophy } from "lucide-react";
+import { NavBarShell, NavTab } from "@/components/nav/NavBarShell";
+import type { TabDef } from "@/components/nav/navConfig";
 
 /**
- * Persistent Fantasy Picks chrome: a bottom hot bar (New Picks · My Picks ·
+ * Persistent Fantasy Picks chrome: a bottom bar (New Picks · My Picks ·
  * Leaderboards) shown across the whole section. The floating bet slip sits just
  * above it; the sandbox inspector opts out.
+ *
+ * The main app nav hides across /majors/fantasy/** (see navConfig.hidesMainNav)
+ * so these two bars never stack — this is the section's only bar. It shares the
+ * main nav's pill shell, and keeps its labels: Wallet/Ticket/Trophy don't read
+ * as icons alone the way Social/Calendar do.
+ *
+ * Because the main nav is hidden here, each section root carries its own
+ * "← Majors" back link — otherwise there is no way out in the installed PWA,
+ * which is portrait-locked with no browser chrome.
  */
 
-const TABS = [
+const TABS: TabDef[] = [
   {
     href: "/majors/fantasy",
     label: "New Picks",
@@ -37,35 +47,32 @@ const TABS = [
 ];
 
 export default function FantasyLayout({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "";
   const hideBar = pathname.includes("/inspector");
 
   return (
     <>
-      <div className={hideBar ? undefined : "pb-[calc(env(safe-area-inset-bottom)+66px)]"}>
+      <div
+        className={
+          hideBar
+            ? undefined
+            : "pb-[calc(env(safe-area-inset-bottom)+var(--ciaga-nav-h))]"
+        }
+      >
         {children}
       </div>
       {!hideBar && (
-        <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-emerald-900/70 bg-[#052a17]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur">
-          <div className="mx-auto flex max-w-sm">
-            {TABS.map(({ href, label, Icon, match }) => {
-              const active = match(pathname);
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  aria-current={active ? "page" : undefined}
-                  className={`flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[10px] font-semibold transition-colors ${
-                    active ? "text-[#f5e6b0]" : "text-emerald-200/50 hover:text-emerald-100/80"
-                  }`}
-                >
-                  <Icon className="h-5 w-5" strokeWidth={active ? 2.4 : 1.8} />
-                  {label}
-                </Link>
-              );
-            })}
-          </div>
-        </nav>
+        <NavBarShell label="Fantasy Picks">
+          {TABS.map((tab) => (
+            <NavTab
+              key={tab.href}
+              tab={tab}
+              active={tab.match(pathname)}
+              showLabel
+              indicatorId="ciaga-fantasy-nav-pill"
+            />
+          ))}
+        </NavBarShell>
       )}
     </>
   );

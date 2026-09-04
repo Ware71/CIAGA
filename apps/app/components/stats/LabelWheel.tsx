@@ -50,8 +50,8 @@ export function LabelWheel({
   };
 
   return (
-    <div className="relative rounded-2xl border border-emerald-900/70 bg-[#042713]/55">
-      <div className="pointer-events-none absolute left-0 right-0 top-1/2 -translate-y-1/2 h-10 border-y border-[#f5e6b0]/35 bg-[#f5e6b0]/10" />
+    <div className="relative rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_55%,transparent)]">
+      <div className="pointer-events-none absolute left-0 right-0 top-1/2 -translate-y-1/2 h-10 border-y border-[color:color-mix(in_srgb,var(--sec-accent)_35%,transparent)] bg-[color:color-mix(in_srgb,var(--sec-accent)_10%,transparent)]" />
       <div
         ref={ref}
         onScroll={onScroll}
@@ -65,8 +65,8 @@ export function LabelWheel({
               <div
                 className={
                   active
-                    ? "text-base font-extrabold text-[#f5e6b0] text-center"
-                    : "text-sm font-semibold text-emerald-100/60 text-center"
+                    ? "text-base font-extrabold text-[color:var(--sec-accent)] text-center"
+                    : "text-sm font-semibold text-[color:var(--sec-muted)] text-center"
                 }
               >
                 {opt.label}

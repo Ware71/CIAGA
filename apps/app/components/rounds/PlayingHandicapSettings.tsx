@@ -42,18 +42,18 @@ export function PlayingHandicapSettings({
     // Non-owners see read-only display
     return (
       <div className="space-y-2">
-        <label className="text-sm font-medium text-emerald-100">Playing Handicap</label>
-        <div className="rounded-lg border border-emerald-900/70 bg-[#0b3b21]/50 p-3">
-          <div className="text-sm font-semibold text-emerald-50">
+        <label className="text-sm font-medium text-[color:var(--sec-text)]">Playing Handicap</label>
+        <div className="rounded-lg border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_50%,transparent)] p-3">
+          <div className="text-sm font-semibold text-[color:var(--sec-text)]">
             {MODE_LABELS[mode]}
             {(mode === "allowance_pct" || mode === "compare_against_lowest") && (
-              <span className="text-emerald-200/80 ml-2">({value}%)</span>
+              <span className="text-[color:var(--sec-muted)] ml-2">({value}%)</span>
             )}
             {mode === "fixed" && (
-              <span className="text-emerald-200/80 ml-2">({value})</span>
+              <span className="text-[color:var(--sec-muted)] ml-2">({value})</span>
             )}
           </div>
-          <div className="text-xs text-emerald-100/70 mt-1">{MODE_DESCRIPTIONS[mode]}</div>
+          <div className="text-xs text-[color:var(--sec-muted)] mt-1">{MODE_DESCRIPTIONS[mode]}</div>
         </div>
       </div>
     );
@@ -61,9 +61,9 @@ export function PlayingHandicapSettings({
 
   return (
     <div className="space-y-3">
-      <label className="text-sm font-medium text-emerald-100">
+      <label className="text-sm font-medium text-[color:var(--sec-text)]">
         Playing Handicap
-        <span className="text-xs text-emerald-200/60 ml-2">(Owner only)</span>
+        <span className="text-xs text-[color:var(--sec-muted)] ml-2">(Owner only)</span>
       </label>
 
       {/* Mode Selector */}
@@ -79,7 +79,7 @@ export function PlayingHandicapSettings({
           else if (newMode === "compare_against_lowest") onValueChange(0);
         }}
         disabled={disabled}
-        className="w-full rounded-lg border border-emerald-900/70 bg-[#0b3b21]/70 px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="w-full rounded-lg border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] px-3 py-2 text-sm text-[color:var(--sec-text)] focus:outline-none focus:ring-2 focus:ring-[color:var(--sec-accent)] disabled:opacity-50 disabled:cursor-not-allowed"
       >
         <option value="none">{MODE_LABELS.none}</option>
         <option value="allowance_pct">{MODE_LABELS.allowance_pct}</option>
@@ -90,7 +90,7 @@ export function PlayingHandicapSettings({
       {/* Value Input (shown for allowance_pct, compare_against_lowest, and fixed modes) */}
       {mode !== "none" && (
         <div className="space-y-2">
-          <label htmlFor="handicap-value" className="text-xs text-emerald-100/80">
+          <label htmlFor="handicap-value" className="text-xs text-[color:var(--sec-muted)]">
             {mode === "allowance_pct" ? "Allowance Percentage" : mode === "compare_against_lowest" ? "Allowance % (applied to handicap difference)" : "Fixed Handicap Value"}
           </label>
           <div className="flex items-center gap-2">
@@ -104,15 +104,15 @@ export function PlayingHandicapSettings({
               value={value}
               onValueChange={(v) => onValueChange(v ?? (mode === "fixed" ? 0 : 100))}
               disabled={disabled}
-              className="flex-1 rounded-lg border border-emerald-900/70 bg-[#0b3b21]/70 px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 rounded-lg border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] px-3 py-2 text-sm text-[color:var(--sec-text)] focus:outline-none focus:ring-2 focus:ring-[color:var(--sec-accent)] disabled:opacity-50 disabled:cursor-not-allowed"
             />
-            <span className="text-sm text-emerald-100/70">
+            <span className="text-sm text-[color:var(--sec-muted)]">
               {mode === "allowance_pct" ? "%" : ""}
             </span>
           </div>
 
           {/* Helper text */}
-          <p className="text-xs text-emerald-100/60">
+          <p className="text-xs text-[color:var(--sec-muted)]">
             {mode === "fixed" ? (
               <>Maximum handicap value is 54</>
             ) : (
@@ -125,7 +125,7 @@ export function PlayingHandicapSettings({
         </div>
       )}
 
-      <p className="text-xs text-emerald-100/60">{MODE_DESCRIPTIONS[mode]}</p>
+      <p className="text-xs text-[color:var(--sec-muted)]">{MODE_DESCRIPTIONS[mode]}</p>
 
       {/* Important note about manual overrides */}
       <div className="rounded-lg border border-amber-900/50 bg-amber-950/20 p-3">

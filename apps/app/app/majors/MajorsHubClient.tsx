@@ -7,6 +7,14 @@ import { requireViewerSession } from "@/lib/auth/requireViewerSession";
 import { fetchWithCache, invalidateCache, readCache, writeCache, setCacheScope } from "@/lib/cache/clientCache";
 import { supabase } from "@/lib/supabaseClient";
 import type { MajorGroup } from "@/lib/majors/types";
+import { AuthUser } from "@/components/ui/auth-user";
+import { MajorsBalance, MajorsSnapshot } from "@/components/majors/MajorsOverview";
+import {
+  MAJORS_CARD,
+  MAJORS_CARD_INTERACTIVE,
+  MajorsSection,
+} from "@/components/majors/majorsChrome";
+import { PageHeader } from "@/components/ui/chrome";
 
 type GroupSummary = MajorGroup & { member_count: number; role?: string };
 
@@ -173,48 +181,48 @@ export default function MajorsHubClient() {
   const filteredDiscover = discoverGroups.filter((g) => !myGroupIds.has(g.id));
 
   return (
-    <div className="min-h-[100dvh] pb-[env(safe-area-inset-bottom)] max-w-sm mx-auto">
-      {/* Header */}
-      <div className="px-4 pt-8 flex items-center justify-between mb-6">
-        <button
-          type="button"
-          onClick={() => router.push("/")}
-          className="text-[11px] text-emerald-100/70 hover:text-emerald-50 flex items-center gap-1"
-        >
-          ← Home
-        </button>
-        <h1 className="text-lg font-bold tracking-wide text-[#f5e6b0]">Majors Hub</h1>
-        {isAdmin && (
-          <button
-            type="button"
-            onClick={() => router.push("/majors/groups/create")}
-            className="text-[11px] text-emerald-400 hover:text-emerald-300"
-          >
-            + Create
-          </button>
-        )}
+    /* The gold radial wash that used to sit behind this header is gone. It was
+       an arbitrary value rather than a token, so the Bottle & Mint retint left
+       it behind — a #ffd666 glow on a section that no longer has any gold in
+       it. Nothing replaces it: the ground is the ground. */
+    <div className="min-h-[100dvh]">
+      <div className="pb-[env(safe-area-inset-bottom)] max-w-sm mx-auto">
+      <div className="px-4">
+        <PageHeader
+          title="Majors"
+          subtitle="Groups · Events · Standings"
+          actions={
+            <>
+              <MajorsBalance />
+              <AuthUser size={38} />
+            </>
+          }
+        />
       </div>
 
       {loading ? (
-        <div className="text-sm text-emerald-100/60 text-center py-20">Loading…</div>
+        <div className="text-sm text-[color:var(--sec-muted)] text-center py-20">Loading…</div>
       ) : (
         <div className="px-4 space-y-8 pb-12">
+          {/* Season snapshot, Live Now and Upcoming — formerly the swipe-up face. */}
+          <MajorsSnapshot />
+
           {/* Pending Invitations */}
           {pendingInvites.length > 0 && (
-            <section className="space-y-2">
-              <h2 className="text-[10px] uppercase tracking-[0.18em] text-amber-300/70">Invitations</h2>
+            <MajorsSection title="Invitations">
+              <div className="space-y-2">
               {pendingInvites.map((invite) => (
                 <div
                   key={invite.id}
-                  className="rounded-2xl border border-amber-700/40 bg-amber-950/20 px-3 py-3 space-y-2"
+                  className={`${MAJORS_CARD} px-3 py-3 space-y-2`}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-amber-800/60 to-amber-950 flex items-center justify-center text-sm font-bold text-amber-200 shrink-0">
+                    <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-[color:var(--sec-surface)] to-[color:var(--sec-surface)] flex items-center justify-center text-sm font-bold text-[color:var(--sec-accent)] shrink-0 border border-[color:color-mix(in_srgb,var(--sec-accent)_25%,transparent)]">
                       {invite.group?.name.slice(0, 2).toUpperCase() ?? "?"}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-semibold text-emerald-50 truncate">{invite.group?.name ?? "Unknown Group"}</div>
-                      <div className="text-[10px] text-emerald-200/50 mt-0.5">
+                      <div className="text-sm font-semibold text-[color:var(--sec-text)] truncate">{invite.group?.name ?? "Unknown Group"}</div>
+                      <div className="text-[10px] text-[color:var(--sec-muted)] mt-0.5">
                         Invited by {invite.inviter?.name ?? "someone"}
                       </div>
                     </div>
@@ -231,7 +239,7 @@ export default function MajorsHubClient() {
                       type="button"
                       onClick={() => handleAcceptInvite(invite)}
                       disabled={acceptingInviteId === invite.id}
-                      className="flex-1 py-1.5 rounded-full bg-emerald-700 text-xs font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
+                      className="flex-1 py-1.5 rounded-full bg-[color:var(--sec-primary)] text-xs font-semibold text-white hover:bg-[color:var(--sec-primary-hover)] disabled:opacity-50"
                     >
                       {acceptingInviteId === invite.id ? "Joining…" : "Accept"}
                     </button>
@@ -239,40 +247,42 @@ export default function MajorsHubClient() {
                       type="button"
                       onClick={() => handleDeclineInvite(invite)}
                       disabled={decliningInviteId === invite.id}
-                      className="flex-1 py-1.5 rounded-full border border-emerald-800/50 text-xs text-emerald-200/60 hover:text-emerald-200 disabled:opacity-50"
+                      className="flex-1 py-1.5 rounded-full border border-[color:var(--sec-hair)] text-xs text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text-2)] disabled:opacity-50"
                     >
                       Decline
                     </button>
                   </div>
                 </div>
               ))}
-            </section>
+              </div>
+            </MajorsSection>
           )}
 
           {/* My Groups */}
-          <section className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/55">My Groups</h2>
-              {isAdmin && (
+          <MajorsSection
+            title="My Groups"
+            action={
+              isAdmin ? (
                 <button
                   type="button"
                   onClick={() => router.push("/majors/groups/create")}
-                  className="text-[11px] text-emerald-400 hover:text-emerald-300"
+                  className="text-[11px] font-semibold text-[color:color-mix(in_srgb,var(--sec-accent)_80%,transparent)] hover:text-[color:var(--sec-accent)]"
                 >
                   + New
                 </button>
-              )}
-            </div>
+              ) : undefined
+            }
+          >
 
             {myGroups.length === 0 ? (
-              <div className="rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/40 p-6 text-center space-y-3">
+              <div className={`${MAJORS_CARD} p-6 text-center space-y-3`}>
                 <p className="text-2xl">⛳</p>
-                <p className="text-sm text-emerald-100/60">You're not in any groups yet.</p>
+                <p className="text-sm text-[color:var(--sec-muted)]">You're not in any groups yet.</p>
                 {isAdmin && (
                   <button
                     type="button"
                     onClick={() => router.push("/majors/groups/create")}
-                    className="px-5 py-2.5 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600"
+                    className="px-5 py-2.5 rounded-full bg-[color:var(--sec-primary)] text-sm font-semibold text-white hover:bg-[color:var(--sec-primary-hover)]"
                   >
                     Create a Group
                   </button>
@@ -285,49 +295,48 @@ export default function MajorsHubClient() {
                     key={g.id}
                     type="button"
                     onClick={() => router.push(`/majors/groups/${g.id}`)}
-                    className="w-full flex items-center gap-3 rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-3 hover:brightness-110 transition-all text-left"
+                    className={`${MAJORS_CARD_INTERACTIVE} w-full flex items-center gap-3 px-3 py-3 text-left`}
                   >
                     {g.image_url ? (
                       <img src={g.image_url} alt="" className="h-10 w-10 rounded-xl object-cover shrink-0" loading="lazy" decoding="async" />
                     ) : (
-                      <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-800 to-emerald-950 flex items-center justify-center text-sm font-bold text-emerald-200 shrink-0">
+                      <div className="h-10 w-10 rounded-xl bg-[color:var(--sec-surface-2)] flex items-center justify-center text-sm font-bold text-[color:var(--sec-accent)] shrink-0 border border-[color:color-mix(in_srgb,var(--sec-accent)_25%,transparent)]">
                         {g.name.slice(0, 2).toUpperCase()}
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-emerald-50 truncate">{g.name}</span>
+                        <span className="text-sm font-semibold text-[color:var(--sec-text)] truncate">{g.name}</span>
                         {g.role === "owner" && (
-                          <span className="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border border-[#f5e6b0]/30 bg-[#f5e6b0]/10 text-[#f5e6b0]">
+                          <span className="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border border-[color:color-mix(in_srgb,var(--sec-accent)_30%,transparent)] bg-[color:color-mix(in_srgb,var(--sec-accent)_10%,transparent)] text-[color:var(--sec-accent)]">
                             Owner
                           </span>
                         )}
                         {g.role === "admin" && (
-                          <span className="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border border-emerald-700/50 bg-emerald-900/30 text-emerald-300">
+                          <span className="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border border-[color:var(--sec-line)] bg-[color:var(--sec-surface-2)] text-[color:var(--sec-accent)]">
                             Admin
                           </span>
                         )}
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[10px] text-emerald-200/50 capitalize">{g.type.replace(/_/g, " ")}</span>
-                        <span className="text-emerald-800">·</span>
-                        <span className="text-[10px] text-emerald-200/50">{g.member_count} {g.member_count === 1 ? "member" : "members"}</span>
+                        <span className="text-[10px] text-[color:var(--sec-muted)] capitalize">{g.type.replace(/_/g, " ")}</span>
+                        <span className="text-[color:var(--ciaga-ground)]">·</span>
+                        <span className="text-[10px] text-[color:var(--sec-muted)]">{g.member_count} {g.member_count === 1 ? "member" : "members"}</span>
                       </div>
                     </div>
-                    <span className="text-emerald-700 text-sm shrink-0">→</span>
+                    <span className="text-[color:var(--sec-muted)] text-sm shrink-0">→</span>
                   </button>
                 ))}
               </div>
             )}
-          </section>
+          </MajorsSection>
 
           {/* Discover Groups */}
-          <section className="space-y-3">
-            <h2 className="text-[10px] uppercase tracking-[0.18em] text-emerald-200/55">Discover Groups</h2>
+          <MajorsSection title="Discover Groups">
 
             {filteredDiscover.length === 0 ? (
-              <div className="rounded-2xl border border-emerald-900/40 bg-[#0b3b21]/30 p-5 text-center">
-                <p className="text-sm text-emerald-100/50">No public groups to discover right now.</p>
+              <div className={`${MAJORS_CARD} p-5 text-center`}>
+                <p className="text-sm text-[color:var(--sec-muted)]">No public groups to discover right now.</p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -336,23 +345,23 @@ export default function MajorsHubClient() {
                   return (
                     <div
                       key={g.id}
-                      className="flex items-center gap-3 rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-3"
+                      className={`${MAJORS_CARD} flex items-center gap-3 px-3 py-3`}
                     >
                       {g.image_url ? (
                         <img src={g.image_url} alt="" className="h-10 w-10 rounded-xl object-cover shrink-0" loading="lazy" decoding="async" />
                       ) : (
-                        <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-800 to-emerald-950 flex items-center justify-center text-sm font-bold text-emerald-200 shrink-0">
+                        <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[color:var(--sec-surface)] to-[color:var(--sec-surface)] flex items-center justify-center text-sm font-bold text-[color:var(--sec-accent)] shrink-0 border border-[color:color-mix(in_srgb,var(--sec-accent)_25%,transparent)]">
                           {g.name.slice(0, 2).toUpperCase()}
                         </div>
                       )}
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-semibold text-emerald-50 truncate">{g.name}</div>
+                        <div className="text-sm font-semibold text-[color:var(--sec-text)] truncate">{g.name}</div>
                         <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-[10px] text-emerald-200/50 capitalize">{g.type.replace(/_/g, " ")}</span>
+                          <span className="text-[10px] text-[color:var(--sec-muted)] capitalize">{g.type.replace(/_/g, " ")}</span>
                           {g.member_count > 0 && (
                             <>
-                              <span className="text-emerald-800">·</span>
-                              <span className="text-[10px] text-emerald-200/50">{g.member_count} {g.member_count === 1 ? "member" : "members"}</span>
+                              <span className="text-[color:var(--ciaga-ground)]">·</span>
+                              <span className="text-[10px] text-[color:var(--sec-muted)]">{g.member_count} {g.member_count === 1 ? "member" : "members"}</span>
                             </>
                           )}
                         </div>
@@ -366,7 +375,7 @@ export default function MajorsHubClient() {
                           type="button"
                           disabled={joiningId === g.id}
                           onClick={() => handleJoin(g)}
-                          className="shrink-0 text-[11px] font-semibold text-emerald-300 border border-emerald-700/50 rounded-full px-3 py-1 hover:bg-emerald-900/40 disabled:opacity-50 transition-colors"
+                          className="shrink-0 text-[11px] font-semibold text-[color:var(--sec-good)] border border-[color:var(--sec-line)] rounded-full px-3 py-1 hover:bg-[color:var(--sec-surface-2)] disabled:opacity-50 transition-colors"
                         >
                           {joiningId === g.id ? "…" : g.join_method === "request" ? "Request" : "Join"}
                         </button>
@@ -376,9 +385,10 @@ export default function MajorsHubClient() {
                 })}
               </div>
             )}
-          </section>
+          </MajorsSection>
         </div>
       )}
+      </div>
     </div>
   );
 }

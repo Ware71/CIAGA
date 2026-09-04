@@ -62,8 +62,8 @@ function useDetailPanelOpen(): [boolean, (v: boolean) => void] {
 const CHIP_BASE =
   "h-9 px-3 rounded-xl border text-[12px] font-bold transition-colors disabled:opacity-30 disabled:cursor-not-allowed";
 const CHIP_OFF =
-  "border-emerald-900/70 bg-[#0b3b21]/40 text-emerald-100/70 hover:bg-emerald-900/25";
-const CHIP_ON = "border-[#f5e6b0] bg-[#f5e6b0] text-[#042713]";
+  "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]";
+const CHIP_ON = "border-[color:var(--sec-accent)] bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)]";
 
 function Chip({
   active,
@@ -97,7 +97,7 @@ function Chip({
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-2">
-      <div className="w-[58px] shrink-0 text-[9px] uppercase tracking-[0.12em] font-bold text-emerald-100/50">
+      <div className="w-[58px] shrink-0 text-[9px] uppercase tracking-[0.12em] font-bold text-[color:var(--sec-muted)]">
         {label}
       </div>
       <div className="flex-1 min-w-0">{children}</div>
@@ -218,15 +218,15 @@ export default function HoleDetailPanel({
         type="button"
         aria-expanded={false}
         onClick={() => setOpen(true)}
-        className="w-full rounded-2xl border border-emerald-900/70 bg-[#061f12]/95 px-3 py-2 shadow-2xl flex items-center gap-2 text-left hover:bg-[#0b3b21]/40 transition-colors"
+        className="w-full rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_95%,transparent)] px-3 py-2 shadow-2xl flex items-center gap-2 text-left hover:bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] transition-colors"
       >
-        <span className="text-[9px] uppercase tracking-[0.14em] font-bold text-emerald-100/50 shrink-0">
+        <span className="text-[9px] uppercase tracking-[0.14em] font-bold text-[color:var(--sec-muted)] shrink-0">
           Shot tracking
         </span>
-        <span className="flex-1 min-w-0 truncate text-[11px] font-semibold text-emerald-100/70">
+        <span className="flex-1 min-w-0 truncate text-[11px] font-semibold text-[color:var(--sec-muted)]">
           {summary || "Optional — putts, fairway, approach…"}
         </span>
-        <span className="text-[11px] font-extrabold text-emerald-100/60 shrink-0">Show</span>
+        <span className="text-[11px] font-extrabold text-[color:var(--sec-muted)] shrink-0">Show</span>
       </button>
     );
   }
@@ -234,16 +234,16 @@ export default function HoleDetailPanel({
   const puttsOverflow = d.putts != null && d.putts > PUTTS_CHIP_MAX;
 
   return (
-    <div className="rounded-2xl border border-emerald-900/70 bg-[#061f12]/95 p-3 shadow-2xl">
+    <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_95%,transparent)] p-3 shadow-2xl">
       <div className="flex items-center justify-between gap-2 mb-2">
-        <div className="text-[9px] uppercase tracking-[0.14em] font-bold text-emerald-100/50">
+        <div className="text-[9px] uppercase tracking-[0.14em] font-bold text-[color:var(--sec-muted)]">
           Shot tracking · Hole {holeNumber}
         </div>
         <button
           type="button"
           aria-expanded
           onClick={() => setOpen(false)}
-          className="rounded-lg border border-emerald-900/70 bg-[#0b3b21]/40 px-2 py-1 text-[11px] font-extrabold text-emerald-100/70 hover:bg-emerald-900/25"
+          className="rounded-lg border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-2 py-1 text-[11px] font-extrabold text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]"
         >
           Hide
         </button>
@@ -264,7 +264,7 @@ export default function HoleDetailPanel({
             />
 
             <div className="flex items-center gap-1">
-              <div className="text-[9px] uppercase tracking-[0.12em] font-bold text-emerald-100/50 shrink-0">
+              <div className="text-[9px] uppercase tracking-[0.12em] font-bold text-[color:var(--sec-muted)] shrink-0">
                 Pen
               </div>
               <button
@@ -279,7 +279,7 @@ export default function HoleDetailPanel({
               <div
                 aria-label={`${d.penalties ?? "no"} penalty strokes recorded`}
                 className={`w-7 shrink-0 text-center text-[13px] font-extrabold tabular-nums ${
-                  d.penalties != null && d.penalties > 0 ? "text-[#f5e6b0]" : "text-emerald-100/50"
+                  d.penalties != null && d.penalties > 0 ? "text-[color:var(--sec-accent)]" : "text-[color:var(--sec-muted)]"
                 }`}
               >
                 {d.penalties ?? "–"}
@@ -339,7 +339,7 @@ export default function HoleDetailPanel({
                   if (e.key === "Enter") commitPuttsEntry();
                   if (e.key === "Escape") setPuttsEntry(null);
                 }}
-                className="h-9 w-14 rounded-xl bg-[#042713] border border-emerald-900/70 px-2 text-center text-[13px] font-extrabold tabular-nums text-emerald-50 outline-none"
+                className="h-9 w-14 rounded-xl bg-[color:var(--ciaga-ground)] border border-[color:var(--sec-hair)] px-2 text-center text-[13px] font-extrabold tabular-nums text-[color:var(--sec-text)] outline-none"
               />
               <Chip active label="Set" onClick={commitPuttsEntry} disabled={disabled} className="flex-1" />
               <Chip

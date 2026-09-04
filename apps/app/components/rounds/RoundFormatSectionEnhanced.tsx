@@ -159,10 +159,10 @@ export function RoundFormatSectionEnhanced({
   return (
     <div className="space-y-4">
       {/* Format Selection */}
-      <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
+      <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4">
         <div className="mb-3">
-          <div className="text-sm font-semibold text-emerald-50">Round Format</div>
-          <div className="text-[11px] text-emerald-100/70">
+          <div className="text-sm font-semibold text-[color:var(--sec-text)]">Round Format</div>
+          <div className="text-[11px] text-[color:var(--sec-muted)]">
             {isOwner ? "Choose the scoring format" : "View current format"}
           </div>
         </div>
@@ -189,10 +189,10 @@ export function RoundFormatSectionEnhanced({
 
       {/* Format Configuration (Stableford Points) */}
       {showStablefordConfig && (
-        <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
+        <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4">
           <div className="mb-3">
-            <div className="text-sm font-semibold text-emerald-50">Stableford Points</div>
-            <div className="text-[11px] text-emerald-100/70">Configure the points table</div>
+            <div className="text-sm font-semibold text-[color:var(--sec-text)]">Stableford Points</div>
+            <div className="text-[11px] text-[color:var(--sec-muted)]">Configure the points table</div>
           </div>
 
           <StablefordConfigEditor
@@ -209,10 +209,10 @@ export function RoundFormatSectionEnhanced({
 
       {/* Pairs Stableford Configuration */}
       {showPairsConfig && (
-        <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
+        <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4">
           <div className="mb-3">
-            <div className="text-sm font-semibold text-emerald-50">Pairs Scoring</div>
-            <div className="text-[11px] text-emerald-100/70">How team scores are calculated</div>
+            <div className="text-sm font-semibold text-[color:var(--sec-text)]">Pairs Scoring</div>
+            <div className="text-[11px] text-[color:var(--sec-muted)]">How team scores are calculated</div>
           </div>
 
           <PairsStablefordConfig
@@ -233,10 +233,10 @@ export function RoundFormatSectionEnhanced({
 
       {/* Best Ball Configuration */}
       {showBestBallConfig && (
-        <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
+        <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4">
           <div className="mb-3">
-            <div className="text-sm font-semibold text-emerald-50">Best Ball Settings</div>
-            <div className="text-[11px] text-emerald-100/70">Scoring type and count</div>
+            <div className="text-sm font-semibold text-[color:var(--sec-text)]">Best Ball Settings</div>
+            <div className="text-[11px] text-[color:var(--sec-muted)]">Scoring type and count</div>
           </div>
 
           <BestBallConfig
@@ -257,10 +257,10 @@ export function RoundFormatSectionEnhanced({
 
       {/* Wolf Configuration */}
       {showWolfConfig && (
-        <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
+        <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4">
           <div className="mb-3">
-            <div className="text-sm font-semibold text-emerald-50">Wolf Settings</div>
-            <div className="text-[11px] text-emerald-100/70">Scoring, ties and multipliers</div>
+            <div className="text-sm font-semibold text-[color:var(--sec-text)]">Wolf Settings</div>
+            <div className="text-[11px] text-[color:var(--sec-muted)]">Scoring, ties and multipliers</div>
           </div>
 
           <WolfConfig
@@ -277,10 +277,10 @@ export function RoundFormatSectionEnhanced({
 
       {/* Matchups (for matchplay or team formats with 2+ teams) */}
       {showMatchups && (
-        <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
+        <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4">
           <div className="mb-3">
-            <div className="text-sm font-semibold text-emerald-50">Matchups</div>
-            <div className="text-[11px] text-emerald-100/70">
+            <div className="text-sm font-semibold text-[color:var(--sec-text)]">Matchups</div>
+            <div className="text-[11px] text-[color:var(--sec-muted)]">
               {formatType === "matchplay" ? "Who plays against whom" : "Team vs team pairings"}
             </div>
           </div>
@@ -302,10 +302,10 @@ export function RoundFormatSectionEnhanced({
       )}
 
       {/* Playing Handicap Settings */}
-      <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
+      <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4">
         <div className="mb-3">
-          <div className="text-sm font-semibold text-emerald-50">Handicap Settings</div>
-          <div className="text-[11px] text-emerald-100/70">
+          <div className="text-sm font-semibold text-[color:var(--sec-text)]">Handicap Settings</div>
+          <div className="text-[11px] text-[color:var(--sec-muted)]">
             {isOwner
               ? "Set default handicap calculation"
               : "View current handicap settings"}
@@ -329,17 +329,17 @@ export function RoundFormatSectionEnhanced({
       </div>
 
       {/* Side Games (Optional - Collapsed by default) */}
-      <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
+      <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <div className="text-sm font-semibold text-emerald-50">Side Games</div>
-            <div className="text-[11px] text-emerald-100/70">
+            <div className="text-sm font-semibold text-[color:var(--sec-text)]">Side Games</div>
+            <div className="text-[11px] text-[color:var(--sec-muted)]">
               Optional games alongside main format
             </div>
           </div>
           <button
             onClick={() => setShowAdvanced(!showAdvanced)}
-            className="px-2 py-1 text-xs rounded border border-emerald-700 text-emerald-200 hover:bg-emerald-900/30 transition-colors"
+            className="px-2 py-1 text-xs rounded border border-[color:var(--sec-line)] text-[color:var(--sec-text-2)] hover:bg-[color:var(--sec-surface-2)] transition-colors"
           >
             {showAdvanced ? "Hide" : "Show"}
           </button>
@@ -358,7 +358,7 @@ export function RoundFormatSectionEnhanced({
         )}
 
         {!showAdvanced && sideGames.length > 0 && (
-          <div className="text-xs text-emerald-100/70">
+          <div className="text-xs text-[color:var(--sec-muted)]">
             {sideGames.length} side game{sideGames.length > 1 ? "s" : ""} enabled
           </div>
         )}

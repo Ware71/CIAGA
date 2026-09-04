@@ -76,24 +76,24 @@ export default function ProfileHeader({
     <>
       {/* Profile content */}
       <div className="mt-4 flex flex-col items-center">
-        <Avatar className="h-24 w-24 border border-emerald-200/70 shadow-lg">
+        <Avatar className="h-24 w-24 border border-[color:var(--sec-line)] shadow-lg">
           <AvatarImage src={avatarUrl} />
           <AvatarFallback className="text-lg">{initials}</AvatarFallback>
         </Avatar>
 
         {/* NAME: self -> editable, public -> static */}
         {!isMe ? (
-          <div className="mt-4 text-base font-semibold text-[#f5e6b0] max-w-[280px] truncate text-center">
+          <div className="mt-4 text-base font-semibold text-[color:var(--sec-accent)] max-w-[280px] truncate text-center">
             {titleName}
           </div>
         ) : !editingName ? (
           <div className="mt-4 flex items-center justify-center gap-2 max-w-[280px]">
-            <div className="text-base font-semibold text-[#f5e6b0] truncate text-center">
+            <div className="text-base font-semibold text-[color:var(--sec-accent)] truncate text-center">
               {profile?.name || titleName}
             </div>
             <button
               type="button"
-              className="text-emerald-300 hover:text-emerald-200 text-sm"
+              className="text-[color:var(--sec-good)] hover:text-[color:var(--sec-text-2)] text-sm"
               onClick={onEditName}
               title="Edit display name"
               aria-label="Edit display name"
@@ -103,21 +103,21 @@ export default function ProfileHeader({
           </div>
         ) : (
           <div className="mt-3 w-full max-w-sm">
-            <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-3">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">Display name</div>
+            <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_80%,transparent)] p-3">
+              <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--sec-muted)]">Display name</div>
               <input
                 value={displayName}
                 onChange={(e) => onDisplayNameChange(e.target.value)}
                 placeholder="Set your display name"
                 maxLength={30}
                 autoFocus
-                className="mt-2 w-full rounded-xl border border-emerald-900/70 bg-[#08341b] px-3 py-2 text-sm outline-none placeholder:text-emerald-200/40"
+                className="mt-2 w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-3 py-2 text-sm outline-none placeholder:text-[color:var(--sec-muted)]"
               />
               <div className="mt-2 flex justify-end gap-2">
                 <Button
                   size="sm"
                   variant="ghost"
-                  className="h-8 px-3 text-emerald-100 hover:bg-emerald-900/30"
+                  className="h-8 px-3 text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
                   onClick={onCancelEditName}
                 >
                   Cancel
@@ -127,7 +127,7 @@ export default function ProfileHeader({
                   size="sm"
                   onClick={onSaveDisplayName}
                   disabled={savingName || !displayName.trim()}
-                  className="h-8 rounded-xl bg-emerald-700/80 hover:bg-emerald-700"
+                  className="h-8 rounded-xl bg-[color:var(--sec-primary)] hover:bg-[color:var(--sec-primary-hover)]"
                 >
                   {savingName ? "Saving…" : "Save"}
                 </Button>
@@ -153,7 +153,7 @@ export default function ProfileHeader({
               <Button
                 size="sm"
                 disabled={busy}
-                className="rounded-xl bg-emerald-700/80 hover:bg-emerald-700"
+                className="rounded-xl bg-[color:var(--sec-primary)] hover:bg-[color:var(--sec-primary-hover)]"
                 onClick={onFollow}
               >
                 {busy ? "..." : "Follow"}
@@ -175,7 +175,7 @@ export default function ProfileHeader({
             <Button
               variant="ghost"
               size="sm"
-              className="text-emerald-200/70 hover:text-emerald-100 hover:bg-emerald-900/30 text-xs"
+              className="text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)] text-xs"
               onClick={onPickFile}
               disabled={uploading}
             >
@@ -191,24 +191,24 @@ export default function ProfileHeader({
             className="text-center hover:opacity-80"
             onClick={() => onOpenList("followers")}
           >
-            <div className="text-lg font-semibold text-emerald-50">{followersCount}</div>
-            <div className="text-[10px] uppercase tracking-[0.14em] text-emerald-100/60">Followers</div>
+            <div className="text-lg font-semibold text-[color:var(--sec-text)]">{followersCount}</div>
+            <div className="text-[10px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)]">Followers</div>
           </button>
           <button
             type="button"
             className="text-center hover:opacity-80"
             onClick={() => onOpenList("following")}
           >
-            <div className="text-lg font-semibold text-emerald-50">{followingCount}</div>
-            <div className="text-[10px] uppercase tracking-[0.14em] text-emerald-100/60">Following</div>
+            <div className="text-lg font-semibold text-[color:var(--sec-text)]">{followingCount}</div>
+            <div className="text-[10px] uppercase tracking-[0.14em] text-[color:var(--sec-muted)]">Following</div>
           </button>
         </div>
 
         {/* Handicap Index card */}
-        <div className="mt-4 w-full rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4 text-center">
-          <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-200/70">Handicap Index</div>
-          <div className="mt-1 text-2xl font-semibold text-emerald-50">{hiText}</div>
-          {hiSub && <div className="mt-1 text-xs text-emerald-100/60">{hiSub}</div>}
+        <div className="mt-4 w-full rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_80%,transparent)] p-4 text-center">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--sec-muted)]">Handicap Index</div>
+          <div className="mt-1 text-2xl font-semibold text-[color:var(--sec-text)]">{hiText}</div>
+          {hiSub && <div className="mt-1 text-xs text-[color:var(--sec-muted)]">{hiSub}</div>}
         </div>
       </div>
     </>

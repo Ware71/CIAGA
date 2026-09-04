@@ -1,9 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { FeedItemVM } from "@/lib/feed/types";
 import ReactionBar from "@/components/social/ReactionBar";
+import OverflowMenu from "@/components/social/OverflowMenu";
+import PostMedia, { mediaFromPayload } from "@/components/social/PostMedia";
+import ReactorsSheet from "@/components/social/ReactorsSheet";
+import StatLine from "@/components/social/StatLine";
+import { CARD, Tag } from "@/components/ui/chrome";
+import { renderWithMentions } from "@/lib/social/mentions";
 
 function safeNum(n: any): number | null {
   return typeof n === "number" && Number.isFinite(n) ? n : null;
@@ -22,13 +28,13 @@ function Avatar({ name, url, size = 32 }: { name: string; url: string | null; si
       src={url}
       alt=""
       style={{ width: s, height: s }}
-      className="rounded-full object-cover border border-emerald-900/60"
+      className="rounded-full border border-[color:var(--hair-panel)] object-cover"
       loading="lazy"
     />
   ) : (
     <div
       style={{ width: s, height: s }}
-      className="rounded-full border border-emerald-900/60 bg-emerald-950/30 grid place-items-center text-[11px] font-extrabold text-emerald-50"
+      className="grid place-items-center rounded-full border border-[color:var(--hair-panel)] bg-[color:var(--sec-surface)] text-[length:var(--t-sec)] font-medium text-[color:var(--sec-text)]"
     >
       {initials(name)}
     </div>
@@ -37,30 +43,40 @@ function Avatar({ name, url, size = 32 }: { name: string; url: string | null; si
 
 type Person = { profile_id?: string | null; name: string; avatar_url: string | null };
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/**
+ * Formatted by hand rather than with toLocaleDateString.
+ *
+ * This is server-rendered and then hydrated, and the two runtimes don't agree
+ * on a locale: Node produced "Sep 3, 2026" while the browser produced
+ * "3 Sept 2026", which threw a hydration mismatch on every load of this page
+ * and made React discard and re-render the tree.
+ */
 function shortDate(iso: string | null | undefined): string | null {
   if (!iso) return null;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
 function pillFor(item: FeedItemVM): string {
   const p: any = item.payload ?? {};
   switch (item.type) {
     case "pb":
-      return "PERSONAL BEST";
+      return "Personal best";
     case "course_record":
-      return "COURSE RECORD";
+      return "Course record";
     case "hole_event":
-      return p.kind === "hio" ? "HOLE IN ONE" : p.kind === "albatross" ? "ALBATROSS" : p.kind === "eagle" ? "EAGLE" : "HOLE EVENT";
+      return p.kind === "hio" ? "Hole in one" : p.kind === "albatross" ? "Albatross" : p.kind === "eagle" ? "Eagle" : "Hole event";
     case "user_post":
-      return "POST";
+      return "";
     case "competition_round":
-      return "COMPETITION";
+      return "Competition";
     case "round_played":
-      return typeof p.format_type === "string" && p.format_type.startsWith("matchplay") ? "MATCHPLAY" : "ROUND";
+      return typeof p.format_type === "string" && p.format_type.startsWith("matchplay") ? "Matchplay" : "Round";
     default:
-      return "ACTIVITY";
+      return "Activity";
   }
 }
 
@@ -95,12 +111,19 @@ function keyFigureFor(item: FeedItemVM): { value: string; label: string } | null
 export default function DetailHeader({ item }: { item: FeedItemVM }) {
   const router = useRouter();
   const [myReaction, setMyReaction] = useState<string | null>(item.aggregates.my_reaction ?? null);
-  const [reactionCounts, setReactionCounts] = useState<Record<string, number>>(item.aggregates.reaction_counts ?? {});
+  const [reactionCounts, setReactionCounts] = useState<Record<string, number>>(
+    item.aggregates.reaction_counts ?? {},
+  );
+  const [reactorsOpen, setReactorsOpen] = useState(false);
 
   const p: any = item.payload ?? {};
   const people = peopleFor(item);
   const pill = pillFor(item);
   const keyFig = keyFigureFor(item);
+  const media = useMemo(
+    () => (item.type === "user_post" ? mediaFromPayload(p) : []),
+    [item.type, p],
+  );
 
   const namesLabel =
     people.length === 0
@@ -114,60 +137,84 @@ export default function DetailHeader({ item }: { item: FeedItemVM }) {
   const date = shortDate(p.date ?? item.occurred_at);
   const subLine = [course, tee, date].filter(Boolean).join(" · ");
 
-  const isMatchplay = item.type === "round_played" && typeof p.format_type === "string" && p.format_type.startsWith("matchplay");
+  const isMatchplay =
+    item.type === "round_played" &&
+    typeof p.format_type === "string" &&
+    p.format_type.startsWith("matchplay");
   const matchLine = isMatchplay && typeof p.format_winner === "string" ? p.format_winner : null;
   const friendBest = item.type === "pb" && item.aggregates.friend_best;
 
   const firstPid = people[0]?.profile_id ?? null;
 
   return (
-    <div className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/60 p-3">
+    <div className={`${CARD} overflow-hidden p-3`}>
       <div className="flex items-start gap-3">
-        {/* Avatars */}
         <button
           type="button"
           onClick={() => firstPid && router.push(`/player/${firstPid}`)}
           className="flex shrink-0 -space-x-2"
+          aria-label={firstPid ? `View ${people[0]?.name ?? "player"}` : undefined}
         >
           {people.slice(0, 3).map((x, i) => (
-            <Avatar key={`${x.name}-${i}`} name={x.name} url={x.avatar_url} size={32} />
+            <Avatar key={`${x.name}-${i}`} name={x.name} url={x.avatar_url} size={36} />
           ))}
-          {people.length === 0 ? <Avatar name="C" url={null} size={32} /> : null}
+          {people.length === 0 ? <Avatar name="C" url={null} size={36} /> : null}
         </button>
 
-        {/* Name + pill + meta */}
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <div className="min-w-0 truncate text-sm font-extrabold text-emerald-50">{namesLabel}</div>
-            <span className="shrink-0 rounded-full border border-emerald-800/50 bg-emerald-950/40 px-2 py-0.5 text-[9px] font-extrabold tracking-wide text-[#f5e6b0]">
-              {pill}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="min-w-0 truncate text-[length:var(--t-body)] font-medium text-[color:var(--sec-text)]">
+              {namesLabel}
             </span>
-            {friendBest ? (
-              <span className="shrink-0 rounded-full border border-sky-700/50 bg-sky-900/30 px-2 py-0.5 text-[9px] font-extrabold tracking-wide text-sky-300">
-                CIRCLE BEST
-              </span>
-            ) : null}
+            {pill ? <Tag>{pill}</Tag> : null}
+            {friendBest ? <Tag>Circle best</Tag> : null}
           </div>
-          {subLine ? <div className="mt-0.5 truncate text-[11px] font-semibold text-emerald-100/55">{subLine}</div> : null}
-          {matchLine ? <div className="mt-0.5 truncate text-[11px] font-extrabold text-[#f5e6b0]">{matchLine}</div> : null}
+          {subLine ? (
+            <div className="mt-0.5 truncate text-[length:var(--t-sec)] font-normal text-[color:var(--sec-muted)]">
+              {subLine}
+            </div>
+          ) : null}
+          {matchLine ? (
+            <div className="mt-0.5 truncate text-[length:var(--t-sec)] font-medium text-[color:var(--sec-accent)]">
+              {matchLine}
+            </div>
+          ) : null}
         </div>
 
-        {/* Key figure */}
         {keyFig ? (
           <div className="shrink-0 text-right">
-            <div className="text-[9px] font-extrabold tracking-wide text-emerald-100/45">{keyFig.label}</div>
-            <div className="text-xl font-extrabold leading-none text-[#f5e6b0]">{keyFig.value}</div>
+            <div className="text-[length:var(--t-label)] font-medium uppercase tracking-[0.1em] text-[color:var(--sec-muted)]">
+              {keyFig.label}
+            </div>
+            <div className="text-[length:var(--t-fig)] font-semibold tabular-nums leading-none text-[color:var(--sec-accent)]">
+              {keyFig.value}
+            </div>
           </div>
         ) : null}
+
+        {!item.id.startsWith("live:") ? <OverflowMenu item={item} /> : null}
       </div>
 
-      {/* Post text (compact) */}
+      {/* Post text — in full. This is the detail page; the feed card is where
+          it gets truncated. */}
       {item.type === "user_post" && typeof p.text === "string" && p.text.trim() ? (
-        <div className="mt-2 line-clamp-3 whitespace-pre-wrap text-sm font-semibold text-emerald-50/90">{p.text}</div>
+        <div className="mt-2.5 whitespace-pre-wrap text-[length:var(--t-body)] font-normal leading-[1.45] text-[color:var(--sec-text)]">
+          {renderWithMentions(p.text, Array.isArray(p.tagged_profiles) ? p.tagged_profiles : [])}
+        </div>
       ) : null}
 
-      {/* Reactions */}
-      <div className="mt-2 flex items-center justify-between gap-2">
+      {/* Photos. These were missing entirely: opening a photo post from the
+          feed used to lose the photos. */}
+      {media.length > 0 ? <PostMedia media={media} /> : null}
+
+      <StatLine
+        counts={reactionCounts}
+        myReaction={myReaction}
+        commentCount={item.aggregates.comment_count ?? 0}
+        onOpenReactors={() => setReactorsOpen(true)}
+      />
+
+      <div className="mt-1.5 flex items-center gap-1 border-t border-[color:var(--hair)] pt-1.5">
         <ReactionBar
           feedItemId={item.id}
           myReaction={myReaction}
@@ -177,27 +224,13 @@ export default function DetailHeader({ item }: { item: FeedItemVM }) {
             if (next.reactionCounts) setReactionCounts(next.reactionCounts);
           }}
         />
-        <ReactionSummary counts={reactionCounts} />
       </div>
-    </div>
-  );
-}
 
-function ReactionSummary({ counts }: { counts: Record<string, number> }) {
-  const entries = Object.entries(counts ?? {}).filter(([, n]) => typeof n === "number" && n > 0);
-  if (!entries.length) return null;
-  entries.sort((a, b) => b[1] - a[1]);
-  const total = entries.reduce((acc, [, n]) => acc + n, 0);
-  return (
-    <div className="flex items-center gap-1 text-[11px] font-semibold text-emerald-100/55">
-      {entries.slice(0, 4).map(([emoji, n]) => (
-        <span key={emoji}>
-          {emoji}
-          {n}
-        </span>
-      ))}
-      <span className="text-emerald-100/35">·</span>
-      <span>{total}</span>
+      <ReactorsSheet
+        open={reactorsOpen}
+        onClose={() => setReactorsOpen(false)}
+        target={{ kind: "feed_item", id: item.id }}
+      />
     </div>
   );
 }

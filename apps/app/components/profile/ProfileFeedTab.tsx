@@ -84,8 +84,8 @@ export default function ProfileFeedTab({ profileId }: Props) {
             type="button"
             className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg shrink-0 whitespace-nowrap transition-colors ${
               sort === opt.value
-                ? "bg-[#f5e6b0] text-[#042713]"
-                : "text-emerald-100/80 hover:bg-emerald-900/20"
+                ? "bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)]"
+                : "text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]"
             }`}
             onClick={() => handleSortChange(opt.value)}
           >
@@ -96,7 +96,7 @@ export default function ProfileFeedTab({ profileId }: Props) {
 
       {/* Loading state */}
       {isLoading && (
-        <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">
+        <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4 text-sm text-[color:var(--sec-muted)]">
           Loading feed...
         </div>
       )}
@@ -110,7 +110,7 @@ export default function ProfileFeedTab({ profileId }: Props) {
 
       {/* Empty state */}
       {!isLoading && !error && items.length === 0 && (
-        <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/70">
+        <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4 text-sm text-[color:var(--sec-muted)]">
           No feed activity yet.
         </div>
       )}
@@ -127,7 +127,7 @@ export default function ProfileFeedTab({ profileId }: Props) {
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-emerald-100 hover:bg-emerald-900/20"
+                className="text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
                 onClick={loadMore}
                 disabled={isLoadingMore}
               >

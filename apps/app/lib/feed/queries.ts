@@ -53,11 +53,15 @@ export async function getFeedPage(params: {
       occurred_at,
       created_at,
       payload,
+      actor:actor_profile_id ( id, name, avatar_url ),
       feed_item_targets!inner(viewer_profile_id)
     `
     )
     .eq("feed_item_targets.viewer_profile_id", viewerProfileId)
-    .neq("visibility", "removed")
+    // 'visible' only, not just "not removed": a moderator hiding an item should
+    // take it out of the feed while leaving it resolvable by direct link (see
+    // getFeedItemById below, which keeps the looser filter on purpose).
+    .eq("visibility", "visible")
     .order("occurred_at", { ascending: false })
     .order("id", { ascending: false })
     .limit(limit + 1);
@@ -95,91 +99,95 @@ export async function getFeedPage(params: {
  * Enrich raw feed_items rows into FeedItemVMs (actor, subjects, reactions,
  * comments, top comment). Shared by getFeedPage and getFeedItemById.
  */
+/**
+ * Fetch and order the subjects for a page of feed items.
+ *
+ * Ordering is deterministic — role 'primary' first, then display name — so the
+ * same round renders its players in the same order on every load.
+ */
+async function getSubjects(feedItemIds: string[]): Promise<Map<string, any[]>> {
+  const subjectMap = new Map<string, any[]>();
+  if (!feedItemIds.length) return subjectMap;
+
+  const { data: subjRows, error: sErr } = await supabaseAdmin
+    .from("feed_item_subjects")
+    .select(
+      `
+      feed_item_id,
+      role,
+      subject_profile_id,
+      profiles:subject_profile_id ( id, name, avatar_url )
+    `
+    )
+    .in("feed_item_id", feedItemIds);
+
+  if (sErr) throw sErr;
+
+  for (const row of subjRows ?? []) {
+    const fid = (row as any).feed_item_id as string | undefined;
+    const prof = (row as any).profiles;
+    if (!fid || !prof?.id) continue;
+
+    const cur = subjectMap.get(fid) ?? [];
+    cur.push({
+      profile_id: prof.id,
+      display_name: prof.name ?? "Player",
+      avatar_url: prof.avatar_url ?? null,
+      role: (row as any).role ?? null,
+    });
+    subjectMap.set(fid, cur);
+  }
+
+  for (const arr of subjectMap.values()) {
+    arr.sort((a, b) => {
+      const ap = a.role === "primary" ? 0 : 1;
+      const bp = b.role === "primary" ? 0 : 1;
+      if (ap !== bp) return ap - bp;
+      return String(a.display_name).localeCompare(String(b.display_name));
+    });
+  }
+
+  return subjectMap;
+}
+
+/**
+ * Enrich raw feed_items rows into FeedItemVMs.
+ *
+ * This used to be eight sequential round trips — actors, then subjects, then a
+ * batch of three aggregate queries, then top comments (gated on the comment
+ * counts), then top-comment authors, then two more for the PB "circle best"
+ * flag. At a ~40ms hop to Supabase that was ~320ms of latency before any of the
+ * queries did work, and it blocked the server render of /social.
+ *
+ * Every one of those dependencies was false:
+ *
+ *   the actor now rides along on the page query's own select;
+ *   the top-comment gate spent a full round trip to avoid asking about a
+ *     handful of ids that would have returned nothing;
+ *   computeFriendBestForPbs's two queries never used each other's results —
+ *     the circle filter happens in JS;
+ *   the four aggregate queries are now one RPC.
+ *
+ * So: one wave for the page, one for everything else.
+ */
 export async function enrichFeedItems(rows: any[], viewerProfileId: string): Promise<FeedItemVM[]> {
   if (!rows.length) return [];
 
-  // Actor profiles
-  const actorIds = Array.from(new Set(rows.map((i: any) => i.actor_profile_id).filter(Boolean)));
+  const feedItemIds = rows.map((i: any) => i.id).filter(Boolean);
 
-  const { data: actors, error: aErr } = await supabaseAdmin
-    .from("profiles")
-    .select("id, name, avatar_url")
-    .in("id", actorIds.length ? actorIds : [viewerProfileId]);
-
-  if (aErr) throw aErr;
-
-  const actorMap = new Map<string, any>();
-  for (const a of actors ?? []) actorMap.set(a.id, a);
-
-  // Subjects (feed_item_subjects -> profiles)
-  const feedItemIdsForSubjects = rows.map((i: any) => i.id).filter(Boolean);
-  const subjectMap = new Map<string, any[]>();
-
-  if (feedItemIdsForSubjects.length) {
-    const { data: subjRows, error: sErr } = await supabaseAdmin
-      .from("feed_item_subjects")
-      .select(
-        `
-        feed_item_id,
-        role,
-        subject_profile_id,
-        profiles:subject_profile_id ( id, name, avatar_url )
-      `
-      )
-      .in("feed_item_id", feedItemIdsForSubjects);
-
-    if (sErr) throw sErr;
-
-    for (const row of subjRows ?? []) {
-      const fid = (row as any).feed_item_id as string | undefined;
-      const prof = (row as any).profiles;
-      if (!fid || !prof?.id) continue;
-
-      const entry = {
-        profile_id: prof.id,
-        display_name: prof.name ?? "Player",
-        avatar_url: prof.avatar_url ?? null,
-        role: (row as any).role ?? null,
-      };
-
-      const cur = subjectMap.get(fid) ?? [];
-      cur.push(entry);
-      subjectMap.set(fid, cur);
-    }
-
-    // Deterministic subject ordering:
-    // - role === 'primary' first
-    // - then by display_name
-    for (const [fid, arr] of subjectMap.entries()) {
-      arr.sort((a, b) => {
-        const ap = a.role === "primary" ? 0 : 1;
-        const bp = b.role === "primary" ? 0 : 1;
-        if (ap !== bp) return ap - bp;
-        return String(a.display_name).localeCompare(String(b.display_name));
-      });
-    }
-  }
-
-  // Aggregates (reactions/comments + top comment)
-  const feedItemIds = rows.map((i: any) => i.id);
-
-  const [reactionAgg, commentAgg, myReactions] = await Promise.all([
-    getReactionCounts(feedItemIds),
-    getCommentCounts(feedItemIds),
-    getMyReactions(feedItemIds, viewerProfileId),
+  const [subjectMap, aggregates, friendBestIds] = await Promise.all([
+    getSubjects(feedItemIds),
+    getFeedAggregates(feedItemIds, viewerProfileId),
+    computeFriendBestForPbs(rows, viewerProfileId),
   ]);
 
-  // Only fetch top comments for items that have comments
-  const feedItemIdsWithComments = feedItemIds.filter((id) => (commentAgg.get(id) ?? 0) > 0);
-  const topComments = await getTopComments(feedItemIdsWithComments);
-
-  // Viewer-specific "best of your circle" flag for PB cards.
-  const friendBestIds = await computeFriendBestForPbs(rows, viewerProfileId);
-
   return rows.map((i: any) => {
-    const actor = i.actor_profile_id ? normalizeActor(actorMap.get(i.actor_profile_id)) : null;
+    // `actor` is embedded by the page query. Rows from callers that don't embed
+    // it fall back to null, which is the same as an item with no actor.
+    const actor = normalizeActor(i.actor ?? null);
 
-    const reaction_counts = reactionAgg.get(i.id) ?? {};
+    const agg = aggregates.get(i.id);
+    const reaction_counts = agg?.reaction_counts ?? {};
     const reaction_summary = buildReactionSummary(reaction_counts, 3);
 
     return {
@@ -206,9 +214,9 @@ export async function enrichFeedItems(rows: any[], viewerProfileId: string): Pro
       aggregates: {
         reaction_counts,
         reaction_summary,
-        comment_count: commentAgg.get(i.id) ?? 0,
-        my_reaction: myReactions.get(i.id) ?? null,
-        top_comment: topComments.get(i.id) ?? null,
+        comment_count: agg?.comment_count ?? 0,
+        my_reaction: agg?.my_reaction ?? null,
+        top_comment: agg?.top_comment ?? null,
         friend_best: friendBestIds.has(i.id),
       },
     } as FeedItemVM;
@@ -227,21 +235,22 @@ async function computeFriendBestForPbs(rows: any[], viewerProfileId: string): Pr
   );
   if (!pbRows.length) return result;
 
-  // Followed profiles (+ self) define "your circle".
-  const { data: followRows } = await supabaseAdmin
-    .from("follows")
-    .select("following_id")
-    .eq("follower_id", viewerProfileId);
-  const circle = new Set<string>([viewerProfileId, ...(followRows ?? []).map((r: any) => r.following_id)]);
-
   const courseIds = Array.from(new Set(pbRows.map((i) => i.payload.course_id as string)));
 
-  // All gross scores by people in the circle at those courses.
-  const { data: crRows } = await supabaseAdmin
-    .from("v_course_record_rounds")
-    .select("profile_id, course_id, tee_name, gross_score, is_complete")
-    .in("course_id", courseIds)
-    .eq("is_complete", true);
+  // These two look sequential but aren't: the course-record query filters on
+  // course only, and the circle is applied in JS below. Awaiting them in turn
+  // cost a whole round trip for nothing.
+  const [{ data: followRows }, { data: crRows }] = await Promise.all([
+    supabaseAdmin.from("follows").select("following_id").eq("follower_id", viewerProfileId),
+    supabaseAdmin
+      .from("v_course_record_rounds")
+      .select("profile_id, course_id, tee_name, gross_score, is_complete")
+      .in("course_id", courseIds)
+      .eq("is_complete", true),
+  ]);
+
+  // Followed profiles (+ self) define "your circle".
+  const circle = new Set<string>([viewerProfileId, ...(followRows ?? []).map((r: any) => r.following_id)]);
 
   // min gross per (course_id, tee_name) among the circle
   const minByKey = new Map<string, number>();
@@ -283,6 +292,7 @@ export async function getFeedItemById(id: string, viewerProfileId: string): Prom
       occurred_at,
       created_at,
       payload,
+      actor:actor_profile_id ( id, name, avatar_url ),
       feed_item_targets!inner(viewer_profile_id)
     `
     )
@@ -298,146 +308,49 @@ export async function getFeedItemById(id: string, viewerProfileId: string): Prom
   return items[0] ?? null;
 }
 
-export async function getReactionCounts(feedItemIds: string[]) {
-  const map = new Map<string, Record<string, number>>();
-  if (!feedItemIds.length) return map;
-
-  const { data, error } = await supabaseAdmin
-    .from("feed_reactions")
-    .select("feed_item_id, emoji")
-    .in("feed_item_id", feedItemIds);
-  if (error) throw error;
-
-  for (const row of data ?? []) {
-    const fid = (row as any).feed_item_id as string;
-    const emoji = (row as any).emoji as string;
-    if (!fid || !emoji) continue;
-    const cur = map.get(fid) ?? {};
-    cur[emoji] = (cur[emoji] ?? 0) + 1;
-    map.set(fid, cur);
-  }
-
-  return map;
-}
-
-export async function getCommentCounts(feedItemIds: string[]) {
-  const map = new Map<string, number>();
-  if (!feedItemIds.length) return map;
-
-  const { data, error } = await supabaseAdmin
-    .from("feed_comments")
-    .select("feed_item_id")
-    .in("feed_item_id", feedItemIds);
-  if (error) throw error;
-
-  for (const row of data ?? []) {
-    const fid = (row as any).feed_item_id as string;
-    if (!fid) continue;
-    map.set(fid, (map.get(fid) ?? 0) + 1);
-  }
-
-  return map;
-}
-
-export async function getMyReactions(feedItemIds: string[], viewerProfileId: string) {
-  const map = new Map<string, string | null>();
-  if (!feedItemIds.length) return map;
-
-  const { data, error } = await supabaseAdmin
-    .from("feed_reactions")
-    .select("feed_item_id, emoji")
-    .eq("profile_id", viewerProfileId)
-    .in("feed_item_id", feedItemIds);
-
-  if (error) throw error;
-
-  for (const row of data ?? []) {
-    const fid = (row as any).feed_item_id as string;
-    const emoji = (row as any).emoji as string;
-    if (!fid) continue;
-    map.set(fid, emoji ?? null);
-  }
-
-  return map;
-}
+export type FeedAggregate = {
+  reaction_counts: Record<string, number>;
+  comment_count: number;
+  my_reaction: string | null;
+  top_comment: any | null;
+};
 
 /**
- * Get the top comment per feed item:
- * - Highest vote_count first
- * - Tie-breaker: most recent created_at
+ * Reaction counts, comment count, the viewer's own reaction and the top comment
+ * for a page of feed items — in one round trip.
  *
- * Returns shape compatible with FeedCard:
- * {
- *   id, body, created_at,
- *   vote_count, like_count,
- *   author: { id, name, avatar_url }
- * }
+ * Replaces four separate queries that each pulled whole tables back to count
+ * them in JS; see migration 20260903000001_feed_aggregates.sql for why that
+ * mattered more than the round-trip count did.
+ *
+ * The RPC is service-role-only and does no authorization of its own: callers
+ * must already have narrowed `feedItemIds` to items the viewer may see.
  */
-export async function getTopComments(feedItemIds: string[]) {
-  const map = new Map<string, any>();
+export async function getFeedAggregates(
+  feedItemIds: string[],
+  viewerProfileId: string,
+): Promise<Map<string, FeedAggregate>> {
+  const map = new Map<string, FeedAggregate>();
   if (!feedItemIds.length) return map;
 
-  const { data: rows, error } = await supabaseAdmin
-    .from("feed_comments")
-    .select("id, feed_item_id, profile_id, body, created_at, vote_count")
-    .in("feed_item_id", feedItemIds)
-    .order("vote_count", { ascending: false })
-    .order("created_at", { ascending: false });
+  const { data, error } = await supabaseAdmin.rpc("get_feed_aggregates", {
+    _feed_item_ids: feedItemIds,
+    _viewer_profile_id: viewerProfileId,
+  });
 
   if (error) throw error;
 
-  const authorIds = Array.from(new Set((rows ?? []).map((r: any) => r.profile_id).filter(Boolean)));
-
-  const authorMap = new Map<string, { id: string; name: string; avatar_url: string | null }>();
-  if (authorIds.length) {
-    const { data: profs, error: pErr } = await supabaseAdmin
-      .from("profiles")
-      .select("id, name, avatar_url")
-      .in("id", authorIds);
-
-    if (pErr) throw pErr;
-
-    for (const p of profs ?? []) {
-      authorMap.set((p as any).id, {
-        id: (p as any).id,
-        name: (p as any).name ?? "Player",
-        avatar_url: (p as any).avatar_url ?? null,
-      });
-    }
-  }
-
-  // Since rows are ordered by (vote_count desc, created_at desc),
-  // first row per feed_item_id is the winner.
-  for (const r of rows ?? []) {
-    const fid = (r as any).feed_item_id as string;
-    if (!fid) continue;
-    if (map.has(fid)) continue;
-
-    const pid = (r as any).profile_id as string | undefined;
-    const author = pid ? authorMap.get(pid) : null;
-
-    const voteCount = typeof (r as any).vote_count === "number" ? (r as any).vote_count : 0;
-    const body = typeof (r as any).body === "string" ? (r as any).body : "";
-
-    if (!body) continue;
-
-    map.set(fid, {
-      id: (r as any).id,
-      body,
-      created_at: (r as any).created_at,
-      vote_count: voteCount,
-      like_count: voteCount, // alias for FeedCard
-      author: {
-        id: pid ?? null,
-        name: author?.name ?? "Player",
-        avatar_url: author?.avatar_url ?? null,
-      },
+  for (const [feedItemId, raw] of Object.entries((data ?? {}) as Record<string, any>)) {
+    map.set(feedItemId, {
+      reaction_counts: (raw?.reaction_counts ?? {}) as Record<string, number>,
+      comment_count: typeof raw?.comment_count === "number" ? raw.comment_count : 0,
+      my_reaction: typeof raw?.my_reaction === "string" ? raw.my_reaction : null,
+      top_comment: raw?.top_comment ?? null,
     });
   }
 
   return map;
 }
-
 
 /**
  * Live rounds for the main feed.

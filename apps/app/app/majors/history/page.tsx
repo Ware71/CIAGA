@@ -1,8 +1,9 @@
-import type { Metadata } from "next";
-import HistoryClient from "./HistoryClient";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "History" };
-
-export default function HistoryPage() {
-  return <HistoryClient />;
+/**
+ * Merged into /majors/schedule, which now shows fixtures and results together.
+ * Kept as a redirect because notifications and older links still point here.
+ */
+export default function MajorsHistoryPage() {
+  redirect("/majors/schedule?filter=completed");
 }

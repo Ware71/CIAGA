@@ -2,7 +2,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 
 export default function ProfileLoading() {
   return (
-    <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
+    <div className="min-h-screen bg-[color:var(--ciaga-ground)] text-slate-100 px-4 pt-8 pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto w-full max-w-sm space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -20,8 +20,8 @@ export default function ProfileLoading() {
           <Skeleton className="h-3 w-24" />
         </div>
         {/* Info cards */}
-        <Skeleton className="h-24 w-full rounded-2xl bg-emerald-900/20" />
-        <Skeleton className="h-16 w-full rounded-2xl bg-emerald-900/20" />
+        <Skeleton className="h-24 w-full rounded-2xl bg-[color:var(--sec-surface)]" />
+        <Skeleton className="h-16 w-full rounded-2xl bg-[color:var(--sec-surface)]" />
       </div>
     </div>
   )

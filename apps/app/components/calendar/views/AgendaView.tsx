@@ -21,7 +21,7 @@ export function AgendaView(props: {
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/40 p-6 text-center text-sm text-emerald-100/60">
+      <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] p-6 text-center text-sm text-[color:var(--sec-muted)]">
         Nothing coming up.
       </div>
     );
@@ -35,7 +35,7 @@ export function AgendaView(props: {
             <div
               className={cn(
                 "text-[11px] font-semibold",
-                isToday(day) ? "text-[#f5e6b0]" : "text-emerald-100/80"
+                isToday(day) ? "text-[color:var(--sec-accent)]" : "text-[color:var(--sec-muted)]"
               )}
             >
               {formatDayLabel(day)}

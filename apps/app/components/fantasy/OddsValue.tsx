@@ -80,7 +80,7 @@ export function OddsFormatMenu({ className }: { className?: string }) {
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-label="Odds format"
-        className="flex items-center gap-1 rounded-full border border-emerald-800/50 px-2 py-1 text-[10px] font-semibold text-emerald-100/70 hover:text-emerald-50"
+        className="flex items-center gap-1 rounded-full border border-[color:var(--sec-hair)] px-2 py-1 text-[10px] font-semibold text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
       >
         <SlidersHorizontal className="h-3 w-3" />
         {current}
@@ -93,7 +93,7 @@ export function OddsFormatMenu({ className }: { className?: string }) {
             className="fixed inset-0 z-40"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute right-0 top-full z-50 mt-1 w-32 overflow-hidden rounded-xl border border-emerald-800/60 bg-[#07301a] shadow-xl">
+          <div className="absolute right-0 top-full z-50 mt-1 w-32 overflow-hidden rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] shadow-xl">
             {ODDS_FORMATS.map((f) => (
               <button
                 key={f.id}
@@ -104,8 +104,8 @@ export function OddsFormatMenu({ className }: { className?: string }) {
                 }}
                 className={`block w-full px-3 py-2 text-left text-[11px] ${
                   format === f.id
-                    ? "bg-emerald-800/40 text-[#f5e6b0]"
-                    : "text-emerald-100/80 hover:bg-emerald-900/40"
+                    ? "bg-[color:var(--sec-surface-2)] text-[color:var(--sec-accent)]"
+                    : "text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]"
                 }`}
               >
                 {f.label}

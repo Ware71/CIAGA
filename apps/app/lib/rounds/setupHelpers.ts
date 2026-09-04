@@ -79,12 +79,22 @@ export function getProfile(p: Participant): ProfileJoin | null {
   return Array.isArray(pr) ? pr[0] ?? null : pr;
 }
 
-/** WHS: Course Handicap = HI*(Slope/113) + (Course Rating - Par) */
+/**
+ * WHS: Course Handicap = HI*(Slope/113) + (Course Rating - Par)
+ *
+ * Over 9 holes the INDEX is halved and nothing else. `rating` and `par` for a
+ * 9-hole tee are already 9-hole figures, so halving the (rating − par) term as
+ * well would double-count the reduction — a mistake the SQL resolver calls out
+ * explicitly. Callers that used to re-derive the formula inline just to halve
+ * the index should pass `holesCount` instead.
+ */
 export function calcCourseHandicap(
   hi: number,
   slope: number,
   rating: number,
   par: number,
+  holesCount: number = 18,
 ) {
-  return Math.round(hi * (slope / 113) + (rating - par));
+  const effectiveHi = holesCount === 9 ? hi / 2 : hi;
+  return Math.round(effectiveHi * (slope / 113) + (rating - par));
 }

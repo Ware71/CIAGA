@@ -95,7 +95,7 @@ export function CreateEventSheet(props: {
   }
 
   const inputCls =
-    "rounded-md border border-emerald-900/70 bg-[#042713] px-2 py-1 text-emerald-50 [color-scheme:dark]";
+    "rounded-md border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] px-2 py-1 text-[color:var(--sec-text)] [color-scheme:dark]";
 
   return (
     <AnimatePresence>
@@ -115,10 +115,10 @@ export function CreateEventSheet(props: {
           exit={{ y: "100%" }}
           transition={{ type: "spring", damping: 30, stiffness: 300 }}
         >
-          <div className="mx-auto w-full max-w-[520px] max-h-[88vh] overflow-y-auto rounded-t-3xl border border-emerald-900/70 bg-[#061f12] shadow-2xl">
-            <div className="sticky top-0 border-b border-emerald-900/60 bg-[#061f12] p-4">
-              <div className="text-sm font-semibold text-emerald-50">New event</div>
-              <div className="text-[11px] text-emerald-100/70 mt-0.5">{formatDayLabel(day)}</div>
+          <div className="mx-auto w-full max-w-[520px] max-h-[88vh] overflow-y-auto rounded-t-3xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] shadow-2xl">
+            <div className="sticky top-0 border-b border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] p-4">
+              <div className="text-sm font-semibold text-[color:var(--sec-text)]">New event</div>
+              <div className="text-[11px] text-[color:var(--sec-muted)] mt-0.5">{formatDayLabel(day)}</div>
             </div>
 
             <div className="p-4 space-y-4">
@@ -134,11 +134,11 @@ export function CreateEventSheet(props: {
 
               {tab === "round" ? (
                 <div className="space-y-3">
-                  <p className="text-[11px] text-emerald-100/70 leading-relaxed">
+                  <p className="text-[11px] text-[color:var(--sec-muted)] leading-relaxed">
                     Creates a scheduled round on this date and takes you to setup to finish the
                     details.
                   </p>
-                  <label className="flex items-center gap-2 text-xs text-emerald-100/80">
+                  <label className="flex items-center gap-2 text-xs text-[color:var(--sec-muted)]">
                     <span className="shrink-0">Tee time</span>
                     <input
                       type="time"
@@ -148,7 +148,7 @@ export function CreateEventSheet(props: {
                     />
                   </label>
                   <Button
-                    className="w-full rounded-2xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c]"
+                    className="w-full rounded-2xl bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] hover:bg-[color:var(--sec-accent)]"
                     onClick={handleRound}
                     disabled={busy}
                   >
@@ -161,17 +161,17 @@ export function CreateEventSheet(props: {
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     placeholder={tab === "available" ? "Title (optional)" : "e.g. Work (optional)"}
-                    className="w-full rounded-xl border border-emerald-900/70 bg-[#042713] px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/40"
+                    className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] px-3 py-2 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)]"
                   />
 
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-emerald-100/80">All day</span>
+                    <span className="text-xs text-[color:var(--sec-muted)]">All day</span>
                     <button
                       type="button"
                       onClick={() => setAllDay((v) => !v)}
                       className={cn(
                         "relative h-6 w-11 rounded-full transition-colors",
-                        allDay ? "bg-[#f5e6b0]" : "bg-emerald-900/70"
+                        allDay ? "bg-[color:var(--sec-accent)]" : "bg-[color:var(--sec-surface)]"
                       )}
                     >
                       <span
@@ -184,8 +184,8 @@ export function CreateEventSheet(props: {
                   </div>
 
                   {/* Start / end — may span multiple days */}
-                  <div className="space-y-2 rounded-xl border border-emerald-900/60 bg-[#0b3b21]/30 p-3">
-                    <div className="flex items-center gap-2 text-xs text-emerald-100/80">
+                  <div className="space-y-2 rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_30%,transparent)] p-3">
+                    <div className="flex items-center gap-2 text-xs text-[color:var(--sec-muted)]">
                       <span className="w-10 shrink-0">Start</span>
                       <input
                         type="date"
@@ -205,7 +205,7 @@ export function CreateEventSheet(props: {
                         />
                       ) : null}
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-emerald-100/80">
+                    <div className="flex items-center gap-2 text-xs text-[color:var(--sec-muted)]">
                       <span className="w-10 shrink-0">End</span>
                       <input
                         type="date"
@@ -225,7 +225,7 @@ export function CreateEventSheet(props: {
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-emerald-900/60 bg-[#0b3b21]/40 p-3">
+                  <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] p-3">
                     <RecurrenceEditor value={recurrence} onChange={setRecurrence} />
                   </div>
 
@@ -233,7 +233,7 @@ export function CreateEventSheet(props: {
                     className={cn(
                       "w-full rounded-2xl",
                       tab === "available"
-                        ? "bg-emerald-500 text-white hover:bg-emerald-600"
+                        ? "bg-emerald-500 text-white hover:bg-[color:var(--sec-primary-hover)]"
                         : "bg-red-500 text-white hover:bg-red-600"
                     )}
                     onClick={handleSaveEvent}
@@ -248,7 +248,7 @@ export function CreateEventSheet(props: {
                 </div>
               )}
 
-              {err ? <div className="text-[11px] text-red-300">{err}</div> : null}
+              {err ? <div className="text-[11px] text-[color:var(--sec-bad)]">{err}</div> : null}
             </div>
           </div>
         </motion.div>

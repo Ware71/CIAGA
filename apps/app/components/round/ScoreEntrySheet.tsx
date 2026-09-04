@@ -129,18 +129,18 @@ export default function ScoreEntrySheet(props: {
           <div
             className={`${
               isPortrait ? "mx-auto w-full max-w-[520px]" : "w-[440px] shrink-0"
-            } rounded-t-3xl border border-emerald-900/70 bg-[#061f12] shadow-2xl overflow-hidden`}
+            } rounded-t-3xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] shadow-2xl overflow-hidden`}
           >
-          <div className="p-3 border-b border-emerald-900/60 flex items-center justify-between gap-3">
+          <div className="p-3 border-b border-[color:var(--sec-hair)] flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5 min-w-0">
-              <Avatar className="h-10 w-10 border border-emerald-200/70">
+              <Avatar className="h-10 w-10 border border-[color:var(--sec-line)]">
                 {avatarUrl ? <AvatarImage src={avatarUrl} /> : null}
                 <AvatarFallback>{initialsFrom(name)}</AvatarFallback>
               </Avatar>
 
               <div className="min-w-0">
-                <div className="text-sm font-semibold text-emerald-50 truncate">Enter score for {name}</div>
-                <div className="text-[11px] text-emerald-100/70">
+                <div className="text-sm font-semibold text-[color:var(--sec-text)] truncate">Enter score for {name}</div>
+                <div className="text-[11px] text-[color:var(--sec-muted)]">
                   Hole {holeNumber} · Par {holeMeta?.par ?? "–"} · SI {holeMeta?.stroke_index ?? "–"}
                   {missingCount ? <span> · Missing {missingCount}</span> : null}
                 </div>
@@ -150,7 +150,7 @@ export default function ScoreEntrySheet(props: {
             <Button
               variant="ghost"
               size="sm"
-              className="rounded-xl border border-emerald-900/70 bg-[#042713] text-emerald-50 hover:bg-emerald-900/20"
+              className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
               onClick={onClose}
             >
               Close
@@ -158,11 +158,11 @@ export default function ScoreEntrySheet(props: {
           </div>
 
           <div className="p-3">
-            <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/25 p-3 flex items-center justify-between">
-              <div className="text-[11px] text-emerald-100/70">Current</div>
-              <div className="text-4xl font-extrabold text-[#f5e6b0] tabular-nums">{currentDisplay}</div>
+            <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_25%,transparent)] p-3 flex items-center justify-between">
+              <div className="text-[11px] text-[color:var(--sec-muted)]">Current</div>
+              <div className="text-4xl font-extrabold text-[color:var(--sec-accent)] tabular-nums">{currentDisplay}</div>
               <button
-                className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/35 px-3 py-2 text-[11px] text-emerald-100/80 hover:bg-emerald-900/20 disabled:opacity-40"
+                className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_35%,transparent)] px-3 py-2 text-[11px] text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)] disabled:opacity-40"
                 disabled={disabled || busy}
                 onClick={() => onSubmit(null)}
               >
@@ -174,7 +174,7 @@ export default function ScoreEntrySheet(props: {
             {!hideHoleState && (
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <button
-                  className="h-11 rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/40 text-emerald-50 text-sm font-semibold hover:bg-emerald-900/25 disabled:opacity-40"
+                  className="h-11 rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-text)] text-sm font-semibold hover:bg-[color:var(--sec-surface-2)] disabled:opacity-40"
                   disabled={disabled || busy}
                   onClick={() => onSetPickedUp()}
                 >
@@ -182,7 +182,7 @@ export default function ScoreEntrySheet(props: {
                 </button>
 
                 <button
-                  className="h-11 rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/40 text-emerald-50 text-sm font-semibold hover:bg-emerald-900/25 disabled:opacity-40"
+                  className="h-11 rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-text)] text-sm font-semibold hover:bg-[color:var(--sec-surface-2)] disabled:opacity-40"
                   disabled={disabled || busy}
                   onClick={() => onSetNotStarted()}
                 >
@@ -196,7 +196,7 @@ export default function ScoreEntrySheet(props: {
                 {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
                   <button
                     key={n}
-                    className="h-11 rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/40 text-emerald-50 text-lg font-semibold hover:bg-emerald-900/25 disabled:opacity-40"
+                    className="h-11 rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-text)] text-lg font-semibold hover:bg-[color:var(--sec-surface-2)] disabled:opacity-40"
                     disabled={disabled || busy}
                     onClick={() => onSubmit(n)}
                   >
@@ -205,7 +205,7 @@ export default function ScoreEntrySheet(props: {
                 ))}
 
                 <button
-                  className="h-11 rounded-2xl border border-emerald-900/70 bg-[#f5e6b0] text-[#042713] text-lg font-bold hover:bg-[#e9d79c] disabled:opacity-40"
+                  className="h-11 rounded-2xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] text-lg font-bold hover:bg-[color:var(--sec-accent)] disabled:opacity-40"
                   disabled={disabled || busy}
                   onClick={() => {
                     setMode("custom");
@@ -216,7 +216,7 @@ export default function ScoreEntrySheet(props: {
                 </button>
 
                 <button
-                  className="h-11 rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/40 text-emerald-100/80 text-sm hover:bg-emerald-900/25 disabled:opacity-40 col-span-2"
+                  className="h-11 rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-muted)] text-sm hover:bg-[color:var(--sec-surface-2)] disabled:opacity-40 col-span-2"
                   disabled={disabled || busy}
                   onClick={onClose}
                 >
@@ -224,28 +224,28 @@ export default function ScoreEntrySheet(props: {
                 </button>
               </div>
             ) : (
-              <div className="mt-3 rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/30 p-3">
-                <div className="text-xs text-emerald-100/70 mb-2">Enter any score</div>
+              <div className="mt-3 rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_30%,transparent)] p-3">
+                <div className="text-xs text-[color:var(--sec-muted)] mb-2">Enter any score</div>
                 <input
                   inputMode="numeric"
                   pattern="[0-9]*"
                   value={customVal}
                   onChange={(e) => setCustomVal(e.target.value.replace(/[^\d]/g, ""))}
-                  className="w-full h-11 rounded-2xl bg-[#042713] border border-emerald-900/70 px-4 text-emerald-50 text-lg font-semibold outline-none"
+                  className="w-full h-11 rounded-2xl bg-[color:var(--ciaga-ground)] border border-[color:var(--sec-hair)] px-4 text-[color:var(--sec-text)] text-lg font-semibold outline-none"
                   placeholder="10"
                 />
 
                 <div className="mt-3 flex gap-2">
                   <Button
                     variant="ghost"
-                    className="flex-1 rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/40 text-emerald-50 hover:bg-emerald-900/20 disabled:opacity-40"
+                    className="flex-1 rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)] disabled:opacity-40"
                     disabled={disabled || busy}
                     onClick={() => setMode("quick")}
                   >
                     Back
                   </Button>
                   <Button
-                    className="flex-1 rounded-2xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c] disabled:opacity-40"
+                    className="flex-1 rounded-2xl bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] hover:bg-[color:var(--sec-accent)] disabled:opacity-40"
                     disabled={disabled || busy}
                     onClick={() => {
                       const n = parseInt(customVal || "", 10);

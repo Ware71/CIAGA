@@ -25,6 +25,13 @@ const nextConfig = {
   images: {
     // Avatars, group images and post images are Supabase Storage public URLs.
     // Without this, next/image refuses them and every one has to be a raw <img>.
+    //
+    // Nothing currently uses it: all ~45 Supabase images render as raw <img>.
+    // That's a deliberate call rather than an oversight — the uploads are now
+    // compressed to their display size and the service worker caches them
+    // (see runtimeCaching below), so routing them through /_next/image would
+    // spend a Vercel transformation quota to save nothing. Kept so the first
+    // component that does want next/image works.
     remotePatterns: [
       { protocol: 'https', hostname: '*.supabase.co', pathname: '/storage/v1/object/public/**' },
     ],
@@ -88,6 +95,33 @@ const runtimeCaching = [
     options: {
       cacheName: 'next-image',
       expiration: { maxEntries: 64, maxAgeSeconds: 24 * 60 * 60 },
+    },
+  },
+  // Supabase Storage objects — avatars, group images, post photos.
+  //
+  // The anchoring is load-bearing, so do NOT "tidy" this into the tail-match
+  // form of the image rule above. Workbox's RegExpRoute only accepts a
+  // cross-origin match at index 0:
+  //
+  //   if (s && (e.origin === location.origin || 0 === s.index)) return …
+  //
+  // so `/\.(?:jpg|webp)$/i` matches the end of a Supabase URL, scores a non-zero
+  // index, and is silently skipped. Every avatar therefore went to the network
+  // on every render, which — with the same-origin NetworkOnly catch-all below —
+  // meant the app had no image cache at all. That was most of a 6.5 GB
+  // cached-egress month; see the 2026-09 audit.
+  //
+  // CacheFirst rather than SWR because these paths are immutable by
+  // construction (`<uid>/<timestamp>.webp`, `<uid>/<uuid>.webp`): a cached copy
+  // can never be stale, and a new upload is a new path. That makes a repeat
+  // view of a screen full of avatars cost nothing.
+  {
+    urlPattern: /^https:\/\/[a-z0-9-]+\.supabase\.co\/storage\/v1\/object\/public\/.*/i,
+    handler: 'CacheFirst',
+    options: {
+      cacheName: 'supabase-storage',
+      expiration: { maxEntries: 200, maxAgeSeconds: 30 * 24 * 60 * 60 },
+      cacheableResponse: { statuses: [0, 200] },
     },
   },
   {

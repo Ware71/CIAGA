@@ -279,7 +279,7 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onMutat
             )}
 
             {draggingId && (
-              <div className="text-[11px] text-center text-emerald-100/50 -mb-1">
+              <div className="text-[11px] text-center text-[color:var(--sec-muted)] -mb-1">
                 Drag to a team or the Unassigned section
               </div>
             )}
@@ -295,11 +295,11 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onMutat
                   ref={(el) => { teamCardRefs.current[team.id] = el; }}
                   className={`rounded-2xl border overflow-hidden transition-all ${
                     isDropTarget
-                      ? "border-[#f5e6b0]/60 ring-2 ring-[#f5e6b0]/40 bg-[#042713]/80"
-                      : "border-emerald-900/70 bg-[#042713]/60"
+                      ? "border-[color:color-mix(in_srgb,var(--sec-accent)_60%,transparent)] ring-2 ring-[color:color-mix(in_srgb,var(--sec-accent)_40%,transparent)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_80%,transparent)]"
+                      : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_60%,transparent)]"
                   }`}
                 >
-                  <div className="px-3 py-2.5 flex items-center justify-between border-b border-emerald-900/50">
+                  <div className="px-3 py-2.5 flex items-center justify-between border-b border-[color:var(--sec-hair)]">
                     {isEditing ? (
                       <input
                         autoFocus
@@ -311,16 +311,16 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onMutat
                         }}
                         onBlur={() => commitRename(team.id)}
                         onPointerDown={(e) => e.stopPropagation()}
-                        className="flex-1 bg-transparent border-b border-emerald-200/40 text-[13px] font-bold text-[#f5e6b0] outline-none min-w-0 mr-2"
+                        className="flex-1 bg-transparent border-b border-[color:var(--sec-line)] text-[13px] font-bold text-[color:var(--sec-accent)] outline-none min-w-0 mr-2"
                       />
                     ) : (
                       <div className="flex items-center gap-1 min-w-0 flex-1">
-                        <div className="text-[13px] font-bold text-[#f5e6b0] truncate">{team.name}</div>
+                        <div className="text-[13px] font-bold text-[color:var(--sec-accent)] truncate">{team.name}</div>
                         <button
                           onPointerDown={(e) => e.stopPropagation()}
                           onClick={() => { setEditingTeamId(team.id); setEditingName(team.name); }}
                           disabled={saving}
-                          className="shrink-0 text-emerald-100/40 hover:text-emerald-100/80 disabled:opacity-40"
+                          className="shrink-0 text-[color:var(--sec-muted)] hover:text-[color:var(--sec-muted)] disabled:opacity-40"
                           aria-label="Rename team"
                         >
                           <Pencil size={12} />
@@ -331,15 +331,15 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onMutat
                       onClick={() => deleteTeam(team.id)}
                       disabled={saving}
                       onPointerDown={(e) => e.stopPropagation()}
-                      className="text-[11px] text-red-400/70 hover:text-red-400 disabled:opacity-40 shrink-0"
+                      className="text-[11px] text-[color:var(--sec-bad)] hover:text-[color:var(--sec-bad)] disabled:opacity-40 shrink-0"
                     >
                       Delete
                     </button>
                   </div>
 
-                  <div className="divide-y divide-emerald-900/40">
+                  <div className="divide-y divide-[color:var(--sec-hair)]">
                     {members.length === 0 && (
-                      <div className="px-3 py-2 text-[11px] text-emerald-100/40">
+                      <div className="px-3 py-2 text-[11px] text-[color:var(--sec-muted)]">
                         {isDropTarget ? "Drop here to assign" : "No players assigned — drag a player here"}
                       </div>
                     )}
@@ -350,10 +350,10 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onMutat
                         onPointerDown={(e) => handlePointerDown(e, p.id)}
                         style={{ userSelect: "none", WebkitUserSelect: "none", touchAction: "none" }}
                       >
-                        <div className="h-7 w-7 rounded-full border border-emerald-200/60 bg-[#0b3b21]/60 flex items-center justify-center text-[9px] font-semibold text-emerald-50 shrink-0 overflow-hidden">
+                        <div className="h-7 w-7 rounded-full border border-[color:var(--sec-line)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] flex items-center justify-center text-[9px] font-semibold text-[color:var(--sec-text)] shrink-0 overflow-hidden">
                           {p.avatarUrl ? <img src={p.avatarUrl} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" /> : initialsFrom(p.name)}
                         </div>
-                        <div className="text-[12px] font-semibold text-emerald-50 flex-1 truncate">{p.name}</div>
+                        <div className="text-[12px] font-semibold text-[color:var(--sec-text)] flex-1 truncate">{p.name}</div>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -361,7 +361,7 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onMutat
                             assignPlayer(p.id, null);
                           }}
                           disabled={saving}
-                          className="text-[11px] text-emerald-100/50 hover:text-emerald-100 disabled:opacity-40 shrink-0"
+                          className="text-[11px] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)] disabled:opacity-40 shrink-0"
                           onPointerDown={(e) => e.stopPropagation()}
                         >
                           Remove
@@ -379,16 +379,16 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onMutat
                 ref={unassignedZoneRef}
                 className={`rounded-2xl border overflow-hidden transition-all ${
                   dropTargetUnassigned
-                    ? "border-emerald-400/60 ring-2 ring-emerald-400/30 bg-[#042713]/60"
-                    : "border-emerald-900/70 bg-[#042713]/40"
+                    ? "border-[color:var(--sec-accent)] ring-2 ring-[color:var(--sec-accent)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_60%,transparent)]"
+                    : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_40%,transparent)]"
                 }`}
               >
-                <div className="px-3 py-2.5 border-b border-emerald-900/50">
-                  <div className="text-[13px] font-bold text-emerald-100/70">
+                <div className="px-3 py-2.5 border-b border-[color:var(--sec-hair)]">
+                  <div className="text-[13px] font-bold text-[color:var(--sec-muted)]">
                     {dropTargetUnassigned ? "Drop to unassign" : "Unassigned"}
                   </div>
                 </div>
-                <div className="divide-y divide-emerald-900/40">
+                <div className="divide-y divide-[color:var(--sec-hair)]">
                   {unassigned.map((p) => (
                     <div
                       key={p.id}
@@ -396,10 +396,10 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onMutat
                       onPointerDown={(e) => handlePointerDown(e, p.id)}
                       style={{ userSelect: "none", WebkitUserSelect: "none", touchAction: "none" }}
                     >
-                      <div className="h-7 w-7 rounded-full border border-emerald-200/60 bg-[#0b3b21]/60 flex items-center justify-center text-[9px] font-semibold text-emerald-50 shrink-0 overflow-hidden">
+                      <div className="h-7 w-7 rounded-full border border-[color:var(--sec-line)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] flex items-center justify-center text-[9px] font-semibold text-[color:var(--sec-text)] shrink-0 overflow-hidden">
                         {p.avatarUrl ? <img src={p.avatarUrl} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" /> : initialsFrom(p.name)}
                       </div>
-                      <div className="text-[12px] font-semibold text-emerald-50 flex-1 truncate">{p.name}</div>
+                      <div className="text-[12px] font-semibold text-[color:var(--sec-text)] flex-1 truncate">{p.name}</div>
                     </div>
                   ))}
                 </div>
@@ -411,17 +411,17 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onMutat
               onClick={addTeam}
               disabled={saving}
               variant="ghost"
-              className="w-full rounded-2xl border border-emerald-900/70 text-emerald-100 hover:bg-emerald-900/20"
+              className="w-full rounded-2xl border border-[color:var(--sec-hair)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
             >
               {saving ? "…" : "+ Add Team"}
             </Button>
 
             {/* WHS handicap formula note */}
             {handicapDesc && (
-              <div className="rounded-xl border border-emerald-900/50 bg-[#042713]/40 px-3 py-2.5">
-                <div className="text-[10px] uppercase tracking-[0.12em] text-emerald-100/50 mb-0.5">WHS Team Handicap</div>
-                <div className="text-[12px] text-emerald-100/80">{handicapDesc}</div>
-                <div className="text-[10px] text-emerald-100/40 mt-0.5">Applied to the team at round start</div>
+              <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_40%,transparent)] px-3 py-2.5">
+                <div className="text-[10px] uppercase tracking-[0.12em] text-[color:var(--sec-muted)] mb-0.5">WHS Team Handicap</div>
+                <div className="text-[12px] text-[color:var(--sec-muted)]">{handicapDesc}</div>
+                <div className="text-[10px] text-[color:var(--sec-muted)] mt-0.5">Applied to the team at round start</div>
               </div>
             )}
       </div>
@@ -429,15 +429,15 @@ export function TeamBuilderSheet({ roundId, format, teams, participants, onMutat
       {/* Drag ghost — follows pointer */}
       {draggingId && dragPos && draggingParticipant && (
         <div
-          className="fixed pointer-events-none z-[200] flex items-center gap-2 rounded-xl border border-[#f5e6b0]/60 bg-[#061f12]/95 px-2.5 py-1.5 shadow-xl"
+          className="fixed pointer-events-none z-[200] flex items-center gap-2 rounded-xl border border-[color:color-mix(in_srgb,var(--sec-accent)_60%,transparent)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_95%,transparent)] px-2.5 py-1.5 shadow-xl"
           style={{ left: dragPos.x - 16, top: dragPos.y - 18, transform: "rotate(2deg)" }}
         >
-          <div className="h-6 w-6 rounded-full border border-emerald-200/60 bg-[#0b3b21]/60 flex items-center justify-center text-[9px] font-semibold text-emerald-50 shrink-0 overflow-hidden">
+          <div className="h-6 w-6 rounded-full border border-[color:var(--sec-line)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] flex items-center justify-center text-[9px] font-semibold text-[color:var(--sec-text)] shrink-0 overflow-hidden">
             {draggingParticipant.avatarUrl
               ? <img src={draggingParticipant.avatarUrl} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
               : initialsFrom(draggingParticipant.name)}
           </div>
-          <span className="text-[12px] font-semibold text-[#f5e6b0] whitespace-nowrap">{draggingParticipant.name}</span>
+          <span className="text-[12px] font-semibold text-[color:var(--sec-accent)] whitespace-nowrap">{draggingParticipant.name}</span>
         </div>
       )}
     </div>

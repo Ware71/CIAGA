@@ -122,6 +122,331 @@
 
   /* ===== Native app feel ===== */
 
+  /* Space the floating bottom nav reserves at the base of every scroll
+     container. The docked logo sets this, not the pill: its base sits on the
+     pill's base, so the reserve is the 12px margin plus the 84px button, with
+     the 60px pill fitting inside that.
+     Mirrored as NAV_H in components/nav/navConfig.ts — change both together. */
+  body {
+    --ciaga-nav-h: 96px;
+
+    /* Section palette. The bottom bar and the page ground live OUTSIDE any
+       route subtree — the nav is mounted at the root and the ground is the body
+       itself — so a section can't retint them by styling its own layout. These
+       tokens are the seam: AppFrame stamps data-section on <body>, and the block
+       below repaints the chrome to match whichever section you're in. */
+    --ciaga-ground: #042713;
+    --nav-pill:     #07301a;
+    --nav-ring:     rgba(110, 231, 183, 0.12);
+    --nav-accent:   #f5e6b0;
+    --nav-idle:     rgba(167, 243, 208, 0.45);
+    --nav-emblem:   #0a341c;
+    --nav-sheen:    rgba(245, 230, 176, 0.07);
+
+    /* Page surfaces. components/ui/chrome.tsx builds its card, section rule and
+       masthead from these, so a section changes its whole look by redefining
+       the block rather than by every page picking its own hexes. */
+    --sec-accent:     #f5e6b0;
+    --sec-line:       rgba(245, 230, 176, 0.20);
+    --sec-line-strong:rgba(245, 230, 176, 0.34);
+    --sec-sheen:      rgba(245, 230, 176, 0.12);
+    --sec-from:       #0E3F24;
+    --sec-to:         #0A3218;
+    --sec-muted:      rgba(198, 225, 205, 0.55);
+
+    /* The rule a section label sits on — the one decorative use of the accent. */
+    --sec-rule:       rgba(245, 230, 176, 0.22);
+
+    /* Text. Held as tokens rather than Tailwind literals so a light theme can
+       invert it — see the theme blocks further down. */
+    --sec-text:       #eaf3ed;
+    --sec-text-2:     rgba(234, 243, 237, 0.66);
+
+    /* Surfaces. A panel is a LIFT of the ground, not a white wash over it:
+       white over bottle green desaturates toward grey and reads as a smudge
+       that belongs to no palette. Same for the hairlines, which take the
+       section's own light rather than pure white. */
+    --sec-surface:    #0a3520;
+    --sec-surface-2:  #0e4028;
+    --sec-hair:       rgba(198, 225, 205, 0.14);
+    --sec-hair-soft:  rgba(198, 225, 205, 0.10);
+
+    /* Semantic, and separate from the accent: under par is green and over par
+       is red in every theme. Held as tokens only so a light theme can pick a
+       darker pair that survives on paper. */
+    --sec-good:       #4ade80;
+    --sec-bad:        #f87171;
+    --sec-primary:      #0f4a2b;
+    --sec-primary-hover:#146138;
+  }
+
+  /* ===== Type and shape system =====
+     Six sizes, three weights, one 4px spacing grid, one radius, and three
+     hairline values that each mean exactly one thing.
+
+     The app had fifteen type sizes across two scales that didn't line up, 90%
+     of its weight declarations at semibold or heavier, and nine corner radii.
+     Nothing could recede, so weight signalled nothing and every screen read as
+     busy. components/ui/chrome.tsx builds every primitive from the tokens
+     below; new code should reach for a primitive rather than a literal size.
+
+     Values are for a 390pt screen. */
+  body {
+    /* Type — six sizes. Title and Figure deliberately share 17px: a page title
+       and a row value carry the same weight in the hierarchy. */
+    --t-label: 11px;   /* micro-caps — section labels, column heads */
+    --t-sec:   13px;   /* secondary — dates, meta, sub-lines */
+    --t-body:  15px;   /* body — names, courses, actions */
+    --t-fig:   17px;   /* row values and page titles */
+    --t-word:  20px;   /* the wordmark, Home only */
+    --t-figlg: 28px;   /* the one large figure on a screen */
+
+    /* Weights — three. 400 carries text, 500 carries figures and titles, 600 is
+       reserved for a page title and an active state. Nothing is heavier. */
+    --w-reg:  400;
+    --w-med:  500;
+    --w-semi: 600;
+
+    /* Spacing — a 4px grid, tightened back toward the density the app had
+       before the rework. The type scale is what makes the screens readable;
+       the air between groups was doing very little except pushing content off
+       the fold, so it costs nothing to take it back. */
+    --sp-gut: 16px;   /* page gutter; everything aligns to it */
+    --sp-grp: 18px;   /* between one group and the next */
+    --sp-lab: 6px;    /* section label to its first row */
+    --row-h:  40px;   /* minimum row height */
+    --row-pv: 6px;    /* vertical padding inside a row */
+
+    /* One radius. Pills stay round because a pill is a shape with a meaning. */
+    --r-ui: 12px;
+
+    /* Hairlines and fills, all pointed at the section's own values so a theme
+       only has to redefine the --sec-* block. */
+    --hair:       var(--sec-hair);        /* divider between rows */
+    --hair-panel: var(--sec-hair-soft);   /* border of a panel */
+    --fill-panel: var(--sec-surface);     /* fill of a panel */
+  }
+
+  /* Majors — "Bottle & Mint". No gold at all: the green goes cold and luminous,
+     so the section differentiates by temperature rather than by a second hue. */
+  body[data-section="majors"] {
+    --ciaga-ground: #01100A;
+    --nav-pill:     #032116;
+    --nav-ring:     rgba(124, 240, 190, 0.34);
+    --nav-accent:   #7CF0BE;
+    --nav-idle:     rgba(160, 220, 195, 0.5);
+    --nav-emblem:   #04281A;
+    --nav-sheen:    rgba(124, 240, 190, 0.14);
+
+    --sec-accent:     #7CF0BE;
+    --sec-line:       rgba(124, 240, 190, 0.26);
+    --sec-line-strong:rgba(124, 240, 190, 0.44);
+    --sec-sheen:      rgba(124, 240, 190, 0.16);
+    --sec-from:       #06432A;
+    --sec-to:         #022415;
+    --sec-muted:      rgba(160, 220, 195, 0.55);
+    --sec-rule:       rgba(124, 240, 190, 0.24);
+    --sec-text:       #e6f5ee;
+    --sec-text-2:     rgba(230, 245, 238, 0.66);
+    --sec-surface:    #06301e;
+    --sec-surface-2:  #083a25;
+    --sec-hair:       rgba(160, 220, 195, 0.15);
+    --sec-hair-soft:  rgba(160, 220, 195, 0.10);
+    --sec-good:       #4ade80;
+    --sec-bad:        #f87171;
+    --sec-primary:      #0a4a2f;
+    --sec-primary-hover:#0d5d3a;
+  }
+
+  /* The ground itself, so nothing shows the app green behind a section. */
+  body {
+    background-color: var(--ciaga-ground);
+    color: var(--sec-text);
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════════
+     THEMES
+
+     A theme redefines the same `--sec-*` and `--nav-*` tokens the two section
+     blocks above use, so nothing else in the app has to know a theme exists.
+
+     Every theme declares BOTH sections, and not only because a theme that
+     defined the default alone would lose to `body[data-section="majors"]` on
+     every Majors screen. Majors is a different place, and it should look like
+     one in every theme. The rule is the same throughout:
+
+         Majors goes a step DEEPER, and swaps the accent to a different metal.
+
+     Deeper means the ground moves away from the middle — darker on a dark
+     theme, more tinted on a light one — so the section reads as its own room
+     the moment it opens. The accent swap is what tells you which room:
+     gold → mint, mint → bone, gilt → silver, brass → bottle, azure → navy.
+
+     `data-theme` is stamped on <html> by an inline script in the root layout so
+     it lands before first paint; see lib/theme.
+     ═══════════════════════════════════════════════════════════════════════ */
+
+  /* ── Default — bottle green and gold. Majors: mint on near-black. ─────── */
+  html[data-theme="default"] body {
+    --sec-primary: #0f4a2b; --sec-primary-hover: #146138;
+    color-scheme: dark;
+    --ciaga-ground: #042713;
+    --nav-pill: #07301a; --nav-ring: rgba(110,231,183,.12); --nav-accent: #f5e6b0;
+    --nav-idle: rgba(167,243,208,.45); --nav-emblem: #0a341c; --nav-sheen: rgba(245,230,176,.07);
+    --sec-accent: #f5e6b0;
+    --sec-line: rgba(245,230,176,.20); --sec-line-strong: rgba(245,230,176,.34);
+    --sec-sheen: rgba(245,230,176,.12); --sec-from: #0E3F24; --sec-to: #0A3218;
+    --sec-muted: rgba(198,225,205,.62); --sec-rule: rgba(245,230,176,.22);
+    --sec-text: #eaf3ed; --sec-text-2: rgba(234,243,237,.72);
+    --sec-surface: #0a3520; --sec-surface-2: #0e4028;
+    --sec-hair: rgba(198,225,205,.14); --sec-hair-soft: rgba(198,225,205,.10);
+    --sec-good: #4ade80; --sec-bad: #f87171;
+  }
+  html[data-theme="default"] body[data-section="majors"] {
+    --sec-primary: #0a4a2f; --sec-primary-hover: #0d5d3a;
+    --ciaga-ground: #01100A;
+    --nav-pill: #032116; --nav-ring: rgba(124,240,190,.34); --nav-accent: #7CF0BE;
+    --nav-idle: rgba(160,220,195,.5); --nav-emblem: #04281A; --nav-sheen: rgba(124,240,190,.14);
+    --sec-accent: #7CF0BE;
+    --sec-line: rgba(124,240,190,.26); --sec-line-strong: rgba(124,240,190,.44);
+    --sec-sheen: rgba(124,240,190,.16); --sec-from: #06432A; --sec-to: #022415;
+    --sec-muted: rgba(160,220,195,.62); --sec-rule: rgba(124,240,190,.24);
+    --sec-text: #e6f5ee; --sec-text-2: rgba(230,245,238,.72);
+    --sec-surface: #06301e; --sec-surface-2: #083a25;
+    --sec-hair: rgba(160,220,195,.15); --sec-hair-soft: rgba(160,220,195,.10);
+    --sec-good: #4ade80; --sec-bad: #f87171;
+  }
+
+  /* ── Dark — neutral near-black, one mint accent. Majors: bone on black,
+        so the formal section is the one with no colour in it at all. ────── */
+  html[data-theme="dark"] body {
+    --sec-primary: #20302A; --sec-primary-hover: #293D35;
+    color-scheme: dark;
+    --ciaga-ground: #0A0D0B;
+    --nav-pill: #141917; --nav-ring: rgba(255,255,255,.09); --nav-accent: #6EE7B7;
+    --nav-idle: rgba(234,239,234,.38); --nav-emblem: #1A211D; --nav-sheen: rgba(255,255,255,.05);
+    --sec-accent: #6EE7B7;
+    --sec-line: rgba(110,231,183,.20); --sec-line-strong: rgba(110,231,183,.34);
+    --sec-sheen: rgba(255,255,255,.05); --sec-from: #171D1A; --sec-to: #121714;
+    --sec-muted: rgba(234,239,234,.58); --sec-rule: rgba(110,231,183,.22);
+    --sec-text: #EAEFEA; --sec-text-2: rgba(234,239,234,.72);
+    --sec-surface: #141917; --sec-surface-2: #1C221F;
+    --sec-hair: rgba(234,239,234,.12); --sec-hair-soft: rgba(234,239,234,.08);
+    --sec-good: #4ade80; --sec-bad: #f87171;
+  }
+  html[data-theme="dark"] body[data-section="majors"] {
+    --sec-primary: #1D211B; --sec-primary-hover: #262B23;
+    --ciaga-ground: #050605;
+    --nav-pill: #0F110F; --nav-ring: rgba(232,228,214,.16);
+    --nav-accent: #E8E4D6; --nav-idle: rgba(232,228,214,.4); --nav-emblem: #15171400;
+    --nav-emblem: #151714; --nav-sheen: rgba(255,255,255,.05);
+    --sec-accent: #E8E4D6;
+    --sec-line: rgba(232,228,214,.20); --sec-line-strong: rgba(232,228,214,.34);
+    --sec-sheen: rgba(255,255,255,.05); --sec-from: #121412; --sec-to: #0C0E0C;
+    --sec-muted: rgba(232,228,214,.56); --sec-rule: rgba(232,228,214,.22);
+    --sec-text: #F1EFE7; --sec-text-2: rgba(241,239,231,.70);
+    --sec-surface: #0F110F; --sec-surface-2: #171916;
+    --sec-hair: rgba(232,228,214,.12); --sec-hair-soft: rgba(232,228,214,.08);
+    --sec-good: #4ade80; --sec-bad: #f87171;
+  }
+
+  /* ── Claret — the jug, not the fairway. Majors: oxblood and silver, because
+        the two trophy metals are the clearest distinction burgundy allows. ── */
+  html[data-theme="claret"] body {
+    --sec-primary: #5A1D2C; --sec-primary-hover: #6E2537;
+    color-scheme: dark;
+    --ciaga-ground: #2A0E16;
+    --nav-pill: #3A141F; --nav-ring: rgba(240,214,168,.16); --nav-accent: #F0D6A8;
+    --nav-idle: rgba(240,214,168,.45); --nav-emblem: #3E1622; --nav-sheen: rgba(240,214,168,.07);
+    --sec-accent: #F0D6A8;
+    --sec-line: rgba(240,214,168,.20); --sec-line-strong: rgba(240,214,168,.34);
+    --sec-sheen: rgba(240,214,168,.10); --sec-from: #431824; --sec-to: #33111B;
+    --sec-muted: rgba(238,206,206,.62); --sec-rule: rgba(240,214,168,.22);
+    --sec-text: #F6EAE9; --sec-text-2: rgba(246,234,233,.72);
+    --sec-surface: #3A141F; --sec-surface-2: #471927;
+    --sec-hair: rgba(238,206,206,.15); --sec-hair-soft: rgba(238,206,206,.10);
+    --sec-good: #6ee7a5; --sec-bad: #ff8f8f;
+  }
+  html[data-theme="claret"] body[data-section="majors"] {
+    --sec-primary: #3B1019; --sec-primary-hover: #4B1622;
+    --ciaga-ground: #150409;
+    --nav-pill: #230810; --nav-ring: rgba(216,220,224,.22); --nav-accent: #D8DCE0;
+    --nav-idle: rgba(216,220,224,.45); --nav-emblem: #280A13; --nav-sheen: rgba(216,220,224,.08);
+    --sec-accent: #D8DCE0;
+    --sec-line: rgba(216,220,224,.24); --sec-line-strong: rgba(216,220,224,.40);
+    --sec-sheen: rgba(216,220,224,.10); --sec-from: #2A0B14; --sec-to: #1B060C;
+    --sec-muted: rgba(226,216,218,.60); --sec-rule: rgba(216,220,224,.26);
+    --sec-text: #F7F1F1; --sec-text-2: rgba(247,241,241,.70);
+    --sec-surface: #230810; --sec-surface-2: #2F0C17;
+    --sec-hair: rgba(226,216,218,.16); --sec-hair-soft: rgba(226,216,218,.11);
+    --sec-good: #6ee7a5; --sec-bad: #ff8f8f;
+  }
+
+  /* ── Light — daylight on warm paper, brass figures, the bar stays green.
+        Majors: a clearly greener ground and a bottle-green accent. ───────── */
+  html[data-theme="light"] body {
+    --sec-primary: #EAE3C8; --sec-primary-hover: #E0D7B4;
+    color-scheme: light;
+    --ciaga-ground: #F2F0E7;
+    --nav-pill: #0E3B22; --nav-ring: rgba(14,59,34,.20); --nav-accent: #F0E7C4;
+    --nav-idle: rgba(240,231,196,.55); --nav-emblem: #0A2E1A; --nav-sheen: rgba(255,255,255,.08);
+    --sec-accent: #7A5C12;
+    --sec-line: rgba(122,92,18,.24); --sec-line-strong: rgba(122,92,18,.38);
+    --sec-sheen: rgba(255,255,255,.6); --sec-from: #FFFFFF; --sec-to: #FAF9F3;
+    --sec-muted: #5C6B60; --sec-rule: rgba(122,92,18,.30);
+    --sec-text: #14251B; --sec-text-2: #45564B;
+    --sec-surface: #FFFFFF; --sec-surface-2: #F5F3E9;
+    --sec-hair: #DFDCCE; --sec-hair-soft: #E8E5D9;
+    --sec-good: #157F4C; --sec-bad: #B4483C;
+  }
+  html[data-theme="light"] body[data-section="majors"] {
+    --sec-primary: #D7E9DC; --sec-primary-hover: #C8E0CF;
+    --ciaga-ground: #E4EDE6;
+    --nav-pill: #06301F; --nav-ring: rgba(6,48,31,.20); --nav-accent: #9FE9C8;
+    --nav-idle: rgba(159,233,200,.55); --nav-emblem: #04281A; --nav-sheen: rgba(255,255,255,.08);
+    --sec-accent: #075E3C;
+    --sec-line: rgba(7,94,60,.24); --sec-line-strong: rgba(7,94,60,.38);
+    --sec-sheen: rgba(255,255,255,.6); --sec-from: #FFFFFF; --sec-to: #F4FAF6;
+    --sec-muted: #4A6055; --sec-rule: rgba(7,94,60,.28);
+    --sec-text: #0F2419; --sec-text-2: #3E5449;
+    --sec-surface: #FFFFFF; --sec-surface-2: #EFF6F1;
+    --sec-hair: #D3E0D7; --sec-hair-soft: #DFE9E2;
+    --sec-good: #157F4C; --sec-bad: #B4483C;
+  }
+
+  /* ── Sky — the other kind of good day. Cool pale blue and azure; Majors
+        goes a deeper, bluer ground with a navy accent. ───────────────────── */
+  html[data-theme="sky"] body {
+    --sec-primary: #DCEAFB; --sec-primary-hover: #CBDFF7;
+    color-scheme: light;
+    --ciaga-ground: #EDF3FA;
+    --nav-pill: #123A6B; --nav-ring: rgba(18,58,107,.20); --nav-accent: #CFE4FA;
+    --nav-idle: rgba(207,228,250,.55); --nav-emblem: #0E2E55; --nav-sheen: rgba(255,255,255,.10);
+    --sec-accent: #1D5FA8;
+    --sec-line: rgba(29,95,168,.24); --sec-line-strong: rgba(29,95,168,.38);
+    --sec-sheen: rgba(255,255,255,.6); --sec-from: #FFFFFF; --sec-to: #F6FAFF;
+    --sec-muted: #55677C; --sec-rule: rgba(29,95,168,.28);
+    --sec-text: #0F2438; --sec-text-2: #40536A;
+    --sec-surface: #FFFFFF; --sec-surface-2: #EEF4FC;
+    --sec-hair: #D6E1EE; --sec-hair-soft: #E3EBF5;
+    --sec-good: #157F4C; --sec-bad: #B4483C;
+  }
+  html[data-theme="sky"] body[data-section="majors"] {
+    --sec-primary: #CFE0F4; --sec-primary-hover: #BDD3ED;
+    --ciaga-ground: #DCE7F5;
+    --nav-pill: #0B2647; --nav-ring: rgba(11,38,71,.24); --nav-accent: #A9C9EC;
+    --nav-idle: rgba(169,201,236,.55); --nav-emblem: #081D37; --nav-sheen: rgba(255,255,255,.10);
+    --sec-accent: #123A6B;
+    --sec-line: rgba(18,58,107,.26); --sec-line-strong: rgba(18,58,107,.42);
+    --sec-sheen: rgba(255,255,255,.6); --sec-from: #FFFFFF; --sec-to: #F2F7FD;
+    --sec-muted: #4A5C73; --sec-rule: rgba(18,58,107,.30);
+    --sec-text: #091B2E; --sec-text-2: #35485F;
+    --sec-surface: #FFFFFF; --sec-surface-2: #E9F0FA;
+    --sec-hair: #C9D8EA; --sec-hair-soft: #D9E4F1;
+    --sec-good: #157F4C; --sec-bad: #B4483C;
+  }
+
+
   /* Prevent overscroll bounce / rubber-banding / pull-to-refresh */
   html, body {
     overscroll-behavior: none;

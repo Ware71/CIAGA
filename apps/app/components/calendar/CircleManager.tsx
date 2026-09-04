@@ -53,21 +53,21 @@ export function CircleManager(props: {
           exit={{ opacity: 0 }}
         />
         <motion.div
-          className="relative mt-auto mb-0 mx-auto w-full max-w-[520px] max-h-[85vh] overflow-y-auto rounded-t-3xl border border-emerald-900/70 bg-[#061f12] shadow-2xl"
+          className="relative mt-auto mb-0 mx-auto w-full max-w-[520px] max-h-[85vh] overflow-y-auto rounded-t-3xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] shadow-2xl"
           initial={{ y: "100%" }}
           animate={{ y: 0 }}
           exit={{ y: "100%" }}
           transition={{ type: "spring", damping: 30, stiffness: 300 }}
         >
-          <div className="sticky top-0 flex items-center justify-between border-b border-emerald-900/60 bg-[#061f12] p-4">
-            <div className="text-sm font-semibold text-emerald-50">Circles</div>
-            <button onClick={onClose} className="text-emerald-100/70 hover:text-emerald-50" aria-label="Close">
+          <div className="sticky top-0 flex items-center justify-between border-b border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] p-4">
+            <div className="text-sm font-semibold text-[color:var(--sec-text)]">Circles</div>
+            <button onClick={onClose} className="text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]" aria-label="Close">
               <X size={18} aria-hidden="true" />
             </button>
           </div>
 
           <div className="p-4 space-y-4 pb-[env(safe-area-inset-bottom)]">
-            <p className="text-[11px] text-emerald-100/60 leading-relaxed">
+            <p className="text-[11px] text-[color:var(--sec-muted)] leading-relaxed">
               Circles are your own private groups of players. Layer their calendars together to find
               a time everyone is free.
             </p>
@@ -78,10 +78,10 @@ export function CircleManager(props: {
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 placeholder="New circle name"
-                className="flex-1 rounded-xl border border-emerald-900/70 bg-[#042713] px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/40"
+                className="flex-1 rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] px-3 py-2 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)]"
               />
               <Button
-                className="rounded-xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c]"
+                className="rounded-xl bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] hover:bg-[color:var(--sec-accent)]"
                 disabled={busy || !newName.trim()}
                 onClick={() =>
                   run(async () => {
@@ -95,7 +95,7 @@ export function CircleManager(props: {
             </div>
 
             {circles.length === 0 ? (
-              <div className="text-center text-[11px] text-emerald-100/50 py-4">
+              <div className="text-center text-[11px] text-[color:var(--sec-muted)] py-4">
                 No circles yet.
               </div>
             ) : (
@@ -115,7 +115,7 @@ export function CircleManager(props: {
               </div>
             )}
 
-            {err ? <div className="text-[11px] text-red-300">{err}</div> : null}
+            {err ? <div className="text-[11px] text-[color:var(--sec-bad)]">{err}</div> : null}
           </div>
         </motion.div>
       </div>
@@ -163,16 +163,16 @@ function CircleRow(props: {
   const memberIds = new Set(circle.members.map((m) => m.profile_id));
 
   return (
-    <div className="rounded-xl border border-emerald-900/70 bg-[#0b3b21]/40">
+    <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)]">
       <div className="flex items-center justify-between p-3">
         <button onClick={onToggle} className="flex-1 text-left">
-          <div className="text-sm font-semibold text-emerald-50">{circle.name}</div>
-          <div className="text-[10px] text-emerald-100/60">
+          <div className="text-sm font-semibold text-[color:var(--sec-text)]">{circle.name}</div>
+          <div className="text-[10px] text-[color:var(--sec-muted)]">
             {circle.members.length} {circle.members.length === 1 ? "member" : "members"}
           </div>
         </button>
         <button
-          className="text-red-300/70 hover:text-red-300"
+          className="text-[color:var(--sec-bad)] hover:text-[color:var(--sec-bad)]"
           disabled={busy}
           onClick={() =>
             run(async () => {
@@ -185,17 +185,17 @@ function CircleRow(props: {
       </div>
 
       {expanded ? (
-        <div className="border-t border-emerald-900/60 p-3 space-y-3">
+        <div className="border-t border-[color:var(--sec-hair)] p-3 space-y-3">
           {circle.members.length > 0 ? (
             <div className="flex flex-wrap gap-1.5">
               {circle.members.map((m) => (
                 <span
                   key={m.profile_id}
-                  className="inline-flex items-center gap-1 rounded-full border border-emerald-900/70 bg-[#042713] px-2 py-1 text-[11px] text-emerald-50"
+                  className="inline-flex items-center gap-1 rounded-full border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] px-2 py-1 text-[11px] text-[color:var(--sec-text)]"
                 >
                   {m.name ?? "Player"}
                   <button
-                    className="text-emerald-100/50 hover:text-red-300"
+                    className="text-[color:var(--sec-muted)] hover:text-[color:var(--sec-bad)]"
                     disabled={busy}
                     onClick={() =>
                       run(async () => {
@@ -213,18 +213,18 @@ function CircleRow(props: {
           <div className="relative">
             <Search
               size={14}
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-emerald-100/40"
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[color:var(--sec-muted)]"
             />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Add a player…"
-              className="w-full rounded-lg border border-emerald-900/70 bg-[#042713] py-1.5 pl-8 pr-3 text-sm text-emerald-50 placeholder:text-emerald-100/40"
+              className="w-full rounded-lg border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)] py-1.5 pl-8 pr-3 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)]"
             />
           </div>
 
           {searching ? (
-            <div className="text-[11px] text-emerald-100/50">Searching…</div>
+            <div className="text-[11px] text-[color:var(--sec-muted)]">Searching…</div>
           ) : results.length > 0 ? (
             <div className="space-y-1">
               {results.map((r) => {
@@ -241,17 +241,17 @@ function CircleRow(props: {
                       })
                     }
                     className={cn(
-                      "flex w-full items-center justify-between rounded-lg border border-emerald-900/60 px-2.5 py-1.5 text-left text-sm",
+                      "flex w-full items-center justify-between rounded-lg border border-[color:var(--sec-hair)] px-2.5 py-1.5 text-left text-sm",
                       already
                         ? "opacity-50"
-                        : "bg-[#042713] text-emerald-50 hover:bg-emerald-900/30"
+                        : "bg-[color:var(--ciaga-ground)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
                     )}
                   >
                     <span>{r.name ?? "Player"}</span>
                     {already ? (
-                      <span className="text-[10px] text-emerald-200/60">Added</span>
+                      <span className="text-[10px] text-[color:var(--sec-muted)]">Added</span>
                     ) : (
-                      <Plus size={14} className="text-emerald-200/70" />
+                      <Plus size={14} className="text-[color:var(--sec-muted)]" />
                     )}
                   </button>
                 );

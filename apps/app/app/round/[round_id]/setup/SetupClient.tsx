@@ -22,6 +22,7 @@ import type { TeamBuilderTeam, TeamBuilderParticipant } from "@/components/round
 import { isTeamFormat } from "@/components/rounds/FormatSelector";
 import { PlayerSetupRow } from "@/components/rounds/PlayerSetupRow";
 import type { TeeBoxOption } from "@/components/rounds/PlayerSetupRow";
+import { AUTO_DETECT_RADIUS_M } from "@/lib/courses/constants";
 
 
 function Avatar({
@@ -42,7 +43,7 @@ function Avatar({
 
   return (
     <div
-      className="rounded-full overflow-hidden flex items-center justify-center border border-emerald-900/70 bg-[#042713]"
+      className="rounded-full overflow-hidden flex items-center justify-center border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)]"
       style={{ width: size, height: size }}
       aria-label={name}
     >
@@ -50,7 +51,7 @@ function Avatar({
         // eslint-disable-next-line @next/next/no-img-element
         <img src={url} alt={name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
       ) : (
-        <div className="text-[11px] font-semibold text-emerald-100/80">{initials}</div>
+        <div className="text-[11px] font-semibold text-[color:var(--sec-muted)]">{initials}</div>
       )}
     </div>
   );
@@ -67,15 +68,15 @@ function SectionCard({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/40 overflow-hidden">
+    <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] overflow-hidden">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center justify-between px-4 py-3 text-left"
       >
-        <span className="text-sm font-semibold text-emerald-50">{title}</span>
+        <span className="text-sm font-semibold text-[color:var(--sec-text)]">{title}</span>
         <ChevronDown
-          className={`h-4 w-4 text-emerald-100/60 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+          className={`h-4 w-4 text-[color:var(--sec-muted)] transition-transform duration-200 ${open ? "rotate-180" : ""}`}
         />
       </button>
       {open && <div className="px-4 pb-4 pt-1">{children}</div>}
@@ -225,7 +226,7 @@ function SwipeToRemoveRow(props: {
   }
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-emerald-900/70">
+    <div className="relative overflow-hidden rounded-2xl border border-[color:var(--sec-hair)]">
       {/* Underlay */}
       <div className="absolute inset-0 bg-red-950/40">
         <div className="absolute right-0 top-0 bottom-0 flex items-center pr-3">
@@ -245,7 +246,7 @@ function SwipeToRemoveRow(props: {
 
       {/* Foreground row (✅ NOT transparent anymore) */}
       <div
-        className="relative bg-[#042713]"
+        className="relative bg-[color:var(--ciaga-ground)]"
         style={{
           transform: `translateX(${dx}px)`,
           transition: draggingRef.current ? "none" : "transform 180ms ease-out",
@@ -358,7 +359,9 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
 
   const setupLocked = !!(round as any)?.setup_locked;
 
-  // GPS + nearby courses fetch at page load (for instant picker + auto-detect)
+  // GPS + a tight nearby sweep, purely to auto-detect the course for a brand-new
+  // round. The picker no longer takes a preload — it loads its own, wider list —
+  // and the two radii are deliberately different: see AUTO_DETECT_RADIUS_M.
   useEffect(() => {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
@@ -366,7 +369,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
         nearbyGpsPosRef.current = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         try {
           const res = await fetch(
-            `/api/courses/nearby?lat=${pos.coords.latitude}&lng=${pos.coords.longitude}&radius=5000`,
+            `/api/courses/nearby?lat=${pos.coords.latitude}&lng=${pos.coords.longitude}&radius=${AUTO_DETECT_RADIUS_M}`,
             { cache: "no-store" }
           );
           const data = await res.json();
@@ -1058,25 +1061,25 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
   const canAdd = canEdit && !roundFull;
 
   return (
-    <div className="min-h-screen bg-[#042713] text-slate-100 px-4 pt-8 pb-[calc(env(safe-area-inset-bottom)+3rem)]">
+    <div className="min-h-screen bg-[color:var(--ciaga-ground)] text-slate-100 px-4 pt-8 pb-[calc(env(safe-area-inset-bottom)+3rem)]">
       <div className="mx-auto w-full max-w-sm space-y-4">
         {/* Header */}
         <header className="flex items-center justify-between">
           <BackButton
-            onClick={() => router.push("/round")}
+            onClick={() => router.push("/play")}
             disabled={starting}
           />
 
           <div className="text-center flex-1 flex items-center justify-center gap-1.5">
-            <div className="text-lg font-semibold tracking-wide text-[#f5e6b0]">Round setup</div>
-            {setupLocked && <Lock className="h-4 w-4 text-[#f5e6b0]/70" />}
+            <div className="text-lg font-semibold tracking-wide text-[color:var(--sec-accent)]">Round setup</div>
+            {setupLocked && <Lock className="h-4 w-4 text-[color:color-mix(in_srgb,var(--sec-accent)_70%,transparent)]" />}
           </div>
 
           <div className="w-[60px]" />
         </header>
 
         {loading ? (
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">
+          <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4 text-sm text-[color:var(--sec-muted)]">
             Loading…
           </div>
         ) : null}
@@ -1086,11 +1089,11 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
         ) : null}
 
         {!loading && round?.status === "live" ? (
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 text-sm text-emerald-100/80">
+          <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4 text-sm text-[color:var(--sec-muted)]">
             This round is already live.
             <div className="mt-3">
               <Button
-                className="w-full rounded-2xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c]"
+                className="w-full rounded-2xl bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] hover:bg-[color:var(--sec-accent)]"
                 onClick={() => router.replace(`/round/${roundId}`)}
               >
                 Go to scorecard
@@ -1111,8 +1114,6 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
                 isOwner={false}
                 isEditable={false}
                 onUpdate={fetchAll}
-                preloadedNearby={null}
-                nearbyGpsPos={null}
               />
             </SectionCard>
 
@@ -1137,7 +1138,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
 
             {/* Players roster (read-only) */}
             <SectionCard title={`Players (${participants.length})`}>
-              <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
+              <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4">
                 <div className="space-y-2">
                   {participants.map((p) => {
                     const d = displayParticipant(p);
@@ -1145,7 +1146,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
                     const ch = p.profile_id ? chByProfileId[p.profile_id] ?? null : null;
                     const ph = p.profile_id ? phByProfileId[p.profile_id] ?? null : null;
                     return (
-                      <div key={p.id} className="rounded-2xl border border-emerald-900/70 bg-[#042713]">
+                      <div key={p.id} className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)]">
                         <PlayerSetupRow
                           avatar={<Avatar name={d.name} url={d.avatar_url} size={36} />}
                           name={d.name}
@@ -1168,7 +1169,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
                     );
                   })}
                   {participants.length === 0 && (
-                    <div className="text-[11px] text-emerald-100/60">No players added yet.</div>
+                    <div className="text-[11px] text-[color:var(--sec-muted)]">No players added yet.</div>
                   )}
                 </div>
               </div>
@@ -1179,7 +1180,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
               {isOwner && (
                 <Button
                   variant="ghost"
-                  className="w-full rounded-2xl border border-emerald-700/60 text-emerald-100/80 hover:bg-emerald-900/20"
+                  className="w-full rounded-2xl border border-[color:var(--sec-line)] text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]"
                   onClick={unlockSetup}
                   disabled={starting}
                 >
@@ -1187,7 +1188,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
                 </Button>
               )}
               <Button
-                className="w-full rounded-2xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c] disabled:opacity-60"
+                className="w-full rounded-2xl bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] hover:bg-[color:var(--sec-accent)] disabled:opacity-60"
                 onClick={startRound}
                 disabled={starting || participants.length === 0}
               >
@@ -1208,26 +1209,26 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
             {/* Round Name */}
             <div className="space-y-4">
               <div>
-                <label className="text-[11px] text-emerald-100/70 block mb-1">Round name</label>
+                <label className="text-[11px] text-[color:var(--sec-muted)] block mb-1">Round name</label>
                 <div className="relative">
                   <input
                     value={nameEdit}
                     onChange={(e) => setNameEdit(e.target.value)}
                     onBlur={() => saveNameOnBlur()}
                     placeholder={courseNameFromJoin(round) || "Round name"}
-                    className="w-full px-3 py-2 rounded-xl bg-[#042713] border border-emerald-900/70 text-sm text-emerald-100 outline-none focus:border-emerald-600 transition-colors"
+                    className="w-full px-3 py-2 rounded-xl bg-[color:var(--ciaga-ground)] border border-[color:var(--sec-hair)] text-sm text-[color:var(--sec-text)] outline-none focus:border-[color:var(--sec-line)] transition-colors"
                     disabled={!canEdit}
                   />
                   {nameSaving ? (
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-emerald-100/50">Saving...</span>
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-[color:var(--sec-muted)]">Saving...</span>
                   ) : null}
                 </div>
               </div>
 
               {/* Scheduled Date */}
               <div>
-                <label className="text-[11px] text-emerald-100/70 block mb-1">Scheduled date & time</label>
-                <div className="overflow-hidden rounded-xl border border-emerald-900/70 bg-[#042713]">
+                <label className="text-[11px] text-[color:var(--sec-muted)] block mb-1">Scheduled date & time</label>
+                <div className="overflow-hidden rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--ciaga-ground)]">
                   <input
                     type="datetime-local"
                     value={scheduledEdit}
@@ -1235,7 +1236,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
                       setScheduledEdit(e.target.value);
                       saveSchedule(e.target.value);
                     }}
-                    className="w-full px-3 py-2 bg-transparent text-sm text-emerald-100 outline-none [color-scheme:dark]"
+                    className="w-full px-3 py-2 bg-transparent text-sm text-[color:var(--sec-text)] outline-none [color-scheme:dark]"
                     disabled={!canEdit}
                   />
                 </div>
@@ -1246,7 +1247,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
                       setScheduledEdit("");
                       saveSchedule("");
                     }}
-                    className="mt-1 text-[10px] text-emerald-100/50 hover:text-emerald-100/80"
+                    className="mt-1 text-[10px] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-muted)]"
                     disabled={!canEdit}
                   >
                     Clear schedule (revert to draft)
@@ -1267,8 +1268,6 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
               isOwner={isOwner}
               isEditable={round.status === "draft" || round.status === "scheduled"}
               onUpdate={fetchAll}
-              preloadedNearby={nearbyForPicker}
-              nearbyGpsPos={nearbyGpsPosRef.current}
             />
           </SectionCard>
         ) : null}
@@ -1298,7 +1297,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
         {!loading && round && round.status !== "live" && !setupLocked && isTeamFormat(round.format_type as any) ? (
           <SectionCard title="Teams">
             <div className="space-y-3">
-              <div className="text-[11px] text-emerald-100/60">
+              <div className="text-[11px] text-[color:var(--sec-muted)]">
                 {teams.length === 0 ? "No teams set up yet" : `${teams.length} team${teams.length !== 1 ? "s" : ""} · ${participants.filter((p) => p.team_id).length}/${participants.length} assigned`}
               </div>
               {isOwner && (round.status === "draft" || round.status === "scheduled") ? (
@@ -1323,8 +1322,8 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
                   {teams.map((t) => {
                     const members = participants.filter((p) => p.team_id === t.id);
                     return (
-                      <div key={t.id} className="text-[11px] text-emerald-100/80">
-                        <span className="font-semibold text-[#f5e6b0]">{t.name}:</span>{" "}
+                      <div key={t.id} className="text-[11px] text-[color:var(--sec-muted)]">
+                        <span className="font-semibold text-[color:var(--sec-accent)]">{t.name}:</span>{" "}
                         {members.length === 0 ? "No players" : members.map((p) => displayParticipant(p).name).join(", ")}
                       </div>
                     );
@@ -1341,9 +1340,9 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
           <div className="space-y-3">
 
             {/* Unified roster: player · HI · CH · PH · Tee */}
-            <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4">
+            <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4">
               <div className="flex items-center gap-1.5 mb-2">
-                <div className="text-[11px] font-medium text-emerald-100/80 uppercase tracking-wider">Roster</div>
+                <div className="text-[11px] font-medium text-[color:var(--sec-muted)] uppercase tracking-wider">Roster</div>
                 <InfoHint label="About these numbers" align="left">
                   <div className="space-y-1.5">
                     <div>
@@ -1408,23 +1407,23 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
                 })}
 
                 {participants.length === 0 ? (
-                  <div className="text-[11px] text-emerald-100/60 mt-2">No players yet.</div>
+                  <div className="text-[11px] text-[color:var(--sec-muted)] mt-2">No players yet.</div>
                 ) : null}
               </div>
             </div>
 
             {/* Add Players (collapsible) */}
-            <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/70 p-4 space-y-3">
+            <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] p-4 space-y-3">
               <button
                 type="button"
                 onClick={() => setShowAddPlayers((v) => !v)}
                 className="w-full flex items-center justify-between"
               >
-                <span className="text-[11px] font-medium text-emerald-100/80 uppercase tracking-wider">
+                <span className="text-[11px] font-medium text-[color:var(--sec-muted)] uppercase tracking-wider">
                   Add Players
                 </span>
                 <ChevronDown
-                  className={`h-4 w-4 text-emerald-100/60 transition-transform duration-200 ${showAddPlayers ? "rotate-180" : ""}`}
+                  className={`h-4 w-4 text-[color:var(--sec-muted)] transition-transform duration-200 ${showAddPlayers ? "rotate-180" : ""}`}
                 />
               </button>
 
@@ -1434,7 +1433,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="text-emerald-100 hover:bg-emerald-900/30"
+                  className="text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
                   onClick={() => meId && fetchFollowing(meId)}
                   disabled={!meId || loadingFollowing}
                 >
@@ -1443,7 +1442,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
               </div>
 
               <input
-                className="w-full rounded-xl bg-[#042713] border border-emerald-900/70 px-3 py-2 text-sm outline-none"
+                className="w-full rounded-xl bg-[color:var(--ciaga-ground)] border border-[color:var(--sec-hair)] px-3 py-2 text-sm outline-none"
                 placeholder="Search following…"
                 value={followFilter}
                 onChange={(e) => setFollowFilter(e.target.value)}
@@ -1459,20 +1458,20 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
                         key={p.id}
                         onClick={() => addProfile(p.id)}
                         disabled={!canAdd}
-                        className="w-full text-left rounded-2xl border border-emerald-900/70 bg-[#042713]/60 p-3 flex items-center gap-3 hover:bg-[#07341c]/70 disabled:opacity-60"
+                        className="w-full text-left rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_60%,transparent)] p-3 flex items-center gap-3 hover:bg-[#07341c]/70 disabled:opacity-60"
                       >
                         <Avatar name={name} url={p.avatar_url} size={34} />
                         <div className="min-w-0 flex-1">
-                          <div className="text-sm font-semibold text-emerald-50 truncate">{name}</div>
-                          <div className="text-[11px] text-emerald-100/60 truncate">{p.email ?? ""}</div>
+                          <div className="text-sm font-semibold text-[color:var(--sec-text)] truncate">{name}</div>
+                          <div className="text-[11px] text-[color:var(--sec-muted)] truncate">{p.email ?? ""}</div>
                         </div>
-                        <div className="text-[12px] text-emerald-100/70">Add</div>
+                        <div className="text-[12px] text-[color:var(--sec-muted)]">Add</div>
                       </button>
                     );
                   })}
 
                   {filteredFollowing.length === 0 ? (
-                    <div className="text-[11px] text-emerald-100/60">
+                    <div className="text-[11px] text-[color:var(--sec-muted)]">
                       {loadingFollowing ? "Loading…" : "No matches in your following."}
                     </div>
                   ) : null}
@@ -1482,7 +1481,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
               <div className="pt-2 flex gap-2">
                 <Button
                   variant="ghost"
-                  className="flex-1 rounded-2xl border border-emerald-900/70 text-emerald-100 hover:bg-emerald-900/20"
+                  className="flex-1 rounded-2xl border border-[color:var(--sec-hair)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
                   onClick={() => setShowSearchMore((v) => !v)}
                   disabled={!canAdd}
                 >
@@ -1491,7 +1490,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
 
                 <Button
                   variant="ghost"
-                  className="flex-1 rounded-2xl border border-emerald-900/70 text-emerald-100 hover:bg-emerald-900/20"
+                  className="flex-1 rounded-2xl border border-[color:var(--sec-hair)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)]"
                   onClick={() => setShowGuest((v) => !v)}
                   disabled={!canAdd}
                 >
@@ -1500,10 +1499,10 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
               </div>
 
               {showSearchMore ? (
-                <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/50 p-3 space-y-2">
-                  <div className="text-[11px] text-emerald-100/70">Search by email or nickname</div>
+                <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_50%,transparent)] p-3 space-y-2">
+                  <div className="text-[11px] text-[color:var(--sec-muted)]">Search by email or nickname</div>
                   <input
-                    className="w-full rounded-xl bg-[#042713] border border-emerald-900/70 px-3 py-2 text-sm outline-none"
+                    className="w-full rounded-xl bg-[color:var(--ciaga-ground)] border border-[color:var(--sec-hair)] px-3 py-2 text-sm outline-none"
                     placeholder="Type to search…"
                     value={moreQuery}
                     onChange={(e) => setMoreQuery(e.target.value)}
@@ -1511,9 +1510,9 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
                   />
 
                   {searchingMore ? (
-                    <div className="text-[11px] text-emerald-100/60">Searching…</div>
+                    <div className="text-[11px] text-[color:var(--sec-muted)]">Searching…</div>
                   ) : moreQuery.trim() && moreResults.length === 0 ? (
-                    <div className="text-[11px] text-emerald-100/60">No results.</div>
+                    <div className="text-[11px] text-[color:var(--sec-muted)]">No results.</div>
                   ) : null}
 
                   <div className="space-y-2">
@@ -1524,14 +1523,14 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
                           key={p.id}
                           onClick={() => addProfile(p.id)}
                           disabled={!canAdd}
-                          className="w-full text-left rounded-2xl border border-emerald-900/70 bg-[#042713]/60 p-3 flex items-center gap-3 hover:bg-[#07341c]/70 disabled:opacity-60"
+                          className="w-full text-left rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_60%,transparent)] p-3 flex items-center gap-3 hover:bg-[#07341c]/70 disabled:opacity-60"
                         >
                           <Avatar name={name} url={p.avatar_url} size={34} />
                           <div className="min-w-0 flex-1">
-                            <div className="text-sm font-semibold text-emerald-50 truncate">{name}</div>
-                            <div className="text-[11px] text-emerald-100/60 truncate">{p.email ?? ""}</div>
+                            <div className="text-sm font-semibold text-[color:var(--sec-text)] truncate">{name}</div>
+                            <div className="text-[11px] text-[color:var(--sec-muted)] truncate">{p.email ?? ""}</div>
                           </div>
-                          <div className="text-[12px] text-emerald-100/70">Add</div>
+                          <div className="text-[12px] text-[color:var(--sec-muted)]">Add</div>
                         </button>
                       );
                     })}
@@ -1540,18 +1539,18 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
               ) : null}
 
               {showGuest ? (
-                <div className="rounded-2xl border border-emerald-900/70 bg-[#042713]/50 p-3 space-y-2">
-                  <div className="text-[11px] text-emerald-100/70">Player name</div>
+                <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_50%,transparent)] p-3 space-y-2">
+                  <div className="text-[11px] text-[color:var(--sec-muted)]">Player name</div>
                   <div className="flex gap-2">
                     <input
-                      className="flex-1 rounded-xl bg-[#042713] border border-emerald-900/70 px-3 py-2 text-sm outline-none"
+                      className="flex-1 rounded-xl bg-[color:var(--ciaga-ground)] border border-[color:var(--sec-hair)] px-3 py-2 text-sm outline-none"
                       placeholder="e.g. Dan"
                       value={guestName}
                       onChange={(e) => setGuestName(e.target.value)}
                       disabled={!canAdd || addingGuest}
                     />
                     <Button
-                      className="rounded-xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c]"
+                      className="rounded-xl bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] hover:bg-[color:var(--sec-accent)]"
                       onClick={addGuest}
                       disabled={!canAdd || addingGuest || !guestName.trim()}
                     >
@@ -1559,9 +1558,9 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
                     </Button>
                   </div>
 
-                  <div className="text-[11px] text-emerald-100/70 pt-1">Email (optional)</div>
+                  <div className="text-[11px] text-[color:var(--sec-muted)] pt-1">Email (optional)</div>
                   <input
-                    className="w-full rounded-xl bg-[#042713] border border-emerald-900/70 px-3 py-2 text-sm outline-none"
+                    className="w-full rounded-xl bg-[color:var(--ciaga-ground)] border border-[color:var(--sec-hair)] px-3 py-2 text-sm outline-none"
                     placeholder="Invite them to join (optional)"
                     type="email"
                     autoComplete="off"
@@ -1571,7 +1570,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
                   />
 
                   {guestEmail.trim() ? (
-                    <label className="flex items-center gap-2 text-[11px] text-emerald-100/70">
+                    <label className="flex items-center gap-2 text-[11px] text-[color:var(--sec-muted)]">
                       <input
                         type="checkbox"
                         checked={guestSendInvite}
@@ -1581,7 +1580,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
                       Send invite email now
                     </label>
                   ) : (
-                    <div className="text-[10px] text-emerald-100/50">
+                    <div className="text-[10px] text-[color:var(--sec-muted)]">
                       Creates their profile now — you can add an email and invite them later from
                       their profile.
                     </div>
@@ -1593,7 +1592,7 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
             </div>
 
             {!isOwner ? (
-              <div className="text-center text-[10px] text-emerald-100/60">
+              <div className="text-center text-[10px] text-[color:var(--sec-muted)]">
                 Only the round owner can add players and start the round.
               </div>
             ) : null}
@@ -1607,14 +1606,14 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
             {isOwner && !starting ? (
               <Button
                 variant="ghost"
-                className="w-full rounded-2xl border border-emerald-700/60 text-emerald-100/80 hover:bg-emerald-900/20"
+                className="w-full rounded-2xl border border-[color:var(--sec-line)] text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]"
                 onClick={lockSetup}
               >
                 Lock Setup
               </Button>
             ) : null}
             <Button
-              className="w-full rounded-2xl bg-[#f5e6b0] text-[#042713] hover:bg-[#e9d79c] disabled:opacity-60"
+              className="w-full rounded-2xl bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] hover:bg-[color:var(--sec-accent)] disabled:opacity-60"
               onClick={startRound}
               disabled={!isOwner || starting || participants.length === 0}
             >

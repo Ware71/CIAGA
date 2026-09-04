@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import type { FeedAudience, FeedItemType } from "@/lib/feed/types";
+import type { FeedAudience, FeedItemType, FeedMedia } from "@/lib/feed/types";
 import { parseFeedPayload } from "@/lib/feed/schemas";
 import { fanOutFeedItemToFollowers } from "@/lib/feed/fanout";
 import { createNotification } from "@/lib/notifications/notify";
@@ -27,7 +27,7 @@ async function getProfileName(profileId: string): Promise<string> {
  * Therefore we MUST enforce access rules in code (via feed_item_targets).
  */
 
-async function assertViewerCanReadFeedItem(feedItemId: string, viewerProfileId: string) {
+export async function assertViewerCanReadFeedItem(feedItemId: string, viewerProfileId: string) {
   if (!feedItemId || !viewerProfileId) throw new Error("Missing ids");
 
   const { data, error } = await supabaseAdmin
@@ -46,6 +46,8 @@ export async function createUserPost(params: {
   audience: FeedAudience;
   payload: {
     text?: string | null;
+    media?: FeedMedia[] | null;
+    /** Derived from `media` by parseFeedPayload; callers need not send it. */
     image_urls?: string[] | null;
     tagged_profiles?: Array<{ profile_id: string; name: string }> | null;
     tagged_round_id?: string | null;
@@ -272,35 +274,64 @@ export async function createComment(params: {
   return { comment_id: data.id };
 }
 
+export const REPORT_REASON_CODES = [
+  "spam",
+  "harassment",
+  "hate",
+  "violence",
+  "sexual",
+  "self_harm",
+  "illegal",
+  "impersonation",
+  "copyright",
+  "other",
+] as const;
+
+export type ReportReasonCode = (typeof REPORT_REASON_CODES)[number];
+
 export async function reportContent(params: {
   reporterProfileId: string;
   targetType: "feed_item" | "comment";
   targetId: string;
-  reason: string;
+  reasonCode?: string | null;
+  reason?: string | null;
 }): Promise<{ report_id: string }> {
-  const { reporterProfileId, targetType, targetId, reason } = params;
+  const { reporterProfileId, targetType, targetId } = params;
 
   if (!reporterProfileId || !targetId) throw new Error("Missing ids");
   if (targetType !== "feed_item" && targetType !== "comment") throw new Error("Invalid target type");
 
-  const r = (reason ?? "").trim();
-  if (r.length < 1) throw new Error("Reason required");
+  const reasonCode = REPORT_REASON_CODES.includes(params.reasonCode as ReportReasonCode)
+    ? (params.reasonCode as ReportReasonCode)
+    : null;
+
+  // feed_reports.reason is NOT NULL and a picked category is a complete report
+  // on its own, so fall back to the code when the reporter didn't add a note.
+  // Requiring free text here would mean asking someone to type out the abuse
+  // they're reporting before we'd accept it.
+  const note = (params.reason ?? "").trim();
+  const r = note || reasonCode;
+
+  if (!r) throw new Error("Reason required");
   if (r.length > 500) throw new Error("Reason too long");
 
-  // Optional hardening:
-  // - If reporting a feed_item, ensure reporter can see it
+  // If reporting a feed_item, ensure reporter can see it
   if (targetType === "feed_item") {
     await assertViewerCanReadFeedItem(targetId, reporterProfileId);
   }
 
   const { data, error } = await supabaseAdmin
     .from("feed_reports")
-    .insert({
-      reporter_profile_id: reporterProfileId,
-      target_type: targetType,
-      target_id: targetId,
-      reason: r,
-    })
+    .upsert(
+      {
+        reporter_profile_id: reporterProfileId,
+        target_type: targetType,
+        target_id: targetId,
+        reason: r,
+        reason_code: reasonCode,
+      },
+      { onConflict: "reporter_profile_id,target_type,target_id" },
+    )
     .select("id")
     .single();
 
@@ -308,4 +339,68 @@ export async function reportContent(params: {
   if (!data?.id) throw new Error("Failed to create report");
 
   return { report_id: data.id };
+}
+
+/**
+ * Hide, remove or restore a feed item or comment.
+ *
+ * `visibility` has been read by every feed query since the beginning and
+ * written by nothing. This is the other half.
+ *
+ *   hide     drops out of the feed, still reachable by direct link
+ *   remove   gone from both
+ *   restore  back to visible
+ *
+ * Authorization is the caller's job — the admin routes check profiles.is_admin,
+ * and the self-delete route checks authorship.
+ */
+export async function setContentVisibility(params: {
+  actorProfileId: string;
+  targetType: "feed_item" | "comment";
+  targetId: string;
+  action: "hide" | "remove" | "restore";
+  reason?: string | null;
+  reportId?: string | null;
+}): Promise<{ ok: true }> {
+  const { actorProfileId, targetType, targetId, action, reason, reportId } = params;
+
+  const visibility =
+    action === "restore" ? "visible" : action === "hide" ? "hidden" : "removed";
+
+  const table = targetType === "feed_item" ? "feed_items" : "feed_comments";
+
+  const { error: updErr } = await supabaseAdmin
+    .from(table)
+    .update({ visibility })
+    .eq("id", targetId);
+
+  if (updErr) throw updErr;
+
+  const { error: logErr } = await supabaseAdmin.from("feed_moderation_actions").insert({
+    actor_profile_id: actorProfileId,
+    target_type: targetType,
+    target_id: targetId,
+    action,
+    reason: reason ?? null,
+    report_id: reportId ?? null,
+  });
+
+  if (logErr) throw logErr;
+
+  // Acting on the content closes the reports about it — otherwise the queue
+  // keeps showing work that's already done.
+  if (action !== "restore") {
+    await supabaseAdmin
+      .from("feed_reports")
+      .update({
+        status: "actioned",
+        resolved_by: actorProfileId,
+        resolved_at: new Date().toISOString(),
+      })
+      .eq("target_type", targetType)
+      .eq("target_id", targetId)
+      .in("status", ["open", "reviewing"]);
+  }
+
+  return { ok: true };
 }

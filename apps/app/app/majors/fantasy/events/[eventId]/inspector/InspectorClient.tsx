@@ -194,7 +194,7 @@ export default function InspectorClient({ eventId }: { eventId: string }) {
 
   if (!isSandbox) {
     return (
-      <main className="mx-auto max-w-lg px-4 py-16 text-center text-emerald-100/60">
+      <main className="mx-auto max-w-lg px-4 py-16 text-center text-[color:var(--sec-muted)]">
         The odds inspector is only available in the sandbox environment.
       </main>
     );
@@ -202,26 +202,26 @@ export default function InspectorClient({ eventId }: { eventId: string }) {
 
   if (loading) {
     return (
-      <main className="mx-auto max-w-5xl px-4 py-16 text-center text-emerald-100/60">
+      <main className="mx-auto max-w-5xl px-4 py-16 text-center text-[color:var(--sec-muted)]">
         Loading inspector…
       </main>
     );
   }
 
-  const th = "px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-wide text-emerald-100/50";
-  const td = "px-2 py-1.5 text-[11px] text-emerald-100/90 whitespace-nowrap";
-  const card = "rounded-xl border border-emerald-900/70 bg-[#03200f] p-3";
+  const th = "px-2 py-1.5 text-left text-[10px] font-semibold uppercase tracking-wide text-[color:var(--sec-muted)]";
+  const td = "px-2 py-1.5 text-[11px] text-[color:var(--sec-muted)] whitespace-nowrap";
+  const card = "rounded-xl border border-[color:var(--sec-hair)] bg-[#03200f] p-3";
 
   return (
     <main className="mx-auto max-w-5xl px-3 pb-24 pt-4 space-y-4">
       <header className="flex flex-wrap items-center gap-2">
         <button
           onClick={() => router.push(`/majors/fantasy/events/${eventId}`)}
-          className="rounded-lg border border-emerald-900/70 px-2.5 py-1.5 text-xs text-emerald-100/70"
+          className="rounded-lg border border-[color:var(--sec-hair)] px-2.5 py-1.5 text-xs text-[color:var(--sec-muted)]"
         >
           ← Markets
         </button>
-        <h1 className="text-base font-semibold text-emerald-50">Odds Inspector</h1>
+        <h1 className="text-base font-semibold text-[color:var(--sec-text)]">Odds Inspector</h1>
         <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-200">
           sandbox dev tool
         </span>
@@ -229,28 +229,28 @@ export default function InspectorClient({ eventId }: { eventId: string }) {
           <button
             disabled={!!busy}
             onClick={() => runAction("regenerate", `/api/fantasy/events/${eventId}/generate`)}
-            className="rounded-lg border border-emerald-700/70 bg-emerald-800/40 px-2.5 py-1.5 text-xs text-emerald-100 disabled:opacity-50"
+            className="rounded-lg border border-[color:var(--sec-line)] bg-[color:var(--sec-surface-2)] px-2.5 py-1.5 text-xs text-[color:var(--sec-text)] disabled:opacity-50"
           >
             {busy === "regenerate" ? "Repricing…" : "Regenerate + reprice"}
           </button>
           <button
             disabled={!!busy}
             onClick={() => runAction("rebuild", `/api/fantasy/events/${eventId}/rebuild-profiles`)}
-            className="rounded-lg border border-emerald-700/70 bg-emerald-800/40 px-2.5 py-1.5 text-xs text-emerald-100 disabled:opacity-50"
+            className="rounded-lg border border-[color:var(--sec-line)] bg-[color:var(--sec-surface-2)] px-2.5 py-1.5 text-xs text-[color:var(--sec-text)] disabled:opacity-50"
           >
             {busy === "rebuild" ? "Rebuilding…" : "Rebuild profiles"}
           </button>
           <button
             disabled={!!busy}
             onClick={exportExcel}
-            className="rounded-lg border border-emerald-700/70 bg-emerald-800/40 px-2.5 py-1.5 text-xs text-emerald-100 disabled:opacity-50"
+            className="rounded-lg border border-[color:var(--sec-line)] bg-[color:var(--sec-surface-2)] px-2.5 py-1.5 text-xs text-[color:var(--sec-text)] disabled:opacity-50"
           >
             {busy === "export" ? "Exporting…" : "Export Excel"}
           </button>
           <button
             disabled={!data}
             onClick={() => navigator.clipboard.writeText(JSON.stringify(data, null, 2))}
-            className="rounded-lg border border-emerald-900/70 px-2.5 py-1.5 text-xs text-emerald-100/70"
+            className="rounded-lg border border-[color:var(--sec-hair)] px-2.5 py-1.5 text-xs text-[color:var(--sec-muted)]"
           >
             Copy JSON
           </button>
@@ -267,27 +267,27 @@ export default function InspectorClient({ eventId }: { eventId: string }) {
         <>
           {/* Event + state */}
           <section className={card}>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-emerald-100/80 sm:grid-cols-4">
-              <div><span className="text-emerald-100/50">Event</span> {data.event.name}</div>
-              <div><span className="text-emerald-100/50">Status</span> {data.event.status}</div>
-              <div><span className="text-emerald-100/50">Scoring</span> {data.event.scoringModel ?? "—"} / ranks {data.event.rankingBasis}</div>
-              <div><span className="text-emerald-100/50">Allowance</span> {data.event.allowancePct}%</div>
-              <div><span className="text-emerald-100/50">Rounds</span> {data.event.numRounds ?? 1}</div>
-              <div><span className="text-emerald-100/50">Version</span> v{data.simMeta.version} · {data.simMeta.simulationCount.toLocaleString()} sims</div>
-              <div><span className="text-emerald-100/50">Stale</span> {data.state ? String(data.state.odds_stale) : "no state"}</div>
-              <div><span className="text-emerald-100/50">Refreshed</span> {ago(data.state?.last_refreshed_at)}</div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-[color:var(--sec-muted)] sm:grid-cols-4">
+              <div><span className="text-[color:var(--sec-muted)]">Event</span> {data.event.name}</div>
+              <div><span className="text-[color:var(--sec-muted)]">Status</span> {data.event.status}</div>
+              <div><span className="text-[color:var(--sec-muted)]">Scoring</span> {data.event.scoringModel ?? "—"} / ranks {data.event.rankingBasis}</div>
+              <div><span className="text-[color:var(--sec-muted)]">Allowance</span> {data.event.allowancePct}%</div>
+              <div><span className="text-[color:var(--sec-muted)]">Rounds</span> {data.event.numRounds ?? 1}</div>
+              <div><span className="text-[color:var(--sec-muted)]">Version</span> v{data.simMeta.version} · {data.simMeta.simulationCount.toLocaleString()} sims</div>
+              <div><span className="text-[color:var(--sec-muted)]">Stale</span> {data.state ? String(data.state.odds_stale) : "no state"}</div>
+              <div><span className="text-[color:var(--sec-muted)]">Refreshed</span> {ago(data.state?.last_refreshed_at)}</div>
             </div>
           </section>
 
           {/* Players */}
           <section className={card}>
-            <h2 className="mb-2 text-xs font-semibold text-emerald-50">
+            <h2 className="mb-2 text-xs font-semibold text-[color:var(--sec-text)]">
               Players ({data.players.length}) — tap a row for per-hole μ + recent rounds
             </h2>
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead>
-                  <tr className="border-b border-emerald-900/60">
+                  <tr className="border-b border-[color:var(--sec-hair)]">
                     <th className={th}>Player</th>
                     <th className={th}>PH</th>
                     <th className={th}>PH source</th>
@@ -330,13 +330,13 @@ export default function InspectorClient({ eventId }: { eventId: string }) {
 
           {/* Markets */}
           <section className={card}>
-            <h2 className="mb-2 text-xs font-semibold text-emerald-50">
+            <h2 className="mb-2 text-xs font-semibold text-[color:var(--sec-text)]">
               Markets ({data.markets.length}) — Σp flagged when a one-winner market drifts from 1
             </h2>
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead>
-                  <tr className="border-b border-emerald-900/60">
+                  <tr className="border-b border-[color:var(--sec-hair)]">
                     <th className={th}>Market</th>
                     <th className={th}>Type</th>
                     <th className={th}>Status</th>
@@ -355,7 +355,7 @@ export default function InspectorClient({ eventId }: { eventId: string }) {
                         <tr
                           key={m.id}
                           onClick={() => setOpenMarket(openMarket === m.id ? null : m.id)}
-                          className="cursor-pointer border-b border-emerald-950/60 hover:bg-emerald-900/20"
+                          className="cursor-pointer border-b border-[color:var(--sec-hair)] hover:bg-[color:var(--sec-surface-2)]"
                         >
                           <td className={td}>{m.displayName}</td>
                           <td className={td}>{m.marketType}</td>
@@ -367,12 +367,12 @@ export default function InspectorClient({ eventId }: { eventId: string }) {
                         </tr>
                         {openMarket === m.id && (
                           <tr key={`${m.id}-detail`}>
-                            <td colSpan={5} className="bg-emerald-950/40 px-3 py-2">
+                            <td colSpan={5} className="bg-[color:var(--sec-surface)] px-3 py-2">
                               <div className="flex flex-wrap gap-2">
                                 {m.selections.map((s) => (
                                   <span
                                     key={s.key}
-                                    className="rounded-md border border-emerald-900/70 px-2 py-1 text-[10px] text-emerald-100/80"
+                                    className="rounded-md border border-[color:var(--sec-hair)] px-2 py-1 text-[10px] text-[color:var(--sec-muted)]"
                                   >
                                     {s.label}: {pct(s.probability)} → {s.decimalOdds.toFixed(2)} (v{s.eventVersion})
                                   </span>
@@ -391,11 +391,11 @@ export default function InspectorClient({ eventId }: { eventId: string }) {
 
           {/* Refresh jobs */}
           <section className={card}>
-            <h2 className="mb-2 text-xs font-semibold text-emerald-50">Refresh jobs (last {data.jobs.length})</h2>
+            <h2 className="mb-2 text-xs font-semibold text-[color:var(--sec-text)]">Refresh jobs (last {data.jobs.length})</h2>
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead>
-                  <tr className="border-b border-emerald-900/60">
+                  <tr className="border-b border-[color:var(--sec-hair)]">
                     <th className={th}>Status</th>
                     <th className={th}>Reason</th>
                     <th className={th}>Attempts</th>
@@ -405,7 +405,7 @@ export default function InspectorClient({ eventId }: { eventId: string }) {
                 </thead>
                 <tbody>
                   {data.jobs.map((j) => (
-                    <tr key={j.id} className="border-b border-emerald-950/60">
+                    <tr key={j.id} className="border-b border-[color:var(--sec-hair)]">
                       <td className={td}>{j.status}</td>
                       <td className={td}>{j.reason}</td>
                       <td className={td}>{j.attempts}</td>
@@ -441,12 +441,12 @@ function PlayerRows({
     <>
       <tr
         onClick={onToggle}
-        className="cursor-pointer border-b border-emerald-950/60 hover:bg-emerald-900/20"
+        className="cursor-pointer border-b border-[color:var(--sec-hair)] hover:bg-[color:var(--sec-surface-2)]"
       >
         <td className={`${td} font-medium`}>{p.name}</td>
         <td className={td}>{p.playingHandicap}</td>
         <td className={td}>{p.playingHandicapSource.replaceAll("_", " ")}</td>
-        <td className={`${td} ${p.modelPath === "differential" ? "text-emerald-300" : "text-amber-300"}`}>
+        <td className={`${td} ${p.modelPath === "differential" ? "text-[color:var(--sec-good)]" : "text-amber-300"}`}>
           {p.modelPath}
         </td>
         <td className={td}>{num(prof?.handicap_index)}</td>
@@ -470,24 +470,24 @@ function PlayerRows({
       </tr>
       {open && (
         <tr>
-          <td colSpan={21} className="bg-emerald-950/40 px-3 py-2">
+          <td colSpan={21} className="bg-[color:var(--sec-surface)] px-3 py-2">
             <div className="space-y-2">
               <div className="flex flex-wrap gap-1">
                 {holes.map((h, i) => (
                   <span
                     key={h.holeNumber}
-                    className="rounded-md border border-emerald-900/70 px-1.5 py-0.5 text-[10px] text-emerald-100/80"
+                    className="rounded-md border border-[color:var(--sec-hair)] px-1.5 py-0.5 text-[10px] text-[color:var(--sec-muted)]"
                     title={`Par ${h.par} · SI ${h.strokeIndex}${h.yardage ? ` · ${h.yardage}y` : ""} · μ = latent mean, E = calibrated expected score (both vs par)`}
                   >
                     H{h.holeNumber}: μ+{p.model.muByHole[i]?.toFixed(2)} / E+{p.model.eByHole[i]?.toFixed(2)}
                   </span>
                 ))}
-                <span className="rounded-md border border-emerald-700/70 px-1.5 py-0.5 text-[10px] text-emerald-200">
+                <span className="rounded-md border border-[color:var(--sec-line)] px-1.5 py-0.5 text-[10px] text-[color:var(--sec-text-2)]">
                   σ/hole {p.model.sigmaPerHole.toFixed(2)} ({p.model.sigmaSource}
                   {p.model.sigmaClamped ? ", clamped" : ""})
                 </span>
               </div>
-              <div className="text-[10px] text-emerald-100/60">
+              <div className="text-[10px] text-[color:var(--sec-muted)]">
                 Birdie calibration: obs {num(p.model.calibration.birdie.observedRate, 2)}/rd over{" "}
                 {p.model.calibration.birdie.sampleRounds} rds · prior{" "}
                 {p.model.calibration.birdie.priorMean.toFixed(2)} (K {p.model.calibration.birdie.priorStrength}) →
@@ -498,7 +498,7 @@ function PlayerRows({
                 {p.sim.expectedBirdies.toFixed(2)} · mean residual{" "}
                 {p.model.calibration.meanResidual.toFixed(3)} ({p.model.calibration.iterations} passes)
               </div>
-              <div className="text-[10px] text-emerald-100/60">
+              <div className="text-[10px] text-[color:var(--sec-muted)]">
                 Par calibration: obs {num(p.model.calibration.par.observedRate, 2)}/rd over{" "}
                 {p.model.calibration.par.sampleRounds} rds · prior{" "}
                 {p.model.calibration.par.priorMean.toFixed(2)} (K {p.model.calibration.par.priorStrength}) →
@@ -508,7 +508,7 @@ function PlayerRows({
                 {p.model.calibration.par.factor.toFixed(2)})
                 {p.model.calibration.par.capped ? " · CAPPED" : ""}
               </div>
-              <div className="text-[10px] text-emerald-100/60">
+              <div className="text-[10px] text-[color:var(--sec-muted)]">
                 {/* What the hole book actually quotes — the residual the two
                     calibrated bins leave behind. */}
                 ⇒ P(bogey+)/hole{" "}
@@ -522,7 +522,7 @@ function PlayerRows({
                   : "—"}{" "}
                 (= 1 − P(birdie+) − P(par); this is the bogey-or-worse hole book)
               </div>
-              <div className="text-[10px] text-emerald-100/60">
+              <div className="text-[10px] text-[color:var(--sec-muted)]">
                 Variance reconciliation: round σ² target{" "}
                 {p.model.roundVarTarget.toFixed(2)} → realized{" "}
                 {p.model.roundVarRealized.toFixed(2)} ({p.model.roundVarTarget > 0
@@ -535,14 +535,14 @@ function PlayerRows({
                   {prof.recent_rounds.map((r, i) => (
                     <span
                       key={i}
-                      className="rounded-md bg-emerald-900/30 px-1.5 py-0.5 text-[10px] text-emerald-100/70"
+                      className="rounded-md bg-[color:var(--sec-surface)] px-1.5 py-0.5 text-[10px] text-[color:var(--sec-muted)]"
                     >
                       {new Date(r.playedAt).toLocaleDateString()} · {r.gross18} ({r.holes}h, {r.birdies} brd)
                     </span>
                   ))}
                 </div>
               )}
-              <div className="text-[10px] text-emerald-100/50">
+              <div className="text-[10px] text-[color:var(--sec-muted)]">
                 Net percentiles: p5 {p.sim.netPercentiles.p5} · p50 {p.sim.netPercentiles.p50} · p95 {p.sim.netPercentiles.p95}
                 {" · "}completed holes {p.completedHoles}{p.roundComplete ? " · round complete" : ""}
               </div>

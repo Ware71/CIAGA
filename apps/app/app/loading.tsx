@@ -7,5 +7,5 @@
  * the splash jitter in the first place.
  */
 export default function Loading() {
-  return <div aria-hidden className="fixed inset-0 z-[9999] bg-[#042713]" />;
+  return <div aria-hidden className="fixed inset-0 z-[9999] bg-[color:var(--ciaga-ground)]" />;
 }

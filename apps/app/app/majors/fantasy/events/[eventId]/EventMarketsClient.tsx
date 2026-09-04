@@ -374,7 +374,7 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
     if (!cell) return <OddsBlank />;
     return (
       <div className="flex flex-col items-center gap-0.5">
-        <span className="text-[8px] text-emerald-200/45 whitespace-nowrap">{cell.selection.label}</span>
+        <span className="text-[8px] text-[color:var(--sec-muted)] whitespace-nowrap">{cell.selection.label}</span>
         {renderCell(cell)}
       </div>
     );
@@ -385,16 +385,16 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
     return (
       <div
         key={sel.key}
-        className="flex items-center justify-between py-1 border-b border-emerald-900/20 last:border-b-0"
+        className="flex items-center justify-between py-1 border-b border-[color:var(--sec-hair)] last:border-b-0"
       >
         <span className="flex min-w-0 items-center gap-1 pr-2">
-          <span className="text-[12px] text-emerald-100/85 truncate">{sel.label}</span>
+          <span className="text-[12px] text-[color:var(--sec-muted)] truncate">{sel.label}</span>
           {isPlayerKey && (
             <button
               type="button"
               aria-label={`About ${sel.label}`}
               onClick={() => openStats(sel.key)}
-              className="shrink-0 text-emerald-100/35 hover:text-emerald-100/80"
+              className="shrink-0 text-[color:var(--sec-muted)] hover:text-[color:var(--sec-muted)]"
             >
               <Info className="h-3 w-3" />
             </button>
@@ -409,17 +409,17 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
   const marketCard = (market: BoardMarket, selections: Selection[]) => (
     <div
       key={market.id}
-      className={`rounded-xl border border-emerald-900/60 bg-[#0b3b21]/70 px-3 py-2.5 ${market.status === "suspended" ? "opacity-50" : ""}`}
+      className={`rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] px-3 py-2.5 ${market.status === "suspended" ? "opacity-50" : ""}`}
     >
       <div className="flex items-center justify-between mb-1.5">
         <button
           type="button"
           disabled={!market.subject_profile_id}
           onClick={() => market.subject_profile_id && openStats(market.subject_profile_id)}
-          className="flex items-center gap-1 text-[12px] font-semibold text-emerald-100 disabled:cursor-default min-w-0"
+          className="flex items-center gap-1 text-[12px] font-semibold text-[color:var(--sec-text)] disabled:cursor-default min-w-0"
         >
           <span className="truncate">{market.display_name}</span>
-          {market.subject_profile_id && <Info className="h-3 w-3 shrink-0 text-emerald-100/40" />}
+          {market.subject_profile_id && <Info className="h-3 w-3 shrink-0 text-[color:var(--sec-muted)]" />}
         </button>
         {market.status === "suspended" && (
           <span className="text-[9px] text-amber-300/70 uppercase tracking-wider">Suspended</span>
@@ -440,20 +440,20 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
     (m.params as { basis?: unknown }).basis === "net" ? "net" : "gross";
 
   const noMarkets = (round: number | null) => (
-    <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 px-4 py-6 text-center text-sm text-emerald-100/70">
+    <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_80%,transparent)] px-4 py-6 text-center text-sm text-[color:var(--sec-muted)]">
       No open markets in this category{round != null ? " for this round" : ""}.
     </div>
   );
 
   const basisToggle = (
-    <div className="mb-2 inline-flex rounded-lg border border-emerald-900/60 p-0.5 text-[10px]">
+    <div className="mb-2 inline-flex rounded-lg border border-[color:var(--sec-hair)] p-0.5 text-[10px]">
       {(["gross", "net"] as const).map((b) => (
         <button
           key={b}
           type="button"
           onClick={() => setScoreBasis(b)}
           className={`rounded-md px-3 py-1 font-semibold capitalize transition-colors ${
-            scoreBasis === b ? "bg-emerald-800/50 text-[#f5e6b0]" : "text-emerald-200/60"
+            scoreBasis === b ? "bg-[color:var(--sec-surface-2)] text-[color:var(--sec-accent)]" : "text-[color:var(--sec-muted)]"
           }`}
         >
           {b}
@@ -530,25 +530,25 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
           <div>
             {basisToggle}
             <div className="overflow-x-auto -mx-1 px-1">
-              <table className="w-full border-collapse rounded-2xl border border-emerald-900/60 bg-[#0b3b21]/40">
+              <table className="w-full border-collapse rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)]">
                 <tbody>
                   {matchRows.map((r) => (
-                    <tr key={r.market.id} className="border-b border-emerald-900/20 last:border-b-0">
+                    <tr key={r.market.id} className="border-b border-[color:var(--sec-hair)] last:border-b-0">
                       <td className="px-1.5 py-2 w-[38%]">
                         <div className="flex flex-col items-center gap-1">
-                          <span className="w-full truncate text-center text-[10px] text-emerald-100/85">{r.aName}</span>
+                          <span className="w-full truncate text-center text-[10px] text-[color:var(--sec-muted)]">{r.aName}</span>
                           {renderCell(r.aSelection ? { market: r.market, selection: r.aSelection } : null)}
                         </div>
                       </td>
                       <td className="px-1.5 py-2 w-[24%]">
                         <div className="flex flex-col items-center gap-1">
-                          <span className="text-[9px] uppercase tracking-wider text-emerald-200/50">Draw</span>
+                          <span className="text-[9px] uppercase tracking-wider text-[color:var(--sec-muted)]">Draw</span>
                           {renderCell(r.drawSelection ? { market: r.market, selection: r.drawSelection } : null)}
                         </div>
                       </td>
                       <td className="px-1.5 py-2 w-[38%]">
                         <div className="flex flex-col items-center gap-1">
-                          <span className="w-full truncate text-center text-[10px] text-emerald-100/85">{r.bName}</span>
+                          <span className="w-full truncate text-center text-[10px] text-[color:var(--sec-muted)]">{r.bName}</span>
                           {renderCell(r.bSelection ? { market: r.market, selection: r.bSelection } : null)}
                         </div>
                       </td>
@@ -607,13 +607,13 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
       case "rare":
         if (data.rare.length === 0) return noMarkets(round);
         return (
-          <div className="rounded-xl border border-emerald-900/60 bg-[#0b3b21]/70 px-3 py-1.5">
+          <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] px-3 py-1.5">
             {data.rare.map(({ market, selection }) => (
               <div
                 key={market.id}
-                className="flex items-center justify-between py-1.5 border-b border-emerald-900/20 last:border-b-0"
+                className="flex items-center justify-between py-1.5 border-b border-[color:var(--sec-hair)] last:border-b-0"
               >
-                <span className="text-[12px] text-emerald-100/85 truncate pr-2">{market.display_name}</span>
+                <span className="text-[12px] text-[color:var(--sec-muted)] truncate pr-2">{market.display_name}</span>
                 {renderCell({ market, selection })}
               </div>
             ))}
@@ -655,7 +655,7 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
                   onToggle={() => toggleIn(openHole, setOpenHole, pid)}
                   onInfo={() => openStats(pid)}
                 >
-                  <div className="mb-2 flex rounded-lg border border-emerald-900/60 p-0.5 text-[10px]">
+                  <div className="mb-2 flex rounded-lg border border-[color:var(--sec-hair)] p-0.5 text-[10px]">
                     {HOLE_OUTCOMES.map((o) => {
                       const available = byOutcome.has(o.id);
                       return (
@@ -670,10 +670,10 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
                           }}
                           className={`flex-1 rounded-md px-2 py-1 font-semibold transition-colors ${
                             outcome === o.id
-                              ? "bg-emerald-800/50 text-[#f5e6b0]"
+                              ? "bg-[color:var(--sec-surface-2)] text-[color:var(--sec-accent)]"
                               : available
-                              ? "text-emerald-200/60"
-                              : "text-emerald-200/25 cursor-default"
+                              ? "text-[color:var(--sec-muted)]"
+                              : "text-[color:var(--sec-muted)] cursor-default"
                           }`}
                         >
                           {o.label}
@@ -685,7 +685,7 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
                     {active ? (
                       sortHoles(active.selections).map((sel) => selectionRow(active, sel))
                     ) : (
-                      <p className="px-1 py-2 text-[11px] text-emerald-200/60">
+                      <p className="px-1 py-2 text-[11px] text-[color:var(--sec-muted)]">
                         No prices for this player.
                       </p>
                     )}
@@ -709,7 +709,7 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
         <button
           type="button"
           onClick={() => router.push("/majors/fantasy")}
-          className="text-[11px] text-emerald-100/70 hover:text-emerald-50"
+          className="text-[11px] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
         >
           ← Fantasy
         </button>
@@ -724,7 +724,7 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
               type="button"
               onClick={handleRefreshMarkets}
               disabled={refreshingMarkets}
-              className="text-[10px] text-emerald-200/80 border border-emerald-800/50 rounded-full px-2 py-0.5 hover:text-emerald-100 disabled:opacity-50"
+              className="text-[10px] text-[color:var(--sec-muted)] border border-[color:var(--sec-hair)] rounded-full px-2 py-0.5 hover:text-[color:var(--sec-text)] disabled:opacity-50"
               title="Rebuild player profiles and re-price all markets"
             >
               {refreshingMarkets ? "Refreshing…" : "⟳ Refresh"}
@@ -733,7 +733,7 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
           <button
             type="button"
             onClick={() => router.push("/")}
-            className="text-[11px] text-emerald-100/70 hover:text-emerald-50"
+            className="text-[11px] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
           >
             Home
           </button>
@@ -750,13 +750,13 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
       </div>
       <div className="px-4 mb-3">
         <div className="flex items-start justify-between gap-2">
-          <h1 className="text-lg font-bold text-[#f5e6b0] leading-tight">
+          <h1 className="text-lg font-bold text-[color:var(--sec-accent)] leading-tight">
             {board?.event?.name ?? "Fantasy Markets"}
           </h1>
           {board?.generated && <OddsFormatMenu className="shrink-0" />}
         </div>
         {board?.state?.last_refreshed_at && (
-          <div className="text-[10px] text-emerald-200/45 mt-0.5">
+          <div className="text-[10px] text-[color:var(--sec-muted)] mt-0.5">
             Odds updated {new Date(board.state.last_refreshed_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
             {" · "}fair odds, simulated
             {balance !== null && <>{" · "}balance {balance} pts</>}
@@ -767,11 +767,11 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
       {/* Narrative preview */}
       {board?.generated && board.state?.narrative && (
         <div className="px-4 mb-4">
-          <div className="rounded-2xl border border-emerald-900/60 bg-gradient-to-br from-[#0b3b21]/90 to-[#07301a]/90 px-4 py-3">
-            <div className="text-[9px] uppercase tracking-[0.2em] text-[#f5e6b0]/60 mb-1">
+          <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-gradient-to-br from-[color:color-mix(in_srgb,var(--sec-surface)_90%,transparent)] to-[color:color-mix(in_srgb,var(--sec-surface)_90%,transparent)] px-4 py-3">
+            <div className="text-[9px] uppercase tracking-[0.2em] text-[color:color-mix(in_srgb,var(--sec-accent)_60%,transparent)] mb-1">
               Event preview
             </div>
-            <p className="text-[12px] leading-relaxed text-emerald-100/85">
+            <p className="text-[12px] leading-relaxed text-[color:var(--sec-muted)]">
               {board.state.narrative}
             </p>
           </div>
@@ -779,11 +779,11 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
       )}
 
       {loading ? (
-        <div className="text-sm text-emerald-100/60 text-center py-20">Loading…</div>
+        <div className="text-sm text-[color:var(--sec-muted)] text-center py-20">Loading…</div>
       ) : !board?.generated ? (
         <div className="px-4">
-          <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 px-4 py-6 text-center space-y-3">
-            <div className="text-sm text-emerald-100/70">
+          <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_80%,transparent)] px-4 py-6 text-center space-y-3">
+            <div className="text-sm text-[color:var(--sec-muted)]">
               {board?.error ?? "Markets haven't been generated for this event yet."}
             </div>
             {board?.canGenerate && (
@@ -792,11 +792,11 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
                   type="button"
                   onClick={handleGenerate}
                   disabled={generating}
-                  className="px-5 py-2 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
+                  className="px-5 py-2 rounded-full bg-[color:var(--sec-primary)] text-sm font-semibold text-white hover:bg-[color:var(--sec-primary-hover)] disabled:opacity-50"
                 >
                   {generating ? "Generating…" : "Generate Markets"}
                 </button>
-                {generateError && <div className="text-[11px] text-red-300">{generateError}</div>}
+                {generateError && <div className="text-[11px] text-[color:var(--sec-bad)]">{generateError}</div>}
               </>
             )}
           </div>
@@ -813,8 +813,8 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
                   onClick={() => setActiveTab(t.id)}
                   className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors ${
                     activeTab === t.id
-                      ? "bg-[#f5e6b0] text-[#042713]"
-                      : "border border-emerald-900/60 text-emerald-100/70 hover:text-emerald-50"
+                      ? "bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)]"
+                      : "border border-[color:var(--sec-hair)] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
                   }`}
                 >
                   {t.label}
@@ -836,8 +836,8 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
                     onClick={() => setActiveCategory(c.id)}
                     className={`shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold transition-colors ${
                       activeCategory === c.id
-                        ? "bg-emerald-700 text-white"
-                        : "border border-emerald-900/60 text-emerald-100/70 hover:text-emerald-50"
+                        ? "bg-[color:var(--sec-primary)] text-white"
+                        : "border border-[color:var(--sec-hair)] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
                     }`}
                   >
                     {c.label}

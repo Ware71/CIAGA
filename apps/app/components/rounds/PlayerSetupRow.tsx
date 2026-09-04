@@ -56,9 +56,9 @@ function Stat({
   adjusted: boolean;
 }) {
   return (
-    <div className="text-[11px] text-emerald-100/70">
-      <span className="text-emerald-100/40">{label} </span>
-      <span className={`tabular-nums ${adjusted ? "italic text-amber-200/90" : "text-emerald-50"}`}>
+    <div className="text-[11px] text-[color:var(--sec-muted)]">
+      <span className="text-[color:var(--sec-muted)]">{label} </span>
+      <span className={`tabular-nums ${adjusted ? "italic text-amber-200/90" : "text-[color:var(--sec-text)]"}`}>
         {value ?? "—"}
       </span>
     </div>
@@ -175,17 +175,17 @@ export function PlayerSetupRow({
       <div className="flex items-center gap-3">
         {avatar}
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold text-emerald-50 truncate">{name}</div>
-          <div className="text-[11px] text-emerald-100/60 truncate">
+          <div className="text-sm font-semibold text-[color:var(--sec-text)] truncate">{name}</div>
+          <div className="text-[11px] text-[color:var(--sec-muted)] truncate">
             {subtitle}
-            {removableHint ? <span className="ml-2 text-emerald-100/40">Swipe to remove</span> : null}
+            {removableHint ? <span className="ml-2 text-[color:var(--sec-muted)]">Swipe to remove</span> : null}
           </div>
         </div>
         {!isGuest && canEdit && !disabled ? (
           <button
             type="button"
             onClick={() => (editing ? setEditing(false) : openEdit())}
-            className="px-2 py-1 text-xs rounded border border-emerald-700 bg-emerald-900/30 text-emerald-100 hover:bg-emerald-800/40 transition-colors shrink-0"
+            className="px-2 py-1 text-xs rounded border border-[color:var(--sec-line)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)] hover:bg-[color:var(--sec-surface-2)] transition-colors shrink-0"
           >
             {editing ? "Done" : "Edit"}
           </button>
@@ -198,20 +198,20 @@ export function PlayerSetupRow({
           <Stat label="CH" value={courseHandicap} adjusted={chAdjusted} />
           <Stat label="PH" value={playingHandicap} adjusted={phAdjusted} />
           <div className="ml-auto text-right">
-            <div className={`text-[11px] ${teeAdjusted ? "italic text-amber-200/90" : "text-emerald-50"}`}>
+            <div className={`text-[11px] ${teeAdjusted ? "italic text-amber-200/90" : "text-[color:var(--sec-text)]"}`}>
               {teeName}
             </div>
-            {teeSpecs ? <div className="text-[10px] text-emerald-100/50">{teeSpecs}</div> : null}
+            {teeSpecs ? <div className="text-[10px] text-[color:var(--sec-muted)]">{teeSpecs}</div> : null}
           </div>
         </div>
       ) : null}
 
       {editing && !isGuest ? (
-        <div className="mt-3 space-y-3 rounded-xl border border-emerald-900/70 bg-[#042713]/60 p-3">
+        <div className="mt-3 space-y-3 rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--ciaga-ground)_60%,transparent)] p-3">
           {/* Handicap Index */}
           {canEditHandicap ? (
           <div className="flex items-center justify-between gap-2">
-            <label className="text-[11px] text-emerald-100/70">Handicap Index</label>
+            <label className="text-[11px] text-[color:var(--sec-muted)]">Handicap Index</label>
             <div className="flex items-center gap-1.5">
               <input
                 type="number"
@@ -221,13 +221,13 @@ export function PlayerSetupRow({
                 value={hiInput}
                 onChange={(e) => setHiInput(e.target.value)}
                 placeholder="HI"
-                className="w-16 rounded border border-emerald-900/70 bg-[#0b3b21]/70 px-2 py-1 text-xs text-emerald-50 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                className="w-16 rounded border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] px-2 py-1 text-xs text-[color:var(--sec-text)] focus:outline-none focus:ring-1 focus:ring-[color:var(--sec-accent)]"
                 disabled={savingHi}
               />
               <button
                 onClick={saveHi}
                 disabled={savingHi}
-                className="px-2 py-1 text-xs rounded bg-emerald-700 text-white hover:bg-emerald-600 disabled:opacity-50 transition-colors"
+                className="px-2 py-1 text-xs rounded bg-[color:var(--sec-primary)] text-white hover:bg-[color:var(--sec-primary-hover)] disabled:opacity-50 transition-colors"
               >
                 {savingHi ? "…" : "Save"}
               </button>
@@ -247,12 +247,12 @@ export function PlayerSetupRow({
           {/* Tee */}
           {canEditTee ? (
           <div className="flex items-center justify-between gap-2">
-            <label className="text-[11px] text-emerald-100/70">Tee</label>
+            <label className="text-[11px] text-[color:var(--sec-muted)]">Tee</label>
             <select
               value={teeInput}
               onChange={(e) => saveTee(e.target.value)}
               disabled={savingTee}
-              className="rounded border border-emerald-900/70 bg-[#0b3b21]/70 px-2 py-1 text-xs text-emerald-50 focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-50"
+              className="rounded border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_70%,transparent)] px-2 py-1 text-xs text-[color:var(--sec-text)] focus:outline-none focus:ring-1 focus:ring-[color:var(--sec-accent)] disabled:opacity-50"
             >
               <option value="">— round default —</option>
               {teeBoxes.map((t) => (

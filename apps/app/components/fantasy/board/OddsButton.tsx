@@ -35,16 +35,16 @@ export function OddsButton({
       title={title}
       className={`shrink-0 min-w-[58px] text-center rounded-lg border px-2 py-1 text-[11px] font-bold transition-colors disabled:cursor-default ${
         inSlip
-          ? "border-[#f5e6b0] bg-[#f5e6b0] text-[#042713]"
+          ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)]"
           : stale
-          ? "border-emerald-900/50 text-emerald-200/40 animate-pulse"
+          ? "border-[color:var(--sec-hair)] text-[color:var(--sec-muted)] animate-pulse"
           : flash === "up"
-          ? "border-emerald-400/60 bg-emerald-500/15 text-emerald-300"
+          ? "border-[color:var(--sec-accent)] bg-emerald-500/15 text-[color:var(--sec-good)]"
           : flash === "down"
-          ? "border-red-400/50 bg-red-500/10 text-red-300"
+          ? "border-red-400/50 bg-red-500/10 text-[color:var(--sec-bad)]"
           : canBack
-          ? "border-emerald-700/50 bg-emerald-950/40 text-[#f5e6b0] hover:bg-emerald-800/40 active:scale-95"
-          : "border-emerald-900/50 text-emerald-200/50"
+          ? "border-[color:var(--sec-line)] bg-[color:var(--sec-surface)] text-[color:var(--sec-accent)] hover:bg-[color:var(--sec-surface-2)] active:scale-95"
+          : "border-[color:var(--sec-hair)] text-[color:var(--sec-muted)]"
       } ${className ?? ""}`}
     >
       <OddsValue odds={odds} />
@@ -54,5 +54,5 @@ export function OddsButton({
 
 /** Empty placeholder occupying an odds cell's footprint (no price for a pairing). */
 export function OddsBlank() {
-  return <span className="inline-block min-w-[58px] text-center text-[11px] text-emerald-200/25">—</span>;
+  return <span className="inline-block min-w-[58px] text-center text-[11px] text-[color:var(--sec-muted)]">—</span>;
 }

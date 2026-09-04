@@ -191,28 +191,28 @@ function EditRoundSheet({
     }
   };
 
-  const inputCls = "w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2.5 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600";
+  const inputCls = "w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2.5 text-sm text-[color:var(--sec-text)] focus:outline-none focus:border-[color:var(--sec-line)]";
 
   return (
     <>
     <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={onClose}>
       <div
-        className="w-full max-w-sm mx-auto rounded-t-3xl bg-[#071f13] border-t border-emerald-900/70 px-4 pt-5 pb-[env(safe-area-inset-bottom)] space-y-4 overflow-y-auto max-h-[85vh]"
+        className="w-full max-w-sm mx-auto rounded-t-3xl bg-[color:var(--ciaga-ground)] border-t border-[color:var(--sec-hair)] px-4 pt-5 pb-[env(safe-area-inset-bottom)] space-y-4 overflow-y-auto max-h-[85vh]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="w-10 h-1 rounded-full bg-emerald-800/60 mx-auto mb-1" />
-        <div className="text-sm font-semibold text-emerald-50">Edit {round.name}</div>
-        {error && <div className="text-[11px] text-red-400">{error}</div>}
+        <div className="w-10 h-1 rounded-full bg-[color:var(--sec-surface-2)] mx-auto mb-1" />
+        <div className="text-sm font-semibold text-[color:var(--sec-text)]">Edit {round.name}</div>
+        {error && <div className="text-[11px] text-[color:var(--sec-bad)]">{error}</div>}
         <div className="space-y-1">
-          <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Name</label>
+          <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Name</label>
           <input type="text" value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
         </div>
         <div className="space-y-1">
-          <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Date</label>
+          <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Date</label>
           <input type="date" value={scheduledDate} onChange={(e) => setScheduledDate(e.target.value)} className={inputCls} />
         </div>
         <div className="space-y-1">
-          <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Status</label>
+          <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Status</label>
           <select value={status} onChange={(e) => setStatus(e.target.value as EventRound["status"])} className={inputCls}>
             <option value="scheduled">Scheduled</option>
             <option value="live">Live</option>
@@ -221,16 +221,16 @@ function EditRoundSheet({
           </select>
         </div>
         <div className="space-y-1">
-          <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Course</label>
+          <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Course</label>
           {courseName ? (
             <div className="flex items-center gap-2">
-              <span className="flex-1 text-sm text-emerald-50 truncate">{courseName}</span>
+              <span className="flex-1 text-sm text-[color:var(--sec-text)] truncate">{courseName}</span>
               <button type="button" onClick={() => setShowCoursePicker(true)}
-                className="text-[11px] text-emerald-400/70 hover:text-emerald-300 shrink-0">Change</button>
+                className="text-[11px] text-[color:var(--sec-good)] hover:text-[color:var(--sec-good)] shrink-0">Change</button>
             </div>
           ) : (
             <button type="button" onClick={() => setShowCoursePicker(true)}
-              className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2.5 text-sm text-emerald-200/50 text-left">
+              className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2.5 text-sm text-[color:var(--sec-muted)] text-left">
               Select course…
             </button>
           )}
@@ -238,7 +238,7 @@ function EditRoundSheet({
         {teeBoxes.length > 0 && (
           <>
             <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Men&apos;s Default Tee</label>
+              <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Men&apos;s Default Tee</label>
               <select value={maleTeeId} onChange={(e) => setMaleTeeId(e.target.value)} className={inputCls}>
                 <option value="">— None —</option>
                 {maleTees.map((t) => (
@@ -247,7 +247,7 @@ function EditRoundSheet({
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Women&apos;s Default Tee</label>
+              <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Women&apos;s Default Tee</label>
               <select value={femaleTeeId} onChange={(e) => setFemaleTeeId(e.target.value)} className={inputCls}>
                 <option value="">— None —</option>
                 {femaleTees.map((t) => (
@@ -261,7 +261,7 @@ function EditRoundSheet({
           type="button"
           onClick={handleSave}
           disabled={saving}
-          className="w-full py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white disabled:opacity-50"
+          className="w-full py-3 rounded-full bg-[color:var(--sec-primary)] text-sm font-semibold text-white disabled:opacity-50"
         >
           {saving ? "Saving…" : "Save"}
         </button>
@@ -477,16 +477,16 @@ function AddTeeTimeSheet({
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={onClose}>
       <div
-        className="w-full max-w-sm mx-auto rounded-t-3xl bg-[#071f13] border-t border-emerald-900/70 px-4 pt-5 pb-[env(safe-area-inset-bottom)] space-y-4 max-h-[85dvh] overflow-y-auto"
+        className="w-full max-w-sm mx-auto rounded-t-3xl bg-[color:var(--ciaga-ground)] border-t border-[color:var(--sec-hair)] px-4 pt-5 pb-[env(safe-area-inset-bottom)] space-y-4 max-h-[85dvh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="w-10 h-1 rounded-full bg-emerald-800/60 mx-auto mb-1" />
-        <div className="text-sm font-semibold text-emerald-50">Add Tee Time</div>
+        <div className="w-10 h-1 rounded-full bg-[color:var(--sec-surface-2)] mx-auto mb-1" />
+        <div className="text-sm font-semibold text-[color:var(--sec-text)]">Add Tee Time</div>
 
         {/* Round picker — only shown when there are multiple rounds */}
         {eventRounds.length > 1 && (
           <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Round *</label>
+            <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Round *</label>
             <div className="flex flex-wrap gap-2">
               {eventRounds.map((r) => (
                 <button
@@ -495,8 +495,8 @@ function AddTeeTimeSheet({
                   onClick={() => setSelectedRoundId(r.id)}
                   className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
                     selectedRoundId === r.id
-                      ? "bg-emerald-700 border-emerald-600 text-white"
-                      : "border-emerald-800/60 text-emerald-200/70 hover:border-emerald-600"
+                      ? "bg-[color:var(--sec-primary)] border-[color:var(--sec-line)] text-white"
+                      : "border-[color:var(--sec-hair)] text-[color:var(--sec-muted)] hover:border-[color:var(--sec-line)]"
                   }`}
                 >
                   {r.name}
@@ -508,36 +508,36 @@ function AddTeeTimeSheet({
 
         {/* Date/time */}
         <div className="space-y-1">
-          <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Tee Time *</label>
+          <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Tee Time *</label>
           <input
             type="datetime-local"
             value={teeTime}
             onChange={(e) => setTeeTime(e.target.value)}
-            className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2.5 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
+            className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2.5 text-sm text-[color:var(--sec-text)] focus:outline-none focus:border-[color:var(--sec-line)]"
           />
         </div>
 
         {/* Group number + notes row */}
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Group #</label>
+            <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Group #</label>
             <input
               type="number"
               min={1}
               value={groupNumber}
               onChange={(e) => setGroupNumber(e.target.value)}
               placeholder="e.g. 1"
-              className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2.5 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
+              className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2.5 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none focus:border-[color:var(--sec-line)]"
             />
           </div>
           <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Notes</label>
+            <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Notes</label>
             <input
               type="text"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Optional"
-              className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2.5 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
+              className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2.5 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none focus:border-[color:var(--sec-line)]"
             />
           </div>
         </div>
@@ -545,8 +545,8 @@ function AddTeeTimeSheet({
         {/* Players */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Players</label>
-            <span className="text-[10px] text-emerald-200/50">{totalPlayers}/4</span>
+            <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Players</label>
+            <span className="text-[10px] text-[color:var(--sec-muted)]">{totalPlayers}/4</span>
           </div>
           <div className="space-y-1.5 max-h-48 overflow-y-auto">
             {groupMembers.filter((m) => entrantProfileIds.has(m.profile_id) && !hiddenByCut(m.profile_id)).map((m) => {
@@ -562,34 +562,34 @@ function AddTeeTimeSheet({
                     disabled={disabled}
                     className={`w-full flex items-center gap-3 rounded-xl border px-3 py-2 text-left transition-colors ${
                       selected
-                        ? "border-emerald-500 bg-emerald-900/50"
+                        ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)]"
                         : disabled
-                        ? "border-emerald-900/30 bg-transparent opacity-40"
-                        : "border-emerald-900/50 bg-emerald-900/20 hover:border-emerald-700/50"
+                        ? "border-[color:var(--sec-hair)] bg-transparent opacity-40"
+                        : "border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] hover:border-[color:var(--sec-line)]"
                     }`}
                   >
                     {m.profile?.avatar_url ? (
                       <img src={m.profile.avatar_url} alt="" className="h-6 w-6 rounded-full object-cover" loading="lazy" decoding="async" />
                     ) : (
-                      <div className="h-6 w-6 rounded-full bg-emerald-900/60 grid place-items-center text-[9px] font-bold text-emerald-200">
+                      <div className="h-6 w-6 rounded-full bg-[color:var(--sec-surface)] grid place-items-center text-[9px] font-bold text-[color:var(--sec-text-2)]">
                         {m.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
                       </div>
                     )}
-                    <span className="flex-1 text-sm text-emerald-50">{m.profile?.name ?? m.profile_id}</span>
+                    <span className="flex-1 text-sm text-[color:var(--sec-text)]">{m.profile?.name ?? m.profile_id}</span>
                     {assignment && (
                       <span className="text-[9px] text-amber-400/80 bg-amber-900/30 rounded px-1.5 py-0.5 shrink-0">
                         {assignment.groupNumber != null ? `Grp ${assignment.groupNumber}` : "Assigned"}
                       </span>
                     )}
-                    {selected && <span className="text-emerald-400 text-xs">✓</span>}
+                    {selected && <span className="text-[color:var(--sec-good)] text-xs">✓</span>}
                   </button>
                   {selected && filteredTees.length > 0 && (
                     <div className="flex items-center gap-2 pl-9">
-                      <span className="text-[10px] text-emerald-200/50 shrink-0">Tee:</span>
+                      <span className="text-[10px] text-[color:var(--sec-muted)] shrink-0">Tee:</span>
                       <select
                         value={playerTees[m.profile_id] ?? ""}
                         onChange={(e) => setPlayerTees((tees) => ({ ...tees, [m.profile_id]: e.target.value }))}
-                        className="flex-1 rounded-lg bg-emerald-900/30 border border-emerald-800/40 px-2 py-1 text-xs text-emerald-50 focus:outline-none"
+                        className="flex-1 rounded-lg bg-[color:var(--sec-surface)] border border-[color:var(--sec-hair)] px-2 py-1 text-xs text-[color:var(--sec-text)] focus:outline-none"
                       >
                         <option value="">— round default —</option>
                         {filteredTees.map((t) => (
@@ -609,7 +609,7 @@ function AddTeeTimeSheet({
         {/* Guest add */}
         {totalPlayers < 4 && (
           <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Add Guest</label>
+            <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Add Guest</label>
             <div className="flex gap-2">
               <input
                 type="text"
@@ -617,33 +617,33 @@ function AddTeeTimeSheet({
                 onChange={(e) => setGuestName(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && addGuest()}
                 placeholder="Guest name"
-                className="flex-1 rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
+                className="flex-1 rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none focus:border-[color:var(--sec-line)]"
               />
               <button
                 type="button"
                 onClick={addGuest}
                 disabled={!guestName.trim()}
-                className="px-3 rounded-xl border border-emerald-700/60 text-sm text-emerald-200 disabled:opacity-40"
+                className="px-3 rounded-xl border border-[color:var(--sec-line)] text-sm text-[color:var(--sec-text-2)] disabled:opacity-40"
               >
                 Add
               </button>
             </div>
             {guests.map((g) => (
               <div key={g} className="space-y-1">
-                <div className="flex items-center justify-between rounded-xl border border-emerald-900/40 bg-emerald-900/20 px-3 py-1.5">
-                  <span className="text-sm text-emerald-100">{g} <span className="text-[10px] text-emerald-200/50">guest</span></span>
-                  <button type="button" onClick={() => removeGuest(g)} className="text-emerald-200/50 text-xs hover:text-red-400">✕</button>
+                <div className="flex items-center justify-between rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-3 py-1.5">
+                  <span className="text-sm text-[color:var(--sec-text)]">{g} <span className="text-[10px] text-[color:var(--sec-muted)]">guest</span></span>
+                  <button type="button" onClick={() => removeGuest(g)} className="text-[color:var(--sec-muted)] text-xs hover:text-[color:var(--sec-bad)]">✕</button>
                 </div>
                 {/* Guest fee — charge to a host player */}
                 {entryFeeAmount && entryFeeAmount > 0 && selectedPlayers.length > 0 && (
                   <div className="flex items-center gap-2 px-1">
-                    <span className="text-[10px] text-emerald-200/50">
+                    <span className="text-[10px] text-[color:var(--sec-muted)]">
                       Charge {entryFeeCurrency === "GBP" ? "£" : ""}{entryFeeAmount.toFixed(2)} guest fee to:
                     </span>
                     <select
                       value={guestChargeTo[g] ?? ""}
                       onChange={(e) => setGuestChargeTo((prev) => ({ ...prev, [g]: e.target.value }))}
-                      className="flex-1 rounded-lg border border-emerald-900/50 bg-[#0b3b21]/60 px-2 py-1 text-[10px] text-emerald-50"
+                      className="flex-1 rounded-lg border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-2 py-1 text-[10px] text-[color:var(--sec-text)]"
                     >
                       <option value="">— none —</option>
                       {selectedPlayers.map((pid) => {
@@ -658,17 +658,17 @@ function AddTeeTimeSheet({
           </div>
         )}
 
-        {error && <div className="text-sm text-red-400">{error}</div>}
+        {error && <div className="text-sm text-[color:var(--sec-bad)]">{error}</div>}
 
         <div className="flex gap-3 pb-2">
-          <button type="button" onClick={onClose} className="flex-1 py-3 rounded-full border border-emerald-900/60 text-sm text-emerald-200/70">
+          <button type="button" onClick={onClose} className="flex-1 py-3 rounded-full border border-[color:var(--sec-hair)] text-sm text-[color:var(--sec-muted)]">
             Cancel
           </button>
           <button
             type="button"
             onClick={handleSubmit}
             disabled={submitting}
-            className="flex-1 py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white disabled:opacity-50"
+            className="flex-1 py-3 rounded-full bg-[color:var(--sec-primary)] text-sm font-semibold text-white disabled:opacity-50"
           >
             {submitting ? "Saving…" : "Create Tee Time"}
           </button>
@@ -773,50 +773,50 @@ function EditTeeTimeSheet({
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={onClose}>
       <div
-        className="w-full max-w-sm mx-auto rounded-t-3xl bg-[#071f13] border-t border-emerald-900/70 px-4 pt-5 pb-[env(safe-area-inset-bottom)] space-y-4 max-h-[85dvh] overflow-y-auto"
+        className="w-full max-w-sm mx-auto rounded-t-3xl bg-[color:var(--ciaga-ground)] border-t border-[color:var(--sec-hair)] px-4 pt-5 pb-[env(safe-area-inset-bottom)] space-y-4 max-h-[85dvh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="w-10 h-1 rounded-full bg-emerald-800/60 mx-auto mb-1" />
-        <div className="text-sm font-semibold text-emerald-50">Edit Tee Time</div>
+        <div className="w-10 h-1 rounded-full bg-[color:var(--sec-surface-2)] mx-auto mb-1" />
+        <div className="text-sm font-semibold text-[color:var(--sec-text)]">Edit Tee Time</div>
 
         <div className="space-y-1">
-          <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Tee Time *</label>
+          <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Tee Time *</label>
           <input
             type="datetime-local"
             value={teeTime}
             onChange={(e) => setTeeTime(e.target.value)}
-            className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2.5 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600"
+            className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2.5 text-sm text-[color:var(--sec-text)] focus:outline-none focus:border-[color:var(--sec-line)]"
           />
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Group #</label>
+            <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Group #</label>
             <input
               type="number"
               min={1}
               value={groupNumber}
               onChange={(e) => setGroupNumber(e.target.value)}
               placeholder="e.g. 1"
-              className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2.5 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
+              className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2.5 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none focus:border-[color:var(--sec-line)]"
             />
           </div>
           <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Notes</label>
+            <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Notes</label>
             <input
               type="text"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Optional"
-              className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2.5 text-sm text-emerald-50 placeholder:text-emerald-100/35 focus:outline-none focus:border-emerald-600"
+              className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2.5 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none focus:border-[color:var(--sec-line)]"
             />
           </div>
         </div>
 
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Players</label>
-            <span className="text-[10px] text-emerald-200/50">{totalPlayers}/4</span>
+            <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Players</label>
+            <span className="text-[10px] text-[color:var(--sec-muted)]">{totalPlayers}/4</span>
           </div>
           <div className="space-y-1.5 max-h-48 overflow-y-auto">
             {groupMembers.filter((m) => entrantProfileIds.has(m.profile_id) || selectedPlayers.includes(m.profile_id)).map((m) => {
@@ -831,49 +831,49 @@ function EditTeeTimeSheet({
                   disabled={disabled}
                   className={`w-full flex items-center gap-3 rounded-xl border px-3 py-2 text-left transition-colors ${
                     selected
-                      ? "border-emerald-500 bg-emerald-900/50"
+                      ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)]"
                       : disabled
-                      ? "border-emerald-900/30 bg-transparent opacity-40"
-                      : "border-emerald-900/50 bg-emerald-900/20 hover:border-emerald-700/50"
+                      ? "border-[color:var(--sec-hair)] bg-transparent opacity-40"
+                      : "border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] hover:border-[color:var(--sec-line)]"
                   }`}
                 >
                   {m.profile?.avatar_url ? (
                     <img src={m.profile.avatar_url} alt="" className="h-6 w-6 rounded-full object-cover" loading="lazy" decoding="async" />
                   ) : (
-                    <div className="h-6 w-6 rounded-full bg-emerald-900/60 grid place-items-center text-[9px] font-bold text-emerald-200">
+                    <div className="h-6 w-6 rounded-full bg-[color:var(--sec-surface)] grid place-items-center text-[9px] font-bold text-[color:var(--sec-text-2)]">
                       {m.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
                     </div>
                   )}
-                  <span className="flex-1 text-sm text-emerald-50">{m.profile?.name ?? m.profile_id}</span>
+                  <span className="flex-1 text-sm text-[color:var(--sec-text)]">{m.profile?.name ?? m.profile_id}</span>
                   {assignment && (
                     <span className="text-[9px] text-amber-400/80 bg-amber-900/30 rounded px-1.5 py-0.5 shrink-0">
                       {assignment.groupNumber != null ? `Grp ${assignment.groupNumber}` : "Assigned"}
                     </span>
                   )}
-                  {selected && <span className="text-emerald-400 text-xs">✓</span>}
+                  {selected && <span className="text-[color:var(--sec-good)] text-xs">✓</span>}
                 </button>
               );
             })}
             {guestParticipants.map((g) => (
-              <div key={g.display_name} className="flex items-center gap-3 rounded-xl border border-emerald-900/30 bg-emerald-900/10 px-3 py-2 opacity-60">
-                <div className="h-6 w-6 rounded-full bg-emerald-900/60 grid place-items-center text-[9px] font-bold text-emerald-200">★</div>
-                <span className="flex-1 text-sm text-emerald-100">{g.display_name} <span className="text-[10px] text-emerald-200/50">guest</span></span>
+              <div key={g.display_name} className="flex items-center gap-3 rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-3 py-2 opacity-60">
+                <div className="h-6 w-6 rounded-full bg-[color:var(--sec-surface)] grid place-items-center text-[9px] font-bold text-[color:var(--sec-text-2)]">★</div>
+                <span className="flex-1 text-sm text-[color:var(--sec-text)]">{g.display_name} <span className="text-[10px] text-[color:var(--sec-muted)]">guest</span></span>
               </div>
             ))}
           </div>
         </div>
 
-        {error && <div className="text-sm text-red-400">{error}</div>}
+        {error && <div className="text-sm text-[color:var(--sec-bad)]">{error}</div>}
 
         <div className="flex gap-3 pb-2">
-          <button type="button" onClick={onClose} className="flex-1 py-3 rounded-full border border-emerald-900/60 text-sm text-emerald-200/70">
+          <button type="button" onClick={onClose} className="flex-1 py-3 rounded-full border border-[color:var(--sec-hair)] text-sm text-[color:var(--sec-muted)]">
             Cancel
           </button>
           <button
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="flex-1 py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white disabled:opacity-50"
+            className="flex-1 py-3 rounded-full bg-[color:var(--sec-primary)] text-sm font-semibold text-white disabled:opacity-50"
           >
             {saving ? "Saving…" : "Save Changes"}
           </button>
@@ -910,16 +910,16 @@ function TeeTimeCard({
   const dateStr = d.toLocaleDateString([], { month: "short", day: "numeric" });
 
   return (
-    <div className="rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/80 p-4 space-y-3">
+    <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_80%,transparent)] p-4 space-y-3">
       <div className="flex items-center justify-between">
         <div>
           {tt.group_number != null && (
-            <span className="text-[10px] uppercase tracking-wider text-emerald-200/55 mr-2">
+            <span className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)] mr-2">
               Group {tt.group_number}
             </span>
           )}
-          <span className="text-sm font-semibold text-[#f5e6b0]">{timeStr}</span>
-          <span className="text-[11px] text-emerald-100/55 ml-2">{dateStr}</span>
+          <span className="text-sm font-semibold text-[color:var(--sec-accent)]">{timeStr}</span>
+          <span className="text-[11px] text-[color:var(--sec-muted)] ml-2">{dateStr}</span>
         </div>
         <div className="flex items-center gap-2">
           {tt.round?.status && (
@@ -927,8 +927,8 @@ function TeeTimeCard({
               tt.round.status === "live"
                 ? "bg-amber-900/50 text-amber-300"
                 : tt.round.status === "finished"
-                ? "bg-emerald-900/60 text-emerald-300"
-                : "bg-emerald-900/40 text-emerald-200/60"
+                ? "bg-[color:var(--sec-surface)] text-[color:var(--sec-good)]"
+                : "bg-[color:var(--sec-surface)] text-[color:var(--sec-muted)]"
             }`}>
               {tt.round.status}
             </span>
@@ -937,7 +937,7 @@ function TeeTimeCard({
             <button
               type="button"
               onClick={onEdit}
-              className="text-[11px] text-emerald-200/40 hover:text-emerald-200 transition-colors px-1"
+              className="text-[11px] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text-2)] transition-colors px-1"
             >
               ✎
             </button>
@@ -946,19 +946,19 @@ function TeeTimeCard({
             <button
               type="button"
               onClick={onDelete}
-              className="text-[11px] text-emerald-200/40 hover:text-red-400 transition-colors"
+              className="text-[11px] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-bad)] transition-colors"
             >
               ✕
             </button>
           )}
         </div>
       </div>
-      {tt.notes && <p className="text-[11px] text-emerald-100/55 italic">{tt.notes}</p>}
+      {tt.notes && <p className="text-[11px] text-[color:var(--sec-muted)] italic">{tt.notes}</p>}
       {tt.round?.status === "finished" && onViewScorecard && (
         <button
           type="button"
           onClick={onViewScorecard}
-          className="text-[11px] text-emerald-400 hover:text-emerald-300 text-left"
+          className="text-[11px] text-[color:var(--sec-good)] hover:text-[color:var(--sec-good)] text-left"
         >
           View Scorecard →
         </button>
@@ -968,7 +968,7 @@ function TeeTimeCard({
           type="button"
           onClick={onStartRound}
           disabled={isStarting}
-          className="text-[11px] text-emerald-400 hover:text-emerald-300 text-left disabled:opacity-50"
+          className="text-[11px] text-[color:var(--sec-good)] hover:text-[color:var(--sec-good)] text-left disabled:opacity-50"
         >
           {isStarting ? "Starting…" : "Start Round →"}
         </button>
@@ -978,20 +978,20 @@ function TeeTimeCard({
           p ? (
             <div key={i} className="flex flex-col items-center gap-1">
               {p.profile?.avatar_url ? (
-                <img src={p.profile.avatar_url} alt="" className="h-9 w-9 rounded-full object-cover border border-emerald-700/40" loading="lazy" decoding="async" />
+                <img src={p.profile.avatar_url} alt="" className="h-9 w-9 rounded-full object-cover border border-[color:var(--sec-line)]" loading="lazy" decoding="async" />
               ) : (
-                <div className="h-9 w-9 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200">
+                <div className="h-9 w-9 rounded-full bg-[color:var(--sec-surface)] grid place-items-center text-[10px] font-bold text-[color:var(--sec-text-2)]">
                   {(p.display_name ?? p.profile?.name ?? "?").slice(0, 2).toUpperCase()}
                 </div>
               )}
-              <span className="text-[9px] text-emerald-100/70 truncate max-w-[52px] text-center leading-tight">
+              <span className="text-[9px] text-[color:var(--sec-muted)] truncate max-w-[52px] text-center leading-tight">
                 {p.is_guest ? `${p.display_name} ★` : (p.profile?.name ?? "—")}
               </span>
             </div>
           ) : (
             <div key={i} className="flex flex-col items-center gap-1 opacity-30">
-              <div className="h-9 w-9 rounded-full border-2 border-dashed border-emerald-700/40" />
-              <span className="text-[9px] text-emerald-100/40">Open</span>
+              <div className="h-9 w-9 rounded-full border-2 border-dashed border-[color:var(--sec-line)]" />
+              <span className="text-[9px] text-[color:var(--sec-muted)]">Open</span>
             </div>
           )
         )}
@@ -1015,14 +1015,14 @@ function FixtureCard({ fixture }: { fixture: MatchplayFixture & { home_entry?: a
   const awayWon = fixture.result_type === "away_win" || fixture.result_type === "walkover_away";
 
   return (
-    <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5">
+    <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2.5">
       <div className="flex items-center gap-2">
         {/* Home */}
         <div className={`flex-1 flex items-center gap-2 min-w-0 ${homeWon ? "opacity-100" : awayWon ? "opacity-50" : "opacity-100"}`}>
-          <div className="h-6 w-6 rounded-full bg-emerald-900/60 grid place-items-center text-[9px] font-bold text-emerald-200 shrink-0">
+          <div className="h-6 w-6 rounded-full bg-[color:var(--sec-surface)] grid place-items-center text-[9px] font-bold text-[color:var(--sec-text-2)] shrink-0">
             {(fixture.home_entry?.profile?.name ?? "?").slice(0, 2).toUpperCase()}
           </div>
-          <span className={`text-xs truncate ${homeWon ? "font-bold text-emerald-50" : "text-emerald-100/70"}`}>
+          <span className={`text-xs truncate ${homeWon ? "font-bold text-[color:var(--sec-text)]" : "text-[color:var(--sec-muted)]"}`}>
             {fixture.home_entry?.profile?.name ?? "TBD"}
           </span>
         </div>
@@ -1030,22 +1030,22 @@ function FixtureCard({ fixture }: { fixture: MatchplayFixture & { home_entry?: a
         {/* Result */}
         <div className="shrink-0 text-center w-14">
           {fixture.status === "completed" && resultLabel ? (
-            <span className="text-xs font-bold text-[#f5e6b0]">{resultLabel}</span>
+            <span className="text-xs font-bold text-[color:var(--sec-accent)]">{resultLabel}</span>
           ) : fixture.scheduled_at ? (
-            <span className="text-[10px] text-emerald-200/50">
+            <span className="text-[10px] text-[color:var(--sec-muted)]">
               {new Date(fixture.scheduled_at).toLocaleDateString([], { month: "short", day: "numeric" })}
             </span>
           ) : (
-            <span className="text-[10px] text-emerald-200/30">vs</span>
+            <span className="text-[10px] text-[color:var(--sec-muted)]">vs</span>
           )}
         </div>
 
         {/* Away */}
         <div className={`flex-1 flex items-center gap-2 justify-end min-w-0 ${awayWon ? "opacity-100" : homeWon ? "opacity-50" : "opacity-100"}`}>
-          <span className={`text-xs truncate text-right ${awayWon ? "font-bold text-emerald-50" : "text-emerald-100/70"}`}>
+          <span className={`text-xs truncate text-right ${awayWon ? "font-bold text-[color:var(--sec-text)]" : "text-[color:var(--sec-muted)]"}`}>
             {fixture.away_entry?.profile?.name ?? "TBD"}
           </span>
-          <div className="h-6 w-6 rounded-full bg-emerald-900/60 grid place-items-center text-[9px] font-bold text-emerald-200 shrink-0">
+          <div className="h-6 w-6 rounded-full bg-[color:var(--sec-surface)] grid place-items-center text-[9px] font-bold text-[color:var(--sec-text-2)] shrink-0">
             {(fixture.away_entry?.profile?.name ?? "?").slice(0, 2).toUpperCase()}
           </div>
         </div>
@@ -1066,13 +1066,13 @@ function MiniScorecard({
   profileId: string | null;
 }) {
   if (loading) {
-    return <div className="text-center py-3 text-emerald-200/50 text-xs">Loading scorecard…</div>;
+    return <div className="text-center py-3 text-[color:var(--sec-muted)] text-xs">Loading scorecard…</div>;
   }
   if (!snap) return null;
 
   const participant = (snap.participants ?? []).find((p: any) => p.profile_id === profileId);
   if (!participant) {
-    return <div className="text-center py-3 text-emerald-200/40 text-xs">No score data</div>;
+    return <div className="text-center py-3 text-[color:var(--sec-muted)] text-xs">No score data</div>;
   }
 
   const pid: string = participant.id;
@@ -1101,14 +1101,14 @@ function MiniScorecard({
     const base = "flex items-center justify-center w-7 h-6 text-xs tabular-nums font-semibold";
     const cls =
       b === "eagle"
-        ? `${base} rounded-full bg-[#f5e6b0] text-[#042713]`
+        ? `${base} rounded-full bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)]`
         : b === "birdie"
-        ? `${base} rounded-full ring-1 ring-[#f5e6b0] text-emerald-50`
+        ? `${base} rounded-full ring-1 ring-[color:var(--sec-accent)] text-[color:var(--sec-text)]`
         : b === "bogey"
-        ? `${base} ring-1 ring-white/50 text-emerald-50`
+        ? `${base} ring-1 ring-white/50 text-[color:var(--sec-text)]`
         : b === "double"
-        ? `${base} bg-white/20 text-emerald-50`
-        : `${base} text-emerald-100/80`;
+        ? `${base} bg-white/20 text-[color:var(--sec-text)]`
+        : `${base} text-[color:var(--sec-muted)]`;
     return <div className={cls}>{s ?? "—"}</div>;
   }
 
@@ -1137,22 +1137,22 @@ function MiniScorecard({
       <div className="flex gap-0.5 items-end">
         {group.map((h) => (
           <div key={h.hole_number} className="flex flex-col items-center gap-0.5 w-7">
-            <div className="text-[9px] text-emerald-200/30 leading-none">{h.hole_number}</div>
-            <div className="text-[9px] text-emerald-200/40 leading-none">{h.par ?? "—"}</div>
+            <div className="text-[9px] text-[color:var(--sec-muted)] leading-none">{h.hole_number}</div>
+            <div className="text-[9px] text-[color:var(--sec-muted)] leading-none">{h.par ?? "—"}</div>
             <ScoreCell hole={h} />
           </div>
         ))}
-        <div className="flex flex-col items-center gap-0.5 w-9 border-l border-emerald-900/40 ml-0.5 pl-1">
-          <div className="text-[9px] text-emerald-200/30 leading-none">{label}</div>
-          <div className="text-[9px] text-emerald-200/40 leading-none">{totals.par}</div>
-          <div className="text-xs font-bold text-[#f5e6b0] tabular-nums">{totals.score || "—"}</div>
+        <div className="flex flex-col items-center gap-0.5 w-9 border-l border-[color:var(--sec-hair)] ml-0.5 pl-1">
+          <div className="text-[9px] text-[color:var(--sec-muted)] leading-none">{label}</div>
+          <div className="text-[9px] text-[color:var(--sec-muted)] leading-none">{totals.par}</div>
+          <div className="text-xs font-bold text-[color:var(--sec-accent)] tabular-nums">{totals.score || "—"}</div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="overflow-x-auto px-2 py-2 space-y-2 border-t border-emerald-900/30 mt-0.5">
+    <div className="overflow-x-auto px-2 py-2 space-y-2 border-t border-[color:var(--sec-hair)] mt-0.5">
       {front.length > 0 && <NineRow group={front} label="OUT" totals={frontTotals} />}
       {back.length > 0 && <NineRow group={back} label="IN" totals={backTotals} />}
     </div>
@@ -1410,26 +1410,26 @@ function EventSetupSheet({
     <>
       <div className="fixed inset-0 z-50 flex items-end bg-black/60 pb-[env(safe-area-inset-bottom)]" onClick={onClose}>
         <div
-          className="w-full max-w-sm mx-auto rounded-t-3xl bg-[#071f13] border-t border-emerald-900/70 px-4 pt-5 space-y-4 max-h-[90dvh] overflow-y-auto"
+          className="w-full max-w-sm mx-auto rounded-t-3xl bg-[color:var(--ciaga-ground)] border-t border-[color:var(--sec-hair)] px-4 pt-5 space-y-4 max-h-[90dvh] overflow-y-auto"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="w-10 h-1 rounded-full bg-emerald-800/60 mx-auto mb-1" />
-          <div className="text-sm font-semibold text-emerald-50">Edit Event Setup</div>
+          <div className="w-10 h-1 rounded-full bg-[color:var(--sec-surface-2)] mx-auto mb-1" />
+          <div className="text-sm font-semibold text-[color:var(--sec-text)]">Edit Event Setup</div>
 
           <div className="space-y-4 pb-6">
             {/* Status */}
             <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Status</label>
+              <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Status</label>
               <div className="grid grid-cols-4 gap-1">
                 {(["upcoming", "live", "completed", "cancelled"] as const).map((s) => (
                   <button key={s} type="button" onClick={() => setMajorsStatus(s)}
                     className={`rounded-xl border px-2 py-1.5 text-[10px] text-center capitalize transition-colors ${
                       majorsStatus === s
                         ? s === "live" ? "border-amber-600 bg-amber-900/40 text-amber-200"
-                          : s === "completed" ? "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                          : s === "cancelled" ? "border-red-700 bg-red-900/30 text-red-300"
-                          : "border-emerald-500 bg-emerald-900/50 text-emerald-50"
-                        : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"
+                          : s === "completed" ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]"
+                          : s === "cancelled" ? "border-red-700 bg-red-900/30 text-[color:var(--sec-bad)]"
+                          : "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]"
+                        : "border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] text-[color:var(--sec-muted)]"
                     }`}>
                     {s}
                   </button>
@@ -1439,35 +1439,35 @@ function EventSetupSheet({
 
             {/* Name */}
             <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Name *</label>
-              <input className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 focus:outline-none"
+              <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Name *</label>
+              <input className="w-full rounded-xl bg-[color:var(--sec-surface)] border border-[color:var(--sec-hair)] px-3 py-2 text-sm text-[color:var(--sec-text)] focus:outline-none"
                 value={name} onChange={(e) => setName(e.target.value)} />
             </div>
 
             {/* Description */}
             <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Description</label>
-              <textarea className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 focus:outline-none resize-none"
+              <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Description</label>
+              <textarea className="w-full rounded-xl bg-[color:var(--sec-surface)] border border-[color:var(--sec-hair)] px-3 py-2 text-sm text-[color:var(--sec-text)] focus:outline-none resize-none"
                 rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
             </div>
 
             {/* Date */}
             <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Event Date</label>
-              <input type="date" className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 focus:outline-none"
+              <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Event Date</label>
+              <input type="date" className="w-full rounded-xl bg-[color:var(--sec-surface)] border border-[color:var(--sec-hair)] px-3 py-2 text-sm text-[color:var(--sec-text)] focus:outline-none"
                 value={eventDate} onChange={(e) => setCompetitionDate(e.target.value)} />
             </div>
 
             {/* Entry window */}
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
-                <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Entry Opens</label>
-                <input type="datetime-local" className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-2 py-2 text-xs text-emerald-50 focus:outline-none"
+                <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Entry Opens</label>
+                <input type="datetime-local" className="w-full rounded-xl bg-[color:var(--sec-surface)] border border-[color:var(--sec-hair)] px-2 py-2 text-xs text-[color:var(--sec-text)] focus:outline-none"
                   value={entryStart} onChange={(e) => setEntryStart(e.target.value)} />
               </div>
               <div className="space-y-1">
-                <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Entry Closes</label>
-                <input type="datetime-local" className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-2 py-2 text-xs text-emerald-50 focus:outline-none"
+                <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Entry Closes</label>
+                <input type="datetime-local" className="w-full rounded-xl bg-[color:var(--sec-surface)] border border-[color:var(--sec-hair)] px-2 py-2 text-xs text-[color:var(--sec-text)] focus:outline-none"
                   value={entryEnd} onChange={(e) => setEntryEnd(e.target.value)} />
               </div>
             </div>
@@ -1475,15 +1475,15 @@ function EventSetupSheet({
             {/* Cut — only meaningful once there is a round to cut after */}
             {!isAggregate && rounds.length > 1 && (
               <div className="space-y-2">
-                <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Cut (optional)</label>
-                <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/30 p-3 space-y-2">
+                <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Cut (optional)</label>
+                <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_30%,transparent)] p-3 space-y-2">
                   <div className="grid grid-cols-2 gap-2">
                     <div className="space-y-1">
-                      <label className="text-[10px] uppercase tracking-wider text-emerald-200/65">After round</label>
+                      <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">After round</label>
                       <select
                         value={cutAfter}
                         onChange={(e) => setCutAfter(e.target.value)}
-                        className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-2 py-1.5 text-[11px] text-emerald-50 focus:outline-none focus:border-emerald-600 [color-scheme:dark]"
+                        className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-2 py-1.5 text-[11px] text-[color:var(--sec-text)] focus:outline-none focus:border-[color:var(--sec-line)] [color-scheme:dark]"
                       >
                         <option value="">No cut</option>
                         {/* Cutting after the final round would decide nothing.
@@ -1497,7 +1497,7 @@ function EventSetupSheet({
                       </select>
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] uppercase tracking-wider text-emerald-200/65">Top</label>
+                      <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Top</label>
                       <NumberField
                         value={cutTopN}
                         onValueChange={setCutTopN}
@@ -1508,7 +1508,7 @@ function EventSetupSheet({
                     </div>
                   </div>
                   {cutAfter && (
-                    <label className="flex items-center gap-2 text-[11px] text-emerald-100/70">
+                    <label className="flex items-center gap-2 text-[11px] text-[color:var(--sec-muted)]">
                       <input
                         type="checkbox"
                         checked={cutTies}
@@ -1518,7 +1518,7 @@ function EventSetupSheet({
                       Include ties (everyone level with the last qualifier plays on)
                     </label>
                   )}
-                  <p className="text-[10px] text-emerald-200/40 leading-relaxed">
+                  <p className="text-[10px] text-[color:var(--sec-muted)] leading-relaxed">
                     Players outside the cut keep their total and take no further part.
                     They earn no season points.
                   </p>
@@ -1529,14 +1529,14 @@ function EventSetupSheet({
             {/* Per-round course + tees */}
             {!isAggregate && (
               <div className="space-y-2">
-                <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Rounds</label>
+                <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Rounds</label>
                 {rounds.map((r, idx) => {
                   const tees = r.tee_boxes;
                   const hint = deleteHint(r);
                   return (
-                    <div key={r.id ?? `new-${idx}`} className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/30 p-3 space-y-2">
+                    <div key={r.id ?? `new-${idx}`} className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_30%,transparent)] p-3 space-y-2">
                       <div className="flex items-center justify-between">
-                        <div className="text-[10px] uppercase tracking-wider text-emerald-200/55 font-semibold">
+                        <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)] font-semibold">
                           {rounds.length > 1 ? r.name : "Course (optional)"}
                         </div>
                         {rounds.length > 1 && (
@@ -1544,22 +1544,22 @@ function EventSetupSheet({
                             type="button"
                             onClick={() => removeRound(idx)}
                             title={hint ?? "Remove round"}
-                            className={`text-[10px] px-1.5 py-0.5 rounded-lg transition-colors ${hint ? "text-emerald-200/25 cursor-not-allowed" : "text-red-400/60 hover:text-red-300 hover:bg-red-900/20"}`}
+                            className={`text-[10px] px-1.5 py-0.5 rounded-lg transition-colors ${hint ? "text-[color:var(--sec-muted)] cursor-not-allowed" : "text-[color:var(--sec-bad)] hover:text-[color:var(--sec-bad)] hover:bg-red-900/20"}`}
                           >
                             Remove
                           </button>
                         )}
                       </div>
                       {r.course_id ? (
-                        <div className="flex items-center justify-between rounded-xl border border-emerald-600/60 bg-emerald-900/30 px-3 py-2">
-                          <span className="text-sm text-emerald-50 truncate">{r.course_name}</span>
+                        <div className="flex items-center justify-between rounded-xl border border-[color:var(--sec-line)] bg-[color:var(--sec-surface)] px-3 py-2">
+                          <span className="text-sm text-[color:var(--sec-text)] truncate">{r.course_name}</span>
                           <button type="button"
                             onClick={() => { updateRound(idx, { course_id: "", course_name: "", tee_male_id: "", tee_female_id: "", tee_boxes: [] }); setShowCoursePickerIdx(idx); }}
-                            className="ml-3 text-[11px] text-emerald-300/60 hover:text-emerald-200 shrink-0">✕</button>
+                            className="ml-3 text-[11px] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text-2)] shrink-0">✕</button>
                         </div>
                       ) : (
                         <button type="button" onClick={() => setShowCoursePickerIdx(idx)}
-                          className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2 text-sm text-emerald-100/40 hover:border-emerald-700/60 text-left">
+                          className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2 text-sm text-[color:var(--sec-muted)] hover:border-[color:var(--sec-line)] text-left">
                           Search for a course…
                         </button>
                       )}
@@ -1570,9 +1570,9 @@ function EventSetupSheet({
                             { label: "Women's tee", field: "tee_female_id" as const, options: tees.filter((t) => !t.gender || t.gender === "female" || t.gender === "unisex") },
                           ].map(({ label, field, options }) => (
                             <div key={field} className="space-y-1">
-                              <label className="text-[10px] uppercase tracking-wider text-emerald-200/65">{label}</label>
+                              <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">{label}</label>
                               <select value={r[field]} onChange={(e) => updateRound(idx, { [field]: e.target.value })}
-                                className="w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-2 py-1.5 text-[11px] text-emerald-50 focus:outline-none [color-scheme:dark]">
+                                className="w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-2 py-1.5 text-[11px] text-[color:var(--sec-text)] focus:outline-none [color-scheme:dark]">
                                 <option value="">— optional —</option>
                                 {options.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                               </select>
@@ -1584,7 +1584,7 @@ function EventSetupSheet({
                   );
                 })}
                 <button type="button" onClick={addRound}
-                  className="w-full py-2 rounded-xl border border-dashed border-emerald-800/50 text-[11px] text-emerald-400/60 hover:text-emerald-300 hover:border-emerald-700/60 transition-colors">
+                  className="w-full py-2 rounded-xl border border-dashed border-[color:var(--sec-hair)] text-[11px] text-[color:var(--sec-good)] hover:text-[color:var(--sec-good)] hover:border-[color:var(--sec-line)] transition-colors">
                   + Add Round
                 </button>
               </div>
@@ -1593,11 +1593,11 @@ function EventSetupSheet({
             {/* Format */}
             {!isAggregate && (
               <div className="space-y-1">
-                <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Format</label>
+                <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Format</label>
                 <div className="grid grid-cols-2 gap-1.5">
                   {EVENT_TYPES.map((t) => (
                     <button key={t.value} type="button" onClick={() => setSelectedCompType(t.value)}
-                      className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${selectedCompType === t.value ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
+                      className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors ${selectedCompType === t.value ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]" : "border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] text-[color:var(--sec-muted)]"}`}>
                       {t.label}
                     </button>
                   ))}
@@ -1614,7 +1614,7 @@ function EventSetupSheet({
 
             {/* Scoring model */}
             <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Scoring</label>
+              <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Scoring</label>
               {isScoringLocked && (
                 <p className="text-[10px] text-amber-400/70">Locked — event is {event.majors_status}. Revert to live to change scoring config.</p>
               )}
@@ -1622,7 +1622,7 @@ function EventSetupSheet({
                 {SCORING_MODELS.map((s) => (
                   <button key={s.value} type="button" onClick={() => !isScoringLocked && setScoringModel(s.value)}
                     disabled={isScoringLocked}
-                    className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${scoringModel === s.value ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
+                    className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${scoringModel === s.value ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]" : "border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] text-[color:var(--sec-muted)]"}`}>
                     {s.label}
                   </button>
                 ))}
@@ -1631,8 +1631,8 @@ function EventSetupSheet({
 
             {/* Handicap rules */}
             {scoringModel !== "gross" && (
-              <div className="rounded-xl border border-emerald-900/40 bg-emerald-950/30 p-3 space-y-2">
-                <div className="text-[10px] uppercase tracking-wider text-emerald-200/50 font-semibold">Handicap Rules</div>
+              <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] p-3 space-y-2">
+                <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)] font-semibold">Handicap Rules</div>
                 <HandicapRulesEditor
                   compact
                   disabled={isScoringLocked}
@@ -1644,12 +1644,12 @@ function EventSetupSheet({
 
             {/* Points model */}
             <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Points</label>
+              <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Points</label>
               <div className="grid grid-cols-2 gap-1.5">
                 {POINTS_MODELS.map((p) => (
                   <button key={p.value} type="button" onClick={() => !isScoringLocked && setPointsModel(p.value)}
                     disabled={isScoringLocked}
-                    className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${pointsModel === p.value ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
+                    className={`rounded-xl border px-2 py-1.5 text-[11px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${pointsModel === p.value ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]" : "border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] text-[color:var(--sec-muted)]"}`}>
                     {p.label}
                   </button>
                 ))}
@@ -1658,23 +1658,23 @@ function EventSetupSheet({
 
             {/* Rules */}
             <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Rules</label>
-              <textarea className="w-full rounded-xl bg-emerald-900/30 border border-emerald-800/40 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-200/30 focus:outline-none resize-none"
+              <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Rules</label>
+              <textarea className="w-full rounded-xl bg-[color:var(--sec-surface)] border border-[color:var(--sec-hair)] px-3 py-2 text-sm text-[color:var(--sec-text)] placeholder:text-[color:var(--sec-muted)] focus:outline-none resize-none"
                 rows={3} value={rulesText} onChange={(e) => setRulesText(e.target.value)} />
             </div>
 
             {/* Standings contribution */}
             <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Season Standings</label>
+              <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Season Standings</label>
               <div className="grid grid-cols-3 gap-1.5">
                 {(["event_only", "season", "both"] as const).map((v) => (
                   <button key={v} type="button" onClick={() => setStandingsContrib(v)}
-                    className={`rounded-xl border px-2 py-1.5 text-[10px] text-center transition-colors ${standingsContrib === v ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
+                    className={`rounded-xl border px-2 py-1.5 text-[10px] text-center transition-colors ${standingsContrib === v ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]" : "border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] text-[color:var(--sec-muted)]"}`}>
                     {v === "event_only" ? "Event only" : v === "season" ? "Season" : "Both"}
                   </button>
                 ))}
               </div>
-              <p className="text-[10px] text-emerald-200/45 leading-relaxed mt-1">
+              <p className="text-[10px] text-[color:var(--sec-muted)] leading-relaxed mt-1">
                 {standingsContrib === "event_only" && "Result stays on this event's leaderboard only — won't affect season standings."}
                 {standingsContrib === "season" && "Feeds into the group's cumulative season standings — no event leaderboard points."}
                 {standingsContrib === "both" && "Counted in both this event's result and the group's season standings."}
@@ -1683,11 +1683,11 @@ function EventSetupSheet({
 
             {/* Tee time mode */}
             <div className="space-y-1">
-              <label className="text-[10px] uppercase tracking-wider text-emerald-200/60">Tee Time Assignment</label>
+              <label className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)]">Tee Time Assignment</label>
               <div className="grid grid-cols-2 gap-1.5">
                 {(["admin_assigned", "self_select"] as const).map((v) => (
                   <button key={v} type="button" onClick={() => setTeeTimeMode(v)}
-                    className={`rounded-xl border px-2 py-1.5 text-[10px] text-center transition-colors ${teeTimeMode === v ? "border-emerald-500 bg-emerald-900/50 text-emerald-50" : "border-emerald-800/40 bg-emerald-900/20 text-emerald-200/60"}`}>
+                    className={`rounded-xl border px-2 py-1.5 text-[10px] text-center transition-colors ${teeTimeMode === v ? "border-[color:var(--sec-accent)] bg-[color:var(--sec-surface)] text-[color:var(--sec-text)]" : "border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] text-[color:var(--sec-muted)]"}`}>
                     {v === "admin_assigned" ? "Admin assigned" : "Self select"}
                   </button>
                 ))}
@@ -1695,14 +1695,14 @@ function EventSetupSheet({
             </div>
           </div>
 
-          {error && <div className="text-sm text-red-400 pb-2">{error}</div>}
+          {error && <div className="text-sm text-[color:var(--sec-bad)] pb-2">{error}</div>}
           <div className="flex gap-3 pb-6">
             <button type="button" onClick={onClose}
-              className="flex-1 py-3 rounded-full border border-emerald-900/60 text-sm text-emerald-200/70">
+              className="flex-1 py-3 rounded-full border border-[color:var(--sec-hair)] text-sm text-[color:var(--sec-muted)]">
               Cancel
             </button>
             <button type="button" onClick={handleSave} disabled={!name.trim() || saving}
-              className="flex-1 py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50">
+              className="flex-1 py-3 rounded-full bg-[color:var(--sec-primary)] text-sm font-semibold text-white hover:bg-[color:var(--sec-primary-hover)] disabled:opacity-50">
               {saving ? "Saving…" : "Save"}
             </button>
           </div>
@@ -1722,15 +1722,15 @@ function EventSetupSheet({
 // ─── Position badge ───────────────────────────────────────────────────────────
 
 function PositionBadge({ position }: { position: number | null }) {
-  if (position == null) return <span className="w-7 text-center text-xs text-emerald-200/40">—</span>;
+  if (position == null) return <span className="w-7 text-center text-xs text-[color:var(--sec-muted)]">—</span>;
   const colours =
     position === 1
-      ? "bg-[#f5e6b0]/20 text-[#f5e6b0] border-[#f5e6b0]/40"
+      ? "bg-[color:color-mix(in_srgb,var(--sec-accent)_20%,transparent)] text-[color:var(--sec-accent)] border-[color:color-mix(in_srgb,var(--sec-accent)_40%,transparent)]"
       : position === 2
       ? "bg-[#c0c0c0]/15 text-[#c0c0c0] border-[#c0c0c0]/30"
       : position === 3
       ? "bg-[#cd7f32]/20 text-[#cd7f32] border-[#cd7f32]/40"
-      : "bg-emerald-900/40 text-emerald-200/70 border-emerald-900/60";
+      : "bg-[color:var(--sec-surface)] text-[color:var(--sec-muted)] border-[color:var(--sec-hair)]";
   return (
     <span className={`w-7 h-7 flex items-center justify-center rounded-full border text-[11px] font-extrabold shrink-0 ${colours}`}>
       {position}
@@ -2494,16 +2494,16 @@ export default function EventDetailClient({
     event?.majors_status === "live"
       ? "bg-amber-900/50 text-amber-300 border-amber-800/50"
       : event?.majors_status === "completed"
-      ? "bg-emerald-900/60 text-emerald-300 border-emerald-800/50"
+      ? "bg-[color:var(--sec-surface)] text-[color:var(--sec-good)] border-[color:var(--sec-hair)]"
       : event?.majors_status === "cancelled"
-      ? "bg-red-900/40 text-red-400 border-red-800/40"
-      : "bg-emerald-900/40 text-emerald-200/80 border-emerald-900/60";
+      ? "bg-red-900/40 text-[color:var(--sec-bad)] border-red-800/40"
+      : "bg-[color:var(--sec-surface)] text-[color:var(--sec-muted)] border-[color:var(--sec-hair)]";
 
   const tabContent: Record<Tab, React.ReactNode> = {
     overview: event ? (
       <div className="space-y-4">
         {event.description && (
-          <p className="text-[13px] text-emerald-100/75 leading-relaxed">{event.description}</p>
+          <p className="text-[13px] text-[color:var(--sec-muted)] leading-relaxed">{event.description}</p>
         )}
 
         {/* Fantasy "Event preview" — auto-written narrative */}
@@ -2511,13 +2511,13 @@ export default function EventDetailClient({
           <button
             type="button"
             onClick={() => router.push(`/majors/fantasy/events/${eventId}`)}
-            className="w-full text-left rounded-2xl border border-emerald-900/60 bg-gradient-to-br from-[#0b3b21]/90 to-[#07301a]/90 px-4 py-3 hover:from-[#0b3b21] hover:to-[#07301a] transition-colors"
+            className="w-full text-left rounded-2xl border border-[color:var(--sec-hair)] bg-gradient-to-br from-[color:color-mix(in_srgb,var(--sec-surface)_90%,transparent)] to-[color:color-mix(in_srgb,var(--sec-surface)_90%,transparent)] px-4 py-3 hover:from-[color:var(--sec-surface)] hover:to-[color:var(--sec-surface)] transition-colors"
           >
             <div className="flex items-center justify-between mb-1">
-              <div className="text-[9px] uppercase tracking-[0.2em] text-[#f5e6b0]/60">Event preview</div>
-              <span className="text-[10px] text-emerald-400/80">Picks →</span>
+              <div className="text-[9px] uppercase tracking-[0.2em] text-[color:color-mix(in_srgb,var(--sec-accent)_60%,transparent)]">Event preview</div>
+              <span className="text-[10px] text-[color:var(--sec-good)]">Picks →</span>
             </div>
-            <p className="text-[12px] leading-relaxed text-emerald-100/85">{fantasyNarrative}</p>
+            <p className="text-[12px] leading-relaxed text-[color:var(--sec-muted)]">{fantasyNarrative}</p>
           </button>
         )}
 
@@ -2529,16 +2529,16 @@ export default function EventDetailClient({
             { label: "Rounds", value: String(event.num_rounds) },
             { label: "Points", value: event.points_model === "none" ? "None" : event.points_model },
           ].map((item) => (
-            <div key={item.label} className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5">
-              <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider mb-0.5">{item.label}</div>
-              <div className="text-sm font-semibold text-emerald-50 capitalize">{item.value ?? "—"}</div>
+            <div key={item.label} className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2.5">
+              <div className="text-[10px] text-[color:var(--sec-muted)] uppercase tracking-wider mb-0.5">{item.label}</div>
+              <div className="text-sm font-semibold text-[color:var(--sec-text)] capitalize">{item.value ?? "—"}</div>
             </div>
           ))}
         </div>
 
         {/* Date / course */}
         {(event.event_date || event.course || eventRounds.length > 0) && (
-          <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 space-y-1">
+          <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2.5 space-y-1">
             {event.event_date && (() => {
               // A multi-day event's span lives on the rounds, not on event_date.
               const { start, end } = eventDateRange(event.event_date, eventRounds);
@@ -2547,8 +2547,8 @@ export default function EventDetailClient({
               const short = (iso: string) =>
                 new Date(iso).toLocaleDateString([], { weekday: "short", month: "long", day: "numeric" });
               return (
-                <div className="flex items-center gap-2 text-[12px] text-emerald-100/70">
-                  <span className="text-emerald-200/40">📅</span>
+                <div className="flex items-center gap-2 text-[12px] text-[color:var(--sec-muted)]">
+                  <span className="text-[color:var(--sec-muted)]">📅</span>
                   {start && end && start !== end
                     ? `${short(start)} – ${long(end)}`
                     : long(start ?? event.event_date)}
@@ -2558,20 +2558,20 @@ export default function EventDetailClient({
             {eventRounds.length > 0 ? (
               <div className="space-y-0.5">
                 {eventRounds.map((r) => (
-                  <div key={r.id} className="flex items-start gap-2 text-[12px] text-emerald-100/70">
-                    <span className="text-emerald-200/40 shrink-0">⛳</span>
+                  <div key={r.id} className="flex items-start gap-2 text-[12px] text-[color:var(--sec-muted)]">
+                    <span className="text-[color:var(--sec-muted)] shrink-0">⛳</span>
                     <div className="min-w-0">
                       <div>
-                        <span className="text-emerald-200/50 text-[11px] mr-1">{r.name}:</span>
+                        <span className="text-[color:var(--sec-muted)] text-[11px] mr-1">{r.name}:</span>
                         <span>{r.course?.name ?? "TBC"}</span>
                       </div>
                       {(r.tee_male?.name || r.tee_female?.name) && (
-                        <div className="text-emerald-200/40 text-[11px] ml-3 space-y-0.5">
+                        <div className="text-[color:var(--sec-muted)] text-[11px] ml-3 space-y-0.5">
                           {r.tee_male?.name && (
-                            <div><span className="text-emerald-200/30">Men's tee: </span>{r.tee_male.name}</div>
+                            <div><span className="text-[color:var(--sec-muted)]">Men's tee: </span>{r.tee_male.name}</div>
                           )}
                           {r.tee_female?.name && (
-                            <div><span className="text-emerald-200/30">Women's tee: </span>{r.tee_female.name}</div>
+                            <div><span className="text-[color:var(--sec-muted)]">Women's tee: </span>{r.tee_female.name}</div>
                           )}
                         </div>
                       )}
@@ -2580,8 +2580,8 @@ export default function EventDetailClient({
                 ))}
               </div>
             ) : event.course ? (
-              <div className="flex items-center gap-2 text-[12px] text-emerald-100/70">
-                <span className="text-emerald-200/40">⛳</span>
+              <div className="flex items-center gap-2 text-[12px] text-[color:var(--sec-muted)]">
+                <span className="text-[color:var(--sec-muted)]">⛳</span>
                 {event.course.name}
               </div>
             ) : null}
@@ -2598,15 +2598,15 @@ export default function EventDetailClient({
         )}
         {event.entry_window_end && entryWindowDaysLeft != null && entryWindowDaysLeft <= 0 && (
           <div className="rounded-xl border border-red-900/40 bg-red-900/20 px-3 py-2">
-            <span className="text-[11px] text-red-400">Entry window closed</span>
+            <span className="text-[11px] text-[color:var(--sec-bad)]">Entry window closed</span>
           </div>
         )}
 
         {/* Entry fee */}
         {(event as any).entry_fee_amount > 0 && (
-          <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 flex items-center justify-between">
-            <span className="text-[12px] text-emerald-200/60">Entry Fee</span>
-            <span className="text-sm font-bold text-[#f5e6b0]">
+          <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2.5 flex items-center justify-between">
+            <span className="text-[12px] text-[color:var(--sec-muted)]">Entry Fee</span>
+            <span className="text-sm font-bold text-[color:var(--sec-accent)]">
               {((event as any).entry_fee_currency ?? "GBP") === "GBP" ? "£" : ""}
               {((event as any).entry_fee_amount as number).toFixed(2)}
             </span>
@@ -2618,7 +2618,7 @@ export default function EventDetailClient({
           <button
             type="button"
             onClick={() => setShowSetupSheet(true)}
-            className="w-full py-2 rounded-full border border-emerald-800/60 text-[11px] font-semibold text-emerald-300/70 hover:text-emerald-200 hover:border-emerald-700/60 transition-colors"
+            className="w-full py-2 rounded-full border border-[color:var(--sec-hair)] text-[11px] font-semibold text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text-2)] hover:border-[color:var(--sec-line)] transition-colors"
           >
             Edit Setup
           </button>
@@ -2629,7 +2629,7 @@ export default function EventDetailClient({
           <button
             type="button"
             onClick={() => setShowInvitePlayers(true)}
-            className="w-full py-2 rounded-full border border-emerald-800/60 text-[11px] font-semibold text-emerald-300/70 hover:text-emerald-200 hover:border-emerald-700/60 transition-colors"
+            className="w-full py-2 rounded-full border border-[color:var(--sec-hair)] text-[11px] font-semibold text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text-2)] hover:border-[color:var(--sec-line)] transition-colors"
           >
             Invite Players
           </button>
@@ -2641,7 +2641,7 @@ export default function EventDetailClient({
             onClick={() => setShowInvitePlayers(false)}
           >
             <div
-              className="w-full max-w-sm rounded-t-2xl bg-[#0b3b21] border border-emerald-800/60 px-4 py-5 max-h-[80vh] overflow-y-auto"
+              className="w-full max-w-sm rounded-t-2xl bg-[color:var(--sec-surface)] border border-[color:var(--sec-hair)] px-4 py-5 max-h-[80vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <InvitePlayerSheet
@@ -2674,38 +2674,38 @@ export default function EventDetailClient({
               type="button"
               onClick={openJoinDrawer}
               disabled={entering}
-              className="w-full py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
+              className="w-full py-3 rounded-full bg-[color:var(--sec-primary)] text-sm font-semibold text-white hover:bg-[color:var(--sec-primary-hover)] disabled:opacity-50"
             >
               Enter Event
             </button>
             {enterError && (
-              <div className="text-sm text-red-400 text-center">{enterError}</div>
+              <div className="text-sm text-[color:var(--sec-bad)] text-center">{enterError}</div>
             )}
 
             {/* Join Drawer */}
             {showJoinDrawer && (
               <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70" onClick={() => setShowJoinDrawer(false)}>
                 <div
-                  className="w-full max-w-sm rounded-t-2xl bg-[#071f12] border border-emerald-800/60 flex flex-col max-h-[90vh]"
+                  className="w-full max-w-sm rounded-t-2xl bg-[#071f12] border border-[color:var(--sec-hair)] flex flex-col max-h-[90vh]"
                   onClick={(e) => e.stopPropagation()}
                 >
                   {/* Header */}
-                  <div className="px-4 py-4 border-b border-emerald-900/40 flex items-center justify-between shrink-0">
-                    <div className="text-sm font-semibold text-emerald-100">Join {event?.name}</div>
-                    <button type="button" onClick={() => setShowJoinDrawer(false)} className="text-emerald-200/40 text-xl leading-none">✕</button>
+                  <div className="px-4 py-4 border-b border-[color:var(--sec-hair)] flex items-center justify-between shrink-0">
+                    <div className="text-sm font-semibold text-[color:var(--sec-text)]">Join {event?.name}</div>
+                    <button type="button" onClick={() => setShowJoinDrawer(false)} className="text-[color:var(--sec-muted)] text-xl leading-none">✕</button>
                   </div>
 
                   {/* Scrollable content */}
                   <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
                     {joinPreviewLoading ? (
-                      <div className="text-sm text-emerald-200/50 text-center py-6">Loading…</div>
+                      <div className="text-sm text-[color:var(--sec-muted)] text-center py-6">Loading…</div>
                     ) : joinPreview ? (
                       <>
                         {/* Entry fee */}
                         {joinPreview.entry_fee_amount > 0 && (
                           <div>
-                            <div className="text-[10px] uppercase text-emerald-200/40 mb-1">Entry Fee</div>
-                            <div className="flex justify-between text-sm text-emerald-100 py-1">
+                            <div className="text-[10px] uppercase text-[color:var(--sec-muted)] mb-1">Entry Fee</div>
+                            <div className="flex justify-between text-sm text-[color:var(--sec-text)] py-1">
                               <span>Event Entry Fee</span>
                               <span className="font-semibold">£{joinPreview.entry_fee_amount?.toFixed(2)}</span>
                             </div>
@@ -2715,32 +2715,32 @@ export default function EventDetailClient({
                         {/* Mandatory section */}
                         {(joinPreview.mandatory_charges?.length > 0 || joinPreview.mandatory_prize_pots?.length > 0 || joinPreview.season_mandatory_pots?.length > 0 || joinPreview.group_mandatory_charges?.length > 0) && (
                           <div>
-                            <div className="text-[10px] uppercase text-emerald-200/40 mb-1">Mandatory</div>
+                            <div className="text-[10px] uppercase text-[color:var(--sec-muted)] mb-1">Mandatory</div>
                             <div className="rounded-xl border border-red-900/30 bg-red-950/10 px-3 py-2 space-y-2">
                               {joinPreview.group_mandatory_charges?.map((c: any) => (
                                 <div key={c.id} className="flex justify-between items-start text-sm">
                                   <div>
-                                    <div className="text-emerald-100">{c.name}</div>
-                                    {c.description && <div className="text-[10px] text-emerald-200/40">{c.description}</div>}
-                                    <div className="text-[10px] text-red-400/60">Group charge</div>
+                                    <div className="text-[color:var(--sec-text)]">{c.name}</div>
+                                    {c.description && <div className="text-[10px] text-[color:var(--sec-muted)]">{c.description}</div>}
+                                    <div className="text-[10px] text-[color:var(--sec-bad)]">Group charge</div>
                                   </div>
-                                  <span className="font-semibold text-emerald-100">£{c.amount?.toFixed(2)}</span>
+                                  <span className="font-semibold text-[color:var(--sec-text)]">£{c.amount?.toFixed(2)}</span>
                                 </div>
                               ))}
                               {joinPreview.mandatory_charges?.map((c: any) => (
                                 <div key={c.id} className="flex justify-between items-start text-sm">
                                   <div>
-                                    <div className="text-emerald-100">{c.name}</div>
-                                    {c.description && <div className="text-[10px] text-emerald-200/40">{c.description}</div>}
+                                    <div className="text-[color:var(--sec-text)]">{c.name}</div>
+                                    {c.description && <div className="text-[10px] text-[color:var(--sec-muted)]">{c.description}</div>}
                                   </div>
-                                  <span className="font-semibold text-emerald-100">£{c.amount?.toFixed(2)}</span>
+                                  <span className="font-semibold text-[color:var(--sec-text)]">£{c.amount?.toFixed(2)}</span>
                                 </div>
                               ))}
                               {[...joinPreview.mandatory_prize_pots ?? [], ...joinPreview.season_mandatory_pots ?? []].map((p: any) => (
                                 <div key={p.id} className="flex justify-between items-start text-sm">
                                   <div>
-                                    <div className="text-emerald-100">{p.name}</div>
-                                    <div className="text-[10px] text-emerald-200/40">
+                                    <div className="text-[color:var(--sec-text)]">{p.name}</div>
+                                    <div className="text-[10px] text-[color:var(--sec-muted)]">
                                       {p.distribution_type === "position_based" ? "Position-based prize pot" :
                                        p.distribution_type === "metric_weighted" ? "Proportionally split by metric" :
                                        p.distribution_type === "metric_equal" ? "Equal split on metric" :
@@ -2749,7 +2749,7 @@ export default function EventDetailClient({
                                       {p.group_season_id || p.competition_season_id ? " · Season Pot" : ""}
                                     </div>
                                   </div>
-                                  <span className="font-semibold text-emerald-100">
+                                  <span className="font-semibold text-[color:var(--sec-text)]">
                                     {p.entry_fee_amount > 0 ? `£${p.entry_fee_amount.toFixed(2)}` : "Free"}
                                   </span>
                                 </div>
@@ -2761,8 +2761,8 @@ export default function EventDetailClient({
                         {/* Optional prize pots */}
                         {((joinPreview.optional_prize_pots?.length ?? 0) + (joinPreview.season_optional_pots?.length ?? 0)) > 0 && (
                           <div>
-                            <div className="text-[10px] uppercase text-emerald-200/40 mb-1">Optional Prize Pots</div>
-                            <div className="rounded-xl border border-emerald-900/40 bg-emerald-950/20 px-3 py-2 space-y-3">
+                            <div className="text-[10px] uppercase text-[color:var(--sec-muted)] mb-1">Optional Prize Pots</div>
+                            <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-3 py-2 space-y-3">
                               {[...joinPreview.optional_prize_pots ?? [], ...joinPreview.season_optional_pots ?? []].map((p: any) => (
                                 <button
                                   key={p.id}
@@ -2773,12 +2773,12 @@ export default function EventDetailClient({
                                   className="w-full flex justify-between items-start text-sm text-left"
                                 >
                                   <div className="flex items-start gap-2">
-                                    <div className={`mt-0.5 w-4 h-4 rounded border shrink-0 flex items-center justify-center text-xs ${selectedOptionalPotIds.includes(p.id) ? "bg-emerald-600 border-emerald-600" : "border-emerald-700/50"}`}>
+                                    <div className={`mt-0.5 w-4 h-4 rounded border shrink-0 flex items-center justify-center text-xs ${selectedOptionalPotIds.includes(p.id) ? "bg-[color:var(--sec-primary)] border-[color:var(--sec-line)]" : "border-[color:var(--sec-line)]"}`}>
                                       {selectedOptionalPotIds.includes(p.id) && "✓"}
                                     </div>
                                     <div>
-                                      <div className="text-emerald-100">{p.name}</div>
-                                      <div className="text-[10px] text-emerald-200/40">
+                                      <div className="text-[color:var(--sec-text)]">{p.name}</div>
+                                      <div className="text-[10px] text-[color:var(--sec-muted)]">
                                         {p.distribution_type === "metric_weighted" ? "Proportionally split" :
                                          p.distribution_type === "metric_equal" ? "Equal split on metric" :
                                          p.distribution_type === "equal_split" ? "Equal split" :
@@ -2790,7 +2790,7 @@ export default function EventDetailClient({
                                       </div>
                                     </div>
                                   </div>
-                                  <span className="font-semibold text-emerald-100 shrink-0">
+                                  <span className="font-semibold text-[color:var(--sec-text)] shrink-0">
                                     {p.entry_fee_amount > 0 ? `£${p.entry_fee_amount.toFixed(2)}` : "Free"}
                                   </span>
                                 </button>
@@ -2802,8 +2802,8 @@ export default function EventDetailClient({
                         {/* Optional charges */}
                         {((joinPreview.optional_charges?.length ?? 0) + (joinPreview.group_optional_charges?.length ?? 0)) > 0 && (
                           <div>
-                            <div className="text-[10px] uppercase text-emerald-200/40 mb-1">Optional Extras</div>
-                            <div className="rounded-xl border border-emerald-900/40 bg-emerald-950/20 px-3 py-2 space-y-3">
+                            <div className="text-[10px] uppercase text-[color:var(--sec-muted)] mb-1">Optional Extras</div>
+                            <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-3 py-2 space-y-3">
                               {[...joinPreview.group_optional_charges ?? [], ...joinPreview.optional_charges ?? []].map((c: any) => (
                                 <button
                                   key={c.id}
@@ -2814,12 +2814,12 @@ export default function EventDetailClient({
                                   className="w-full flex justify-between items-center text-sm text-left"
                                 >
                                   <div className="flex items-center gap-2">
-                                    <div className={`w-4 h-4 rounded border shrink-0 flex items-center justify-center text-xs ${selectedOptionalChargeIds.includes(c.id) ? "bg-emerald-600 border-emerald-600" : "border-emerald-700/50"}`}>
+                                    <div className={`w-4 h-4 rounded border shrink-0 flex items-center justify-center text-xs ${selectedOptionalChargeIds.includes(c.id) ? "bg-[color:var(--sec-primary)] border-[color:var(--sec-line)]" : "border-[color:var(--sec-line)]"}`}>
                                       {selectedOptionalChargeIds.includes(c.id) && "✓"}
                                     </div>
-                                    <span className="text-emerald-100">{c.name}</span>
+                                    <span className="text-[color:var(--sec-text)]">{c.name}</span>
                                   </div>
-                                  <span className="font-semibold text-emerald-100">£{c.amount?.toFixed(2)}</span>
+                                  <span className="font-semibold text-[color:var(--sec-text)]">£{c.amount?.toFixed(2)}</span>
                                 </button>
                               ))}
                             </div>
@@ -2836,21 +2836,21 @@ export default function EventDetailClient({
                           !joinPreview.season_optional_pots?.length &&
                           !joinPreview.group_mandatory_charges?.length &&
                           !joinPreview.group_optional_charges?.length && (
-                          <div className="text-sm text-emerald-200/50 text-center py-2">No charges for this event — entry is free!</div>
+                          <div className="text-sm text-[color:var(--sec-muted)] text-center py-2">No charges for this event — entry is free!</div>
                         )}
                       </>
                     ) : (
-                      <div className="text-sm text-red-400 text-center py-4">Could not load entry details. You can still join.</div>
+                      <div className="text-sm text-[color:var(--sec-bad)] text-center py-4">Could not load entry details. You can still join.</div>
                     )}
                   </div>
 
                   {/* Sticky balance preview + confirm */}
-                  <div className="px-4 py-3 border-t border-emerald-900/40 space-y-3 shrink-0">
+                  <div className="px-4 py-3 border-t border-[color:var(--sec-hair)] space-y-3 shrink-0">
                     {joinPreview && (
                       <div className="flex justify-between text-[11px]">
                         <div>
-                          <span className="text-emerald-200/50">Current balance: </span>
-                          <span className={joinPreview.current_balance > 0 ? "text-red-400" : joinPreview.current_balance < 0 ? "text-emerald-400" : "text-emerald-200/60"}>
+                          <span className="text-[color:var(--sec-muted)]">Current balance: </span>
+                          <span className={joinPreview.current_balance > 0 ? "text-[color:var(--sec-bad)]" : joinPreview.current_balance < 0 ? "text-[color:var(--sec-good)]" : "text-[color:var(--sec-muted)]"}>
                             {joinPreview.current_balance < 0 ? "£" + Math.abs(joinPreview.current_balance).toFixed(2) + " credit" :
                              joinPreview.current_balance > 0 ? "£" + joinPreview.current_balance.toFixed(2) + " owed" : "Settled"}
                           </span>
@@ -2868,8 +2868,8 @@ export default function EventDetailClient({
                             const total = joinPreview.projected_balance + optPotCost + optChargeCost;
                             return (
                               <>
-                                <span className="text-emerald-200/50">After joining: </span>
-                                <span className={total > 0 ? "text-red-400 font-semibold" : total < 0 ? "text-emerald-400 font-semibold" : "text-emerald-200/60"}>
+                                <span className="text-[color:var(--sec-muted)]">After joining: </span>
+                                <span className={total > 0 ? "text-[color:var(--sec-bad)] font-semibold" : total < 0 ? "text-[color:var(--sec-good)] font-semibold" : "text-[color:var(--sec-muted)]"}>
                                   {total < 0 ? "£" + Math.abs(total).toFixed(2) + " credit" :
                                    total > 0 ? "£" + total.toFixed(2) + " owed" : "Settled"}
                                 </span>
@@ -2883,11 +2883,11 @@ export default function EventDetailClient({
                       type="button"
                       onClick={handleEnter}
                       disabled={entering}
-                      className="w-full py-3 rounded-full bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
+                      className="w-full py-3 rounded-full bg-[color:var(--sec-primary)] text-sm font-semibold text-white hover:bg-[color:var(--sec-primary-hover)] disabled:opacity-50"
                     >
                       {entering ? "Joining…" : "Confirm & Join"}
                     </button>
-                    {enterError && <div className="text-sm text-red-400 text-center">{enterError}</div>}
+                    {enterError && <div className="text-sm text-[color:var(--sec-bad)] text-center">{enterError}</div>}
                   </div>
                 </div>
               </div>
@@ -2905,13 +2905,13 @@ export default function EventDetailClient({
                 </div>
                 {waitlistEntry.status === "offered" && (
                   <button type="button" onClick={handleEnter} disabled={entering}
-                    className="mt-2 w-full py-2 rounded-full bg-emerald-700 text-sm font-semibold text-white disabled:opacity-50">
+                    className="mt-2 w-full py-2 rounded-full bg-[color:var(--sec-primary)] text-sm font-semibold text-white disabled:opacity-50">
                     {entering ? "Entering…" : "Accept Spot"}
                   </button>
                 )}
               </div>
               <button type="button" onClick={handleLeaveWaitlist}
-                className="w-full py-2 rounded-full border border-red-900/50 text-sm text-red-400/70 hover:text-red-400">
+                className="w-full py-2 rounded-full border border-red-900/50 text-sm text-[color:var(--sec-bad)] hover:text-[color:var(--sec-bad)]">
                 Leave Waitlist
               </button>
             </div>
@@ -2949,7 +2949,7 @@ export default function EventDetailClient({
           return (
           <div className="space-y-2">
             <div className="flex gap-3">
-              <div className="flex-1 py-3 rounded-full border border-emerald-700/50 text-sm font-semibold text-emerald-400 text-center">
+              <div className="flex-1 py-3 rounded-full border border-[color:var(--sec-line)] text-sm font-semibold text-[color:var(--sec-good)] text-center">
                 ✓ Entered
               </div>
             </div>
@@ -2965,7 +2965,7 @@ export default function EventDetailClient({
                       ? "Round in progress — your score will be submitted when the round is finished."
                       : `Tee time at ${new Date(tt.tee_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} — your score will be submitted automatically.`;
                   return (
-                    <div key={tt.id} className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5 text-[11px] text-emerald-200/60">
+                    <div key={tt.id} className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2.5 text-[11px] text-[color:var(--sec-muted)]">
                       {prefix}{body}
                     </div>
                   );
@@ -2978,11 +2978,11 @@ export default function EventDetailClient({
              !anyRoundInProgressOrDone && (
               (event as any).allow_self_withdrawal !== false ? (
                 <button type="button" onClick={() => setShowWithdrawConfirm(true)}
-                  className="w-full py-2 rounded-full border border-red-900/50 text-sm text-red-400/70 hover:text-red-400 transition-colors">
+                  className="w-full py-2 rounded-full border border-red-900/50 text-sm text-[color:var(--sec-bad)] hover:text-[color:var(--sec-bad)] transition-colors">
                   Withdraw from Event
                 </button>
               ) : (
-                <div className="text-center text-[11px] text-emerald-200/40 py-1">
+                <div className="text-center text-[11px] text-[color:var(--sec-muted)] py-1">
                   Contact the organiser to withdraw
                 </div>
               )
@@ -3106,14 +3106,14 @@ export default function EventDetailClient({
               <button
                 type="button"
                 onClick={() => { setTieDrawerScreen("playoff_setup"); setShowTieDrawer(true); }}
-                className="flex-1 py-2 rounded-full bg-[#f5e6b0] text-[#042713] text-xs font-semibold"
+                className="flex-1 py-2 rounded-full bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)] text-xs font-semibold"
               >
                 Playoff
               </button>
               <button
                 type="button"
                 onClick={() => { setTieDrawerScreen("choice"); setShowTieDrawer(true); }}
-                className="flex-1 py-2 rounded-full border border-[#f5e6b0]/50 text-[#f5e6b0] text-xs font-semibold"
+                className="flex-1 py-2 rounded-full border border-[color:color-mix(in_srgb,var(--sec-accent)_50%,transparent)] text-[color:var(--sec-accent)] text-xs font-semibold"
               >
                 Countback
               </button>
@@ -3126,8 +3126,8 @@ export default function EventDetailClient({
               disabled={revealLoading}
               className={`w-full py-2 mb-1.5 rounded-full text-xs transition-colors disabled:opacity-30 ${
                 leaderboardFreeze?.freeze_state === "frozen"
-                  ? "border border-emerald-600/35 text-emerald-300/60 hover:text-emerald-100 hover:border-emerald-500/50"
-                  : "text-emerald-200/25 hover:text-emerald-200/50"
+                  ? "border border-[color:var(--sec-line)] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)] hover:border-[color:var(--sec-accent)]"
+                  : "text-[color:var(--sec-muted)] hover:text-[color:var(--sec-muted)]"
               }`}
             >
               {revealLoading ? "…" : leaderboardFreeze?.freeze_state === "frozen" ? "Reveal Results" : "Start Ceremony"}
@@ -3137,7 +3137,7 @@ export default function EventDetailClient({
             <button
               type="button"
               onClick={() => setShowReveal(true)}
-              className="w-full py-1 mb-1.5 text-[11px] text-emerald-200/25 hover:text-emerald-200/50 transition-colors"
+              className="w-full py-1 mb-1.5 text-[11px] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-muted)] transition-colors"
             >
               ↺ Replay ceremony
             </button>
@@ -3152,8 +3152,8 @@ export default function EventDetailClient({
                   onClick={() => setLbView(v)}
                   className={`px-3 py-1 rounded-full text-[11px] font-semibold transition-colors ${
                     lbView === v
-                      ? "bg-emerald-700 text-white"
-                      : "border border-emerald-900/60 text-emerald-200/70 hover:text-emerald-50"
+                      ? "bg-[color:var(--sec-primary)] text-white"
+                      : "border border-[color:var(--sec-hair)] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
                   }`}
                 >
                   {v === "score" ? "By Score" : "By Gross"}
@@ -3171,8 +3171,8 @@ export default function EventDetailClient({
                 onClick={() => setLbRoundId(null)}
                 className={`px-3 py-1 rounded-full text-[11px] font-semibold shrink-0 transition-colors ${
                   lbRoundId === null
-                    ? "bg-emerald-700 text-white"
-                    : "border border-emerald-900/60 text-emerald-200/70 hover:text-emerald-50"
+                    ? "bg-[color:var(--sec-primary)] text-white"
+                    : "border border-[color:var(--sec-hair)] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
                 }`}
               >
                 Overall
@@ -3184,8 +3184,8 @@ export default function EventDetailClient({
                   onClick={() => setLbRoundId(r.id)}
                   className={`px-3 py-1 rounded-full text-[11px] font-semibold shrink-0 transition-colors ${
                     lbRoundId === r.id
-                      ? "bg-emerald-700 text-white"
-                      : "border border-emerald-900/60 text-emerald-200/70 hover:text-emerald-50"
+                      ? "bg-[color:var(--sec-primary)] text-white"
+                      : "border border-[color:var(--sec-hair)] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
                   }`}
                 >
                   {`R${r.round_number}`}
@@ -3194,15 +3194,15 @@ export default function EventDetailClient({
             </div>
           )}
           {viewingRound && roundLeaderboard === null && (
-            <div className="text-sm text-emerald-100/60 text-center py-8">Loading round…</div>
+            <div className="text-sm text-[color:var(--sec-muted)] text-center py-8">Loading round…</div>
           )}
           {viewingRound && roundLeaderboard !== null && roundLeaderboard.length === 0 && (
-            <div className="text-sm text-emerald-100/60 text-center py-8">
+            <div className="text-sm text-[color:var(--sec-muted)] text-center py-8">
               No scores in this round yet.
             </div>
           )}
           {leaderboard.length === 0 && unranked.length === 0 && (
-            <div className="text-sm text-emerald-100/60 text-center py-8">
+            <div className="text-sm text-[color:var(--sec-muted)] text-center py-8">
               No participants yet. Enter to appear here.
             </div>
           )}
@@ -3249,20 +3249,20 @@ export default function EventDetailClient({
                 {row.profile?.avatar_url ? (
                   <img src={row.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
                 ) : (
-                  <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
+                  <div className="h-7 w-7 rounded-full bg-[color:var(--sec-surface)] grid place-items-center text-[10px] font-bold text-[color:var(--sec-text-2)] shrink-0">
                     {row.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1 min-w-0">
-                    <span className="text-sm font-semibold text-emerald-50 truncate">{row.profile?.name ?? "Unknown"}</span>
+                    <span className="text-sm font-semibold text-[color:var(--sec-text)] truncate">{row.profile?.name ?? "Unknown"}</span>
                     {isFrozenRow && <span className="text-[11px] leading-none shrink-0">❄️</span>}
                   </div>
                   {(row as any).playoff_result && (
                     <span className={`inline-block mt-0.5 text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full ${
                       String((row as any).playoff_result).startsWith("won")
-                        ? "bg-[#f5e6b0] text-[#042713]"
-                        : "border border-emerald-700/50 text-emerald-200/70"
+                        ? "bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)]"
+                        : "border border-[color:var(--sec-line)] text-[color:var(--sec-muted)]"
                     }`}>
                       {String((row as any).playoff_result).includes("countback")
                         ? (String((row as any).playoff_result).startsWith("won") ? "Won Countback" : "Lost Countback")
@@ -3272,31 +3272,31 @@ export default function EventDetailClient({
                 </div>
                 {showPts && (
                   <div className="text-right shrink-0 mr-1">
-                    <div className="text-[10px] text-emerald-200/50 uppercase tracking-wider leading-none">Pts</div>
-                    <div className="text-xs font-bold text-emerald-300">{fmtPts(pts)}</div>
+                    <div className="text-[10px] text-[color:var(--sec-muted)] uppercase tracking-wider leading-none">Pts</div>
+                    <div className="text-xs font-bold text-[color:var(--sec-good)]">{fmtPts(pts)}</div>
                   </div>
                 )}
                 <div className="text-right shrink-0">
-                  <div className="text-xs font-extrabold text-[#f5e6b0]">{mainScoreText}</div>
+                  <div className="text-xs font-extrabold text-[color:var(--sec-accent)]">{mainScoreText}</div>
                   {bracketText ? (
-                    <div className="text-[10px] text-emerald-100/50">{subLabel} {bracketText}</div>
+                    <div className="text-[10px] text-[color:var(--sec-muted)]">{subLabel} {bracketText}</div>
                   ) : (
-                    <div className="text-[10px] text-emerald-100/50">{subLabel}</div>
+                    <div className="text-[10px] text-[color:var(--sec-muted)]">{subLabel}</div>
                   )}
                 </div>
-                <span className="text-[10px] text-emerald-400/70 shrink-0">→</span>
+                <span className="text-[10px] text-[color:var(--sec-good)] shrink-0">→</span>
               </>
             );
             const rowClass = `flex items-center gap-3 rounded-xl border px-3 py-2.5 w-full text-left hover:brightness-110 active:scale-[0.99] transition-all ${
               isFrozenRow
                 ? "border-cyan-700/40 bg-cyan-900/30"
                 : row.position === 1
-                ? "border-[#f5e6b0]/25 bg-[#f5e6b0]/5"
+                ? "border-[color:color-mix(in_srgb,var(--sec-accent)_25%,transparent)] bg-[color:color-mix(in_srgb,var(--sec-accent)_5%,transparent)]"
                 : row.position === 2
                 ? "border-[#c0c0c0]/20 bg-[#c0c0c0]/5"
                 : row.position === 3
                 ? "border-[#cd7f32]/20 bg-[#cd7f32]/5"
-                : "border-emerald-900/50 bg-[#0b3b21]/60"
+                : "border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)]"
             }`;
             const handleRowClick = async () => {
               setDetailPlayer(row);
@@ -3334,28 +3334,28 @@ export default function EventDetailClient({
             <>
               {leaderboard.length > 0 && (
                 <div className="flex items-center gap-2 py-1">
-                  <div className="flex-1 h-px bg-emerald-900/50" />
-                  <span className="text-[10px] text-emerald-200/40 uppercase tracking-wider">Entered</span>
-                  <div className="flex-1 h-px bg-emerald-900/50" />
+                  <div className="flex-1 h-px bg-[color:var(--sec-surface)]" />
+                  <span className="text-[10px] text-[color:var(--sec-muted)] uppercase tracking-wider">Entered</span>
+                  <div className="flex-1 h-px bg-[color:var(--sec-surface)]" />
                 </div>
               )}
               {unranked.map((p) => (
                 <div
                   key={p.profile_id}
-                  className="flex items-center gap-3 rounded-xl border border-emerald-900/40 bg-[#0b3b21]/40 px-3 py-2.5"
+                  className="flex items-center gap-3 rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] px-3 py-2.5"
                 >
-                  <span className="w-7 text-center text-xs text-emerald-200/30">—</span>
+                  <span className="w-7 text-center text-xs text-[color:var(--sec-muted)]">—</span>
                   {p.profile?.avatar_url ? (
                     <img src={p.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0 opacity-60" loading="lazy" decoding="async" />
                   ) : (
-                    <div className="h-7 w-7 rounded-full bg-emerald-900/40 grid place-items-center text-[10px] font-bold text-emerald-200/50 shrink-0">
+                    <div className="h-7 w-7 rounded-full bg-[color:var(--sec-surface)] grid place-items-center text-[10px] font-bold text-[color:var(--sec-muted)] shrink-0">
                       {p.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
                     </div>
                   )}
-                  <span className="flex-1 text-sm font-semibold text-emerald-50/50 truncate">{p.profile?.name ?? "Unknown"}</span>
+                  <span className="flex-1 text-sm font-semibold text-[color:var(--sec-text)] truncate">{p.profile?.name ?? "Unknown"}</span>
                   <div className="text-right shrink-0">
-                    <div className="text-xs text-emerald-200/30">—</div>
-                    <div className="text-[10px] text-emerald-100/30">0 rnd</div>
+                    <div className="text-xs text-[color:var(--sec-muted)]">—</div>
+                    <div className="text-[10px] text-[color:var(--sec-muted)]">0 rnd</div>
                   </div>
                 </div>
               ))}
@@ -3366,24 +3366,24 @@ export default function EventDetailClient({
         {revealWarning && (
           <div className="fixed inset-0 z-50 flex items-end bg-black/60" onClick={() => setRevealWarning(null)}>
             <div
-              className="w-full max-w-sm mx-auto rounded-t-3xl bg-[#071f13] border-t border-emerald-900/70 px-4 pt-5 pb-[env(safe-area-inset-bottom)] space-y-4"
+              className="w-full max-w-sm mx-auto rounded-t-3xl bg-[color:var(--ciaga-ground)] border-t border-[color:var(--sec-hair)] px-4 pt-5 pb-[env(safe-area-inset-bottom)] space-y-4"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-start gap-3">
                 <span className="text-amber-400 text-lg mt-0.5">⚠️</span>
                 <div>
                   <p className="text-sm font-semibold text-amber-300">Some rounds aren&apos;t finished</p>
-                  <p className="text-xs text-emerald-200/60 mt-0.5">These players are still on the course. You can wait for them or mark all rounds complete and reveal now.</p>
+                  <p className="text-xs text-[color:var(--sec-muted)] mt-0.5">These players are still on the course. You can wait for them or mark all rounds complete and reveal now.</p>
                 </div>
               </div>
               <div className="space-y-3">
                 {revealWarning.incomplete_rounds.map((round, ri) => (
-                  <div key={ri} className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5">
-                    <p className="text-[11px] font-semibold text-emerald-300/80 mb-1.5">{round.round_name}</p>
+                  <div key={ri} className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2.5">
+                    <p className="text-[11px] font-semibold text-[color:var(--sec-muted)] mb-1.5">{round.round_name}</p>
                     {round.players.map((p, pi) => (
                       <div key={pi} className="flex items-center justify-between py-0.5">
-                        <span className="text-xs text-emerald-100">{p.name}</span>
-                        <span className="text-[11px] text-emerald-200/50">
+                        <span className="text-xs text-[color:var(--sec-text)]">{p.name}</span>
+                        <span className="text-[11px] text-[color:var(--sec-muted)]">
                           {p.rounds_submitted > 0 ? "Submitted" : `${p.holes_completed}/18 holes`}
                         </span>
                       </div>
@@ -3395,7 +3395,7 @@ export default function EventDetailClient({
                 <button
                   type="button"
                   onClick={() => setRevealWarning(null)}
-                  className="flex-1 py-2.5 rounded-full border border-emerald-900/50 text-xs text-emerald-200/60 hover:text-emerald-200/90 transition-colors"
+                  className="flex-1 py-2.5 rounded-full border border-[color:var(--sec-hair)] text-xs text-[color:var(--sec-muted)] hover:text-[color:var(--sec-muted)] transition-colors"
                 >
                   Cancel
                 </button>
@@ -3437,11 +3437,11 @@ export default function EventDetailClient({
         )}
         {/* Playoff scorecard view */}
         {showPlayoffCard && activePlayoff && (
-          <div className="fixed inset-0 z-50 bg-[#071f13] overflow-y-auto">
+          <div className="fixed inset-0 z-50 bg-[color:var(--ciaga-ground)] overflow-y-auto">
             <button
               type="button"
               onClick={() => setShowPlayoffCard(false)}
-              className="absolute top-4 right-4 text-emerald-100/60 text-sm z-10"
+              className="absolute top-4 right-4 text-[color:var(--sec-muted)] text-sm z-10"
             >
               ✕ Close
             </button>
@@ -3452,7 +3452,7 @@ export default function EventDetailClient({
         {detailPlayer && (
           <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={() => setDetailPlayer(null)}>
             <div
-              className="bg-[#0a2e1a] border-t border-emerald-900/60 rounded-t-2xl px-4 pb-8 pt-4 max-h-[80vh] overflow-y-auto"
+              className="bg-[#0a2e1a] border-t border-[color:var(--sec-hair)] rounded-t-2xl px-4 pb-8 pt-4 max-h-[80vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
@@ -3460,13 +3460,13 @@ export default function EventDetailClient({
                 {detailPlayer.profile?.avatar_url ? (
                   <img src={detailPlayer.profile.avatar_url} alt="" className="h-10 w-10 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
                 ) : (
-                  <div className="h-10 w-10 rounded-full bg-emerald-900/60 grid place-items-center text-sm font-bold text-emerald-200 shrink-0">
+                  <div className="h-10 w-10 rounded-full bg-[color:var(--sec-surface)] grid place-items-center text-sm font-bold text-[color:var(--sec-text-2)] shrink-0">
                     {detailPlayer.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-bold text-emerald-50 truncate">{detailPlayer.profile?.name ?? "Unknown"}</div>
-                  <div className="text-[10px] text-emerald-200/50">
+                  <div className="text-sm font-bold text-[color:var(--sec-text)] truncate">{detailPlayer.profile?.name ?? "Unknown"}</div>
+                  <div className="text-[10px] text-[color:var(--sec-muted)]">
                     {detailPlayer.position != null ? `#${detailPlayer.position}` : ""}
                     {detailPlayer.to_par != null ? ` · ${formatToPar(detailPlayer.to_par)}` : ""}
                   </div>
@@ -3474,21 +3474,21 @@ export default function EventDetailClient({
                 <button
                   type="button"
                   onClick={() => setDetailPlayer(null)}
-                  className="text-emerald-200/60 text-sm px-3 py-1 rounded-lg border border-emerald-900/50"
+                  className="text-[color:var(--sec-muted)] text-sm px-3 py-1 rounded-lg border border-[color:var(--sec-hair)]"
                 >
                   Close
                 </button>
               </div>
               {/* Round rows */}
               {playerRoundsLoading ? (
-                <div className="text-center py-6 text-emerald-200/50 text-sm">Loading…</div>
+                <div className="text-center py-6 text-[color:var(--sec-muted)] text-sm">Loading…</div>
               ) : playerRounds && playerRounds.length > 0 ? (
                 <div className="space-y-1">
                   {/* Column headers */}
                   <div className="grid grid-cols-[1fr_auto_auto] gap-2 px-2 pb-1">
-                    <div className="text-[10px] text-emerald-200/40 uppercase tracking-wider">Round</div>
-                    <div className="text-[10px] text-emerald-200/40 uppercase tracking-wider text-right w-12">Gross</div>
-                    <div className="text-[10px] text-emerald-200/40 uppercase tracking-wider text-right w-12">Net</div>
+                    <div className="text-[10px] text-[color:var(--sec-muted)] uppercase tracking-wider">Round</div>
+                    <div className="text-[10px] text-[color:var(--sec-muted)] uppercase tracking-wider text-right w-12">Gross</div>
+                    <div className="text-[10px] text-[color:var(--sec-muted)] uppercase tracking-wider text-right w-12">Net</div>
                   </div>
                   {playerRounds.map((r: any, i: number) => {
                     const label = r.event_round?.name ?? `R${r.event_round?.round_number ?? i + 1}`;
@@ -3498,17 +3498,17 @@ export default function EventDetailClient({
                         <button
                           type="button"
                           onClick={() => r.round_id && handleRoundCardClick(r.round_id)}
-                          className="grid grid-cols-[1fr_auto_auto] gap-2 items-center w-full rounded-xl border border-emerald-900/40 bg-[#0b3b21]/60 px-3 py-2 text-left hover:brightness-110 active:scale-[0.99] transition-all"
+                          className="grid grid-cols-[1fr_auto_auto] gap-2 items-center w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2 text-left hover:brightness-110 active:scale-[0.99] transition-all"
                         >
                           <div>
-                            <div className="text-sm font-semibold text-emerald-100 truncate">{label}</div>
+                            <div className="text-sm font-semibold text-[color:var(--sec-text)] truncate">{label}</div>
                             {(() => {
                               const hi = r.handicap_index;
                               const ch = r.course_handicap;
                               const ph = r.playing_handicap;
                               if (hi == null && ch == null && ph == null) return null;
                               return (
-                                <div className="text-[10px] text-emerald-200/40 mt-0.5 space-x-2">
+                                <div className="text-[10px] text-[color:var(--sec-muted)] mt-0.5 space-x-2">
                                   {hi != null && <span>HI {hi}</span>}
                                   {ch != null && <span>CH {ch}</span>}
                                   {ph != null && <span>PH {ph}</span>}
@@ -3516,10 +3516,10 @@ export default function EventDetailClient({
                               );
                             })()}
                           </div>
-                          <div className="text-sm font-bold tabular-nums text-[#f5e6b0] text-right w-12">
+                          <div className="text-sm font-bold tabular-nums text-[color:var(--sec-accent)] text-right w-12">
                             {r.gross_score != null ? r.gross_score : "—"}
                           </div>
-                          <div className="text-sm font-bold tabular-nums text-emerald-300 text-right w-12">
+                          <div className="text-sm font-bold tabular-nums text-[color:var(--sec-good)] text-right w-12">
                             {r.net_score_snapshot != null ? r.net_score_snapshot : "—"}
                           </div>
                         </button>
@@ -3540,12 +3540,12 @@ export default function EventDetailClient({
                     const totalNet = playerRounds.every((r: any) => r.net_score_snapshot != null)
                       ? playerRounds.reduce((s: number, r: any) => s + r.net_score_snapshot, 0) : null;
                     return (
-                      <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-center rounded-xl border border-emerald-700/40 bg-emerald-900/20 px-3 py-2 mt-1">
-                        <div className="text-[11px] font-bold text-emerald-300 uppercase tracking-wider">Total</div>
-                        <div className="text-sm font-bold tabular-nums text-[#f5e6b0] text-right w-12">
+                      <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-center rounded-xl border border-[color:var(--sec-line)] bg-[color:var(--sec-surface)] px-3 py-2 mt-1">
+                        <div className="text-[11px] font-bold text-[color:var(--sec-good)] uppercase tracking-wider">Total</div>
+                        <div className="text-sm font-bold tabular-nums text-[color:var(--sec-accent)] text-right w-12">
                           {totalGross != null ? totalGross : "—"}
                         </div>
-                        <div className="text-sm font-bold tabular-nums text-emerald-300 text-right w-12">
+                        <div className="text-sm font-bold tabular-nums text-[color:var(--sec-good)] text-right w-12">
                           {totalNet != null ? totalNet : "—"}
                         </div>
                       </div>
@@ -3553,7 +3553,7 @@ export default function EventDetailClient({
                   })()}
                 </div>
               ) : playerRounds != null ? (
-                <div className="text-center py-6 text-emerald-200/40 text-sm">No accepted rounds yet.</div>
+                <div className="text-center py-6 text-[color:var(--sec-muted)] text-sm">No accepted rounds yet.</div>
               ) : null}
             </div>
           </div>
@@ -3590,7 +3590,7 @@ export default function EventDetailClient({
         return (
           <div key={tt.id} className="space-y-2">
             {hasSlot && tt.event_round && (
-              <div className="text-[10px] text-emerald-400/80 font-semibold uppercase tracking-wider px-0.5">
+              <div className="text-[10px] text-[color:var(--sec-good)] font-semibold uppercase tracking-wider px-0.5">
                 {tt.event_round.name} · Your tee time
               </div>
             )}
@@ -3608,7 +3608,7 @@ export default function EventDetailClient({
                 <button
                   type="button"
                   onClick={() => handleLeaveTeeTimeSlot(tt.id)}
-                  className="w-full py-2 rounded-full border border-red-900/40 text-[11px] text-red-400/70 hover:text-red-400"
+                  className="w-full py-2 rounded-full border border-red-900/40 text-[11px] text-[color:var(--sec-bad)] hover:text-[color:var(--sec-bad)]"
                 >
                   Leave this slot
                 </button>
@@ -3616,7 +3616,7 @@ export default function EventDetailClient({
                 <button
                   type="button"
                   onClick={() => handleJoinTeeTimeSlot(tt.id)}
-                  className="w-full py-2 rounded-full bg-emerald-700/80 text-[11px] font-semibold text-white hover:bg-emerald-700"
+                  className="w-full py-2 rounded-full bg-[color:var(--sec-primary)] text-[11px] font-semibold text-white hover:bg-[color:var(--sec-primary-hover)]"
                 >
                   Join this slot
                 </button>
@@ -3632,7 +3632,7 @@ export default function EventDetailClient({
       return (
         <div className="space-y-3">
           {isSelfSelect && (
-            <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2 text-[11px] text-emerald-200/60">
+            <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2 text-[11px] text-[color:var(--sec-muted)]">
               Players can choose their own tee time slot.
             </div>
           )}
@@ -3668,14 +3668,14 @@ export default function EventDetailClient({
             <button
               type="button"
               onClick={() => setShowAddTeeTime(true)}
-              className="w-full py-2.5 rounded-full border border-emerald-700/60 text-sm font-semibold text-emerald-200 hover:bg-emerald-900/30"
+              className="w-full py-2.5 rounded-full border border-[color:var(--sec-line)] text-sm font-semibold text-[color:var(--sec-text-2)] hover:bg-[color:var(--sec-surface-2)]"
             >
               + {isSelfSelect ? "Add Slot" : "Add Tee Time"}
             </button>
           )}
           {teeTimes.length === 0 && eventRounds.length === 0 ? (
-            <div className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 p-5 text-center space-y-1">
-              <div className="text-sm text-emerald-100/60">
+            <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] p-5 text-center space-y-1">
+              <div className="text-sm text-[color:var(--sec-muted)]">
                 {isAdminOrOwner
                   ? "No tee times set up yet."
                   : isEntered
@@ -3692,34 +3692,34 @@ export default function EventDetailClient({
                   ? new Date(cr.scheduled_date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
                   : null;
                 const statusColour =
-                  cr.status === "live" ? "text-emerald-400" :
-                  cr.status === "completed" ? "text-emerald-200/40" :
-                  cr.status === "cancelled" ? "text-red-400/60" :
-                  "text-emerald-200/50";
+                  cr.status === "live" ? "text-[color:var(--sec-good)]" :
+                  cr.status === "completed" ? "text-[color:var(--sec-muted)]" :
+                  cr.status === "cancelled" ? "text-[color:var(--sec-bad)]" :
+                  "text-[color:var(--sec-muted)]";
                 return (
                   <div key={cr.id} className="space-y-2">
                     {/* Round header */}
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-300">
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-[color:var(--sec-good)]">
                             {cr.name}
                           </span>
                           {dateLabel && (
-                            <span className="text-[10px] text-emerald-200/50">{dateLabel}</span>
+                            <span className="text-[10px] text-[color:var(--sec-muted)]">{dateLabel}</span>
                           )}
                           <span className={`text-[10px] capitalize ${statusColour}`}>{cr.status}</span>
                         </div>
                         {(cr.course?.name || cr.tee_male?.name || cr.tee_female?.name) && (
-                          <div className="text-[10px] text-emerald-200/50 mt-0.5">
+                          <div className="text-[10px] text-[color:var(--sec-muted)] mt-0.5">
                             {cr.course?.name && <span>{cr.course.name}</span>}
                             {(cr.tee_male?.name || cr.tee_female?.name) && (
                               <div className="space-y-0.5 mt-0.5">
                                 {cr.tee_male?.name && (
-                                  <div><span className="text-emerald-200/30">Men's tee: </span>{cr.tee_male.name}</div>
+                                  <div><span className="text-[color:var(--sec-muted)]">Men's tee: </span>{cr.tee_male.name}</div>
                                 )}
                                 {cr.tee_female?.name && (
-                                  <div><span className="text-emerald-200/30">Women's tee: </span>{cr.tee_female.name}</div>
+                                  <div><span className="text-[color:var(--sec-muted)]">Women's tee: </span>{cr.tee_female.name}</div>
                                 )}
                               </div>
                             )}
@@ -3730,14 +3730,14 @@ export default function EventDetailClient({
                         <button
                           type="button"
                           onClick={() => setEditingRound(cr)}
-                          className="text-[10px] text-emerald-400/60 hover:text-emerald-300 px-1 shrink-0"
+                          className="text-[10px] text-[color:var(--sec-good)] hover:text-[color:var(--sec-good)] px-1 shrink-0"
                         >
                           Edit
                         </button>
                       )}
                     </div>
                     {roundTeeTimes.length === 0 ? (
-                      <div className="text-[11px] text-emerald-200/40 pl-0.5">No tee times for this round yet.</div>
+                      <div className="text-[11px] text-[color:var(--sec-muted)] pl-0.5">No tee times for this round yet.</div>
                     ) : (
                       <div className="space-y-3">{roundTeeTimes.map(renderTeeTimeCard)}</div>
                     )}
@@ -3747,7 +3747,7 @@ export default function EventDetailClient({
               {/* Unlinked tee times (legacy) */}
               {(teeTimesByRound.get(null)?.length ?? 0) > 0 && (
                 <div className="space-y-2">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-200/40">Unassigned</div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--sec-muted)]">Unassigned</div>
                   <div className="space-y-3">{(teeTimesByRound.get(null) ?? []).map(renderTeeTimeCard)}</div>
                 </div>
               )}
@@ -3761,41 +3761,41 @@ export default function EventDetailClient({
     })(),
 
     rules: event ? (
-      <div className="space-y-4 text-[13px] text-emerald-100/75 leading-relaxed">
+      <div className="space-y-4 text-[13px] text-[color:var(--sec-muted)] leading-relaxed">
         {event.rules_text ? (
           <p>{event.rules_text}</p>
         ) : (
-          <p className="text-emerald-100/50">No custom rules specified.</p>
+          <p className="text-[color:var(--sec-muted)]">No custom rules specified.</p>
         )}
-        <div className="space-y-2 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-3">
+        <div className="space-y-2 rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-3">
           {event.scoring_model && (
             <div className="flex justify-between text-[12px]">
-              <span className="text-emerald-200/55">Scoring</span>
-              <span className="text-emerald-50 capitalize">{event.scoring_model}</span>
+              <span className="text-[color:var(--sec-muted)]">Scoring</span>
+              <span className="text-[color:var(--sec-text)] capitalize">{event.scoring_model}</span>
             </div>
           )}
           {event.scoring_model !== "gross" && (event.handicap_rules as any)?.allowance_pct != null && (
             <div className="flex justify-between text-[12px]">
-              <span className="text-emerald-200/55">Handicap allowance</span>
-              <span className="text-emerald-50">{(event.handicap_rules as any).allowance_pct}%</span>
+              <span className="text-[color:var(--sec-muted)]">Handicap allowance</span>
+              <span className="text-[color:var(--sec-text)]">{(event.handicap_rules as any).allowance_pct}%</span>
             </div>
           )}
           {(event.handicap_rules as any)?.max_handicap != null && (
             <div className="flex justify-between text-[12px]">
-              <span className="text-emerald-200/55">Max handicap</span>
-              <span className="text-emerald-50">{(event.handicap_rules as any).max_handicap}</span>
+              <span className="text-[color:var(--sec-muted)]">Max handicap</span>
+              <span className="text-[color:var(--sec-text)]">{(event.handicap_rules as any).max_handicap}</span>
             </div>
           )}
           {event.num_rounds > 1 && (
             <div className="flex justify-between text-[12px]">
-              <span className="text-emerald-200/55">Rounds required</span>
-              <span className="text-emerald-50">{event.num_rounds}</span>
+              <span className="text-[color:var(--sec-muted)]">Rounds required</span>
+              <span className="text-[color:var(--sec-text)]">{event.num_rounds}</span>
             </div>
           )}
           {event.standings_contribution !== "event_only" && (
             <div className="flex justify-between text-[12px]">
-              <span className="text-emerald-200/55">Contributes to</span>
-              <span className="text-emerald-50 capitalize">{event.standings_contribution}</span>
+              <span className="text-[color:var(--sec-muted)]">Contributes to</span>
+              <span className="text-[color:var(--sec-text)] capitalize">{event.standings_contribution}</span>
             </div>
           )}
         </div>
@@ -3805,14 +3805,14 @@ export default function EventDetailClient({
     fixtures: (
       <div className="space-y-4">
         {matchplayStages.length === 0 && matchplayFixtures.length === 0 ? (
-          <div className="text-sm text-emerald-100/60 text-center py-8">
+          <div className="text-sm text-[color:var(--sec-muted)] text-center py-8">
             {isAdminOrOwner ? "No fixtures generated yet." : "Fixtures not yet scheduled."}
           </div>
         ) : (
           matchplayStages.length > 0
             ? matchplayStages.map((stage) => (
                 <div key={stage.id} className="space-y-2">
-                  <div className="text-[10px] uppercase tracking-wider text-emerald-200/60 font-semibold px-1">{stage.name}</div>
+                  <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)] font-semibold px-1">{stage.name}</div>
                   {matchplayFixtures.filter((f) => f.stage_id === stage.id).map((f) => (
                     <FixtureCard key={f.id} fixture={f as any} />
                   ))}
@@ -3824,7 +3824,7 @@ export default function EventDetailClient({
     ),
 
     bracket: (
-      <div className="space-y-3 text-sm text-emerald-100/70 text-center py-8">
+      <div className="space-y-3 text-sm text-[color:var(--sec-muted)] text-center py-8">
         Bracket view coming soon.
       </div>
     ),
@@ -3832,12 +3832,12 @@ export default function EventDetailClient({
     "league-table": (
       <div className="space-y-2">
         {leagueTable.length === 0 ? (
-          <div className="text-sm text-emerald-100/60 text-center py-8">
+          <div className="text-sm text-[color:var(--sec-muted)] text-center py-8">
             League table will appear after fixtures are played.
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-6 text-[10px] uppercase tracking-wider text-emerald-200/50 px-3 pb-1">
+            <div className="grid grid-cols-6 text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)] px-3 pb-1">
               <span className="col-span-2">Player</span>
               <span className="text-center">P</span>
               <span className="text-center">W</span>
@@ -3845,22 +3845,22 @@ export default function EventDetailClient({
               <span className="text-center">Pts</span>
             </div>
             {leagueTable.map((row) => (
-              <div key={row.id} className="grid grid-cols-6 items-center rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5">
+              <div key={row.id} className="grid grid-cols-6 items-center rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2.5">
                 <div className="col-span-2 flex items-center gap-2 min-w-0">
-                  <span className="text-[11px] text-emerald-200/50 w-4 shrink-0">{row.position ?? "—"}</span>
+                  <span className="text-[11px] text-[color:var(--sec-muted)] w-4 shrink-0">{row.position ?? "—"}</span>
                   {row.profile?.avatar_url ? (
                     <img src={row.profile.avatar_url} alt="" className="h-6 w-6 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
                   ) : (
-                    <div className="h-6 w-6 rounded-full bg-emerald-900/60 grid place-items-center text-[9px] font-bold text-emerald-200 shrink-0">
+                    <div className="h-6 w-6 rounded-full bg-[color:var(--sec-surface)] grid place-items-center text-[9px] font-bold text-[color:var(--sec-text-2)] shrink-0">
                       {row.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
                     </div>
                   )}
-                  <span className="text-xs font-semibold text-emerald-50 truncate">{row.profile?.name ?? "—"}</span>
+                  <span className="text-xs font-semibold text-[color:var(--sec-text)] truncate">{row.profile?.name ?? "—"}</span>
                 </div>
-                <span className="text-center text-xs text-emerald-100/70">{row.played}</span>
-                <span className="text-center text-xs text-emerald-100/70">{row.won}</span>
-                <span className="text-center text-xs text-emerald-100/70">{row.halved}</span>
-                <span className="text-center text-xs font-bold text-[#f5e6b0]">{row.league_points}</span>
+                <span className="text-center text-xs text-[color:var(--sec-muted)]">{row.played}</span>
+                <span className="text-center text-xs text-[color:var(--sec-muted)]">{row.won}</span>
+                <span className="text-center text-xs text-[color:var(--sec-muted)]">{row.halved}</span>
+                <span className="text-center text-xs font-bold text-[color:var(--sec-accent)]">{row.league_points}</span>
               </div>
             ))}
           </>
@@ -4227,7 +4227,7 @@ export default function EventDetailClient({
       };
 
       const potStatusColour: Record<string, string> = {
-        active: "text-emerald-400 bg-emerald-900/30 border-emerald-700/40",
+        active: "text-[color:var(--sec-good)] bg-[color:var(--sec-surface)] border-[color:var(--sec-line)]",
         locked: "text-yellow-300 bg-yellow-900/20 border-yellow-700/40",
         distributed: "text-blue-300 bg-blue-900/20 border-blue-700/40",
       };
@@ -4246,12 +4246,12 @@ export default function EventDetailClient({
         is_mandatory: false,
       });
 
-      const inputCls = "w-full rounded-xl border border-emerald-900/60 bg-[#0b3b21]/60 px-3 py-2 text-sm text-emerald-50 focus:outline-none focus:border-emerald-600";
+      const inputCls = "w-full rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2 text-sm text-[color:var(--sec-text)] focus:outline-none focus:border-[color:var(--sec-line)]";
 
       return (
         <div className="space-y-5">
           {chargeError && (
-            <div className="text-[11px] text-red-400 bg-red-950/30 border border-red-900/50 rounded-xl px-3 py-2">
+            <div className="text-[11px] text-[color:var(--sec-bad)] bg-red-950/30 border border-red-900/50 rounded-xl px-3 py-2">
               {chargeError}
               <button type="button" onClick={() => setChargeError(null)} className="ml-2 underline">Dismiss</button>
             </div>
@@ -4259,23 +4259,23 @@ export default function EventDetailClient({
 
           {/* Section A: Competition Fees & Prize Pot */}
           {entryFee && entryFee > 0 && (
-            <div className="rounded-2xl border border-emerald-900/50 bg-[#0b3b21]/60 px-4 py-3 space-y-2">
-              <div className="text-[10px] uppercase tracking-wider text-emerald-200/50 font-semibold">Competition Fee & Prize Pot</div>
+            <div className="rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-4 py-3 space-y-2">
+              <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)] font-semibold">Competition Fee & Prize Pot</div>
               <div className="grid grid-cols-3 gap-2">
                 <div className="text-center">
-                  <div className="text-[10px] text-emerald-200/50">Entry Fee</div>
-                  <div className="text-sm font-bold text-emerald-50">{currencySymbol}{entryFee.toFixed(2)}</div>
+                  <div className="text-[10px] text-[color:var(--sec-muted)]">Entry Fee</div>
+                  <div className="text-sm font-bold text-[color:var(--sec-text)]">{currencySymbol}{entryFee.toFixed(2)}</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-[10px] text-emerald-200/50">Total Pot</div>
-                  <div className="text-sm font-bold text-[#f5e6b0]">{currencySymbol}{pot.toFixed(2)}</div>
+                  <div className="text-[10px] text-[color:var(--sec-muted)]">Total Pot</div>
+                  <div className="text-sm font-bold text-[color:var(--sec-accent)]">{currencySymbol}{pot.toFixed(2)}</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-[10px] text-emerald-200/50">Paid Out</div>
-                  <div className="text-sm font-bold text-emerald-400">{currencySymbol}{totalWinningsPaid.toFixed(2)}</div>
+                  <div className="text-[10px] text-[color:var(--sec-muted)]">Paid Out</div>
+                  <div className="text-sm font-bold text-[color:var(--sec-good)]">{currencySymbol}{totalWinningsPaid.toFixed(2)}</div>
                 </div>
               </div>
-              <div className="text-[10px] text-emerald-200/40 text-center">
+              <div className="text-[10px] text-[color:var(--sec-muted)] text-center">
                 {enteredCount} {enteredCount === 1 ? "entry" : "entries"} · see Winnings tab for payouts
               </div>
             </div>
@@ -4283,19 +4283,19 @@ export default function EventDetailClient({
 
           {/* Section B: Charge Catalog */}
           <div className="space-y-2">
-            <div className="text-[10px] uppercase tracking-wider text-emerald-200/50 font-semibold">Event Charges</div>
+            <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)] font-semibold">Event Charges</div>
 
             {eventCharges.length === 0 && !addChargeForm && (
-              <div className="text-[11px] text-emerald-200/40 text-center py-2">No charges defined yet.</div>
+              <div className="text-[11px] text-[color:var(--sec-muted)] text-center py-2">No charges defined yet.</div>
             )}
 
             {eventCharges.map((charge) => {
               const chargeRound = charge.round_id ? eventRounds.find((r) => r.id === charge.round_id) : null;
               return (
-                <div key={charge.id} className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/50 px-3 py-2.5 space-y-1.5">
+                <div key={charge.id} className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_50%,transparent)] px-3 py-2.5 space-y-1.5">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-emerald-700/50 text-emerald-300/80 bg-emerald-900/30 shrink-0">
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-[color:var(--sec-line)] text-[color:var(--sec-muted)] bg-[color:var(--sec-surface)] shrink-0">
                         {categoryLabel[charge.category] ?? charge.category}
                       </span>
                       {chargeRound && (
@@ -4303,24 +4303,24 @@ export default function EventDetailClient({
                           {chargeRound.name || `Round ${chargeRound.round_number}`}
                         </span>
                       )}
-                      <span className="text-sm font-semibold text-emerald-50 truncate">{charge.name}</span>
+                      <span className="text-sm font-semibold text-[color:var(--sec-text)] truncate">{charge.name}</span>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-sm font-bold text-emerald-200">{currencySymbol}{charge.amount.toFixed(2)}</span>
+                      <span className="text-sm font-bold text-[color:var(--sec-text-2)]">{currencySymbol}{charge.amount.toFixed(2)}</span>
                       <button
                         type="button"
                         onClick={() => handleDeleteCharge(charge.id)}
-                        className="text-[10px] text-red-400/60 hover:text-red-400"
+                        className="text-[10px] text-[color:var(--sec-bad)] hover:text-[color:var(--sec-bad)]"
                       >
                         ✕
                       </button>
                     </div>
                   </div>
-                  {charge.description && <div className="text-[10px] text-emerald-200/40">{charge.description}</div>}
+                  {charge.description && <div className="text-[10px] text-[color:var(--sec-muted)]">{charge.description}</div>}
                   <button
                     type="button"
                     onClick={() => handleAssignAll(charge.id)}
-                    className="w-full py-1 rounded-full border border-emerald-700/40 text-[10px] text-emerald-200/70 hover:bg-emerald-900/30"
+                    className="w-full py-1 rounded-full border border-[color:var(--sec-line)] text-[10px] text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]"
                   >
                     Apply to all entered players
                   </button>
@@ -4329,8 +4329,8 @@ export default function EventDetailClient({
             })}
 
             {addChargeForm ? (
-              <div className="rounded-xl border border-emerald-700/40 bg-[#0b3b21]/50 px-3 py-3 space-y-2">
-                <div className="text-[11px] font-semibold text-emerald-200">New Charge</div>
+              <div className="rounded-xl border border-[color:var(--sec-line)] bg-[color:color-mix(in_srgb,var(--sec-surface)_50%,transparent)] px-3 py-3 space-y-2">
+                <div className="text-[11px] font-semibold text-[color:var(--sec-text-2)]">New Charge</div>
                 <input
                   type="text"
                   placeholder="Name (e.g. Green Fee, Buggy)"
@@ -4385,23 +4385,23 @@ export default function EventDetailClient({
                 <button
                   type="button"
                   onClick={() => setAddChargeForm((f) => f && { ...f, is_mandatory: !f.is_mandatory })}
-                  className="flex items-center justify-between w-full py-2 px-2 rounded-lg border border-emerald-900/40 hover:bg-emerald-900/20"
+                  className="flex items-center justify-between w-full py-2 px-2 rounded-lg border border-[color:var(--sec-hair)] hover:bg-[color:var(--sec-surface-2)]"
                 >
                   <div className="text-left">
-                    <div className="text-[11px] font-semibold text-emerald-100">Mandatory</div>
-                    <div className="text-[10px] text-emerald-200/40">Auto-charged when a player joins this event</div>
+                    <div className="text-[11px] font-semibold text-[color:var(--sec-text)]">Mandatory</div>
+                    <div className="text-[10px] text-[color:var(--sec-muted)]">Auto-charged when a player joins this event</div>
                   </div>
-                  <div className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${addChargeForm.is_mandatory ? "bg-emerald-600" : "bg-emerald-900/50"}`}>
+                  <div className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${addChargeForm.is_mandatory ? "bg-[color:var(--sec-primary)]" : "bg-[color:var(--sec-surface)]"}`}>
                     <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${addChargeForm.is_mandatory ? "translate-x-5" : ""}`} />
                   </div>
                 </button>
                 <div className="flex gap-2">
                   <button type="button" onClick={() => setAddChargeForm(null)}
-                    className="flex-1 py-1.5 rounded-full border border-emerald-900/60 text-[11px] text-emerald-200/60">
+                    className="flex-1 py-1.5 rounded-full border border-[color:var(--sec-hair)] text-[11px] text-[color:var(--sec-muted)]">
                     Cancel
                   </button>
                   <button type="button" onClick={handleAddCharge} disabled={addingCharge}
-                    className="flex-1 py-1.5 rounded-full bg-emerald-700 text-[11px] font-semibold text-white disabled:opacity-50">
+                    className="flex-1 py-1.5 rounded-full bg-[color:var(--sec-primary)] text-[11px] font-semibold text-white disabled:opacity-50">
                     {addingCharge ? "Adding…" : "Add Charge"}
                   </button>
                 </div>
@@ -4410,7 +4410,7 @@ export default function EventDetailClient({
               <button
                 type="button"
                 onClick={() => setAddChargeForm({ name: "", amount: "", category: "green_fee", description: "", round_id: "", is_mandatory: false })}
-                className="w-full py-2 rounded-full border border-emerald-700/50 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-900/30"
+                className="w-full py-2 rounded-full border border-[color:var(--sec-line)] text-[11px] font-semibold text-[color:var(--sec-text-2)] hover:bg-[color:var(--sec-surface-2)]"
               >
                 + Add Charge
               </button>
@@ -4421,20 +4421,20 @@ export default function EventDetailClient({
           {(eventCharges.length > 0 || playerCharges.length > 0) && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <div className="text-[10px] uppercase tracking-wider text-emerald-200/50 font-semibold">Player Charges</div>
+                <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)] font-semibold">Player Charges</div>
                 {eventCharges.length > 0 && participants.length > 0 && (
-                  <div className="flex rounded-full border border-emerald-900/60 overflow-hidden text-[9px]">
+                  <div className="flex rounded-full border border-[color:var(--sec-hair)] overflow-hidden text-[9px]">
                     <button
                       type="button"
                       onClick={() => setChargesViewMode("list")}
-                      className={`px-2.5 py-1 ${chargesViewMode === "list" ? "bg-emerald-800/60 text-emerald-100" : "text-emerald-200/50 hover:text-emerald-200/80"}`}
+                      className={`px-2.5 py-1 ${chargesViewMode === "list" ? "bg-[color:var(--sec-surface-2)] text-[color:var(--sec-text)]" : "text-[color:var(--sec-muted)] hover:text-[color:var(--sec-muted)]"}`}
                     >
                       List
                     </button>
                     <button
                       type="button"
                       onClick={() => setChargesViewMode("matrix")}
-                      className={`px-2.5 py-1 ${chargesViewMode === "matrix" ? "bg-emerald-800/60 text-emerald-100" : "text-emerald-200/50 hover:text-emerald-200/80"}`}
+                      className={`px-2.5 py-1 ${chargesViewMode === "matrix" ? "bg-[color:var(--sec-surface-2)] text-[color:var(--sec-text)]" : "text-[color:var(--sec-muted)] hover:text-[color:var(--sec-muted)]"}`}
                     >
                       Matrix
                     </button>
@@ -4443,25 +4443,25 @@ export default function EventDetailClient({
               </div>
 
               {participants.length === 0 ? (
-                <div className="text-[11px] text-emerald-200/40 text-center py-2">No entered players yet.</div>
+                <div className="text-[11px] text-[color:var(--sec-muted)] text-center py-2">No entered players yet.</div>
               ) : chargesViewMode === "matrix" ? (
                 /* Matrix view: players × charges grid */
                 <div className="overflow-x-auto">
                   <table className="w-full text-[10px] border-collapse">
                     <thead>
                       <tr>
-                        <th className="text-left text-emerald-200/50 pb-1 pr-2 font-normal">Player</th>
+                        <th className="text-left text-[color:var(--sec-muted)] pb-1 pr-2 font-normal">Player</th>
                         {eventCharges.map((charge) => {
                           const chargeRound = charge.round_id ? eventRounds.find((r) => r.id === charge.round_id) : null;
                           return (
-                            <th key={charge.id} className="text-center text-emerald-200/50 pb-1 px-1 font-normal leading-tight max-w-[60px]">
+                            <th key={charge.id} className="text-center text-[color:var(--sec-muted)] pb-1 px-1 font-normal leading-tight max-w-[60px]">
                               <div className="truncate">{charge.name}</div>
                               {chargeRound && <div className="text-[8px] text-blue-300/60">{chargeRound.name || `R${chargeRound.round_number}`}</div>}
-                              <div className="text-emerald-200/30">{currencySymbol}{charge.amount.toFixed(0)}</div>
+                              <div className="text-[color:var(--sec-muted)]">{currencySymbol}{charge.amount.toFixed(0)}</div>
                             </th>
                           );
                         })}
-                        <th className="text-right text-emerald-200/50 pb-1 pl-2 font-normal">Bal.</th>
+                        <th className="text-right text-[color:var(--sec-muted)] pb-1 pl-2 font-normal">Bal.</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -4472,23 +4472,23 @@ export default function EventDetailClient({
                         const totalCharged = myCharges.reduce((s, pc) => s + pc.amount, 0);
                         const totalPaid = myCharges.filter((pc) => pc.is_paid).reduce((s, pc) => s + pc.amount, 0);
                         return (
-                          <tr key={pid} className="border-t border-emerald-900/30">
-                            <td className="py-1.5 pr-2 text-emerald-50 font-medium whitespace-nowrap truncate max-w-[80px]">{profileName}</td>
+                          <tr key={pid} className="border-t border-[color:var(--sec-hair)]">
+                            <td className="py-1.5 pr-2 text-[color:var(--sec-text)] font-medium whitespace-nowrap truncate max-w-[80px]">{profileName}</td>
                             {eventCharges.map((charge) => {
                               const pc = myCharges.find((c) => c.charge_id === charge.id);
                               return (
                                 <td key={charge.id} className="text-center py-1.5 px-1">
                                   {pc ? (
                                     pc.is_paid
-                                      ? <span className="text-emerald-400">✓</span>
+                                      ? <span className="text-[color:var(--sec-good)]">✓</span>
                                       : <span className="text-yellow-400/80">{currencySymbol}{pc.amount.toFixed(0)}</span>
                                   ) : (
-                                    <span className="text-emerald-200/20">—</span>
+                                    <span className="text-[color:var(--sec-muted)]">—</span>
                                   )}
                                 </td>
                               );
                             })}
-                            <td className={`text-right py-1.5 pl-2 font-semibold ${totalCharged > totalPaid ? "text-red-400" : totalCharged > 0 ? "text-emerald-400" : "text-emerald-200/30"}`}>
+                            <td className={`text-right py-1.5 pl-2 font-semibold ${totalCharged > totalPaid ? "text-[color:var(--sec-bad)]" : totalCharged > 0 ? "text-[color:var(--sec-good)]" : "text-[color:var(--sec-muted)]"}`}>
                               {totalCharged > 0 ? (totalCharged > totalPaid ? `-${currencySymbol}${(totalCharged - totalPaid).toFixed(0)}` : "✓") : "—"}
                             </td>
                           </tr>
@@ -4509,22 +4509,22 @@ export default function EventDetailClient({
                     const outstanding = totalCharged - totalPaid;
 
                     return (
-                      <div key={pid} className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/50 px-3 py-3 space-y-2">
+                      <div key={pid} className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_50%,transparent)] px-3 py-3 space-y-2">
                         <div className="flex items-center gap-2">
                           {profileAvatar ? (
                             <img src={profileAvatar} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
                           ) : (
-                            <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[9px] font-bold text-emerald-200 shrink-0">
+                            <div className="h-7 w-7 rounded-full bg-[color:var(--sec-surface)] grid place-items-center text-[9px] font-bold text-[color:var(--sec-text-2)] shrink-0">
                               {profileName.slice(0, 2).toUpperCase()}
                             </div>
                           )}
-                          <span className="flex-1 text-sm font-semibold text-emerald-50">{profileName}</span>
+                          <span className="flex-1 text-sm font-semibold text-[color:var(--sec-text)]">{profileName}</span>
                           {totalCharged > 0 && (
                             <div className="text-right shrink-0">
-                              <div className={`text-[11px] font-bold ${outstanding > 0 ? "text-red-400" : "text-emerald-400"}`}>
+                              <div className={`text-[11px] font-bold ${outstanding > 0 ? "text-[color:var(--sec-bad)]" : "text-[color:var(--sec-good)]"}`}>
                                 {outstanding > 0 ? `Owes ${currencySymbol}${outstanding.toFixed(2)}` : "Settled"}
                               </div>
-                              <div className="text-[9px] text-emerald-200/30">
+                              <div className="text-[9px] text-[color:var(--sec-muted)]">
                                 {currencySymbol}{totalCharged.toFixed(2)} total
                               </div>
                             </div>
@@ -4536,17 +4536,17 @@ export default function EventDetailClient({
                           const pc = myCharges.find((c) => c.charge_id === charge.id);
                           return (
                             <div key={charge.id} className="flex items-center justify-between gap-2 pl-9 text-[11px]">
-                              <span className="text-emerald-200/60">{charge.name}</span>
+                              <span className="text-[color:var(--sec-muted)]">{charge.name}</span>
                               {pc ? (
                                 <div className="flex items-center gap-2">
-                                  <span className="text-emerald-200/80">{currencySymbol}{pc.amount.toFixed(2)}</span>
+                                  <span className="text-[color:var(--sec-muted)]">{currencySymbol}{pc.amount.toFixed(2)}</span>
                                   {pc.is_paid ? (
-                                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-800/50 text-emerald-300">Paid</span>
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[color:var(--sec-surface-2)] text-[color:var(--sec-good)]">Paid</span>
                                   ) : (
                                     <button
                                       type="button"
                                       onClick={() => handleMarkPaid(pc.id)}
-                                      className="text-[9px] px-1.5 py-0.5 rounded-full border border-emerald-700/50 text-emerald-200/70 hover:bg-emerald-900/40"
+                                      className="text-[9px] px-1.5 py-0.5 rounded-full border border-[color:var(--sec-line)] text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]"
                                     >
                                       Mark Paid
                                     </button>
@@ -4554,7 +4554,7 @@ export default function EventDetailClient({
                                   <button
                                     type="button"
                                     onClick={() => handleRemovePlayerCharge(pc.id)}
-                                    className="text-red-400/50 hover:text-red-400 text-[9px]"
+                                    className="text-[color:var(--sec-bad)] hover:text-[color:var(--sec-bad)] text-[9px]"
                                   >
                                     ✕
                                   </button>
@@ -4563,7 +4563,7 @@ export default function EventDetailClient({
                                 <button
                                   type="button"
                                   onClick={() => handleAssignToPlayer(charge.id, pid)}
-                                  className="text-[9px] px-1.5 py-0.5 rounded-full border border-emerald-900/50 text-emerald-200/40 hover:text-emerald-200/80 hover:border-emerald-700/50"
+                                  className="text-[9px] px-1.5 py-0.5 rounded-full border border-[color:var(--sec-hair)] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-muted)] hover:border-[color:var(--sec-line)]"
                                 >
                                   + Assign
                                 </button>
@@ -4577,16 +4577,16 @@ export default function EventDetailClient({
                           .filter((pc) => !pc.charge_id || !eventCharges.find((c) => c.id === pc.charge_id))
                           .map((pc) => (
                             <div key={pc.id} className="flex items-center justify-between gap-2 pl-9 text-[11px]">
-                              <span className="text-emerald-200/60">{pc.name}</span>
+                              <span className="text-[color:var(--sec-muted)]">{pc.name}</span>
                               <div className="flex items-center gap-2">
-                                <span className="text-emerald-200/80">{currencySymbol}{pc.amount.toFixed(2)}</span>
+                                <span className="text-[color:var(--sec-muted)]">{currencySymbol}{pc.amount.toFixed(2)}</span>
                                 {pc.is_paid ? (
-                                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-800/50 text-emerald-300">Paid</span>
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[color:var(--sec-surface-2)] text-[color:var(--sec-good)]">Paid</span>
                                 ) : (
                                   <button
                                     type="button"
                                     onClick={() => handleMarkPaid(pc.id)}
-                                    className="text-[9px] px-1.5 py-0.5 rounded-full border border-emerald-700/50 text-emerald-200/70 hover:bg-emerald-900/40"
+                                    className="text-[9px] px-1.5 py-0.5 rounded-full border border-[color:var(--sec-line)] text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)]"
                                   >
                                     Mark Paid
                                   </button>
@@ -4605,12 +4605,12 @@ export default function EventDetailClient({
           {isAdminOrOwner && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <div className="text-[10px] uppercase tracking-wider text-emerald-200/50 font-semibold">Prize Pots</div>
+                <div className="text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)] font-semibold">Prize Pots</div>
                 {!addPotForm && (
                   <button
                     type="button"
                     onClick={() => setAddPotForm(emptyAddPotForm())}
-                    className="text-[10px] text-emerald-300/70 hover:text-emerald-300 border border-emerald-800/50 rounded-full px-2.5 py-1"
+                    className="text-[10px] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-good)] border border-[color:var(--sec-hair)] rounded-full px-2.5 py-1"
                   >
                     + Add Pot
                   </button>
@@ -4618,14 +4618,14 @@ export default function EventDetailClient({
               </div>
 
               {potError && (
-                <div className="text-[11px] text-red-400 bg-red-950/30 border border-red-900/50 rounded-xl px-3 py-2">
+                <div className="text-[11px] text-[color:var(--sec-bad)] bg-red-950/30 border border-red-900/50 rounded-xl px-3 py-2">
                   {potError}
                   <button type="button" onClick={() => setPotError(null)} className="ml-2 underline">Dismiss</button>
                 </div>
               )}
 
               {prizePots.length === 0 && !addPotForm && (
-                <div className="text-[11px] text-emerald-200/30 text-center py-2">
+                <div className="text-[11px] text-[color:var(--sec-muted)] text-center py-2">
                   No prize pots. Add entry fees, Two&apos;s Club, side pots, or non-monetary prizes.
                 </div>
               )}
@@ -4635,19 +4635,19 @@ export default function EventDetailClient({
                 const actionPrefix = potActionLoading?.startsWith(pot.id + ":") ? potActionLoading.split(":")[1] : null;
 
                 return (
-                  <div key={pot.id} className="rounded-xl border border-emerald-900/50 bg-[#0b3b21]/50 overflow-hidden">
+                  <div key={pot.id} className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_50%,transparent)] overflow-hidden">
                     {/* Pot header */}
                     <div className="px-3 py-2.5 space-y-2">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 space-y-1">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-semibold text-emerald-50">{pot.name}</span>
+                            <span className="text-sm font-semibold text-[color:var(--sec-text)]">{pot.name}</span>
                             <span className={`text-[9px] px-1.5 py-0.5 rounded-full border ${potStatusColour[pot.status] ?? ""}`}>
                               {pot.status}
                             </span>
                           </div>
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-emerald-700/40 text-emerald-300/70">
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-[color:var(--sec-line)] text-[color:var(--sec-muted)]">
                               {distTypeLabel[pot.distribution_type] ?? pot.distribution_type}
                             </span>
                             {pot.metric_type && (
@@ -4664,10 +4664,10 @@ export default function EventDetailClient({
                         </div>
                         <div className="text-right shrink-0">
                           {pot.is_monetary && (
-                            <div className="text-sm font-bold text-[#f5e6b0]">{currencySymbol}{pot.total_pot.toFixed(2)} pot</div>
+                            <div className="text-sm font-bold text-[color:var(--sec-accent)]">{currencySymbol}{pot.total_pot.toFixed(2)} pot</div>
                           )}
                           {pot.entry_fee_amount && pot.entry_fee_amount > 0 && (
-                            <div className="text-[10px] text-emerald-200/50">{currencySymbol}{pot.entry_fee_amount.toFixed(2)}/player</div>
+                            <div className="text-[10px] text-[color:var(--sec-muted)]">{currencySymbol}{pot.entry_fee_amount.toFixed(2)}/player</div>
                           )}
                           {pot.prize_description && !pot.is_monetary && (
                             <div className="text-[10px] text-amber-200/70 max-w-[120px] text-right">{pot.prize_description}</div>
@@ -4675,7 +4675,7 @@ export default function EventDetailClient({
                         </div>
                       </div>
                       {pot.description && (
-                        <div className="text-[10px] text-emerald-200/40">{pot.description}</div>
+                        <div className="text-[10px] text-[color:var(--sec-muted)]">{pot.description}</div>
                       )}
 
                       {/* Action buttons */}
@@ -4685,7 +4685,7 @@ export default function EventDetailClient({
                             type="button"
                             onClick={() => handleEnrollAllPot(pot.id)}
                             disabled={actionPrefix === "enroll"}
-                            className="text-[10px] px-2.5 py-1 rounded-full border border-emerald-700/50 text-emerald-200/70 hover:bg-emerald-900/30 disabled:opacity-50"
+                            className="text-[10px] px-2.5 py-1 rounded-full border border-[color:var(--sec-line)] text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)] disabled:opacity-50"
                           >
                             {actionPrefix === "enroll" ? "Enrolling…" : "Enroll All Players"}
                           </button>
@@ -4713,7 +4713,7 @@ export default function EventDetailClient({
                             type="button"
                             onClick={() => handleEditPotClick(pot)}
                             disabled={editPotId === pot.id}
-                            className="text-[10px] px-2.5 py-1 rounded-full border border-emerald-700/50 text-emerald-200/70 hover:bg-emerald-900/30 disabled:opacity-50"
+                            className="text-[10px] px-2.5 py-1 rounded-full border border-[color:var(--sec-line)] text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface-2)] disabled:opacity-50"
                           >
                             Edit
                           </button>
@@ -4721,7 +4721,7 @@ export default function EventDetailClient({
                             type="button"
                             onClick={() => handleDeletePot(pot.id)}
                             disabled={actionPrefix === "delete"}
-                            className="text-[10px] px-2 py-1 text-red-400/50 hover:text-red-400 disabled:opacity-50"
+                            className="text-[10px] px-2 py-1 text-[color:var(--sec-bad)] hover:text-[color:var(--sec-bad)] disabled:opacity-50"
                           >
                             {actionPrefix === "delete" ? "…" : "Delete"}
                           </button>
@@ -4733,7 +4733,7 @@ export default function EventDetailClient({
                         <button
                           type="button"
                           onClick={() => setExpandedPotId(isExpanded ? null : pot.id)}
-                          className="w-full text-[10px] text-emerald-200/40 hover:text-emerald-200/70 text-center"
+                          className="w-full text-[10px] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-muted)] text-center"
                         >
                           {isExpanded ? "▲ Hide" : `▼ ${pot.entries.length} enrolled${pot.payouts.length > 0 ? ` · ${pot.payouts.length} payouts` : ""}`}
                         </button>
@@ -4742,8 +4742,8 @@ export default function EventDetailClient({
 
                     {/* Inline edit form */}
                     {editPotId === pot.id && editPotForm && (
-                      <div className="border-t border-emerald-900/50 px-3 py-3 space-y-2">
-                        <div className="text-[11px] font-semibold text-emerald-200">Edit Prize Pot</div>
+                      <div className="border-t border-[color:var(--sec-hair)] px-3 py-3 space-y-2">
+                        <div className="text-[11px] font-semibold text-[color:var(--sec-text-2)]">Edit Prize Pot</div>
 
                         {/* Payment warning */}
                         {pot.entries.length > 0 && (pot.entry_fee_amount ?? 0) > 0 && (
@@ -4774,17 +4774,17 @@ export default function EventDetailClient({
                         </select>
 
                         {editPotForm.distribution_type === "winner_takes_all" && (
-                          <div className="rounded-xl border border-emerald-900/40 bg-emerald-950/20 px-3 py-2">
-                            <div className="text-[11px] text-emerald-200/60">100% of the pot goes to 1st place.</div>
+                          <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-3 py-2">
+                            <div className="text-[11px] text-[color:var(--sec-muted)]">100% of the pot goes to 1st place.</div>
                           </div>
                         )}
 
                         {editPotForm.distribution_type === "position_based" && (
-                          <div className="rounded-xl border border-emerald-900/40 bg-emerald-950/20 px-3 py-2 space-y-2">
-                            <div className="text-[10px] uppercase text-emerald-200/50">Payout Percentages</div>
+                          <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-3 py-2 space-y-2">
+                            <div className="text-[10px] uppercase text-[color:var(--sec-muted)]">Payout Percentages</div>
                             {editPotForm.prize_table.map((row, i) => (
                               <div key={i} className="flex items-center gap-2">
-                                <span className="text-[11px] text-emerald-200/60 w-8 shrink-0">
+                                <span className="text-[11px] text-[color:var(--sec-muted)] w-8 shrink-0">
                                   {i === 0 ? "1st" : i === 1 ? "2nd" : i === 2 ? "3rd" : `${i + 1}th`}
                                 </span>
                                 <NumberField
@@ -4800,13 +4800,13 @@ export default function EventDetailClient({
                                     );
                                     setEditPotForm((f) => f && { ...f, prize_table: updated });
                                   }}
-                                  className="w-20 rounded-lg border border-emerald-900/60 bg-[#0b3b21]/60 px-2 py-1 text-sm text-emerald-50 text-center focus:outline-none"
+                                  className="w-20 rounded-lg border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-2 py-1 text-sm text-[color:var(--sec-text)] text-center focus:outline-none"
                                 />
-                                <span className="text-[11px] text-emerald-200/40">%</span>
+                                <span className="text-[11px] text-[color:var(--sec-muted)]">%</span>
                                 <button
                                   type="button"
                                   onClick={() => setEditPotForm((f) => f && { ...f, prize_table: f.prize_table.filter((_, j) => j !== i) })}
-                                  className="ml-auto text-emerald-200/30 hover:text-red-400 text-sm"
+                                  className="ml-auto text-[color:var(--sec-muted)] hover:text-[color:var(--sec-bad)] text-sm"
                                 >✕</button>
                               </div>
                             ))}
@@ -4814,7 +4814,7 @@ export default function EventDetailClient({
                               const total = editPotForm.prize_table.reduce((s, r) => s + r.pct, 0);
                               const remainder = 100 - total;
                               return (
-                                <div className={`text-[10px] font-semibold ${total <= 100 ? "text-emerald-400" : "text-red-400"}`}>
+                                <div className={`text-[10px] font-semibold ${total <= 100 ? "text-[color:var(--sec-good)]" : "text-[color:var(--sec-bad)]"}`}>
                                   Paying out: {total}%{remainder > 0 ? ` · ${remainder}% retained by group` : ""}
                                   {total > 100 && " (over 100%)"}
                                 </div>
@@ -4823,7 +4823,7 @@ export default function EventDetailClient({
                             <button
                               type="button"
                               onClick={() => setEditPotForm((f) => f && { ...f, prize_table: [...f.prize_table, { position: f.prize_table.length + 1, pct: 0 }] })}
-                              className="text-[11px] text-emerald-300/60 hover:text-emerald-300"
+                              className="text-[11px] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-good)]"
                             >
                               + Add position
                             </button>
@@ -4883,13 +4883,13 @@ export default function EventDetailClient({
                         <button
                           type="button"
                           onClick={() => setEditPotForm((f) => f && { ...f, is_mandatory: !f.is_mandatory })}
-                          className="flex items-center justify-between w-full py-2 px-2 rounded-lg border border-emerald-900/40 hover:bg-emerald-900/20"
+                          className="flex items-center justify-between w-full py-2 px-2 rounded-lg border border-[color:var(--sec-hair)] hover:bg-[color:var(--sec-surface-2)]"
                         >
                           <div className="text-left">
-                            <div className="text-[11px] font-semibold text-emerald-100">Mandatory</div>
-                            <div className="text-[10px] text-emerald-200/40">Players are auto-enrolled when joining this event</div>
+                            <div className="text-[11px] font-semibold text-[color:var(--sec-text)]">Mandatory</div>
+                            <div className="text-[10px] text-[color:var(--sec-muted)]">Players are auto-enrolled when joining this event</div>
                           </div>
-                          <div className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${editPotForm.is_mandatory ? "bg-emerald-600" : "bg-emerald-900/50"}`}>
+                          <div className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${editPotForm.is_mandatory ? "bg-[color:var(--sec-primary)]" : "bg-[color:var(--sec-surface)]"}`}>
                             <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${editPotForm.is_mandatory ? "translate-x-5" : ""}`} />
                           </div>
                         </button>
@@ -4897,7 +4897,7 @@ export default function EventDetailClient({
                           <button
                             type="button"
                             onClick={() => { setEditPotId(null); setEditPotForm(null); setPotError(null); }}
-                            className="flex-1 py-1.5 rounded-full border border-emerald-900/60 text-[11px] text-emerald-200/60"
+                            className="flex-1 py-1.5 rounded-full border border-[color:var(--sec-hair)] text-[11px] text-[color:var(--sec-muted)]"
                           >
                             Cancel
                           </button>
@@ -4909,7 +4909,7 @@ export default function EventDetailClient({
                               !editPotForm.name.trim() ||
                               (editPotForm.distribution_type === "position_based" && editPotForm.prize_table.reduce((s, r) => s + r.pct, 0) > 100)
                             }
-                            className="flex-1 py-1.5 rounded-full bg-emerald-700 text-[11px] font-semibold text-white disabled:opacity-50"
+                            className="flex-1 py-1.5 rounded-full bg-[color:var(--sec-primary)] text-[11px] font-semibold text-white disabled:opacity-50"
                           >
                             {savingPot ? "Saving…" : "Save Changes"}
                           </button>
@@ -4919,21 +4919,21 @@ export default function EventDetailClient({
 
                     {/* Proposed distribution banner */}
                     {proposedDistribution?.potId === pot.id && (
-                      <div className="border-t border-emerald-900/50 px-3 py-3 space-y-2 bg-amber-950/20">
+                      <div className="border-t border-[color:var(--sec-hair)] px-3 py-3 space-y-2 bg-amber-950/20">
                         <div className="text-[10px] font-semibold text-amber-200/80 uppercase tracking-wider">
                           Proposed Distribution — {currencySymbol}{proposedDistribution.total_pot.toFixed(2)} total
                         </div>
                         <div className="space-y-1">
                           {proposedDistribution.proposed.map((p, i) => (
                             <div key={i} className="flex items-center justify-between text-[11px]">
-                              <span className="text-emerald-200/80">
+                              <span className="text-[color:var(--sec-muted)]">
                                 {p.position ? `${p.position}. ` : ""}{p.profile?.name ?? p.profile_id}
                               </span>
                               <div className="text-right">
-                                <span className="text-[#f5e6b0] font-semibold">
+                                <span className="text-[color:var(--sec-accent)] font-semibold">
                                   {p.amount != null ? `${currencySymbol}${p.amount.toFixed(2)}` : pot.prize_description ?? "Prize"}
                                 </span>
-                                <span className="text-emerald-200/30 ml-1.5 text-[9px]">{p.note}</span>
+                                <span className="text-[color:var(--sec-muted)] ml-1.5 text-[9px]">{p.note}</span>
                               </div>
                             </div>
                           ))}
@@ -4942,7 +4942,7 @@ export default function EventDetailClient({
                           <button
                             type="button"
                             onClick={() => setProposedDistribution(null)}
-                            className="flex-1 py-1.5 rounded-full border border-emerald-900/60 text-[11px] text-emerald-200/60"
+                            className="flex-1 py-1.5 rounded-full border border-[color:var(--sec-hair)] text-[11px] text-[color:var(--sec-muted)]"
                           >
                             Cancel
                           </button>
@@ -4960,20 +4960,20 @@ export default function EventDetailClient({
 
                     {/* Expanded: entries + payouts */}
                     {isExpanded && (
-                      <div className="border-t border-emerald-900/50 px-3 py-2.5 space-y-2">
+                      <div className="border-t border-[color:var(--sec-hair)] px-3 py-2.5 space-y-2">
                         {pot.entries.length > 0 && (
                           <>
-                            <div className="text-[10px] text-emerald-200/40 font-semibold uppercase tracking-wider">Enrolled ({pot.entries.length})</div>
+                            <div className="text-[10px] text-[color:var(--sec-muted)] font-semibold uppercase tracking-wider">Enrolled ({pot.entries.length})</div>
                             <div className="space-y-1">
                               {pot.entries.map((e) => (
                                 <div key={e.id} className="flex items-center justify-between text-[11px]">
-                                  <span className="text-emerald-200/80">{e.profile.name}</span>
+                                  <span className="text-[color:var(--sec-muted)]">{e.profile.name}</span>
                                   <div className="flex items-center gap-2 text-right">
                                     {e.metric_value != null && (
                                       <span className="text-purple-300/70">{e.metric_value} {pot.metric_type === "twos" ? "two's" : "pts"}</span>
                                     )}
                                     {pot.entry_fee_amount && pot.entry_fee_amount > 0 && (
-                                      <span className="text-emerald-200/50">{currencySymbol}{e.amount_contributed.toFixed(2)}</span>
+                                      <span className="text-[color:var(--sec-muted)]">{currencySymbol}{e.amount_contributed.toFixed(2)}</span>
                                     )}
                                   </div>
                                 </div>
@@ -4983,12 +4983,12 @@ export default function EventDetailClient({
                         )}
                         {pot.payouts.length > 0 && (
                           <>
-                            <div className="text-[10px] text-emerald-200/40 font-semibold uppercase tracking-wider mt-2">Payouts</div>
+                            <div className="text-[10px] text-[color:var(--sec-muted)] font-semibold uppercase tracking-wider mt-2">Payouts</div>
                             <div className="space-y-1">
                               {pot.payouts.map((p) => (
                                 <div key={p.id} className="flex items-center justify-between text-[11px]">
-                                  <span className="text-emerald-200/80">{p.position ? `${p.position}. ` : ""}{p.profile.name}</span>
-                                  <span className="text-[#f5e6b0] font-semibold">
+                                  <span className="text-[color:var(--sec-muted)]">{p.position ? `${p.position}. ` : ""}{p.profile.name}</span>
+                                  <span className="text-[color:var(--sec-accent)] font-semibold">
                                     {p.amount != null ? `${currencySymbol}${p.amount.toFixed(2)}` : (pot.prize_description ?? "Prize")}
                                   </span>
                                 </div>
@@ -5004,8 +5004,8 @@ export default function EventDetailClient({
 
               {/* Add Prize Pot form */}
               {addPotForm && (
-                <div className="rounded-xl border border-emerald-700/40 bg-[#0b3b21]/50 px-3 py-3 space-y-2">
-                  <div className="text-[11px] font-semibold text-emerald-200">New Prize Pot</div>
+                <div className="rounded-xl border border-[color:var(--sec-line)] bg-[color:color-mix(in_srgb,var(--sec-surface)_50%,transparent)] px-3 py-3 space-y-2">
+                  <div className="text-[11px] font-semibold text-[color:var(--sec-text-2)]">New Prize Pot</div>
                   <input
                     type="text"
                     placeholder="Name (e.g. Two's Club, Season FedEx Pot)"
@@ -5029,18 +5029,18 @@ export default function EventDetailClient({
 
                   {/* Winner Takes All info */}
                   {addPotForm.distribution_type === "winner_takes_all" && (
-                    <div className="rounded-xl border border-emerald-900/40 bg-emerald-950/20 px-3 py-2">
-                      <div className="text-[11px] text-emerald-200/60">100% of the pot goes to 1st place.</div>
+                    <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-3 py-2">
+                      <div className="text-[11px] text-[color:var(--sec-muted)]">100% of the pot goes to 1st place.</div>
                     </div>
                   )}
 
                   {/* Position-based prize table editor */}
                   {addPotForm.distribution_type === "position_based" && (
-                    <div className="rounded-xl border border-emerald-900/40 bg-emerald-950/20 px-3 py-2 space-y-2">
-                      <div className="text-[10px] uppercase text-emerald-200/50">Payout Percentages</div>
+                    <div className="rounded-xl border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-3 py-2 space-y-2">
+                      <div className="text-[10px] uppercase text-[color:var(--sec-muted)]">Payout Percentages</div>
                       {addPotForm.prize_table.map((row, i) => (
                         <div key={i} className="flex items-center gap-2">
-                          <span className="text-[11px] text-emerald-200/60 w-8 shrink-0">
+                          <span className="text-[11px] text-[color:var(--sec-muted)] w-8 shrink-0">
                             {i === 0 ? "1st" : i === 1 ? "2nd" : i === 2 ? "3rd" : `${i + 1}th`}
                           </span>
                           <NumberField
@@ -5056,13 +5056,13 @@ export default function EventDetailClient({
                               );
                               setAddPotForm((f) => f && { ...f, prize_table: updated });
                             }}
-                            className="w-20 rounded-lg border border-emerald-900/60 bg-[#0b3b21]/60 px-2 py-1 text-sm text-emerald-50 text-center focus:outline-none"
+                            className="w-20 rounded-lg border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-2 py-1 text-sm text-[color:var(--sec-text)] text-center focus:outline-none"
                           />
-                          <span className="text-[11px] text-emerald-200/40">%</span>
+                          <span className="text-[11px] text-[color:var(--sec-muted)]">%</span>
                           <button
                             type="button"
                             onClick={() => setAddPotForm((f) => f && { ...f, prize_table: f.prize_table.filter((_, j) => j !== i) })}
-                            className="ml-auto text-emerald-200/30 hover:text-red-400 text-sm"
+                            className="ml-auto text-[color:var(--sec-muted)] hover:text-[color:var(--sec-bad)] text-sm"
                           >✕</button>
                         </div>
                       ))}
@@ -5070,7 +5070,7 @@ export default function EventDetailClient({
                         const total = addPotForm.prize_table.reduce((s, r) => s + r.pct, 0);
                         const remainder = 100 - total;
                         return (
-                          <div className={`text-[10px] font-semibold ${total <= 100 ? "text-emerald-400" : "text-red-400"}`}>
+                          <div className={`text-[10px] font-semibold ${total <= 100 ? "text-[color:var(--sec-good)]" : "text-[color:var(--sec-bad)]"}`}>
                             Paying out: {total}%{remainder > 0 ? ` · ${remainder}% retained by group` : ""}
                             {total > 100 && " (over 100%)"}
                           </div>
@@ -5079,7 +5079,7 @@ export default function EventDetailClient({
                       <button
                         type="button"
                         onClick={() => setAddPotForm((f) => f && { ...f, prize_table: [...f.prize_table, { position: f.prize_table.length + 1, pct: 0 }] })}
-                        className="text-[11px] text-emerald-300/60 hover:text-emerald-300"
+                        className="text-[11px] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-good)]"
                       >
                         + Add position
                       </button>
@@ -5140,23 +5140,23 @@ export default function EventDetailClient({
                   <button
                     type="button"
                     onClick={() => setAddPotForm((f) => f && { ...f, is_mandatory: !f.is_mandatory })}
-                    className="flex items-center justify-between w-full py-2 px-2 rounded-lg border border-emerald-900/40 hover:bg-emerald-900/20"
+                    className="flex items-center justify-between w-full py-2 px-2 rounded-lg border border-[color:var(--sec-hair)] hover:bg-[color:var(--sec-surface-2)]"
                   >
                     <div className="text-left">
-                      <div className="text-[11px] font-semibold text-emerald-100">Mandatory</div>
-                      <div className="text-[10px] text-emerald-200/40">Players are auto-enrolled when joining this event</div>
+                      <div className="text-[11px] font-semibold text-[color:var(--sec-text)]">Mandatory</div>
+                      <div className="text-[10px] text-[color:var(--sec-muted)]">Players are auto-enrolled when joining this event</div>
                     </div>
-                    <div className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${addPotForm.is_mandatory ? "bg-emerald-600" : "bg-emerald-900/50"}`}>
+                    <div className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${addPotForm.is_mandatory ? "bg-[color:var(--sec-primary)]" : "bg-[color:var(--sec-surface)]"}`}>
                       <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${addPotForm.is_mandatory ? "translate-x-5" : ""}`} />
                     </div>
                   </button>
                   <div className="flex gap-2">
                     <button type="button" onClick={() => { setAddPotForm(null); setPotError(null); }}
-                      className="flex-1 py-1.5 rounded-full border border-emerald-900/60 text-[11px] text-emerald-200/60">
+                      className="flex-1 py-1.5 rounded-full border border-[color:var(--sec-hair)] text-[11px] text-[color:var(--sec-muted)]">
                       Cancel
                     </button>
                     <button type="button" onClick={handleAddPot} disabled={addingPot}
-                      className="flex-1 py-1.5 rounded-full bg-emerald-700 text-[11px] font-semibold text-white disabled:opacity-50">
+                      className="flex-1 py-1.5 rounded-full bg-[color:var(--sec-primary)] text-[11px] font-semibold text-white disabled:opacity-50">
                       {addingPot ? "Creating…" : "Create Prize Pot"}
                     </button>
                   </div>
@@ -5188,17 +5188,17 @@ export default function EventDetailClient({
                 {proposedWinnings.map((pw) => (
                   <div key={pw.profile_id} className="flex items-center gap-3">
                     <PositionBadge position={pw.position} />
-                    <span className="flex-1 text-sm text-emerald-50">{pw.profile?.name ?? "?"}</span>
-                    <span className="text-sm font-bold text-[#f5e6b0]">£{pw.amount.toFixed(2)}</span>
+                    <span className="flex-1 text-sm text-[color:var(--sec-text)]">{pw.profile?.name ?? "?"}</span>
+                    <span className="text-sm font-bold text-[color:var(--sec-accent)]">£{pw.amount.toFixed(2)}</span>
                   </div>
                 ))}
                 <div className="flex gap-2 pt-1">
                   <button type="button" onClick={() => setProposedWinnings(null)}
-                    className="flex-1 py-2 rounded-full border border-emerald-900/60 text-[11px] text-emerald-200/60">
+                    className="flex-1 py-2 rounded-full border border-[color:var(--sec-hair)] text-[11px] text-[color:var(--sec-muted)]">
                     Cancel
                   </button>
                   <button type="button" onClick={handleConfirmWinnings}
-                    className="flex-1 py-2 rounded-full bg-emerald-700 text-[11px] font-semibold text-white">
+                    className="flex-1 py-2 rounded-full bg-[color:var(--sec-primary)] text-[11px] font-semibold text-white">
                     Confirm & Record
                   </button>
                 </div>
@@ -5209,21 +5209,21 @@ export default function EventDetailClient({
 
         {/* Winnings list */}
         {winnings.length === 0 ? (
-          <div className="text-sm text-emerald-100/60 text-center py-8">No winnings recorded yet.</div>
+          <div className="text-sm text-[color:var(--sec-muted)] text-center py-8">No winnings recorded yet.</div>
         ) : (
           <div className="space-y-2">
             {winnings.map((w) => (
-              <div key={w.id} className="flex items-center gap-3 rounded-xl border border-emerald-900/50 bg-[#0b3b21]/60 px-3 py-2.5">
+              <div key={w.id} className="flex items-center gap-3 rounded-xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_60%,transparent)] px-3 py-2.5">
                 <PositionBadge position={w.position ?? null} />
                 {w.profile?.avatar_url ? (
                   <img src={w.profile.avatar_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" loading="lazy" decoding="async" />
                 ) : (
-                  <div className="h-7 w-7 rounded-full bg-emerald-900/60 grid place-items-center text-[10px] font-bold text-emerald-200 shrink-0">
+                  <div className="h-7 w-7 rounded-full bg-[color:var(--sec-surface)] grid place-items-center text-[10px] font-bold text-[color:var(--sec-text-2)] shrink-0">
                     {w.profile?.name?.slice(0, 2).toUpperCase() ?? "?"}
                   </div>
                 )}
-                <span className="flex-1 text-sm font-semibold text-emerald-50">{w.profile?.name ?? "Unknown"}</span>
-                <span className="text-sm font-bold text-[#f5e6b0]">£{w.amount.toFixed(2)}</span>
+                <span className="flex-1 text-sm font-semibold text-[color:var(--sec-text)]">{w.profile?.name ?? "Unknown"}</span>
+                <span className="text-sm font-bold text-[color:var(--sec-accent)]">£{w.amount.toFixed(2)}</span>
               </div>
             ))}
           </div>
@@ -5236,7 +5236,7 @@ export default function EventDetailClient({
   if (loading) {
     return (
       <div className="min-h-[100dvh] flex items-center justify-center">
-        <div className="text-sm text-emerald-100/60">Loading…</div>
+        <div className="text-sm text-[color:var(--sec-muted)]">Loading…</div>
       </div>
     );
   }
@@ -5244,8 +5244,8 @@ export default function EventDetailClient({
   if (!event) {
     return (
       <div className="min-h-[100dvh] flex flex-col items-center justify-center gap-4 px-4">
-        <div className="text-sm text-emerald-100/60">Event not found.</div>
-        <button type="button" onClick={() => router.push("/majors")} className="text-sm text-emerald-200 underline">
+        <div className="text-sm text-[color:var(--sec-muted)]">Event not found.</div>
+        <button type="button" onClick={() => router.push("/majors")} className="text-sm text-[color:var(--sec-text-2)] underline">
           Back to Hub
         </button>
       </div>
@@ -5265,7 +5265,7 @@ export default function EventDetailClient({
               router.back();
             }
           }}
-          className="text-[11px] text-emerald-100/70 hover:text-emerald-50"
+          className="text-[11px] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
         >
           ← Back
         </button>
@@ -5278,7 +5278,7 @@ export default function EventDetailClient({
           <button
             type="button"
             onClick={() => router.push(`/majors/groups/${event.group!.id}`)}
-            className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-emerald-200/55 hover:text-emerald-200 border border-emerald-900/50 rounded-full px-2.5 py-1 transition-colors"
+            className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text-2)] border border-[color:var(--sec-hair)] rounded-full px-2.5 py-1 transition-colors"
           >
             {event.group.name}
             {event.group.ciaga_tag !== "none" && (
@@ -5286,18 +5286,18 @@ export default function EventDetailClient({
             )}
           </button>
         )}
-        <h1 className="text-xl font-bold text-[#f5e6b0] leading-tight">{event.name}</h1>
+        <h1 className="text-xl font-bold text-[color:var(--sec-accent)] leading-tight">{event.name}</h1>
         <div className="flex items-center gap-2 flex-wrap">
           <span className={`text-[10px] font-medium px-2.5 py-1 rounded-full border capitalize ${statusColour}`}>
             {event.majors_status}
           </span>
           {event.event_date && (
-            <span className="text-[11px] text-emerald-100/60">
+            <span className="text-[11px] text-[color:var(--sec-muted)]">
               {new Date(event.event_date).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })}
             </span>
           )}
           {event.course && (
-            <span className="text-[11px] text-emerald-100/60">· {event.course.name}</span>
+            <span className="text-[11px] text-[color:var(--sec-muted)]">· {event.course.name}</span>
           )}
         </div>
       </div>
@@ -5312,8 +5312,8 @@ export default function EventDetailClient({
               onClick={() => setTab(t.id)}
               className={`shrink-0 px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
                 tab === t.id
-                  ? "bg-emerald-700 text-white"
-                  : "border border-emerald-900/60 text-emerald-200/70 hover:text-emerald-50"
+                  ? "bg-[color:var(--sec-primary)] text-white"
+                  : "border border-[color:var(--sec-hair)] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
               }`}
             >
               {t.label}
@@ -5391,7 +5391,7 @@ export default function EventDetailClient({
               </div>
               <div className="p-4 flex gap-2">
                 <button
-                  className="flex-1 rounded-2xl border border-emerald-900/70 bg-[#0b3b21]/40 text-emerald-50 py-3 text-sm hover:bg-emerald-900/20"
+                  className="flex-1 rounded-2xl border border-[color:var(--sec-hair)] bg-[color:color-mix(in_srgb,var(--sec-surface)_40%,transparent)] text-[color:var(--sec-text)] py-3 text-sm hover:bg-[color:var(--sec-surface-2)]"
                   onClick={() => setShowWithdrawConfirm(false)}
                   disabled={withdrawing}
                 >

@@ -58,8 +58,8 @@ export function WeekendsGridView(props: {
     >
       {/* Header row */}
       <div />
-      <div className="text-center text-[9px] uppercase tracking-wide text-emerald-200/50">Sat</div>
-      <div className="text-center text-[9px] uppercase tracking-wide text-emerald-200/50">Sun</div>
+      <div className="text-center text-[9px] uppercase tracking-wide text-[color:var(--sec-muted)]">Sat</div>
+      <div className="text-center text-[9px] uppercase tracking-wide text-[color:var(--sec-muted)]">Sun</div>
 
       {/* One row per week: label + Sat + Sun */}
       {weeks.map((week, i) => {
@@ -67,7 +67,7 @@ export function WeekendsGridView(props: {
         const sun = week[6];
         return (
           <FragmentRow key={i}>
-            <div className="flex items-center justify-end pr-0.5 text-[9px] uppercase tracking-wide text-emerald-200/50">
+            <div className="flex items-center justify-end pr-0.5 text-[9px] uppercase tracking-wide text-[color:var(--sec-muted)]">
               {weekLabel(week[0])}
             </div>
             <DayCell
