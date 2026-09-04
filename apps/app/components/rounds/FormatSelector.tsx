@@ -21,7 +21,8 @@ export type RoundFormatType =
 // re-exported here so the existing import sites don't have to move.
 export { TEAM_FORMATS, isTeamFormat } from "@/lib/rounds/formatScoring";
 
-const FORMAT_LABELS: Record<RoundFormatType, string> = {
+/** Exported so the handicap calculator names formats identically to setup. */
+export const FORMAT_LABELS: Record<RoundFormatType, string> = {
   strokeplay: "Stroke Play",
   stableford: "Stableford",
   matchplay: "Match Play",

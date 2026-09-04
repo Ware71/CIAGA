@@ -1,52 +1,56 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { X } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { CourseBrowser } from "@/components/courses/CourseBrowser";
+import {
+  TeePickerSheet,
+  teeHolesCount,
+  type TeeOption,
+} from "@/components/courses/TeePickerSheet";
 import { PeoplePicker, type Person } from "@/components/people/PeoplePicker";
 import { Figures, Group, Hero, PageHeader, Row } from "@/components/ui/chrome";
 import { calcCourseHandicap } from "@/lib/rounds/setupHelpers";
 import { getWhsDefaultPolicy } from "@/lib/rounds/whsDefaults";
 import { resolvePlayingHandicapPreview } from "@/lib/rounds/playingHandicapPreview";
+import {
+  calcTeamHandicap,
+  isSingleBallFormat,
+  teamHandicapDescription,
+} from "@/lib/rounds/teamHandicap";
+import { isTeamFormat } from "@/lib/rounds/formatScoring";
 import { scoreDifferential } from "@/lib/whs/scoreDifferential";
-import type { RoundFormatType } from "@/components/rounds/FormatSelector";
-import { X } from "lucide-react";
+import { FORMAT_LABELS, type RoundFormatType } from "@/components/rounds/FormatSelector";
+import { cn } from "@/lib/utils";
 
 /**
  * Course and playing handicap for any tee, for you and whoever you're playing.
  *
  * None of the arithmetic lives here. Course handicap comes from
  * calcCourseHandicap, the playing handicap from resolvePlayingHandicapPreview
- * (which mirrors the SQL resolver), the allowance from getWhsDefaultPolicy, and
- * the differential from scoreDifferential. This screen used to carry its own
- * allowance table — a fourth copy, disagreeing with the three real ones — and a
- * hand-typed slope and rating. Both are gone: you pick a format and a tee.
+ * (which mirrors the SQL resolver), the team handicap from calcTeamHandicap
+ * (shared with the round-start route), the allowance seed from
+ * getWhsDefaultPolicy, and the differential from scoreDifferential. This screen
+ * used to carry its own allowance table — a fourth copy, disagreeing with the
+ * three real ones — and a hand-typed slope and rating.
  *
- * Picking a format rather than a bare percentage is what lets matchplay work at
- * all. Its WHS answer is "off the lowest", which no flat percentage can express.
+ * Format drives the allowance rather than the other way round, which is what
+ * lets matchplay work at all: its WHS answer is "off the lowest", and no flat
+ * percentage can express that. The percentage is still editable, because the
+ * WHS figures are recommendations and societies vary them.
  */
 
-/** Formats worth offering here — the ones a player computes a handicap for. */
-const FORMATS: { key: RoundFormatType; label: string }[] = [
-  { key: "strokeplay", label: "Strokeplay" },
-  { key: "stableford", label: "Stableford" },
-  { key: "matchplay", label: "Matchplay" },
-  { key: "pairs_stableford", label: "Pairs" },
-  { key: "team_bestball", label: "Fourball" },
-  { key: "foursomes", label: "Foursomes" },
+const SINGLES: RoundFormatType[] = ["strokeplay", "stableford", "matchplay"];
+const TEAMS: RoundFormatType[] = [
+  "pairs_stableford",
+  "team_strokeplay",
+  "team_stableford",
+  "team_bestball",
+  "scramble",
+  "greensomes",
+  "foursomes",
 ];
-
-type TeeBox = {
-  id: string;
-  name: string | null;
-  gender: string | null;
-  rating: number | null;
-  slope: number | null;
-  par: number | null;
-  yards: number | null;
-  holes_count: number | null;
-  sort_order: number | null;
-};
 
 type PlayerRow = {
   id: string;
@@ -54,6 +58,7 @@ type PlayerRow = {
   handicapIndex: number | null;
   courseHandicap: number | null;
   playingHandicap: number | null;
+  teamIndex: number;
 };
 
 function parseNum(v: string): number | null {
@@ -71,6 +76,32 @@ function num(v: unknown): number | null {
   if (v === null || v === undefined) return null;
   const n = typeof v === "number" ? v : Number(v);
   return Number.isFinite(n) ? n : null;
+}
+
+function Chip({
+  on,
+  onClick,
+  children,
+}: {
+  on: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      className={cn(
+        "rounded-full px-3 py-1.5 text-[length:var(--t-sec)] transition-colors",
+        on
+          ? "bg-[color:var(--sec-accent)] font-medium text-[color:var(--ciaga-ground)]"
+          : "border border-[color:var(--sec-hair)] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
+      )}
+    >
+      {children}
+    </button>
+  );
 }
 
 function Field({
@@ -113,12 +144,17 @@ export default function HandicapCalculatorClient() {
   const [holes, setHoles] = useState<9 | 18>(18);
 
   const [courseName, setCourseName] = useState<string | null>(null);
-  const [teeBoxes, setTeeBoxes] = useState<TeeBox[]>([]);
+  const [teeBoxes, setTeeBoxes] = useState<TeeOption[]>([]);
   const [teeId, setTeeId] = useState<string | null>(null);
-  const [pickerOpen, setPickerOpen] = useState(false);
+  const [teeName, setTeeName] = useState<string | null>(null);
+  const [coursePickerOpen, setCoursePickerOpen] = useState(false);
+  const [teePickerOpen, setTeePickerOpen] = useState(false);
   const [teeLoading, setTeeLoading] = useState(false);
 
+  const [tab, setTab] = useState<"singles" | "teams">("singles");
   const [format, setFormat] = useState<RoundFormatType>("strokeplay");
+  /** null = follow the format's WHS default; a number = the user overrode it. */
+  const [allowanceOverride, setAllowanceOverride] = useState<number | null>(null);
 
   const [myIndex, setMyIndex] = useState<number | null>(null);
   const [myId, setMyId] = useState<string | null>(null);
@@ -127,6 +163,9 @@ export default function HandicapCalculatorClient() {
 
   const [friends, setFriends] = useState<Person[]>([]);
   const [friendIndexes, setFriendIndexes] = useState<Record<string, number | null>>({});
+  /** playerId → team index. Everyone starts on team 1. */
+  const [teamOf, setTeamOf] = useState<Record<string, number>>({});
+  const [teamCount, setTeamCount] = useState(2);
 
   const [ags, setAgs] = useState("");
 
@@ -176,7 +215,43 @@ export default function HandicapCalculatorClient() {
     };
   }, [friends]);
 
-  /** Tees for a chosen course, sorted and filtered the way round setup does. */
+  /**
+   * Keep team assignments sane as the party and the team count change.
+   *
+   * New players are dealt to the smallest team rather than all piling onto team
+   * one, so a fourball splits 2–2 without anyone dragging chips around. And
+   * dropping the team count would otherwise strand players on an index that no
+   * longer renders — they'd vanish from the builder while still counting.
+   */
+  useEffect(() => {
+    const ids = [myId ?? "me", ...friends.map((f) => f.id)];
+    setTeamOf((prev) => {
+      const next: Record<string, number> = {};
+      const sizes = new Array(teamCount).fill(0);
+
+      for (const id of ids) {
+        const existing = prev[id];
+        if (typeof existing === "number" && existing < teamCount) {
+          next[id] = existing;
+          sizes[existing] += 1;
+        }
+      }
+      for (const id of ids) {
+        if (id in next) continue;
+        let smallest = 0;
+        for (let i = 1; i < teamCount; i++) if (sizes[i] < sizes[smallest]) smallest = i;
+        next[id] = smallest;
+        sizes[smallest] += 1;
+      }
+
+      const unchanged =
+        Object.keys(next).length === Object.keys(prev).length &&
+        ids.every((id) => prev[id] === next[id]);
+      return unchanged ? prev : next;
+    });
+  }, [myId, friends, teamCount]);
+
+  /** Tees for a chosen course. */
   const loadTees = useCallback(async (courseId: string) => {
     setTeeLoading(true);
     try {
@@ -185,9 +260,11 @@ export default function HandicapCalculatorClient() {
       // Already sorted hardest-first (rating, slope, yards, name) by the route,
       // so no re-sort here — and a client-side one would compare `numeric`
       // columns that can arrive as strings.
-      const boxes: TeeBox[] = Array.isArray(json?.tee_boxes) ? json.tee_boxes : [];
+      const boxes: TeeOption[] = Array.isArray(json?.tee_boxes) ? json.tee_boxes : [];
       setTeeBoxes(boxes);
-      const first = boxes[0];
+      // Default to the first full-18 tee rather than whatever sorts first, which
+      // is often a synthetic front-nine row.
+      const first = boxes.find((t) => teeHolesCount(t) === 18) ?? boxes[0];
       if (first) applyTee(first);
     } catch {
       setTeeBoxes([]);
@@ -196,20 +273,29 @@ export default function HandicapCalculatorClient() {
     }
   }, []);
 
-  function applyTee(tee: TeeBox) {
+  function applyTee(tee: TeeOption) {
     setTeeId(tee.id);
+    setTeeName(tee.name ?? "Tee");
     const s = num(tee.slope);
     const r = num(tee.rating);
     const p = num(tee.par);
     if (s !== null) setSlope(String(s));
     if (r !== null) setRating(String(r));
     if (p !== null) setPar(String(p));
-    // A tee named "(Front 9)" / "(Back 9)" carries 9-hole figures.
-    const nine = tee.holes_count === 9 || /\((front|back) 9\)/i.test(tee.name ?? "");
-    setHoles(nine ? 9 : 18);
+    setHoles(teeHolesCount(tee) === 9 ? 9 : 18);
   }
 
   const policy = useMemo(() => getWhsDefaultPolicy(format), [format]);
+  /** The percentage actually applied — the override if set, else the WHS seed. */
+  const allowance = allowanceOverride ?? policy.allowance_pct;
+  const overridden = allowanceOverride !== null && allowanceOverride !== policy.allowance_pct;
+
+  function chooseFormat(next: RoundFormatType) {
+    setFormat(next);
+    // Auto-update: a new format brings its own WHS allowance, so a percentage
+    // typed for the previous one would silently carry over and be wrong.
+    setAllowanceOverride(null);
+  }
 
   const teeReady = useMemo(() => {
     const s = parseNum(slope);
@@ -218,13 +304,17 @@ export default function HandicapCalculatorClient() {
     return s !== null && s > 0 && r !== null && p !== null ? { s, r, p } : null;
   }, [slope, rating, par]);
 
+  const isTeams = isTeamFormat(format);
+  const singleBall = isSingleBallFormat(format);
+
   /** Everyone in the party, with their handicaps at this tee. */
   const rows = useMemo<PlayerRow[]>(() => {
     const manual = parseNum(manualHi);
     const mine = manual ?? myIndex;
+    const meKey = myId ?? "me";
 
     const people: { id: string; name: string; hi: number | null }[] = [
-      { id: myId ?? "me", name: myName, hi: mine },
+      { id: meKey, name: myName, hi: mine },
       ...friends.map((f) => ({
         id: f.id,
         name: f.name ?? "Player",
@@ -253,13 +343,29 @@ export default function HandicapCalculatorClient() {
       playingHandicap: resolvePlayingHandicapPreview({
         courseHandicap: p.ch,
         mode: policy.mode,
-        value: policy.allowance_pct,
+        value: allowance,
         lowestCourseHandicap: lowest,
       }),
+      teamIndex: teamOf[p.id] ?? 0,
     }));
-  }, [myId, myName, myIndex, manualHi, friends, friendIndexes, teeReady, holes, policy]);
+  }, [myId, myName, myIndex, manualHi, friends, friendIndexes, teeReady, holes, policy, allowance, teamOf]);
 
   const me = rows[0];
+
+  /** Per-team handicaps, for the three single-ball formats only. */
+  const teams = useMemo(() => {
+    if (!isTeams) return [];
+    return Array.from({ length: teamCount }, (_, i) => {
+      const members = rows.filter((r) => r.teamIndex === i);
+      return {
+        index: i,
+        members,
+        handicap: singleBall
+          ? calcTeamHandicap(format, members.map((m) => m.courseHandicap))
+          : null,
+      };
+    });
+  }, [isTeams, teamCount, rows, singleBall, format]);
 
   const differential = useMemo(() => {
     const a = parseNum(ags);
@@ -269,8 +375,15 @@ export default function HandicapCalculatorClient() {
 
   const allowanceLabel =
     policy.mode === "compare_against_lowest"
-      ? "Off the lowest handicap"
-      : `${policy.allowance_pct}% of course handicap`;
+      ? `Off the lowest handicap, at ${allowance}%`
+      : `${allowance}% of course handicap`;
+
+  const heroFigure = singleBall
+    ? teams[0]?.handicap ?? "—"
+    : me?.playingHandicap ?? "—";
+  const heroCaption = singleBall
+    ? `Team handicap · ${teamHandicapDescription(format, teams[0]?.members.length ?? 2)}`
+    : `Playing handicap · ${allowanceLabel}`;
 
   return (
     <div className="min-h-screen px-4 pb-8">
@@ -283,18 +396,18 @@ export default function HandicapCalculatorClient() {
         />
 
         {/* The answer, first — it's why you opened this. */}
-        <Group label="You" className="mb-2">
+        <Group label={singleBall ? "Your team" : "You"} className="mb-2">
           <Hero
-            figure={me?.playingHandicap ?? "—"}
-            caption={`Playing handicap · ${allowanceLabel}`}
-            sideLabel="Course"
-            sideValue={me?.courseHandicap ?? "—"}
+            figure={heroFigure}
+            caption={heroCaption}
+            sideLabel={singleBall ? "Players" : "Course"}
+            sideValue={singleBall ? teams[0]?.members.length ?? 0 : me?.courseHandicap ?? "—"}
           />
         </Group>
 
         <Group label="Course & tee">
           <Row
-            onClick={() => setPickerOpen(true)}
+            onClick={() => setCoursePickerOpen(true)}
             title={courseName ?? "Choose a course"}
             subtitle={
               teeBoxes.length
@@ -308,29 +421,27 @@ export default function HandicapCalculatorClient() {
             }
           />
 
-          {teeLoading ? (
-            <p className="py-2 text-[length:var(--t-sec)] text-[color:var(--sec-muted)]">
-              Loading tees…
-            </p>
-          ) : teeBoxes.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5 py-2.5">
-              {teeBoxes.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => applyTee(t)}
-                  aria-pressed={teeId === t.id}
-                  className={
-                    teeId === t.id
-                      ? "rounded-full bg-[color:var(--sec-accent)] px-3 py-1.5 text-[length:var(--t-sec)] font-medium text-[color:var(--ciaga-ground)]"
-                      : "rounded-full border border-[color:var(--sec-hair)] px-3 py-1.5 text-[length:var(--t-sec)] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
-                  }
-                >
-                  {t.name ?? "Tee"}
-                </button>
-              ))}
-            </div>
-          ) : null}
+          {/* The tee opens a sheet like the course does. A course routinely has
+              a dozen tees once men's, women's and the synthetic nines are
+              counted, which is too many for a row of chips. */}
+          <Row
+            onClick={teeBoxes.length ? () => setTeePickerOpen(true) : undefined}
+            title={teeName ?? (teeLoading ? "Loading tees…" : "Choose a tee")}
+            subtitle={
+              teeReady
+                ? `CR ${teeReady.r} · SL ${teeReady.s} · Par ${teeReady.p} · ${holes} holes`
+                : teeBoxes.length
+                  ? "Men's and women's, 18 and 9"
+                  : "Pick a course first, or type the numbers below"
+            }
+            trailing={
+              teeBoxes.length ? (
+                <span className="text-[length:var(--t-fig)] leading-none text-[color:var(--sec-muted)]">
+                  ›
+                </span>
+              ) : undefined
+            }
+          />
 
           <div className="grid grid-cols-3 gap-2 py-2.5">
             <Field label="Slope" value={slope} onChange={setSlope} placeholder="113" />
@@ -344,19 +455,9 @@ export default function HandicapCalculatorClient() {
             trailing={
               <span className="flex gap-1.5">
                 {([18, 9] as const).map((h) => (
-                  <button
-                    key={h}
-                    type="button"
-                    onClick={() => setHoles(h)}
-                    aria-pressed={holes === h}
-                    className={
-                      holes === h
-                        ? "rounded-full bg-[color:var(--sec-accent)] px-3 py-1 text-[length:var(--t-sec)] font-medium text-[color:var(--ciaga-ground)]"
-                        : "rounded-full border border-[color:var(--sec-hair)] px-3 py-1 text-[length:var(--t-sec)] text-[color:var(--sec-muted)]"
-                    }
-                  >
+                  <Chip key={h} on={holes === h} onClick={() => setHoles(h)}>
                     {h}
-                  </button>
+                  </Chip>
                 ))}
               </span>
             }
@@ -364,27 +465,161 @@ export default function HandicapCalculatorClient() {
         </Group>
 
         <Group label="Format">
-          <div className="flex flex-wrap gap-1.5 py-2.5">
-            {FORMATS.map((f) => (
+          {/* Singles and teams are different questions — a team format brings a
+              team builder and, for the single-ball three, a team handicap. */}
+          <div className="flex gap-1.5 pt-2.5" role="tablist">
+            {(["singles", "teams"] as const).map((t) => (
               <button
-                key={f.key}
+                key={t}
                 type="button"
-                onClick={() => setFormat(f.key)}
-                aria-pressed={format === f.key}
-                className={
-                  format === f.key
-                    ? "rounded-full bg-[color:var(--sec-accent)] px-3 py-1.5 text-[length:var(--t-sec)] font-medium text-[color:var(--ciaga-ground)]"
-                    : "rounded-full border border-[color:var(--sec-hair)] px-3 py-1.5 text-[length:var(--t-sec)] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
-                }
+                role="tab"
+                aria-selected={tab === t}
+                onClick={() => {
+                  setTab(t);
+                  chooseFormat(t === "singles" ? "strokeplay" : "pairs_stableford");
+                }}
+                className={cn(
+                  "flex-1 rounded-[var(--r-ui)] px-3 py-2 text-[length:var(--t-sec)] font-medium transition-colors",
+                  tab === t
+                    ? "bg-[color:var(--sec-accent)] text-[color:var(--ciaga-ground)]"
+                    : "border border-[color:var(--sec-hair)] text-[color:var(--sec-muted)] hover:text-[color:var(--sec-text)]"
+                )}
               >
-                {f.label}
+                {t === "singles" ? "Singles" : "Teams"}
               </button>
             ))}
           </div>
-          <p className="pb-2.5 text-[length:var(--t-sec)] text-[color:var(--sec-muted)]">
-            {allowanceLabel}. WHS default for this format — the same seed a real round uses.
-          </p>
+
+          <div className="flex flex-wrap gap-1.5 py-2.5">
+            {(tab === "singles" ? SINGLES : TEAMS).map((f) => (
+              <Chip key={f} on={format === f} onClick={() => chooseFormat(f)}>
+                {FORMAT_LABELS[f]}
+              </Chip>
+            ))}
+          </div>
+
+          {/* Editable, but seeded from the format. WHS allowances are
+              recommendations and societies vary them, so the number is a
+              starting point rather than a lock. */}
+          <Row
+            title="Allowance"
+            subtitle={
+              overridden
+                ? `Edited — WHS default for ${FORMAT_LABELS[format]} is ${policy.allowance_pct}%`
+                : allowanceLabel
+            }
+            trailing={
+              <span className="flex items-center gap-2">
+                {overridden ? (
+                  <button
+                    type="button"
+                    onClick={() => setAllowanceOverride(null)}
+                    className="text-[length:var(--t-sec)] text-[color:var(--sec-muted)] underline underline-offset-2 hover:text-[color:var(--sec-text)]"
+                  >
+                    Reset
+                  </button>
+                ) : null}
+                <span className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    max={200}
+                    aria-label="Handicap allowance percentage"
+                    value={String(allowance)}
+                    onChange={(e) => {
+                      const n = parseNum(e.target.value);
+                      setAllowanceOverride(n === null ? null : Math.max(0, Math.min(200, n)));
+                    }}
+                    className="w-[68px] rounded-[var(--r-ui)] border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-2 py-1.5 text-right text-[length:var(--t-body)] tabular-nums text-[color:var(--sec-text)] outline-none focus:border-[color:var(--sec-accent)]"
+                  />
+                  <span className="text-[length:var(--t-body)] text-[color:var(--sec-muted)]">%</span>
+                </span>
+              </span>
+            }
+          />
         </Group>
+
+        {isTeams ? (
+          <Group
+            label="Teams"
+            action={
+              <span className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setTeamCount((c) => Math.max(2, c - 1))}
+                  aria-label="Fewer teams"
+                  className="px-1.5 hover:text-[color:var(--sec-text)]"
+                >
+                  −
+                </button>
+                <span className="tabular-nums">{teamCount}</span>
+                <button
+                  type="button"
+                  onClick={() => setTeamCount((c) => Math.min(4, c + 1))}
+                  aria-label="More teams"
+                  className="px-1.5 hover:text-[color:var(--sec-text)]"
+                >
+                  +
+                </button>
+              </span>
+            }
+          >
+            {teams.map((t) => (
+              <div key={t.index} className="border-b border-[color:var(--hair)] py-2.5 last:border-b-0">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-[length:var(--t-body)] font-medium text-[color:var(--sec-text)]">
+                    Team {t.index + 1}
+                  </span>
+                  {singleBall ? (
+                    <span className="text-[length:var(--t-fig)] font-medium tabular-nums text-[color:var(--sec-accent)]">
+                      {t.handicap ?? "—"}
+                    </span>
+                  ) : null}
+                </div>
+                {singleBall && t.members.length > 0 ? (
+                  <p className="mt-[2px] text-[length:var(--t-label)] text-[color:var(--sec-muted)]">
+                    {teamHandicapDescription(format, t.members.length)}
+                  </p>
+                ) : null}
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {t.members.length === 0 ? (
+                    <span className="text-[length:var(--t-sec)] text-[color:var(--sec-muted)]">
+                      Nobody yet
+                    </span>
+                  ) : (
+                    t.members.map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() =>
+                          setTeamOf((prev) => ({
+                            ...prev,
+                            [m.id]: ((prev[m.id] ?? 0) + 1) % teamCount,
+                          }))
+                        }
+                        title="Move to the next team"
+                        className="rounded-full border border-[color:var(--sec-hair)] bg-[color:var(--sec-surface)] px-2.5 py-1 text-[length:var(--t-sec)] text-[color:var(--sec-text)]"
+                      >
+                        {m.name}
+                        {m.courseHandicap !== null ? (
+                          <span className="ml-1.5 tabular-nums text-[color:var(--sec-muted)]">
+                            {m.courseHandicap}
+                          </span>
+                        ) : null}
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            ))}
+            <p className="py-2 text-[length:var(--t-label)] text-[color:var(--sec-muted)]">
+              {singleBall
+                ? "Tap a player to move them. One ball per team, so the team plays off a weighted handicap."
+                : "Tap a player to move them. Everyone plays their own ball off their own allowance."}
+            </p>
+          </Group>
+        ) : null}
 
         <Group label="Playing with">
           {rows.map((r, i) => (
@@ -393,7 +628,7 @@ export default function HandicapCalculatorClient() {
               title={r.name}
               subtitle={
                 r.handicapIndex !== null
-                  ? `Index ${r.handicapIndex.toFixed(1)}`
+                  ? `Index ${r.handicapIndex.toFixed(1)}${isTeams ? ` · Team ${r.teamIndex + 1}` : ""}`
                   : i === 0
                     ? "No index yet — type one below"
                     : "No index on record"
@@ -414,7 +649,7 @@ export default function HandicapCalculatorClient() {
               selected={friends}
               onChange={setFriends}
               excludeIds={myId ? [myId] : []}
-              max={5}
+              max={7}
               label="Add a playing partner"
             />
           </div>
@@ -436,9 +671,7 @@ export default function HandicapCalculatorClient() {
           <Row
             title="From a gross score"
             subtitle={
-              teeReady
-                ? "(AGS − rating) × 113 ÷ slope"
-                : "Set a tee's rating and slope first"
+              teeReady ? "(AGS − rating) × 113 ÷ slope" : "Set a tee's rating and slope first"
             }
             trailing={
               <span className="text-[length:var(--t-fig)] font-medium tabular-nums text-[color:var(--sec-accent)]">
@@ -447,17 +680,12 @@ export default function HandicapCalculatorClient() {
             }
           />
           <div className="py-2.5">
-            <Field
-              label="Adjusted gross score"
-              value={ags}
-              onChange={setAgs}
-              placeholder="85"
-            />
+            <Field label="Adjusted gross score" value={ags} onChange={setAgs} placeholder="85" />
           </div>
         </Group>
       </div>
 
-      {pickerOpen ? (
+      {coursePickerOpen ? (
         <div className="fixed inset-0 z-50 flex flex-col bg-[color:var(--ciaga-ground)]">
           <div className="mx-auto flex min-h-0 w-full max-w-sm flex-1 flex-col px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-6">
             <header className="flex shrink-0 items-center justify-between pb-3">
@@ -466,7 +694,7 @@ export default function HandicapCalculatorClient() {
               </h2>
               <button
                 type="button"
-                onClick={() => setPickerOpen(false)}
+                onClick={() => setCoursePickerOpen(false)}
                 aria-label="Close"
                 className="grid h-9 w-9 place-items-center rounded-full text-[color:var(--sec-muted)] hover:bg-[color:var(--sec-surface)] hover:text-[color:var(--sec-text)]"
               >
@@ -477,12 +705,27 @@ export default function HandicapCalculatorClient() {
               mode="select"
               onSelect={(courseId, name) => {
                 setCourseName(name);
-                setPickerOpen(false);
+                setTeeName(null);
+                setTeeId(null);
+                setCoursePickerOpen(false);
                 void loadTees(courseId);
               }}
             />
           </div>
         </div>
+      ) : null}
+
+      {teePickerOpen ? (
+        <TeePickerSheet
+          tees={teeBoxes}
+          selectedId={teeId}
+          courseName={courseName}
+          onClose={() => setTeePickerOpen(false)}
+          onSelect={(t) => {
+            applyTee(t);
+            setTeePickerOpen(false);
+          }}
+        />
       ) : null}
     </div>
   );

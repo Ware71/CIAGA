@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getOwnedProfileIdOrThrow } from "@/lib/serverOwnedProfile";
 import { notifyFollowersOfRoundActivity } from "@/lib/notifications/roundActivity";
+import { calcTeamHandicap, isSingleBallFormat } from "@/lib/rounds/teamHandicap";
+import type { RoundFormatType } from "@/components/rounds/FormatSelector";
 
 type Body = { round_id: string };
 
@@ -277,15 +279,14 @@ export async function POST(req: Request) {
     if (handicapErr) return NextResponse.json({ error: handicapErr.message }, { status: 500 });
 
     // Compute and store team handicaps for single-ball formats
-    const SINGLE_BALL_FORMATS = ["scramble", "greensomes", "foursomes"];
     const { data: roundForFormat } = await supabaseAdmin
       .from("rounds")
       .select("format_type")
       .eq("id", round.id)
       .single();
 
-    if (roundForFormat && SINGLE_BALL_FORMATS.includes((roundForFormat as any).format_type)) {
-      const formatType = (roundForFormat as any).format_type as string;
+    if (roundForFormat && isSingleBallFormat((roundForFormat as any).format_type)) {
+      const formatType = (roundForFormat as any).format_type as RoundFormatType;
 
       // Fetch participants with team assignment and resolved course handicap
       const { data: teamsData } = await supabaseAdmin
@@ -308,19 +309,9 @@ export async function POST(req: Request) {
 
           if (handicaps.length === 0) continue;
 
-          const sorted = [...handicaps].sort((a, b) => a - b);
-          let teamHcp = 0;
-
-          if (formatType === "scramble") {
-            if (sorted.length === 1) teamHcp = Math.round(sorted[0] * 0.35);
-            else if (sorted.length === 2) teamHcp = Math.round(sorted[0] * 0.35 + sorted[1] * 0.15);
-            else if (sorted.length === 3) teamHcp = Math.round(sorted[0] * 0.30 + sorted[1] * 0.20 + sorted[2] * 0.10);
-            else teamHcp = Math.round(sorted[0] * 0.25 + sorted[1] * 0.20 + sorted[2] * 0.15 + sorted[3] * 0.10);
-          } else if (formatType === "greensomes") {
-            teamHcp = Math.round(sorted[0] * 0.6 + (sorted[1] ?? sorted[0]) * 0.4);
-          } else if (formatType === "foursomes") {
-            teamHcp = Math.round((sorted[0] + (sorted[1] ?? sorted[0])) * 0.5);
-          }
+          // Shared with the handicap calculator — see lib/rounds/teamHandicap.
+          const teamHcp = calcTeamHandicap(formatType, handicaps);
+          if (teamHcp === null) continue;
 
           await supabaseAdmin
             .from("round_teams")
