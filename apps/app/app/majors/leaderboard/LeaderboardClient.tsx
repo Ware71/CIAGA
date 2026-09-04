@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { requireViewerSession } from "@/lib/auth/requireViewerSession";
 import { supabase } from "@/lib/supabaseClient";
+import { useDebouncedRefresh } from "@/lib/majors/useDebouncedRefresh";
 import type {
   LeaderboardEntryWithProfile,
   GroupStandingWithProfile,
@@ -116,6 +117,21 @@ export default function LeaderboardClient() {
     }
   }
 
+  // A recompute rewrites every entry row and postgres_changes fires per row, so
+  // undebounced this was one full leaderboard fetch per player, mid-round, on
+  // whatever connection a golf course provides.
+  //
+  // The tab re-check is not redundant. useDebouncedRefresh only clears its timer
+  // on unmount, not when the effect below re-runs, so a timer armed just before
+  // a tab switch still fires afterwards — and because the hook re-reads this
+  // closure each render, it would otherwise write competition state while the
+  // group tab is on screen.
+  const debouncedFetchLeaderboard = useDebouncedRefresh(() => {
+    if (tab === "competition" && competitionId) {
+      return fetchLeaderboard(competitionId, "competition");
+    }
+  });
+
   // Initial fetch + realtime subscription
   useEffect(() => {
     let cancelled = false;
@@ -144,10 +160,12 @@ export default function LeaderboardClient() {
             filter: `event_id=eq.${competitionId}`,
           },
           () => {
-            if (!cancelled) fetchLeaderboard(competitionId, "competition");
+            if (!cancelled) debouncedFetchLeaderboard();
           }
         )
-        // Also watch competitions row for freeze_state changes
+        // Also watch competitions row for freeze_state changes. These stay
+        // undebounced: a freeze or reveal is one deliberate transition, not a
+        // burst, and making the reveal wait 800ms would be felt.
         .on(
           "postgres_changes",
           {
@@ -189,7 +207,7 @@ export default function LeaderboardClient() {
     }
 
     return () => { cancelled = true; };
-  }, [tab, competitionId, groupId]);
+  }, [tab, competitionId, groupId, debouncedFetchLeaderboard]);
 
   async function handleReveal() {
     if (!competitionId) return;
