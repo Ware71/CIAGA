@@ -403,15 +403,23 @@ export default function RoundMenuSheet(props: {
     fetchCompStandings();
 
     let cancelled = false;
-    const channel = supabase
-      .channel(`round-menu:comp:${eventId}`)
+
+    // ONE TABLE PER CHANNEL — these two shared one, and a channel with
+    // postgres_changes bindings for two different tables delivers nothing while
+    // still reporting SUBSCRIBED. See LeaderboardClient for the measurements.
+    const entriesChannel = supabase
+      .channel(`round-menu:comp:${eventId}:entries`)
       .on("postgres_changes", {
         event: "*",
         schema: "public",
         table: "event_leaderboard_entries",
         filter: `event_id=eq.${eventId}`,
       }, () => { if (!cancelled) debouncedFetchCompStandings(); })
-      // Freeze/reveal stays undebounced — one deliberate transition, not a burst.
+      .subscribe();
+
+    // Freeze/reveal stays undebounced — one deliberate transition, not a burst.
+    const eventChannel = supabase
+      .channel(`round-menu:comp:${eventId}:event`)
       .on("postgres_changes", {
         event: "UPDATE",
         schema: "public",
@@ -430,7 +438,8 @@ export default function RoundMenuSheet(props: {
 
     return () => {
       cancelled = true;
-      supabase.removeChannel(channel);
+      supabase.removeChannel(entriesChannel);
+      supabase.removeChannel(eventChannel);
     };
   }, [eventId, debouncedFetchCompStandings]); // eslint-disable-line react-hooks/exhaustive-deps
 

@@ -2091,9 +2091,12 @@ export default function EventDetailClient({
     return () => { cancelled = true; };
   }, [lbRoundId, eventId, leaderboardSig]);
 
+  // ONE TABLE PER CHANNEL — these two shared one, and a channel with
+  // postgres_changes bindings for two different tables delivers nothing while
+  // still reporting SUBSCRIBED. See LeaderboardClient for the measurements.
   useEffect(() => {
-    const channel = supabase
-      .channel(`event-lb:${eventId}`)
+    const entriesChannel = supabase
+      .channel(`event-lb:${eventId}:entries`)
       .on(
         "postgres_changes",
         {
@@ -2104,6 +2107,10 @@ export default function EventDetailClient({
         },
         debouncedFetchLeaderboard
       )
+      .subscribe();
+
+    const eventChannel = supabase
+      .channel(`event-lb:${eventId}:event`)
       .on(
         "postgres_changes",
         {
@@ -2123,7 +2130,11 @@ export default function EventDetailClient({
         }
       )
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+
+    return () => {
+      supabase.removeChannel(entriesChannel);
+      supabase.removeChannel(eventChannel);
+    };
   }, [eventId, debouncedFetchLeaderboard, fetchLeaderboard]);
 
   // Lazy-load finances when tab first opens

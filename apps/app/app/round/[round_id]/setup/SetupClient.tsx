@@ -751,17 +751,25 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
   // data disagreeing about it.
   const debouncedFetchAll = useDebouncedRefresh(fetchAll);
 
-  // Realtime updates
+  // Realtime updates.
+  //
+  // ONE TABLE PER CHANNEL — these two shared one, and a channel with
+  // postgres_changes bindings for two different tables delivers nothing while
+  // still reporting SUBSCRIBED. See LeaderboardClient for the measurements.
   useEffect(() => {
     if (!roundId) return;
 
-    const chan = supabase
-      .channel(`round-setup:${roundId}`)
+    const participantsChannel = supabase
+      .channel(`round-setup:${roundId}:participants`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "round_participants", filter: `round_id=eq.${roundId}` },
         debouncedFetchAll
       )
+      .subscribe();
+
+    const roundChannel = supabase
+      .channel(`round-setup:${roundId}:round`)
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "rounds", filter: `id=eq.${roundId}` },
@@ -770,7 +778,8 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
       .subscribe();
 
     return () => {
-      supabase.removeChannel(chan);
+      supabase.removeChannel(participantsChannel);
+      supabase.removeChannel(roundChannel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roundId, debouncedFetchAll]);

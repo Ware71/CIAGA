@@ -83,17 +83,26 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore, scoringMode
   // scoring a single playoff hole for a 4-way tie writes a row per player.
   const debouncedLoad = useDebouncedRefresh(load);
 
+  // ONE TABLE PER CHANNEL. These two shared a channel, and a channel with
+  // postgres_changes bindings for two different tables delivers nothing while
+  // still reporting SUBSCRIBED — so the playoff scorecard never updated live.
+  // See LeaderboardClient for the measurements.
   useEffect(() => {
     load();
-    const channel = supabase
-      .channel(`playoff:${playoff.id}`)
-      // event_playoff_scores keys on playoff_hole_id and carries no playoff_id
-      // (migration 20260609000001), so it cannot be narrowed to this playoff
-      // without denormalising a column. Until then this still wakes on any
-      // playoff's scores anywhere, and the debounce is what keeps that cheap.
+
+    // event_playoff_scores keys on playoff_hole_id and carries no playoff_id
+    // (migration 20260609000001), so it cannot be narrowed to this playoff
+    // without denormalising a column. Until then this still wakes on any
+    // playoff's scores anywhere, and the debounce is what keeps that cheap.
+    const scoresChannel = supabase
+      .channel(`playoff:${playoff.id}:scores`)
       .on("postgres_changes", { event: "*", schema: "public", table: "event_playoff_scores" }, debouncedLoad)
-      // This one does have playoff_id, so it can be narrowed properly. Without
-      // the filter every playoff in the database reloaded this component.
+      .subscribe();
+
+    // This one does have playoff_id, so it can be narrowed properly. Without
+    // the filter every playoff in the database reloaded this component.
+    const holesChannel = supabase
+      .channel(`playoff:${playoff.id}:holes`)
       .on(
         "postgres_changes",
         {
@@ -105,7 +114,11 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore, scoringMode
         debouncedLoad
       )
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+
+    return () => {
+      supabase.removeChannel(scoresChannel);
+      supabase.removeChannel(holesChannel);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playoff.id, eventId, debouncedLoad]);
 

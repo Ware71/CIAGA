@@ -147,10 +147,18 @@ export default function LeaderboardClient() {
       }
     })();
 
-    // Realtime subscription for competition tab
+    // Realtime subscription for competition tab.
+    //
+    // ONE TABLE PER CHANNEL. These two used to share a channel, and a channel
+    // carrying postgres_changes bindings for two different tables delivers
+    // nothing at all — while still reporting SUBSCRIBED. Measured against
+    // staging 2026-09-05: one binding 6/6 events, two bindings on one channel
+    // 0/6, split across two channels 6/6. The live leaderboard had never
+    // updated. The failure is silent, so if you merge these back into one
+    // channel nothing will look broken except that scores stop moving.
     if (tab === "competition" && competitionId) {
-      const channel = supabase
-        .channel(`leaderboard:${competitionId}`)
+      const entriesChannel = supabase
+        .channel(`leaderboard:${competitionId}:entries`)
         .on(
           "postgres_changes",
           {
@@ -163,9 +171,12 @@ export default function LeaderboardClient() {
             if (!cancelled) debouncedFetchLeaderboard();
           }
         )
-        // Also watch competitions row for freeze_state changes. These stay
-        // undebounced: a freeze or reveal is one deliberate transition, not a
-        // burst, and making the reveal wait 800ms would be felt.
+        .subscribe();
+
+      // Freeze/reveal stays undebounced: one deliberate transition, not a
+      // burst, and making the reveal wait 800ms would be felt.
+      const eventChannel = supabase
+        .channel(`leaderboard:${competitionId}:event`)
         .on(
           "postgres_changes",
           {
@@ -202,7 +213,8 @@ export default function LeaderboardClient() {
 
       return () => {
         cancelled = true;
-        supabase.removeChannel(channel);
+        supabase.removeChannel(entriesChannel);
+        supabase.removeChannel(eventChannel);
       };
     }
 
