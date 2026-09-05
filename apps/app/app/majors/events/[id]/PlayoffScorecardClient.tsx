@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 import { requireViewerSession } from "@/lib/auth/requireViewerSession";
 import { strokesReceivedOnHole } from "@/lib/rounds/handicapUtils";
+import { useDebouncedRefresh } from "@/lib/majors/useDebouncedRefresh";
 import { StrokeDots, PlusIndicator, BadgeWrap, scoreBadgeType } from "@/components/round/ScorecardCells";
 import { CoursePickerModal } from "@/components/rounds/CoursePickerModal";
 import ScoreEntrySheet from "@/components/round/ScoreEntrySheet";
@@ -78,16 +79,48 @@ export function PlayoffScorecardClient({ playoff, eventId, canScore, scoringMode
     setLoading(false);
   }
 
+  // load() is two round trips — the playoff route, then a profiles lookup — and
+  // scoring a single playoff hole for a 4-way tie writes a row per player.
+  const debouncedLoad = useDebouncedRefresh(load);
+
+  // ONE TABLE PER CHANNEL. These two shared a channel, and a channel with
+  // postgres_changes bindings for two different tables delivers nothing while
+  // still reporting SUBSCRIBED — so the playoff scorecard never updated live.
+  // See LeaderboardClient for the measurements.
   useEffect(() => {
     load();
-    const channel = supabase
-      .channel(`playoff:${playoff.id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "event_playoff_scores" }, () => load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "event_playoff_holes" }, () => load())
+
+    // event_playoff_scores keys on playoff_hole_id and carries no playoff_id
+    // (migration 20260609000001), so it cannot be narrowed to this playoff
+    // without denormalising a column. Until then this still wakes on any
+    // playoff's scores anywhere, and the debounce is what keeps that cheap.
+    const scoresChannel = supabase
+      .channel(`playoff:${playoff.id}:scores`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "event_playoff_scores" }, debouncedLoad)
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+
+    // This one does have playoff_id, so it can be narrowed properly. Without
+    // the filter every playoff in the database reloaded this component.
+    const holesChannel = supabase
+      .channel(`playoff:${playoff.id}:holes`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "event_playoff_holes",
+          filter: `playoff_id=eq.${playoff.id}`,
+        },
+        debouncedLoad
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(scoresChannel);
+      supabase.removeChannel(holesChannel);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playoff.id, eventId]);
+  }, [playoff.id, eventId, debouncedLoad]);
 
   // Resolve course + tee box names for the holes (for the scorecard banner). Only
   // refetches when the set of courses changes.

@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { requireViewerSession } from "@/lib/auth/requireViewerSession";
 import { supabase } from "@/lib/supabaseClient";
+import { useDebouncedRefresh } from "@/lib/majors/useDebouncedRefresh";
 import type {
   LeaderboardEntryWithProfile,
   GroupStandingWithProfile,
@@ -116,6 +117,21 @@ export default function LeaderboardClient() {
     }
   }
 
+  // A recompute rewrites every entry row and postgres_changes fires per row, so
+  // undebounced this was one full leaderboard fetch per player, mid-round, on
+  // whatever connection a golf course provides.
+  //
+  // The tab re-check is not redundant. useDebouncedRefresh only clears its timer
+  // on unmount, not when the effect below re-runs, so a timer armed just before
+  // a tab switch still fires afterwards — and because the hook re-reads this
+  // closure each render, it would otherwise write competition state while the
+  // group tab is on screen.
+  const debouncedFetchLeaderboard = useDebouncedRefresh(() => {
+    if (tab === "competition" && competitionId) {
+      return fetchLeaderboard(competitionId, "competition");
+    }
+  });
+
   // Initial fetch + realtime subscription
   useEffect(() => {
     let cancelled = false;
@@ -131,10 +147,18 @@ export default function LeaderboardClient() {
       }
     })();
 
-    // Realtime subscription for competition tab
+    // Realtime subscription for competition tab.
+    //
+    // ONE TABLE PER CHANNEL. These two used to share a channel, and a channel
+    // carrying postgres_changes bindings for two different tables delivers
+    // nothing at all — while still reporting SUBSCRIBED. Measured against
+    // staging 2026-09-05: one binding 6/6 events, two bindings on one channel
+    // 0/6, split across two channels 6/6. The live leaderboard had never
+    // updated. The failure is silent, so if you merge these back into one
+    // channel nothing will look broken except that scores stop moving.
     if (tab === "competition" && competitionId) {
-      const channel = supabase
-        .channel(`leaderboard:${competitionId}`)
+      const entriesChannel = supabase
+        .channel(`leaderboard:${competitionId}:entries`)
         .on(
           "postgres_changes",
           {
@@ -144,10 +168,15 @@ export default function LeaderboardClient() {
             filter: `event_id=eq.${competitionId}`,
           },
           () => {
-            if (!cancelled) fetchLeaderboard(competitionId, "competition");
+            if (!cancelled) debouncedFetchLeaderboard();
           }
         )
-        // Also watch competitions row for freeze_state changes
+        .subscribe();
+
+      // Freeze/reveal stays undebounced: one deliberate transition, not a
+      // burst, and making the reveal wait 800ms would be felt.
+      const eventChannel = supabase
+        .channel(`leaderboard:${competitionId}:event`)
         .on(
           "postgres_changes",
           {
@@ -184,12 +213,13 @@ export default function LeaderboardClient() {
 
       return () => {
         cancelled = true;
-        supabase.removeChannel(channel);
+        supabase.removeChannel(entriesChannel);
+        supabase.removeChannel(eventChannel);
       };
     }
 
     return () => { cancelled = true; };
-  }, [tab, competitionId, groupId]);
+  }, [tab, competitionId, groupId, debouncedFetchLeaderboard]);
 
   async function handleReveal() {
     if (!competitionId) return;

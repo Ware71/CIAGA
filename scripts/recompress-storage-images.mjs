@@ -31,8 +31,13 @@
 // Usage:
 //   node scripts/recompress-storage-images.mjs                       # dry run vs staging
 //   node scripts/recompress-storage-images.mjs --apply               # rewrite staging
-//   node scripts/recompress-storage-images.mjs --env-file <path> --apply
 //   node scripts/recompress-storage-images.mjs --bucket avatars
+//
+//   # production, without writing a service-role key to disk:
+//   PROD_SUPABASE_URL=… PROD_SUPABASE_SERVICE_ROLE_KEY=… \
+//     node scripts/recompress-storage-images.mjs --apply
+//
+//   node scripts/recompress-storage-images.mjs --env-file <path> --apply
 //
 // This talks to whatever the env file points at. It never touches the Supabase
 // CLI link, so the stay-linked-to-staging rule in CLAUDE.md is unaffected.
@@ -85,29 +90,73 @@ function formatBytes(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-const envPath = envFileArg
-  ? isAbsolute(envFileArg)
-    ? envFileArg
-    : resolve(process.cwd(), envFileArg)
-  : join(here, "..", "apps", "app", ".env.local");
+/**
+ * Credentials, in precedence order:
+ *
+ *   1. --env-file <path>   an explicit flag means what it says
+ *   2. the environment     PROD_SUPABASE_URL + PROD_SUPABASE_SERVICE_ROLE_KEY
+ *   3. apps/app/.env.local the staging default
+ *
+ * Step 2 exists so a production run never has to write a service-role key to
+ * disk. Each source is taken whole — a URL from one and a key from another
+ * would eventually point a production key at staging, or worse.
+ */
+function pick(source) {
+  return {
+    url: source.PROD_SUPABASE_URL || source.NEXT_PUBLIC_SUPABASE_URL || source.SUPABASE_URL,
+    key: source.PROD_SUPABASE_SERVICE_ROLE_KEY || source.SUPABASE_SERVICE_ROLE_KEY,
+  };
+}
 
-let env;
-try {
-  env = loadEnv(envPath);
-} catch (e) {
-  console.error(`Could not read env file: ${envPath}\n${e.message}`);
+const fromEnvVars = pick(process.env);
+const hasEnvVars = Boolean(fromEnvVars.url && fromEnvVars.key);
+
+// A half-set pair is a typo, not a choice. Say so rather than silently falling
+// back to the staging file and reporting a confusingly empty production bucket.
+if (!envFileArg && !hasEnvVars && (fromEnvVars.url || fromEnvVars.key)) {
+  console.error(
+    "Only one of the Supabase environment variables is set. Set both, or neither.\n" +
+      `  URL: ${fromEnvVars.url ? "set" : "MISSING"}\n` +
+      `  key: ${fromEnvVars.key ? "set" : "MISSING"}`,
+  );
   process.exit(1);
 }
 
-const url = env.PROD_SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL || env.SUPABASE_URL;
-const key = env.PROD_SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SERVICE_ROLE_KEY;
-if (!url || !key) {
-  console.error(
-    `Missing Supabase URL / service-role key in ${envPath}\n` +
-      "Expected NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY " +
-      "(or PROD_SUPABASE_URL + PROD_SUPABASE_SERVICE_ROLE_KEY).",
-  );
-  process.exit(1);
+let url;
+let key;
+let credsFrom;
+
+if (!envFileArg && hasEnvVars) {
+  ({ url, key } = fromEnvVars);
+  credsFrom = "environment";
+} else {
+  const envPath = envFileArg
+    ? isAbsolute(envFileArg)
+      ? envFileArg
+      : resolve(process.cwd(), envFileArg)
+    : join(here, "..", "apps", "app", ".env.local");
+
+  let env;
+  try {
+    env = loadEnv(envPath);
+  } catch (e) {
+    console.error(`Could not read env file: ${envPath}\n${e.message}`);
+    process.exit(1);
+  }
+
+  ({ url, key } = pick(env));
+  credsFrom = envPath;
+
+  if (!url || !key) {
+    console.error(
+      `Missing Supabase URL / service-role key in ${envPath}\n` +
+        "Expected NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY " +
+        "(or PROD_SUPABASE_URL + PROD_SUPABASE_SERVICE_ROLE_KEY).\n" +
+        "Alternatively set PROD_SUPABASE_URL and PROD_SUPABASE_SERVICE_ROLE_KEY " +
+        "in the environment and pass no --env-file.",
+    );
+    process.exit(1);
+  }
 }
 
 let envName = url;
@@ -131,6 +180,7 @@ for (const b of buckets) {
 console.log("━".repeat(72));
 console.log(`Target : ${envName}`);
 console.log(`URL    : ${url}`);
+console.log(`Creds  : ${credsFrom}`);
 console.log(`Buckets: ${buckets.join(", ")}`);
 console.log(`Mode   : ${APPLY ? "APPLY — objects will be overwritten" : "dry run"}`);
 console.log("━".repeat(72));

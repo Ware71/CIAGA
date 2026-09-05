@@ -11,6 +11,7 @@ import { getViewerSession } from "@/lib/auth/viewerSession";
 import { requireViewerSession } from "@/lib/auth/requireViewerSession";
 import { FEDEX_POINTS } from "@/lib/events/constants";
 import { formatHI } from "@/lib/rounds/handicapUtils";
+import { useDebouncedRefresh } from "@/lib/majors/useDebouncedRefresh";
 
 const FORMAT_LABELS: Record<RoundFormatType, string> = {
   strokeplay: "Stroke Play",
@@ -390,20 +391,35 @@ export default function RoundMenuSheet(props: {
 
   const hasSeasonTab = !!(groupId || seasonId);
 
+  // Both of these tables are rewritten in bulk by a recompute, and
+  // postgres_changes fires per row — so undebounced each was one full standings
+  // fetch per player. Same defect the leaderboard carried; same fix.
+  const debouncedFetchCompStandings = useDebouncedRefresh(fetchCompStandings);
+  const debouncedFetchSeasonStandings = useDebouncedRefresh(fetchSeasonStandings);
+
   // Realtime: competition leaderboard
   useEffect(() => {
     if (!eventId) return;
     fetchCompStandings();
 
     let cancelled = false;
-    const channel = supabase
-      .channel(`round-menu:comp:${eventId}`)
+
+    // ONE TABLE PER CHANNEL — these two shared one, and a channel with
+    // postgres_changes bindings for two different tables delivers nothing while
+    // still reporting SUBSCRIBED. See LeaderboardClient for the measurements.
+    const entriesChannel = supabase
+      .channel(`round-menu:comp:${eventId}:entries`)
       .on("postgres_changes", {
         event: "*",
         schema: "public",
         table: "event_leaderboard_entries",
         filter: `event_id=eq.${eventId}`,
-      }, () => { if (!cancelled) fetchCompStandings(); })
+      }, () => { if (!cancelled) debouncedFetchCompStandings(); })
+      .subscribe();
+
+    // Freeze/reveal stays undebounced — one deliberate transition, not a burst.
+    const eventChannel = supabase
+      .channel(`round-menu:comp:${eventId}:event`)
       .on("postgres_changes", {
         event: "UPDATE",
         schema: "public",
@@ -422,9 +438,10 @@ export default function RoundMenuSheet(props: {
 
     return () => {
       cancelled = true;
-      supabase.removeChannel(channel);
+      supabase.removeChannel(entriesChannel);
+      supabase.removeChannel(eventChannel);
     };
-  }, [eventId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [eventId, debouncedFetchCompStandings]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Realtime: season standings
   useEffect(() => {
@@ -442,14 +459,14 @@ export default function RoundMenuSheet(props: {
         schema: "public",
         table,
         filter,
-      }, () => { if (!cancelled) fetchSeasonStandings(); })
+      }, () => { if (!cancelled) debouncedFetchSeasonStandings(); })
       .subscribe();
 
     return () => {
       cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, [seasonId, groupId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [seasonId, groupId, debouncedFetchSeasonStandings]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const teamMembersByTeamId = useMemo<Record<string, Participant[]>>(() => {
     if (!teams?.length || !allParticipants?.length) return {};

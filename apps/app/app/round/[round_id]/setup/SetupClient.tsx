@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Lock } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { useDebouncedRefresh } from "@/lib/majors/useDebouncedRefresh";
 import { getViewerSession } from "@/lib/auth/viewerSession";
 import { Button } from "@/components/ui/button";
 import { BackButton } from "@/components/ui/BackButton";
@@ -743,27 +744,45 @@ export default function SetupClient({ roundId, initialSnapshot, viewerProfileId,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meId]);
 
-  // Realtime updates
+  // Adding a group to a round inserts a participant row per player, and
+  // postgres_changes fires per row — so this was one full fetchAll() per member
+  // being added. useRoundDetail already debounces the identical
+  // round_participants subscription, so this was also the two views of the same
+  // data disagreeing about it.
+  const debouncedFetchAll = useDebouncedRefresh(fetchAll);
+
+  // Realtime updates.
+  //
+  // ONE TABLE PER CHANNEL — these two shared one, and a channel with
+  // postgres_changes bindings for two different tables delivers nothing while
+  // still reporting SUBSCRIBED. See LeaderboardClient for the measurements.
   useEffect(() => {
     if (!roundId) return;
 
-    const chan = supabase
-      .channel(`round-setup:${roundId}`)
+    const participantsChannel = supabase
+      .channel(`round-setup:${roundId}:participants`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "round_participants", filter: `round_id=eq.${roundId}` },
-        () => fetchAll()
+        debouncedFetchAll
       )
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "rounds", filter: `id=eq.${roundId}` }, () =>
-        fetchAll()
+      .subscribe();
+
+    const roundChannel = supabase
+      .channel(`round-setup:${roundId}:round`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "rounds", filter: `id=eq.${roundId}` },
+        debouncedFetchAll
       )
       .subscribe();
 
     return () => {
-      supabase.removeChannel(chan);
+      supabase.removeChannel(participantsChannel);
+      supabase.removeChannel(roundChannel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roundId]);
+  }, [roundId, debouncedFetchAll]);
 
   async function addProfile(profileId: string) {
     if (!isOwner) return;

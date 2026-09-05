@@ -60,6 +60,8 @@ type BoardResponse = {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const FLASH_MS = 1400;
+/** How old the board must be before returning to the tab refetches it. */
+const BOARD_STALE_MS = 30_000;
 const SEASON_TAB = "season";
 
 type HoleOutcome = "birdie_or_better" | "bogey_or_worse";
@@ -92,6 +94,8 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
   // Admin "Refresh": rebuild every field profile then force-reprice this event.
   const [refreshingMarkets, setRefreshingMarkets] = useState(false);
   const refetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // When the board last came back, so returning to the tab doesn't re-pull it.
+  const lastBoardFetchRef = useRef<number>(0);
   // Tabs: "event" | "round-N" | "season".
   const [activeTab, setActiveTab] = useState<string>("event");
   const [seasonId, setSeasonId] = useState<string | null>(null);
@@ -144,6 +148,9 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
       headers: { Authorization: `Bearer ${session.accessToken}` },
     });
     const j = (await safeJson(res)) as BoardResponse;
+    // Stamped on any completed response, success or not: a failing board should
+    // not be retried on every tab focus either.
+    lastBoardFetchRef.current = Date.now();
     if (res.ok) {
       // Diff odds against the previous board for the up/down flash.
       const moved = new Map<string, "up" | "down">();
@@ -216,8 +223,18 @@ export default function EventMarketsClient({ eventId }: { eventId: string }) {
         }
       )
       .subscribe();
+    // Only worth a request if the board has actually gone stale.
+    //
+    // GET /odds is no-store, reads ~1,265 snapshot rows over two-plus paginated
+    // round trips, and when the odds are stale and the event isn't final it can
+    // run the Monte Carlo sim inline (odds/route.ts, hence maxDuration 60).
+    // Unconditional, that was the full cost every time you tabbed back — and the
+    // realtime channel above already covers genuine state changes, so this only
+    // needs to catch a long absence.
     const onVisible = () => {
-      if (document.visibilityState === "visible") fetchBoard();
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - lastBoardFetchRef.current < BOARD_STALE_MS) return;
+      fetchBoard();
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
