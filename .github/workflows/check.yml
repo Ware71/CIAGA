@@ -1,0 +1,55 @@
+name: check
+
+# The repo had no CI at all: 47 vitest files, 737 TypeScript files and 231
+# migrations, and nothing ran unless a human remembered. Vercel builds on push,
+# so build breakage was already caught — type errors, failing tests and unsafe
+# migrations were not.
+#
+# `npm run build` is deliberately absent here. It needs production env vars, and
+# Vercel already runs it on every push; duplicating it would mean holding
+# secrets in CI for no extra signal.
+
+on:
+  pull_request:
+  push:
+    branches: [develop, main]
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # lint-migrations compares HEAD against the full migration history, and
+          # session-status derives pending migrations from main..HEAD.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Split rather than one `npm run check` so a failure names itself in the
+      # job summary instead of collapsing into "check failed".
+      - name: Migrations
+        run: npm run lint:migrations
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      # Scope note: apps/app/vitest.config.ts includes only
+      # `lib/**/__tests__/**`, so this covers the pure-logic layer — fantasy,
+      # majors, whs, rounds, stats — and says nothing about components, API
+      # routes, or apps/web. A green run here is not "the app works"; browser
+      # verification (the /verify skill) is still the gate for UI changes.
+      - name: Tests
+        run: npm run test

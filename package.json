@@ -7,6 +7,11 @@
     "build:app": "npm --workspace apps/app run build",
     "dev:web": "npm --workspace apps/web run dev",
     "build:web": "npm --workspace apps/web run build",
-    "build": "npm run build:app && npm run build:web"
+    "build": "npm run build:app && npm run build:web",
+    "typecheck": "npm --workspace apps/app exec -- tsc --noEmit && npm --workspace apps/web exec -- tsc --noEmit",
+    "lint": "npm --workspace apps/app exec -- eslint . && npm --workspace apps/web run lint",
+    "test": "npm --workspace apps/app run test",
+    "lint:migrations": "node scripts/lint-migrations.mjs",
+    "check": "npm run lint:migrations && npm run typecheck && npm run lint && npm run test"
   }
 }
