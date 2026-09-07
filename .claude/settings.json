@@ -4,8 +4,73 @@
       "Bash(npx tsc --noEmit)",
       "Bash(npx vitest run *)",
       "Bash(node scripts/check-db-env.js)",
+      "Bash(node scripts/lint-migrations.mjs *)",
+      "Bash(npm run check *)",
+      "Bash(npm run typecheck *)",
+      "Bash(npm run lint *)",
+      "Bash(npm run test *)",
       "Bash(npx supabase projects list)",
       "Bash(npx supabase migration list *)"
+    ],
+    "deny": [
+      "Read(./**/.env)",
+      "Read(./**/.env.local)",
+      "Read(./**/.env.prod)",
+      "Read(./**/.env.*.local)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-push.mjs"],
+            "timeout": 10,
+            "statusMessage": "Checking push target..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/lint-touched-migration.mjs"],
+            "timeout": 20,
+            "statusMessage": "Linting migration..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-staging-link.mjs"],
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/session-status.mjs"],
+            "timeout": 15
+          }
+        ]
+      }
     ]
   }
 }

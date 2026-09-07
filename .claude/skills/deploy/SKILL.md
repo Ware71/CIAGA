@@ -10,13 +10,42 @@ and **staging** (`staging.app.ciagagolf.com`) from `develop` — so **both branc
 pushed**, or staging silently keeps serving old code.
 **NEVER run `git push origin develop:main`.** Always go through a real merge on a local `main` checkout.
 
+Both of this skill's load-bearing rules are now enforced rather than requested: a
+`PreToolUse` hook blocks any push whose refspec targets `main`, and a `Stop` hook
+refuses to end a turn with the CLI still linked to production. Overrides exist
+(`CIAGA_ALLOW_DIRECT_PUSH=1`, `CIAGA_ALLOW_PROD_LINK=1`) for genuine exceptions.
+
 ## Preconditions
 
 1. On `develop` with a clean working tree (`git status`).
-2. `npm run build` passes.
-3. Confirm with the user which commits are going out (`git log main..develop --oneline`).
+2. `npm run check` passes — migration lint, typecheck (both workspaces), eslint, and
+   the 47 vitest files.
+3. **`npm run build` passes against a tree git can reproduce.** Not the tree as it
+   happens to sit: untracked files moved aside.
 
-## Step 1 — Migrations (only if `supabase/migrations/` has new files since last deploy)
+   ```
+   git stash push --include-untracked --keep-index
+   npm run build
+   git stash pop
+   ```
+
+   On 2026-09-02 a local build passed twice on a tree git could not reproduce.
+   `app/layout.tsx` was dirty with in-progress analytics work; committing it carried
+   an import onto `develop` while the module it needed stayed untracked, and staging
+   failed on "Module not found". A clean `git status` is not the same as a tree that
+   builds from a fresh clone — see `61cb627`.
+4. Confirm with the user which commits are going out (`git log main..develop --oneline`).
+
+## Step 1 — Migrations
+
+Find the pending set first — this needs no link change and no credentials:
+
+```
+node scripts/migration-status.mjs
+```
+
+Anything listed under "not yet on main" has not reached production. If that is empty,
+skip to Step 2.
 
 Order is **staging first, then production**. Before every push, confirm the linked project with `node scripts/check-db-env.js`.
 

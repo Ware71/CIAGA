@@ -5,7 +5,14 @@ description: Verify a change works end-to-end by driving the app in a real brows
 
 # Verifying CIAGA changes in the browser
 
-Typecheck and build are not verification. A change to `apps/app` is verified only when the affected flow has been driven in a browser and observed working.
+Typecheck, lint and tests are not verification. Run `npm run check` first — it is the
+cheap gate (migration lint, typecheck both workspaces, eslint, 47 vitest files) — but a
+change to `apps/app` is verified only when the affected flow has been driven in a
+browser and observed working.
+
+Note what the test suite does **not** cover: `apps/app/vitest.config.ts` includes only
+`lib/**/__tests__/**`, so there are no component, route, or `apps/web` tests at all. A
+green `npm run check` says the pure-logic layer is fine and nothing more.
 
 ## Environment facts
 
@@ -22,6 +29,17 @@ Read the staging test account from `.claude/test-credentials.local.json` (gitign
 
 If the file is missing, ask the user for a staging test login and create it. Never commit credentials, never echo the password into logs or screenshots.
 
+## Two things that will waste your time if you don't know them
+
+**Overlays swallow the first clicks.** The app renders a CSS splash from the root
+layout and a cookie-consent banner. Both sit above the page. Dismiss them
+immediately after load or every subsequent click times out with no useful error —
+the element is found, it just isn't reachable.
+
+**A round cannot start on a freshly imported course.** OSM-imported courses have no
+tees and no hole data. Add both on `/courses/[course_id]` first, or the round starts
+with hole snapshots silently skipped and whatever you were verifying is meaningless.
+
 ## Procedure
 
 1. **Start the dev server** (from repo root, in the background):
@@ -34,6 +52,9 @@ If the file is missing, ask the user for a staging test login and create it. Nev
 4. **Capture evidence**: screenshot the key before/after states.
 5. **Check the browser console** for errors or failed network requests during the flow.
 6. **Stop the dev server** when done.
+7. **Clear the evidence directory.** Playwright MCP writes console logs to
+   `.playwright-mcp/`, which had accumulated 206 files before anyone looked. Keep the
+   screenshots that matter, delete the rest: `rm -rf .playwright-mcp/`.
 
 ## Reporting
 

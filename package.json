@@ -12,6 +12,7 @@
     "lint": "npm --workspace apps/app exec -- eslint . && npm --workspace apps/web run lint",
     "test": "npm --workspace apps/app run test",
     "lint:migrations": "node scripts/lint-migrations.mjs",
-    "check": "npm run lint:migrations && npm run typecheck && npm run lint && npm run test"
+    "test:hooks": "node scripts/test-hooks.mjs",
+    "check": "npm run lint:migrations && npm run test:hooks && npm run typecheck && npm run lint && npm run test"
   }
 }
