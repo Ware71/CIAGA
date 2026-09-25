@@ -1,68 +1,30 @@
 # Supabase Environments
 
-## Project References
+| Env | Project ref |
+|---|---|
+| staging | `balcwdqjzouufxigszup` |
+| production | `jcmkyxlfyrhkgeszefjb` |
 
-### Staging / Development
-- **Project Ref:** `balcwdqjzouufxigszup`
-- **URL:** https://balcwdqjzouufxigszup.supabase.co
-- **Purpose:** Development, testing, and staging
-- **Current Status:** Currently linked (see `.temp/project-ref`)
+**The CLI must always be left linked to staging.** If a task requires linking to
+production, re-link staging immediately afterwards.
 
-### Production
-- **Project Ref:** `jcmkyxlfyrhkgeszefjb`
-- **URL:** https://jcmkyxlfyrhkgeszefjb.supabase.co
-- **Purpose:** Live production database
-- **Current Status:** Not linked
-
-## Migration Workflow
-
-### 1. Test on Staging First
 ```bash
-# Ensure you're linked to staging
-npx supabase link --project-ref balcwdqjzouufxigszup
-
-# Push migrations to staging
-npx supabase db push
-
-# Verify migrations worked
-npx supabase db diff --schema public
+node scripts/check-db-env.js          # which project am I linked to?
+node scripts/migration-status.mjs     # what has not reached production yet?
 ```
 
-### 2. Apply to Production (After Verification)
-```bash
-# Switch to production
-npx supabase link --project-ref jcmkyxlfyrhkgeszefjb
+## Where the real procedure lives
 
-# Push migrations to production
-npx supabase db push
+This file used to carry its own copy of the migration workflow. It had drifted: it
+told you to link production and push, and never mentioned re-linking staging — the
+single rule that matters most. Four copies of this policy existed and this was the
+oldest, so it is now a pointer rather than a fourth source of truth.
 
-# Verify
-npx supabase db diff --schema public
-```
+- **Deploy procedure** — `.claude/skills/deploy/SKILL.md` (`/deploy`)
+- **Writing a migration** — `.claude/rules/supabase-migrations.md`
+- **Project refs, machine-readable** — `.claude/db-environments.json`, read by
+  `scripts/check-db-env.js`
+- **Summary** — the "Database environments" section of the root `CLAUDE.md`
 
-### 3. Local Development
-```bash
-# Start local Supabase instance
-npx supabase start
-
-# Migrations are automatically applied to local instance
-# or manually push:
-npx supabase db push --local
-```
-
-## Current Linked Project
-The currently linked project is stored in: `.temp/project-ref`
-
-To check which project is currently linked:
-```bash
-cat supabase/.temp/project-ref
-```
-
-## Safety Notes
-
-⚠️ **ALWAYS** test migrations on staging before applying to production!
-
-⚠️ Double-check which project is linked before running `db push`:
-```bash
-npx supabase status --local=false
-```
+A `Stop` hook now refuses to end a turn with the CLI linked to production, so the
+re-link step is enforced rather than remembered.

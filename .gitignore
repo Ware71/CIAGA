@@ -44,9 +44,13 @@ next-env.d.ts
 /apps/**/node_modules/
 /apps/**/.next/
 
-# AI assistant files: track CLAUDE.md + shared skills, ignore local/session files
+# AI assistant files: track CLAUDE.md + shared config, ignore local/session files.
+# Anything not negated here is invisible to git, so a new .claude/ subdirectory
+# must be added below or it silently never gets committed.
 .claude/*
 !.claude/skills/
+!.claude/rules/
+!.claude/hooks/
 !.claude/settings.json
 !.claude/db-environments.json
 
@@ -58,5 +62,23 @@ nul
 /verify-*.png
 /.playwright-mcp/
 
+# Scratch working files (analysis output, one-off renders). Not repo content.
+/.scratch/
+
+# next-pwa build output. `withPWA({ dest: 'public' })` regenerates these on every
+# production build, and workbox/worker filenames carry a fresh content hash, so
+# tracking them meant each build deleted one file and added another — a
+# permanently dirty tree that hid real changes. Vercel regenerates them at deploy
+# time; nothing needs the committed copy.
+/apps/app/public/sw.js
+/apps/app/public/sw.js.map
+/apps/app/public/workbox-*.js
+/apps/app/public/workbox-*.js.map
+/apps/app/public/worker-*.js
+/apps/app/public/worker-*.js.map
+
 .vercel
 .env*
+
+# The documented key list is deliberately tracked; real values never are.
+!.env.example
