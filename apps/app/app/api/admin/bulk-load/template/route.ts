@@ -26,12 +26,16 @@ const IMPORT_COLS = [
   { header: "role",                 width: 10, fill: AMBER_FILL }, // I
   { header: "status",               width: 11, fill: AMBER_FILL }, // J
   { header: "visibility",           width: 13, fill: AMBER_FILL }, // K
-  { header: "profile_id",           width: 38, fill: RED_FILL   }, // L  ← XLOOKUP(A)
-  { header: "display_name",         width: 22, fill: RED_FILL   }, // M  ← XLOOKUP(A)
-  { header: "course_id",            width: 38, fill: RED_FILL   }, // N  ← XLOOKUP(B)
-  { header: "round_name",           width: 34, fill: RED_FILL   }, // O  ← formula(B,G)
-  { header: "tee_box_id",           width: 38, fill: RED_FILL   }, // P  ← XLOOKUP(N,C,Q)
-  { header: "player_gender",        width: 15, fill: RED_FILL   }, // Q  ← XLOOKUP(L)
+  { header: "putts",                width: 10, fill: AMBER_FILL }, // L
+  { header: "fairway",              width: 12, fill: AMBER_FILL }, // M
+  { header: "bunker",               width: 10, fill: AMBER_FILL }, // N
+  { header: "penalties",            width: 12, fill: AMBER_FILL }, // O
+  { header: "profile_id",           width: 38, fill: RED_FILL   }, // P  ← XLOOKUP(A)
+  { header: "display_name",         width: 22, fill: RED_FILL   }, // Q  ← XLOOKUP(A)
+  { header: "course_id",            width: 38, fill: RED_FILL   }, // R  ← XLOOKUP(B)
+  { header: "round_name",           width: 34, fill: RED_FILL   }, // S  ← formula(B,G)
+  { header: "tee_box_id",           width: 38, fill: RED_FILL   }, // T  ← XLOOKUP(R,C,U)
+  { header: "player_gender",        width: 15, fill: RED_FILL   }, // U  ← XLOOKUP(P)
 ] as const;
 
 const DATA_ROWS = 200;
@@ -138,6 +142,8 @@ function buildGuideSheet(wb: ExcelJS.Workbook) {
   r = addText(ws, r, "This template lets you bulk-import golf round scores into CIAGA.");
   r = addText(ws, r, "Each row represents one hole score for one player in one round.");
   r = addText(ws, r, "You need 18 rows per player per round — one row per hole.");
+  r = addText(ws, r, "Putts, fairway, bunker and penalties are optional per-hole shot-tracking detail.");
+  r = addText(ws, r, "Green in regulation is never entered directly — it's calculated automatically from strokes, putts and par once putts are loaded.");
 
   r = addBlank(ws, r);
 
@@ -212,6 +218,10 @@ function buildGuideSheet(wb: ExcelJS.Workbook) {
     ["role",                  "player / scorer / owner — defaults to player",                     "player",         "Amber"],
     ["status",                "draft / live / finished — defaults to finished",                   "finished",       "Amber"],
     ["visibility",            "private / link / public — defaults to private",                    "private",        "Amber"],
+    ["putts",                 "Putts taken on this hole (integer 0–10) — leave blank if not tracked", "2",          "Amber"],
+    ["fairway",               "hit / left / right — leave blank if not tracked (par 3s ignored)", "hit",            "Amber"],
+    ["bunker",                "true / false — whether a bunker shot was involved — leave blank if not tracked", "false", "Amber"],
+    ["penalties",             "Penalty strokes taken on this hole (integer 0–10) — leave blank if not tracked", "0", "Amber"],
     ["profile_id",            "Auto-resolved UUID from Player Name or Email — do not edit",       "(auto)",         "Red"],
     ["display_name",          "Auto-resolved display name — do not edit",                         "(auto)",         "Red"],
     ["course_id",             "Auto-resolved UUID from Course Name — do not edit",                "(auto)",         "Red"],
@@ -317,12 +327,16 @@ function buildImportSheet(wb: ExcelJS.Workbook) {
       "player",    // I  role
       "finished",  // J  status
       "private",   // K  visibility
-      { formula: `IFERROR(XLOOKUP(A${r},Profiles!$B:$B,Profiles!$A:$A,XLOOKUP(A${r},Profiles!$C:$C,Profiles!$A:$A,"")),"")` }, // L profile_id
-      { formula: `IFERROR(XLOOKUP(A${r},Profiles!$B:$B,Profiles!$B:$B,A${r}),"")` },                                            // M display_name
-      { formula: `IFERROR(XLOOKUP(B${r},Courses!$B:$B,Courses!$A:$A),"")` },                                                    // N course_id
-      { formula: `IF(AND(B${r}<>"",G${r}<>""),B${r}&" — "&TEXT(G${r},"DD MMM YYYY"),"")` },                                // O round_name
-      { formula: `IFERROR(XLOOKUP(N${r}&"|"&C${r}&"|"&Q${r},TeeBoxes!$F:$F,TeeBoxes!$A:$A),IFERROR(XLOOKUP(N${r}&"|"&C${r},TeeBoxes!$E:$E,TeeBoxes!$A:$A),""))` }, // P tee_box_id
-      { formula: `IFERROR(XLOOKUP(L${r},Profiles!$A:$A,Profiles!$D:$D),"male")` },                                              // Q player_gender
+      null,        // L  putts
+      null,        // M  fairway
+      null,        // N  bunker
+      null,        // O  penalties
+      { formula: `IFERROR(XLOOKUP(A${r},Profiles!$B:$B,Profiles!$A:$A,XLOOKUP(A${r},Profiles!$C:$C,Profiles!$A:$A,"")),"")` }, // P profile_id
+      { formula: `IFERROR(XLOOKUP(A${r},Profiles!$B:$B,Profiles!$B:$B,A${r}),"")` },                                            // Q display_name
+      { formula: `IFERROR(XLOOKUP(B${r},Courses!$B:$B,Courses!$A:$A),"")` },                                                    // R course_id
+      { formula: `IF(AND(B${r}<>"",G${r}<>""),B${r}&" — "&TEXT(G${r},"DD MMM YYYY"),"")` },                                // S round_name
+      { formula: `IFERROR(XLOOKUP(R${r}&"|"&C${r}&"|"&U${r},TeeBoxes!$F:$F,TeeBoxes!$A:$A),IFERROR(XLOOKUP(R${r}&"|"&C${r},TeeBoxes!$E:$E,TeeBoxes!$A:$A),""))` }, // T tee_box_id
+      { formula: `IFERROR(XLOOKUP(P${r},Profiles!$A:$A,Profiles!$D:$D),"male")` },                                              // U player_gender
     ]);
   }
 
@@ -346,9 +360,9 @@ function buildImportSheet(wb: ExcelJS.Workbook) {
     cell.alignment = { horizontal: "center", wrapText: false };
   });
 
-  // Light-red tint on formula data cells (cols L–Q = 12–17) to signal "don't type here"
+  // Light-red tint on formula data cells (cols P–U = 16–21) to signal "don't type here"
   for (let row = 2; row <= DATA_ROWS + 1; row++) {
-    for (let col = 12; col <= 17; col++) {
+    for (let col = 16; col <= 21; col++) {
       ws.getCell(row, col).fill = LIGHT_RED;
     }
   }

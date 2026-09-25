@@ -35,6 +35,32 @@ function normalizeBool(v?: string) {
   return (v || "").trim().toLowerCase() === "true";
 }
 
+const FAIRWAY_VALUES = new Set(["hit", "left", "right"]);
+
+function toIntInRangeOrNull(v: string | undefined, label: string, min: number, max: number) {
+  if (v == null || v.trim() === "") return null;
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < min || n > max) {
+    throw new Error(`Invalid ${label}: ${v} (must be an integer ${min}-${max})`);
+  }
+  return n;
+}
+
+function toBoolOrNull(v: string | undefined, label: string) {
+  if (v == null || v.trim() === "") return null;
+  const s = v.trim().toLowerCase();
+  if (s === "true") return true;
+  if (s === "false") return false;
+  throw new Error(`Invalid ${label}: ${v} (must be true or false)`);
+}
+
+function toFairwayOrNull(v: string | undefined) {
+  if (v == null || v.trim() === "") return null;
+  const s = v.trim().toLowerCase();
+  if (!FAIRWAY_VALUES.has(s)) throw new Error(`Invalid fairway: ${v} (must be hit, left or right)`);
+  return s as "hit" | "left" | "right";
+}
+
 export async function POST(req: Request) {
   try {
     const admin = getSupabaseAdmin();
@@ -152,11 +178,13 @@ export async function POST(req: Request) {
       rounds_created: number;
       participants_created: number;
       score_events_created: number;
+      hole_details_created: number;
       round_keys: Array<{ round_key: string; round_id: string }>;
     } = {
       rounds_created: 0,
       participants_created: 0,
       score_events_created: 0,
+      hole_details_created: 0,
       round_keys: [],
     };
 
@@ -357,6 +385,45 @@ export async function POST(req: Request) {
       if (seErr) throw new Error(`Round ${roundKey}: create score events failed: ${seErr.message}`);
 
       summary.score_events_created += scoreEvents.length;
+
+      // Optional per-hole shot-tracking detail (putts, fairway, bunker, penalties).
+      // Only written for rows where at least one field was actually supplied —
+      // round_hole_details treats every column as independently nullable, and an
+      // absent value must stay NULL ("not recorded"), never become a false zero.
+      const holeDetails = rRows
+        .map((rr) => {
+          const pId = must(
+            participantIdByPlayerKey.get(playerKey(rr)),
+            `Round ${roundKey}: missing participant for row`
+          );
+          const putts = toIntInRangeOrNull(rr.putts, `Round ${roundKey}: putts`, 0, 10);
+          const fairway = toFairwayOrNull(rr.fairway);
+          const bunker = toBoolOrNull(rr.bunker, `Round ${roundKey}: bunker`);
+          const penalties = toIntInRangeOrNull(rr.penalties, `Round ${roundKey}: penalties`, 0, 10);
+
+          if (putts == null && fairway == null && bunker == null && penalties == null) return null;
+
+          return {
+            round_id: round.id,
+            participant_id: pId,
+            hole_number: toInt(must(rr.hole_number, `Round ${roundKey}: missing hole_number`), "hole_number"),
+            putts,
+            fairway,
+            bunker,
+            penalties,
+            updated_by: myProfile.id,
+          };
+        })
+        .filter((d): d is NonNullable<typeof d> => d != null);
+
+      if (holeDetails.length) {
+        const { error: hdErr } = await admin
+          .from("round_hole_details")
+          .upsert(holeDetails, { onConflict: "participant_id,hole_number" });
+        if (hdErr) throw new Error(`Round ${roundKey}: create hole details failed: ${hdErr.message}`);
+        summary.hole_details_created += holeDetails.length;
+      }
+
       summary.round_keys.push({ round_key: roundKey, round_id: round.id });
     }
 

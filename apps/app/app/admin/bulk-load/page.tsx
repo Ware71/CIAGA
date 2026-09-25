@@ -22,6 +22,7 @@ type ImportSummary = {
   rounds_created: number;
   participants_created: number;
   score_events_created: number;
+  hole_details_created: number;
   round_keys: Array<{ round_key: string; round_id: string }>;
 };
 
@@ -63,6 +64,26 @@ function validateRows(rows: ParsedRow[]) {
     const strokes = Number(r["strokes"]);
     if (!Number.isInteger(strokes) || strokes < 0 || strokes > 30) {
       errs.push(`Row ${idx + 2}: strokes must be an integer (0-30)`);
+    }
+
+    // Shot-tracking fields are optional — only validate when supplied.
+    if (r["putts"]) {
+      const putts = Number(r["putts"]);
+      if (!Number.isInteger(putts) || putts < 0 || putts > 10) {
+        errs.push(`Row ${idx + 2}: putts must be an integer (0-10)`);
+      }
+    }
+    if (r["fairway"] && !["hit", "left", "right"].includes(r["fairway"].toLowerCase())) {
+      errs.push(`Row ${idx + 2}: fairway must be hit, left or right`);
+    }
+    if (r["bunker"] && !["true", "false"].includes(r["bunker"].toLowerCase())) {
+      errs.push(`Row ${idx + 2}: bunker must be true or false`);
+    }
+    if (r["penalties"]) {
+      const penalties = Number(r["penalties"]);
+      if (!Number.isInteger(penalties) || penalties < 0 || penalties > 10) {
+        errs.push(`Row ${idx + 2}: penalties must be an integer (0-10)`);
+      }
     }
   });
 
@@ -299,6 +320,10 @@ export default function AdminBulkLoadPage() {
                   ["role", "player | scorer | owner (default: player)"],
                   ["status", "draft | live | finished (default: finished)"],
                   ["visibility", "private | link | public (default: private)"],
+                  ["putts", "Putts on this hole, integer 0-10 — leave blank if not tracked"],
+                  ["fairway", "hit | left | right — leave blank if not tracked"],
+                  ["bunker", "true | false — leave blank if not tracked"],
+                  ["penalties", "Penalty strokes on this hole, integer 0-10 — leave blank if not tracked"],
                 ].map(([col, desc]) => (
                   <tr key={col}>
                     <td className="border px-2 py-1 font-mono">{col}</td>
@@ -341,6 +366,7 @@ export default function AdminBulkLoadPage() {
             <p><strong>Tip:</strong> All 18 holes × all players in one round share the same <code>round_key</code>.</p>
             <p><strong>Tip:</strong> If a red formula cell is blank, the name/email in the green column doesn&apos;t match the database — check spelling.</p>
             <p><strong>Tip:</strong> The lookup data in the template is from the same environment the import writes to.</p>
+            <p><strong>Tip:</strong> There&apos;s no &quot;greens&quot; column — GIR is calculated automatically from strokes, putts and par once putts are loaded.</p>
           </div>
         </div>
       </details>
@@ -406,10 +432,11 @@ export default function AdminBulkLoadPage() {
       {importSummary && (
         <div className="rounded border border-green-500/40 bg-green-500/5 p-4 space-y-3">
           <div className="font-medium text-green-700 dark:text-green-400">Import complete</div>
-          <div className="flex gap-4 text-sm">
+          <div className="flex gap-4 text-sm flex-wrap">
             <span><strong>{importSummary.rounds_created}</strong> rounds</span>
             <span><strong>{importSummary.participants_created}</strong> participants</span>
             <span><strong>{importSummary.score_events_created}</strong> score events</span>
+            <span><strong>{importSummary.hole_details_created}</strong> shot-tracking rows</span>
           </div>
           <button
             className="text-xs text-muted-foreground underline"
